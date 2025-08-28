@@ -1,6 +1,20 @@
-import Image from "next/image";
+"use client"; // nécessaire si tu es dans le dossier app/
+
+import { useState } from "react";
 
 export default function Home() {
+  const [characters, setCharacters] = useState<any[]>([]);
+
+  const fetchCharacters = async () => {
+    try {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/characters`);
+      const data = await res.json();
+      setCharacters(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900">
       {/* Hero */}
@@ -64,6 +78,30 @@ export default function Home() {
             S'inscrire
           </button>
         </form>
+      </section>
+
+      <section className="py-16 px-6 max-w-3xl mx-auto text-center">
+        <h2 className="text-2xl font-bold mb-4">Test API Personnages</h2>
+        <button
+          onClick={fetchCharacters}
+          className="bg-green-600 text-white px-6 py-3 rounded-xl hover:bg-green-500 transition mb-4"
+        >
+          Charger les personnages
+        </button>
+
+        <div className="mt-4">
+          {characters.length > 0 ? (
+            <ul>
+              {characters.map((c) => (
+                <li key={c.id}>
+                  {c.name} — {c.race}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>Aucun personnage chargé</p>
+          )}
+        </div>
       </section>
 
       {/* Footer */}
