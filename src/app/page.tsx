@@ -2,101 +2,78 @@ import Image from "next/image";
 
 export default function Home() {
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900">
+      {/* Hero */}
+      <header className="bg-gradient-to-r from-purple-800 to-indigo-700 text-white p-12 text-center">
+        <h1 className="text-4xl font-bold mb-4">Bienvenue dans mon univers de Fantasy</h1>
+        <p className="text-lg mb-6">Découvrez mes romans et plongez dans un monde de magie et d'aventures</p>
+        <a
+          href="#books"
+          className="bg-yellow-400 text-black font-semibold px-6 py-3 rounded-2xl shadow hover:bg-yellow-300 transition"
+        >
+          Découvrir les livres
+        </a>
+      </header>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      {/* Section Livres */}
+      <section id="books" className="py-16 px-6 max-w-6xl mx-auto">
+        <h2 className="text-3xl font-bold text-center mb-12">Mes Livres</h2>
+        <div className="grid md:grid-cols-3 gap-8">
+          {[1, 2, 3].map((book) => (
+            <div key={book} className="bg-white rounded-2xl shadow-lg p-6 flex flex-col">
+              <div className="h-48 bg-gray-200 rounded-lg mb-4"></div>
+              <h3 className="text-xl font-bold mb-2">Titre du Livre {book}</h3>
+              <p className="text-sm text-gray-600 mb-4">Résumé rapide du livre {book}…</p>
+              <a
+                href="#"
+                className="mt-auto bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 transition"
+              >
+                Acheter sur Amazon
+              </a>
+            </div>
+          ))}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+      </section>
+
+      {/* Extrait & Illustrations */}
+      <section className="py-16 bg-gray-100 px-6 text-center">
+        <h2 className="text-3xl font-bold mb-8">Extrait & Illustrations</h2>
+        <div className="max-w-3xl mx-auto bg-white shadow rounded-2xl p-6">
+          <p className="text-gray-700 italic">
+            « Ici tu peux afficher un extrait de ton livre, ou une image immersive qui plonge le lecteur dans ton monde. »
+          </p>
+        </div>
+      </section>
+
+      {/* Newsletter */}
+      <section className="py-16 px-6 max-w-2xl mx-auto text-center">
+        <h2 className="text-2xl font-bold mb-4">Rejoignez la Communauté</h2>
+        <p className="text-gray-600 mb-6">
+          Recevez des extraits inédits, des illustrations exclusives et soyez les premiers informés des prochaines sorties.
+        </p>
+        <form className="flex gap-2 justify-center">
+          <input
+            type="email"
+            placeholder="Votre email"
+            className="flex-1 p-3 rounded-xl border border-gray-300"
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+          <button
+            type="submit"
+            className="bg-purple-700 text-white px-6 py-3 rounded-xl hover:bg-purple-600 transition"
+          >
+            S'inscrire
+          </button>
+        </form>
+      </section>
+
+      {/* Footer */}
+      <footer className="bg-gray-900 text-white text-center py-6 mt-auto">
+        <p>© 2025 Mon Univers Fantasy — Tous droits réservés</p>
+        <div className="flex justify-center gap-4 mt-2">
+          <a href="#" className="hover:underline">Instagram</a>
+          <a href="#" className="hover:underline">Facebook</a>
+          <a href="#" className="hover:underline">Contact</a>
+        </div>
       </footer>
     </div>
   );
