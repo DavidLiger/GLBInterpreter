@@ -68,7 +68,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="bg-gray-900 text-white text-center py-6 mt-auto">
-        <p>© 2025 Mon Univers Fantasy — Tous droits réservés - tous</p>
+        <p>© 2025 Mon Univers Fantasy — Tous droits réservés - </p>
         <div className="flex justify-center gap-4 mt-2">
           <a href="#" className="hover:underline">Instagram</a>
           <a href="#" className="hover:underline">Facebook</a>
