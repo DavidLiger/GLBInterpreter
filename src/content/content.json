@@ -1,0 +1,49 @@
+{
+  "header": {
+    "title": "Bienvenue dans mon univers de Fantasy",
+    "subtitle": "Découvrez mes romans et plongez dans un monde de magie et d'aventures",
+    "cta": {
+      "label": "Découvrir les livres",
+      "href": "#books"
+    }
+  },
+  "books": [
+    {
+      "id": 1,
+      "title": "Titre du Livre 1",
+      "summary": "Résumé rapide du livre 1…",
+      "image": "/images/book1.jpg",
+      "link": "https://amazon.com/livre1"
+    },
+    {
+      "id": 2,
+      "title": "Titre du Livre 2",
+      "summary": "Résumé rapide du livre 2…",
+      "image": "/images/book2.jpg",
+      "link": "https://amazon.com/livre2"
+    },
+    {
+      "id": 3,
+      "title": "Titre du Livre 3",
+      "summary": "Résumé rapide du livre 3…",
+      "image": "/images/book3.jpg",
+      "link": "https://amazon.com/livre3"
+    }
+  ],
+  "extrait": {
+    "text": "« Ici tu peux afficher un extrait de ton livre, ou une image immersive qui plonge le lecteur dans ton monde. »"
+  },
+  "newsletter": {
+    "title": "Rejoignez la Communauté",
+    "description": "Recevez des extraits inédits, des illustrations exclusives et soyez les premiers informés des prochaines sorties.",
+    "cta": "S'inscrire"
+  },
+  "footer": {
+    "copyright": "© 2025 Mon Univers Fantasy — Tous droits réservés",
+    "links": [
+      { "label": "Instagram", "href": "https://instagram.com/toncompte" },
+      { "label": "Facebook", "href": "https://facebook.com/toncompte" },
+      { "label": "Contact", "href": "mailto:contact@exemple.com" }
+    ]
+  }
+}
