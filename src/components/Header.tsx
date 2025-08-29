@@ -3,13 +3,17 @@
 import { useEffect, useState } from "react";
 import content from "../content/content.json";
 
-export default function Header() {
+interface HeaderProps {
+  onDiscoverClick?: () => void; // on passe la fonction scroll ici
+}
+
+export default function Header({ onDiscoverClick }: HeaderProps) {
   const { title, subtitle, cta, backgroundImage } = content.header;
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
-      setScrolled(window.scrollY > 50); // déclenche après 50px scroll
+      setScrolled(window.scrollY > 50);
     };
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
@@ -17,10 +21,7 @@ export default function Header() {
 
   return (
     <header
-      className={`
-        fixed top-0 left-0 w-full z-50 transition-all duration-300
-        ${scrolled ? "h-20" : "h-64 sm:h-56 xs:h-48"}
-      `}
+      className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${scrolled ? "h-20" : "h-64 sm:h-56 xs:h-48"}`}
     >
       {/* Image de fond */}
       <div
@@ -33,17 +34,9 @@ export default function Header() {
 
       {/* Contenu */}
       <div
-        className={`
-          relative z-10 w-full px-6 flex items-center justify-between transition-all duration-300
-          ${scrolled ? "h-20" : "flex-col justify-center h-full text-center"}
-        `}
+        className={`relative z-10 w-full px-6 flex items-center justify-between transition-all duration-300 ${scrolled ? "h-20" : "flex-col justify-center h-full text-center"}`}
       >
-        <h1
-          className={`
-            font-bold transition-all duration-300
-            ${scrolled ? "text-xl text-left" : "text-4xl mb-2"}
-          `}
-        >
+        <h1 className={`font-bold transition-all duration-300 ${scrolled ? "text-xl text-left" : "text-4xl mb-2"}`}>
           {title}
         </h1>
 
@@ -51,15 +44,12 @@ export default function Header() {
           <p className="text-lg sm:text-base xs:text-sm mb-4">{subtitle}</p>
         )}
 
-        <a
-          href={cta.href}
-          className={`
-            bg-yellow-400 text-black font-semibold px-6 py-3 rounded-2xl shadow hover:bg-yellow-300 transition-all duration-300
-            ${scrolled ? "ml-auto" : ""}
-          `}
+        <button
+          onClick={onDiscoverClick} // <- simple scroll à chaque clic
+          className={`bg-yellow-400 text-black font-semibold px-6 py-3 rounded-2xl shadow hover:bg-yellow-300 transition-all duration-300 ${scrolled ? "ml-auto" : ""}`}
         >
           {cta.label}
-        </a>
+        </button>
       </div>
     </header>
   );

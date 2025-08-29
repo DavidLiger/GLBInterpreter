@@ -8,6 +8,12 @@
     },
     "backgroundImage": "/images/header-bg.jpg"
   },
+  "universe": [
+    { "id": 1, "image": "/images/universe1.jpg", "text": "La forêt enchantée" },
+    { "id": 2, "image": "/images/universe2.jpg", "text": "Le château mystérieux" },
+    { "id": 3, "image": "/images/universe2.jpg", "text": "Le château mystérieux" },
+    { "id": 4, "image": "/images/universe3.jpg", "text": "Le village des elfes" }
+  ],
   "books": [
     {
       "id": 1,
