@@ -46,7 +46,7 @@ export default function Header({ onDiscoverClick }: HeaderProps) {
 
         <button
           onClick={onDiscoverClick} // <- simple scroll à chaque clic
-          className={`bg-yellow-400 text-black font-semibold px-6 py-3 rounded-2xl shadow hover:bg-yellow-300 transition-all duration-300 ${scrolled ? "ml-auto" : ""}`}
+          className={`bg-yellow-400 text-black font-semibold px-6 py-3 rounded-2xl shadow hover:bg-yellow-300 transition-all cursor-pointer duration-300 ${scrolled ? "ml-auto" : ""}`}
         >
           {cta.label}
         </button>
