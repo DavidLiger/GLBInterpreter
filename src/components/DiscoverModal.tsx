@@ -43,7 +43,7 @@ export default function DiscoverModal({ isOpen, onClose, item }: DiscoverModalPr
       {/* Bouton croix indépendant */}
       <button
         onClick={onClose}
-        className="fixed top-4 right-7 text-5xl font-bold text-gray-800 z-50 cursor-pointer"
+        className="fixed top-4 right-7 text-5xl font-bold text-gray-100 z-50 cursor-pointer"
       >
         &times;
       </button>
