@@ -60,7 +60,7 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
         <div className="sticky top-0 w-full h-[180px] z-10">
           <img src={book.image} alt={book.title} className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center p-2 gap-2">
-            <p className="text-white font-semibold text-center text-sm">{book.title}</p>
+            <p className="text-white font-semibold text-center text-4xl">{book.title}</p>
             {book.link && <AmazonButton href={book.link} />}
           </div>
         </div>

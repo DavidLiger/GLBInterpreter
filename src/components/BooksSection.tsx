@@ -45,7 +45,7 @@ return (
           <div className="flex flex-col gap-2 mt-auto">
             <button
               onClick={() => openModal(book)}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 transition"
+              className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 transition cursor-pointer"
             >
               En savoir +
             </button>
