@@ -24,7 +24,7 @@ export default function Home() {
       <Header onDiscoverClick={scrollToDiscover} />
       <main className="pt-64"> {/* Ajuste selon la hauteur du header */}
         <BooksSection />
-        <Extrait />
+        {/* <Extrait /> */}
         <div ref={discoverRef}>
           <DiscoverSection />
         </div>
