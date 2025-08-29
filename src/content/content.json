@@ -8,6 +8,16 @@
     },
     "backgroundImage": "/images/header-bg.jpg"
   },
+  "bookSection": {
+    "title": "Mes livres",
+    "detailLink": "En savoir +"
+  },
+  "discoverSection": {
+    "title": "Découvrir l'univers"
+  },
+  "amazonButton": {
+    "title": "Acheter sur Amazon"
+  },
   "universe": [
     {
       "id": 1,

@@ -13,6 +13,7 @@ interface DiscoverItem {
 import DiscoverModal from "./DiscoverModal";
 
 export default function DiscoverSection() {
+  const { title } = content.discoverSection;
   const { universe } = content;
   const [selectedItem, setSelectedItem] = useState<DiscoverItem | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -34,7 +35,7 @@ export default function DiscoverSection() {
   return (
   <>
     <section className="py-16 px-6 max-w-full mx-auto relative">
-      <h2 className="text-3xl font-bold text-center mb-8">Découvrir l'univers</h2>
+      <h2 className="text-3xl font-bold text-center mb-8">{title}</h2>
 
       <div
         ref={containerRef}

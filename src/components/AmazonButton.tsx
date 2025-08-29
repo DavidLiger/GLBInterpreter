@@ -1,10 +1,13 @@
 import Image from "next/image";
+import content from "../content/content.json";
 
 interface AmazonButtonProps {
   href: string;
 }
 
 export default function AmazonButton({ href }: AmazonButtonProps) {
+  const { title } = content.amazonButton;
+
   return (
     <a
       href={href}
@@ -18,7 +21,7 @@ export default function AmazonButton({ href }: AmazonButtonProps) {
         width={20}
         height={20}
       />
-      Acheter sur Amazon
+      {title}
     </a>
   );
 }
