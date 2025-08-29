@@ -5,7 +5,8 @@
     "cta": {
       "label": "Découvrir les livres",
       "href": "#books"
-    }
+    },
+    "backgroundImage": "/images/header-bg.jpg"
   },
   "books": [
     {

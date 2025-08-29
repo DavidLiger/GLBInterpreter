@@ -5,7 +5,7 @@ export default function BooksSection() {
   return (
     <section id="books" className="py-16 px-6 max-w-6xl mx-auto">
       <h2 className="text-3xl font-bold text-center mb-12">Mes Livres</h2>
-      <div className="grid md:grid-cols-3 gap-8">
+      <div className="grid gap-12 sm:[grid-template-columns:repeat(auto-fit,minmax(250px,1fr))] lg:flex lg:flex-wrap lg:justify-center">
         {content.books.map((book) => (
           <div key={book.id} className="bg-white rounded-2xl shadow-lg p-6 flex flex-col">
             <div className="h-48 relative mb-4">

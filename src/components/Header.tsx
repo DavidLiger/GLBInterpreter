@@ -1,18 +1,66 @@
+'use client'
+
+import { useEffect, useState } from "react";
 import content from "../content/content.json";
 
 export default function Header() {
-  const { title, subtitle, cta } = content.header;
+  const { title, subtitle, cta, backgroundImage } = content.header;
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 50); // déclenche après 50px scroll
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
-    <header className="bg-gradient-to-r from-purple-800 to-indigo-700 text-white p-12 text-center">
-      <h1 className="text-4xl font-bold mb-4">{title}</h1>
-      <p className="text-lg mb-6">{subtitle}</p>
-      <a
-        href={cta.href}
-        className="bg-yellow-400 text-black font-semibold px-6 py-3 rounded-2xl shadow hover:bg-yellow-300 transition"
+    <header
+      className={`
+        fixed top-0 left-0 w-full z-50 transition-all duration-300
+        ${scrolled ? "h-20" : "h-64 sm:h-56 xs:h-48"}
+      `}
+    >
+      {/* Image de fond */}
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: `url(${backgroundImage})` }}
+      ></div>
+
+      {/* Overlay gradient */}
+      <div className="absolute inset-0 bg-gradient-to-r from-purple-800 to-indigo-700 opacity-70"></div>
+
+      {/* Contenu */}
+      <div
+        className={`
+          relative z-10 w-full px-6 flex items-center justify-between transition-all duration-300
+          ${scrolled ? "h-20" : "flex-col justify-center h-full text-center"}
+        `}
       >
-        {cta.label}
-      </a>
+        <h1
+          className={`
+            font-bold transition-all duration-300
+            ${scrolled ? "text-xl text-left" : "text-4xl mb-2"}
+          `}
+        >
+          {title}
+        </h1>
+
+        {!scrolled && (
+          <p className="text-lg sm:text-base xs:text-sm mb-4">{subtitle}</p>
+        )}
+
+        <a
+          href={cta.href}
+          className={`
+            bg-yellow-400 text-black font-semibold px-6 py-3 rounded-2xl shadow hover:bg-yellow-300 transition-all duration-300
+            ${scrolled ? "ml-auto" : ""}
+          `}
+        >
+          {cta.label}
+        </a>
+      </div>
     </header>
   );
 }

@@ -7,8 +7,10 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900">
       <Header />
-      <BooksSection />
-      <Extrait />
+      <main className="pt-64"> {/* ajuste pt selon la hauteur du header */}
+        <BooksSection />
+        <Extrait />
+      </main>
       <Footer />
     </div>
   );
