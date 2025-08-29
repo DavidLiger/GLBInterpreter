@@ -9,10 +9,34 @@
     "backgroundImage": "/images/header-bg.jpg"
   },
   "universe": [
-    { "id": 1, "image": "/images/universe1.jpg", "text": "La forêt enchantée" },
-    { "id": 2, "image": "/images/universe2.jpg", "text": "Le château mystérieux" },
-    { "id": 3, "image": "/images/universe2.jpg", "text": "Le château mystérieux" },
-    { "id": 4, "image": "/images/universe3.jpg", "text": "Le village des elfes" }
+    {
+      "id": 1,
+      "image": "/images/universe1.jpg",
+      "text": "La forêt enchantée",
+      "details": [
+        { "image": "/images/foret1.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum." },
+        { "image": "/images/foret2.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." },
+        { "image": "/images/foret3.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." }
+      ]
+    },
+    {
+      "id": 2,
+      "image": "/images/universe2.jpg",
+      "text": "Le château mystérieux",
+      "details": [
+        { "image": "/images/chateau1.jpg", "text": "La tour abandonnée" },
+        { "image": "/images/chateau2.jpg", "text": "Les jardins secrets" }
+      ]
+    },
+    {
+      "id": 3,
+      "image": "/images/universe3.jpg",
+      "text": "Le village des elfes",
+      "details": [
+        { "image": "/images/village1.jpg", "text": "La place du marché" },
+        { "image": "/images/village2.jpg", "text": "Les maisons dans les arbres" }
+      ]
+    }
   ],
   "books": [
     {
