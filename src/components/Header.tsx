@@ -30,7 +30,7 @@ export default function Header({ onDiscoverClick }: HeaderProps) {
       ></div>
 
       {/* Overlay gradient */}
-      <div className="absolute inset-0 bg-gradient-to-r from-purple-800 to-indigo-700 opacity-70"></div>
+      <div className="absolute inset-0 bg-gradient-to-r from-purple-800 to-indigo-700 opacity-30"></div>
 
       {/* Contenu */}
       <div
