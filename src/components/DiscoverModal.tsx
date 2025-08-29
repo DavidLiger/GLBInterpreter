@@ -50,7 +50,7 @@ export default function DiscoverModal({ isOpen, onClose, item }: DiscoverModalPr
 
       {/* Modale principale */}
       <div
-        className={`bg-white w-full sm:w-[70%] lg:max-w-[40%] h-full overflow-auto relative transform transition-transform duration-500
+        className={`bg-white w-full sm:w-[80%] lg:max-w-[60%] h-full overflow-auto relative transform transition-transform duration-500
                     ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
         onClick={(e) => e.stopPropagation()}
       >
