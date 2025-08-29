@@ -13,16 +13,16 @@ export default function Home() {
   // Fonction pour scroller vers DiscoverSection
   const scrollToDiscover = () => {
     if (discoverRef.current) {
-      const yOffset = -120; // hauteur approximative du header + marge
+      const yOffset = -60; // hauteur approximative du header + marge
       const y = discoverRef.current.getBoundingClientRect().top + window.pageYOffset + yOffset;
       window.scrollTo({ top: y, behavior: "smooth" });
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 text-gray-900">
+    <div className="min-h-screen flex flex-col bg-gray-300 text-gray-900">
       <Header onDiscoverClick={scrollToDiscover} />
-      <main className="pt-64"> {/* Ajuste selon la hauteur du header */}
+      <main className="pt-48"> {/* Ajuste selon la hauteur du header */}
         <BooksSection />
         {/* <Extrait /> */}
         <div ref={discoverRef}>

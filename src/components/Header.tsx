@@ -21,7 +21,7 @@ export default function Header({ onDiscoverClick }: HeaderProps) {
 
   return (
     <header
-      className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${scrolled ? "h-20" : "h-64 sm:h-56 xs:h-48"}`}
+      className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${scrolled ? "h-20" : "h-48 sm:h-56 xs:h-48"}`}
     >
       {/* Image de fond */}
       <div
@@ -36,20 +36,23 @@ export default function Header({ onDiscoverClick }: HeaderProps) {
       <div
         className={`relative z-10 w-full px-6 flex items-center justify-between transition-all duration-300 ${scrolled ? "h-20" : "flex-col justify-center h-full text-center"}`}
       >
-        <h1 className={`font-bold transition-all duration-300 ${scrolled ? "text-xl text-left" : "text-4xl mb-2"}`}>
+        <h1 className={`font-bold transition-all duration-300 text-white ${scrolled ? "text-3xl text-left" : "text-6xl mb-2"}`}>
           {title}
         </h1>
 
         {!scrolled && (
-          <p className="text-lg sm:text-base xs:text-sm mb-4">{subtitle}</p>
+          <p className="text-lg text-white sm:text-base xs:text-sm mb-4">{subtitle}</p>
         )}
 
-        <button
-          onClick={onDiscoverClick} // <- simple scroll à chaque clic
-          className={`bg-yellow-400 text-black font-semibold px-6 py-3 rounded-2xl shadow hover:bg-yellow-300 transition-all cursor-pointer duration-300 ${scrolled ? "ml-auto" : ""}`}
-        >
-          {cta.label}
-        </button>
+      <button
+        onClick={onDiscoverClick}
+        className={`bg-yellow-400 text-black font-semibold px-6 py-3 rounded-2xl shadow hover:bg-yellow-300 transition-all cursor-pointer duration-300 ${
+          scrolled ? "ml-auto" : ""
+        }`}
+      >
+        {scrolled ? "Découvrir l'univers..." : cta.label}
+      </button>
+
       </div>
     </header>
   );

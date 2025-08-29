@@ -43,7 +43,7 @@ export default function DiscoverModal({ isOpen, onClose, item }: DiscoverModalPr
       {/* Bouton croix indépendant */}
       <button
         onClick={onClose}
-        className="fixed top-4 right-7 text-5xl font-bold text-gray-100 z-50 cursor-pointer"
+        className="fixed top-3 right-5 text-4xl font-bold text-gray-100 z-50 cursor-pointer"
       >
         &times;
       </button>
@@ -59,12 +59,12 @@ export default function DiscoverModal({ isOpen, onClose, item }: DiscoverModalPr
         <div className="sticky top-0 w-full h-[180px] z-10">
         <img src={item.image} alt={item.text} className="w-full h-full object-cover" />
         <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-1">
-            <p className="text-white font-semibold text-center text-sm">{item.text}</p>
+            <p className="text-white font-semibold text-center text-3xl mb-5">{item.text}</p>
         </div>
         </div>
 
         {/* Details scrollables */}
-        <div className="mt-6 flex flex-col gap-6 px-4 pb-8">
+        <div className="mt-6 flex flex-col gap-6 px-4 pb-24">
           {item.details?.map((detail, idx) => (
             <div key={idx} className="w-full">
               <img src={detail.image} alt={detail.text} className="w-full h-auto object-cover rounded-lg" />

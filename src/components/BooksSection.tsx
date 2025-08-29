@@ -22,14 +22,14 @@ export default function BooksSection() {
   };
 
 return (
-  <section id="books" className="py-16 px-6 max-w-6xl mx-auto">
+  <section id="books" className="py-16 px-6 max-w-6xl mx-auto scroll-mt-20">
     <h2 className="text-3xl font-bold text-center mb-12">{title}</h2>
 
     <div className="grid gap-12 sm:[grid-template-columns:repeat(auto-fit,minmax(250px,1fr))] lg:flex lg:flex-wrap lg:justify-center">
       {content.books.map((book) => (
         <div
           key={book.id}
-          className="bg-white rounded-2xl shadow-lg p-6 flex flex-col cursor-pointer hover:scale-105 transition-transform"
+          className="bg-gray-100 rounded-2xl shadow-lg p-6 flex flex-col cursor-pointer hover:scale-105 transition-transform"
         >
           <div className="h-48 relative mb-4">
             <Image
@@ -39,14 +39,14 @@ return (
               className="object-cover rounded-lg"
             />
           </div>
-          <h3 className="text-xl font-bold mb-2">{book.title}</h3>
-          <p className="text-sm text-gray-600 mb-4">{book.summary}</p>
+          <h3 className="text-2xl text-gray-700 font-bold mb-2">{book.title}</h3>
+          <p className="text-sm text-gray-700 font-bold mb-4">{book.summary}</p>
 
           {/* Conteneur des boutons */}
           <div className="flex flex-col gap-2 mt-auto">
             <button
               onClick={() => openModal(book)}
-              className="bg-indigo-600 text-white font-semibold px-4 py-2 rounded-lg hover:bg-indigo-500 transition cursor-pointer"
+              className="bg-indigo-600 text-white shadow-lg font-semibold px-4 py-2 rounded-lg hover:bg-indigo-500 transition cursor-pointer"
             >
               {detailLink}
             </button>

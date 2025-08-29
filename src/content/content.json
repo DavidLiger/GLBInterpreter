@@ -1,9 +1,9 @@
 {
   "header": {
-    "title": "Bienvenue dans mon univers de Fantasy",
-    "subtitle": "Découvrez mes romans et plongez dans un monde de magie et d'aventures",
+    "title": "Faerium",
+    "subtitle": "Un univers à nul autre pareil...",
     "cta": {
-      "label": "Découvrir le monde de Faerium",
+      "label": "Découvrir l'univers de Faerium",
       "href": "#books"
     },
     "backgroundImage": "/images/header-bg.jpg"

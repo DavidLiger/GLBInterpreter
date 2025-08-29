@@ -34,7 +34,7 @@ export default function DiscoverSection() {
 
   return (
   <>
-    <section className="py-16 px-6 max-w-full mx-auto relative">
+    <section className="py-12 px-6 max-w-full mx-auto relative">
       <h2 className="text-3xl font-bold text-center mb-8">{title}</h2>
 
       <div
@@ -54,15 +54,15 @@ export default function DiscoverSection() {
               className="w-full h-64 md:h-72 object-cover"
             />
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center p-4">
-              <p className="text-white font-semibold text-center">{item.text}</p>
+              <p className="text-white font-semibold text-2xl text-center">{item.text}</p>
             </div>
           </div>
         ))}
       </div>
 
       {/* Gradients pour indiquer scroll */}
-      <div className="hidden md:block absolute top-0 left-0 w-12 h-full bg-gradient-to-r from-gray-50 pointer-events-none"></div>
-      <div className="hidden md:block absolute top-0 right-0 w-12 h-full bg-gradient-to-l from-gray-50 pointer-events-none"></div>
+      {/* <div className="hidden md:block absolute top-0 left-0 w-12 h-full bg-gradient-to-r from-gray-50 pointer-events-none"></div>
+      <div className="hidden md:block absolute top-0 right-0 w-12 h-full bg-gradient-to-l from-gray-50 pointer-events-none"></div> */}
     </section>
 
     {/* Modale */}
