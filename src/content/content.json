@@ -51,7 +51,7 @@
   "books": [
     {
       "id": 1,
-      "title": "Titre du Livre 1",
+      "title": "Titre vraiment vachement plus long du Livre 1",
       "summary": "Résumé rapide du livre 1…",
       "image": "/images/book1.jpg",
       "link": "https://amazon.com/livre1",

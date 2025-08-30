@@ -3,7 +3,6 @@
 import { useRef } from "react";
 import Header from "../components/Header";
 import BooksSection from "../components/BooksSection";
-import Extrait from "../components/Extrait";
 import Footer from "../components/Footer";
 import DiscoverSection from "../components/DiscoverSection";
 
@@ -24,7 +23,6 @@ export default function Home() {
       <Header onDiscoverClick={scrollToDiscover} />
       <main className="pt-48"> {/* Ajuste selon la hauteur du header */}
         <BooksSection />
-        {/* <Extrait /> */}
         <div ref={discoverRef}>
           <DiscoverSection />
         </div>

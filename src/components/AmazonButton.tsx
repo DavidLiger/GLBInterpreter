@@ -3,9 +3,10 @@ import content from "../content/content.json";
 
 interface AmazonButtonProps {
   href: string;
+  label?: string; // <-- option pour changer le texte
 }
 
-export default function AmazonButton({ href }: AmazonButtonProps) {
+export default function AmazonButton({ href, label }: AmazonButtonProps) {
   const { title } = content.amazonButton;
 
   return (
@@ -21,7 +22,7 @@ export default function AmazonButton({ href }: AmazonButtonProps) {
         width={20}
         height={20}
       />
-      {title}
+      {label || title} {/* si on passe label="Acheter", il prend le dessus */}
     </a>
   );
 }
