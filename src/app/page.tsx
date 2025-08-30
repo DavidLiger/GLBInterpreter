@@ -5,6 +5,8 @@ import Header from "../components/Header";
 import BooksSection from "../components/BooksSection";
 import Footer from "../components/Footer";
 import DiscoverSection from "../components/DiscoverSection";
+import content from "../content/content.json";
+import Copyright from "@/components/Copyright";
 
 export default function Home() {
   const discoverRef = useRef<HTMLDivElement>(null);
@@ -26,6 +28,7 @@ export default function Home() {
         <div ref={discoverRef}>
           <DiscoverSection />
         </div>
+        <Copyright />
       </main>
       <Footer />
     </div>
