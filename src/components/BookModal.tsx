@@ -27,15 +27,24 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
   const [scrolled, setScrolled] = useState(false);
   const lastState = useRef(false);
 
+  // Bloquer scroll du body et reset hystérésis
+  useEffect(() => {
+    document.body.style.overflow = isOpen ? "hidden" : "";
+    if (!isOpen) {
+      setScrolled(false);
+      lastState.current = false;
+    }
+    return () => { document.body.style.overflow = ""; }
+  }, [isOpen]);
+
+  // Détection du scroll avec hystérésis
   useEffect(() => {
     if (!isOpen) return;
     const modal = document.getElementById("book-modal-content");
+    if (!modal) return;
 
     const handleScroll = () => {
-      if (!modal) return;
       const scrollTop = modal.scrollTop;
-
-      // Hystérésis pour éviter le rebond
       if (!lastState.current && scrollTop > 2) {
         setScrolled(true);
         lastState.current = true;
@@ -45,40 +54,19 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
       }
     };
 
-    modal?.addEventListener("scroll", handleScroll);
-    return () => modal?.removeEventListener("scroll", handleScroll);
-  }, [isOpen]);
-
-
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-      setScrolled(false);       // ← reset état scroll
-      lastState.current = false; // ← reset l’hystérésis
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [isOpen]);
-
-
-  useEffect(() => {
-    document.body.style.overflow = isOpen ? "hidden" : "";
-    return () => {
-      document.body.style.overflow = "";
-    };
+    modal.addEventListener("scroll", handleScroll);
+    return () => modal.removeEventListener("scroll", handleScroll);
   }, [isOpen]);
 
   if (!isOpen || !book) return null;
+
+  const scaleY = scrolled ? 0.5 : 1;
 
   return (
     <div
       className="fixed inset-0 z-50 bg-black/70 flex justify-end lg:justify-center overflow-hidden"
       onClick={onClose}
     >
-      {/* Bouton croix */}
       <button
         onClick={onClose}
         className="fixed right-2 text-4xl font-bold text-gray-100 z-50 cursor-pointer"
@@ -86,48 +74,40 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
         &times;
       </button>
 
-      {/* Modale principale */}
       <div
         id="book-modal-content"
-        className={`bg-white w-full sm:w-[80%] lg:max-w-[60%] h-full overflow-auto relative transform transition-transform duration-500
-          ${isOpen ? "translate-x-0" : "translate-x-full"}`}
+        className="bg-white w-full sm:w-[80%] lg:max-w-[60%] h-full overflow-auto relative transform transition-transform duration-500"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header sticky */}
-        <div
-          className={`sticky top-0 w-full transition-all duration-300 ${
-            scrolled ? "h-24" : "h-48"
-          }`}
-        >
-          {/* Image */}
-          <img
-            src={book.image}
-            alt={book.title}
-            className="absolute inset-0 w-full h-full object-cover"
-          />
+        <div className={`sticky top-0 w-full transition-all duration-300 ${ scrolled ? "h-24" : "h-48" }`} >
+          <div className="absolute inset-0 overflow-hidden">
+            {/* Image réduite quand scroll */}
+            <img
+              src={book.image}
+              alt={book.title}
+              className={`absolute inset-0 w-full h-full object-cover transition-transform duration-300 `}
+            />
+          </div>
 
-          {/* Conteneur texte + bouton */}
+          {/* Conteneur texte + bouton (toujours visible) */}
           <div
-            className={`absolute inset-0 bg-black/50 flex ${
+            className={`absolute inset-0 bg-black/50 flex transition-all duration-300 ${
               scrolled
                 ? "flex-row justify-between items-center px-5"
                 : "flex-col justify-center items-center p-2 gap-2"
             }`}
           >
-            {/* Titre */}
             <p
               className={`text-white font-semibold transition-all duration-300 ${
-                scrolled
-                  ? "text-xl text-left max-w-[60%]" // limite la largeur
-                  : "text-3xl text-center mb-2"
+                scrolled ? "text-xl text-left max-w-[60%]" : "text-3xl text-center mb-2"
               }`}
             >
               {book.title}
             </p>
 
-            {/* Bouton Amazon */}
             {book.link && (
-              <div className="mr-5"> {/* Ajoute un petit offset du bord */}
+              <div className={scrolled ? "mr-5" : ""}>
                 <AmazonButton
                   href={book.link}
                   label={scrolled ? "Acheter" : undefined}
@@ -136,7 +116,6 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
             )}
           </div>
         </div>
-
 
         {/* Contenu */}
         <div className="mt-6 flex flex-col gap-6 px-4 pb-24">
