@@ -9,11 +9,11 @@
     "backgroundImage": "/images/header-bg.jpg"
   },
   "bookSection": {
-    "title": "Mes livres",
+    "title": "Les livres",
     "detailLink": "En savoir +"
   },
   "discoverSection": {
-    "title": "Découvrir l'univers"
+    "title": "L'univers"
   },
   "amazonButton": {
     "title": "Acheter sur Amazon"

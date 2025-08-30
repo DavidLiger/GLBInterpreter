@@ -5,6 +5,12 @@ import Image from "next/image";
 import content from "../content/content.json";
 import BookModal from "./BookModal";
 import AmazonButton from "./AmazonButton";
+import localFont from "next/font/local";
+
+const Alstoria = localFont({
+  src: "../../public/fonts/Alstoria.ttf",
+  variable: "--font-Alstoria", // optionnel si tu veux l'utiliser avec Tailwind
+});
 
 export default function BooksSection() {
   const { title, detailLink } = content.bookSection;
@@ -23,7 +29,7 @@ export default function BooksSection() {
 
 return (
   <section id="books" className="py-16 px-6 max-w-6xl mx-auto scroll-mt-20">
-    <h2 className="text-3xl font-bold text-center mb-12">{title}</h2>
+    <h2 className={`${Alstoria.className} text-4xl font-bold text-center mb-12`}>{title}</h2>
 
 <div className="grid gap-12 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 justify-items-center">
 

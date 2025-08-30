@@ -2,6 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import content from "../content/content.json";
+import localFont from "next/font/local";
+import DiscoverModal from "./DiscoverModal";
+
+const Alstoria = localFont({
+  src: "../../public/fonts/Alstoria.ttf",
+  variable: "--font-Alstoria", // optionnel si tu veux l'utiliser avec Tailwind
+});
 
 interface DiscoverItem {
   id: number;
@@ -10,7 +17,6 @@ interface DiscoverItem {
   details?: { image: string; text: string }[];
 }
 
-import DiscoverModal from "./DiscoverModal";
 
 export default function DiscoverSection() {
   const { title } = content.discoverSection;
@@ -35,8 +41,14 @@ export default function DiscoverSection() {
   return (
   <>
     <section className="py-12 px-6 max-w-full mx-auto relative">
-      <h2 className="text-3xl font-bold text-center mb-8">{title}</h2>
-
+      <h2 className={`${Alstoria.className} text-4xl font-bold text-center mb-8`}>
+        {title.split("'").map((part, idx, arr) => (
+          <span key={idx}>
+            {part}
+            {idx < arr.length - 1 && <span className="font-serif">'</span>}
+          </span>
+        ))}
+      </h2>
       <div
         ref={containerRef}
         className={`flex flex-col items-center space-y-6 md:flex-row md:space-x-8 md:space-y-0 overflow-x-auto md:overflow-x-auto 
