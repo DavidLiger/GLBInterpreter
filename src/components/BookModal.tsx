@@ -36,7 +36,7 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
       const scrollTop = modal.scrollTop;
 
       // Hystérésis pour éviter le rebond
-      if (!lastState.current && scrollTop > 2) {
+      if (!lastState.current && scrollTop > 5) {
         setScrolled(true);
         lastState.current = true;
       } else if (lastState.current && scrollTop < 2) {
