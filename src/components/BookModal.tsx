@@ -27,27 +27,41 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
   const [scrolled, setScrolled] = useState(false);
   const lastState = useRef(false);
 
+  // useEffect(() => {
+  //   if (!isOpen) return;
+  //   const modal = document.getElementById("book-modal-content");
+
+  //   const handleScroll = () => {
+  //     if (!modal) return;
+  //     const scrollTop = modal.scrollTop;
+
+  //     // Hystérésis pour éviter le rebond
+  //     if (!lastState.current && scrollTop > 0) {
+  //       setScrolled(true);
+  //       lastState.current = true;
+  //     } else if (lastState.current && scrollTop < 5) {
+  //       setScrolled(false);
+  //       lastState.current = false;
+  //     }
+  //   };
+
+  //   modal?.addEventListener("scroll", handleScroll);
+  //   return () => modal?.removeEventListener("scroll", handleScroll);
+  // }, [isOpen]);
+
   useEffect(() => {
     if (!isOpen) return;
     const modal = document.getElementById("book-modal-content");
 
     const handleScroll = () => {
       if (!modal) return;
-      const scrollTop = modal.scrollTop;
-
-      // Hystérésis pour éviter le rebond
-      if (!lastState.current && scrollTop > 250) {
-        setScrolled(true);
-        lastState.current = true;
-      } else if (lastState.current && scrollTop < 5) {
-        setScrolled(false);
-        lastState.current = false;
-      }
+      setScrolled(modal.scrollTop > 0); // réduit dès que scrollTop > 0
     };
 
     modal?.addEventListener("scroll", handleScroll);
     return () => modal?.removeEventListener("scroll", handleScroll);
   }, [isOpen]);
+
 
   useEffect(() => {
     if (isOpen) {

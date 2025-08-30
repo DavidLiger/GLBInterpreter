@@ -33,26 +33,39 @@ export default function DiscoverModal({ isOpen, onClose, item }: DiscoverModalPr
   }, [isOpen]);
 
   // Détection du scroll avec hystérésis
+  // useEffect(() => {
+  //   if (!isOpen) return;
+  //   const modal = document.getElementById("discover-modal-content");
+
+  //   const handleScroll = () => {
+  //     if (!modal) return;
+  //     const scrollTop = modal.scrollTop;
+
+  //     if (!lastState.current && scrollTop > 250) {
+  //       setScrolled(true);
+  //       lastState.current = true;
+  //     } else if (lastState.current && scrollTop < 5) {
+  //       setScrolled(false);
+  //       lastState.current = false;
+  //     }
+  //   };
+
+  //   modal?.addEventListener("scroll", handleScroll);
+  //   return () => modal?.removeEventListener("scroll", handleScroll);
+  // }, [isOpen]);
   useEffect(() => {
-    if (!isOpen) return;
-    const modal = document.getElementById("discover-modal-content");
+  if (!isOpen) return;
+  const modal = document.getElementById("discover-modal-content");
+  if (!modal) return;
 
-    const handleScroll = () => {
-      if (!modal) return;
-      const scrollTop = modal.scrollTop;
+  const handleScroll = () => {
+    setScrolled(modal.scrollTop > 0); // réduit dès que scrollTop > 0
+  };
 
-      if (!lastState.current && scrollTop > 250) {
-        setScrolled(true);
-        lastState.current = true;
-      } else if (lastState.current && scrollTop < 5) {
-        setScrolled(false);
-        lastState.current = false;
-      }
-    };
+  modal.addEventListener("scroll", handleScroll);
+  return () => modal.removeEventListener("scroll", handleScroll);
+}, [isOpen]);
 
-    modal?.addEventListener("scroll", handleScroll);
-    return () => modal?.removeEventListener("scroll", handleScroll);
-  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
