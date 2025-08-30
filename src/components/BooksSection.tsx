@@ -25,11 +25,13 @@ return (
   <section id="books" className="py-16 px-6 max-w-6xl mx-auto scroll-mt-20">
     <h2 className="text-3xl font-bold text-center mb-12">{title}</h2>
 
-    <div className="grid gap-12 sm:[grid-template-columns:repeat(auto-fit,minmax(250px,1fr))] lg:flex lg:flex-wrap lg:justify-center">
+<div className="grid gap-12 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 justify-items-center">
+
       {content.books.map((book) => (
         <div
           key={book.id}
-          className="bg-gray-100 rounded-2xl shadow-lg p-6 flex flex-col cursor-pointer hover:scale-105 transition-transform"
+          className="bg-gray-100 rounded-2xl shadow-lg p-6 flex flex-col cursor-pointer hover:scale-105 transition-transform
+             min-h-[420px] max-h-[500px] max-w-[265px]"
         >
           <div className="h-48 relative mb-4">
             <Image
@@ -39,7 +41,11 @@ return (
               className="object-cover rounded-lg"
             />
           </div>
-          <h3 className="text-2xl text-gray-700 font-bold mb-2">{book.title}</h3>
+          <h3 className="text-2xl sm:text-2xl text-gray-700 font-bold mb-2 line-clamp-3 break-words">
+            {book.title}
+          </h3>
+
+
           <p className="text-sm text-gray-700 font-bold mb-4">{book.summary}</p>
 
           {/* Conteneur des boutons */}
