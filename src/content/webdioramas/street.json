@@ -1,0 +1,20 @@
+{
+  "glb": "/models/glb/street.glb",
+  "pois": [
+    {
+      "id": "window",
+      "label": "Fenêtre appartement",
+      "emptyName": "window",
+      "icon": "/icons/dioramas/test_street/window.png",
+      "zoom": 2
+    },
+    {
+      "id": "start",
+      "label": "Vue initiale",
+      "emptyName": "start",
+      "icon": "/icons/dioramas/test_street/start.png",
+      "zoom": 1
+    }
+  ],
+  "token": "abcd1234"
+}
