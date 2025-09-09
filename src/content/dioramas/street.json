@@ -8,7 +8,7 @@
       "id": "window",
       "icon": "/icons/dioramas/test_street/window.png",
       "label": "Fenêtre appartement",
-      "focus": { "x": 500, "y": 200, "zoom": 2 },
+      "focus": { "x": 0.65, "y": 1, "zoom": 2.5 },
       "child": {
         "layers": [
           { "image": "/images/dioramas/test_street/apartment_background.png", "zIndex": 0 },
@@ -19,7 +19,7 @@
             "id": "table",
             "icon": "/icons/dioramas/test_street/table.png",
             "label": "Table",
-            "focus": { "x": 300, "y": 250, "zoom": 3 }
+            "focus": { "x": 0.3, "y": 0.25, "zoom": 3 }
           }
         ]
       }
@@ -28,7 +28,7 @@
       "id": "door",
       "icon": "/icons/dioramas/test_street/door.png",
       "label": "Porte d'entrée",
-      "focus": { "x": 700, "y": 350, "zoom": 2 }
+      "focus": { "x": 0.7, "y": 0.35, "zoom": 2 }
     }
   ]
 }
