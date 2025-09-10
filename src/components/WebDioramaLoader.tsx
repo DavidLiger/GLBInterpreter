@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
@@ -251,18 +252,32 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   return (
     <div className="relative w-screen h-screen bg-black" ref={containerRef}>
       <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
-        {config.pois
-            .filter((poi) => poi.id !== currentPOI) // 🔥 Ne pas afficher le POI actuel
+        <AnimatePresence>
+          {config.pois
+            .filter((poi) => poi.id !== currentPOI)
             .map((poi) => (
-              <button
+              <motion.button
                 key={poi.id}
                 onClick={() => goToPOI(poi)}
-                className="bg-white rounded-full p-2 hover:scale-110 transition"
                 title={poi.label}
+                className="bg-white rounded-full p-2"
+                initial={{ scale: 0, opacity: 0 }}       // 🔥 Commence invisible et petit
+                animate={{ scale: 1, opacity: 1 }}       // 🔥 S'agrandit et devient visible
+                exit={{ scale: 0, opacity: 0 }}          // 🔥 Se rétrécit et disparaît
+                transition={{ duration: 0.3 }}
               >
-                <img src={poi.icon} alt={poi.label} className="w-8 h-8" />
-              </button>
-        ))}
+                <motion.img
+                  src={poi.icon}
+                  alt={poi.label}
+                  className="w-8 h-8"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  transition={{ duration: 0.3 }}
+                />
+              </motion.button>
+            ))}
+        </AnimatePresence>
       </div>
     </div>
   );
