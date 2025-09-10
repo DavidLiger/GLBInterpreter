@@ -251,15 +251,17 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   return (
     <div className="relative w-screen h-screen bg-black" ref={containerRef}>
       <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
-        {config.pois.map((poi) => (
-          <button
-            key={poi.id}
-            onClick={() => goToPOI(poi)}
-            className="bg-white rounded-full p-2 hover:scale-110 transition"
-            title={poi.label}
-          >
-            <img src={poi.icon} alt={poi.label} className="w-8 h-8" />
-          </button>
+        {config.pois
+            .filter((poi) => poi.id !== currentPOI) // 🔥 Ne pas afficher le POI actuel
+            .map((poi) => (
+              <button
+                key={poi.id}
+                onClick={() => goToPOI(poi)}
+                className="bg-white rounded-full p-2 hover:scale-110 transition"
+                title={poi.label}
+              >
+                <img src={poi.icon} alt={poi.label} className="w-8 h-8" />
+              </button>
         ))}
       </div>
     </div>
