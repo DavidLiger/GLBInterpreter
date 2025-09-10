@@ -210,31 +210,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     return null;
   };
 
-  // const getVisiblePOIs = () => {
-  //   if (!currentPOI) return config.pois;
-
-  //   const activePOI =
-  //     config.pois.find((p) => p.id === currentPOI) ||
-  //     findPOIRecursively(config.pois, currentPOI);
-
-  //   const parent = findParentPOI(config.pois, currentPOI);
-
-  //   if (parent) {
-  //     // 🔥 Si on est sur un enfant, montrer ses frères et ses éventuels enfants
-  //     const siblings = parent.children?.filter((p) => p.id !== currentPOI) ?? [];
-  //     const children = activePOI?.children ?? [];
-  //     return [...siblings, ...children];
-  //   }
-
-  //   // 🔥 Si on est sur un parent avec des enfants, montrer ses enfants
-  //   if (activePOI?.children?.length) {
-  //     return activePOI.children;
-  //   }
-
-  //   // 🔥 Sinon, montrer les autres POIs sauf le courant
-  //   return config.pois.filter((p) => p.id !== currentPOI);
-  // };
-
   const getVisiblePOIs = () => {
     if (!currentPOI) return config.pois;
 
@@ -256,10 +231,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       return [...siblings, ...children];
     }
   };
-
-
-
-
 
   const findPOIRecursively = (pois: POI[], id: string): POI | null => {
     for (const poi of pois) {
@@ -285,7 +256,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     scene.background = new THREE.Color(0x000000);
     sceneRef.current = scene;
 
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 1000);
     camera.position.set(0, 2, 5);
     cameraRef.current = camera;
 
