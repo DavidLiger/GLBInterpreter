@@ -1,0 +1,37 @@
+import type { POI, DioramaConfig3D } from "@/components/WebDioramaLoader";
+
+export const street: DioramaConfig3D = {
+  glb: "/models/glb/street.glb",
+  pois: [
+    {
+      id: "start",
+      label: "Vue initiale",
+      emptyName: "start",
+      icon: "/icons/dioramas/test_street/start.png",
+      zoom: 0.5,
+      lookAxis: "x",
+      minDistance: 1,
+      maxDistance: 20,
+      minPolarAngle: 0,
+      maxPolarAngle: 1.57,
+      minAzimuthAngle: -3.14,
+      maxAzimuthAngle: 3.14,
+      enableZoom: true,
+    },
+    {
+      id: "window",
+      label: "Fenêtre appartement",
+      emptyName: "window",
+      icon: "/icons/dioramas/test_street/window.png",
+      zoom: 0.2,
+      lookAxis: "x",
+      minDistance: 0.05,
+      maxDistance: 0.1,
+      minPolarAngle: 1,
+      maxPolarAngle: 1.57,
+      minAzimuthAngle: 1.14,
+      maxAzimuthAngle: 2.14,
+      enableZoom: true,
+    },
+  ],
+};
