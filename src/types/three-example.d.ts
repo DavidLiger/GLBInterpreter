@@ -12,7 +12,7 @@ declare module 'three/examples/jsm/loaders/GLTFLoader' {
 }
 
 declare module 'three/examples/jsm/controls/OrbitControls' {
-  import { Camera, MOUSE, EventDispatcher, Vector3, Renderer } from 'three';
+  import { Camera, MOUSE, EventDispatcher, Vector3 } from 'three';
   export class OrbitControls extends EventDispatcher {
     constructor(object: Camera, domElement?: HTMLElement);
     enabled: boolean;
@@ -26,8 +26,11 @@ declare module 'three/examples/jsm/controls/OrbitControls' {
     maxDistance: number;
     minPolarAngle: number;
     maxPolarAngle: number;
+    minAzimuthAngle: number;   // Ajouté
+    maxAzimuthAngle: number;   // Ajouté
     mouseButtons: { LEFT: MOUSE; MIDDLE: MOUSE; RIGHT: MOUSE };
     update(): void;
     dispose(): void;
   }
 }
+
