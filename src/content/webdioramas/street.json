@@ -6,14 +6,16 @@
       "label": "Fenêtre appartement",
       "emptyName": "window",
       "icon": "/icons/dioramas/test_street/window.png",
-      "zoom": 2
+      "zoom": 0.1,
+      "lookAxis": "x"
     },
     {
       "id": "start",
       "label": "Vue initiale",
       "emptyName": "start",
       "icon": "/icons/dioramas/test_street/start.png",
-      "zoom": 1
+      "zoom": 0.5,
+      "lookAxis": "x"
     }
   ],
   "token": "abcd1234"

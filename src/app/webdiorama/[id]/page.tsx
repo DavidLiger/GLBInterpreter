@@ -1,18 +1,19 @@
 import { notFound } from "next/navigation";
 import WebDioramaLoader, { DioramaConfig3D } from "@/components/WebDioramaLoader";
-import webdioramas from "@/content/webdioramas";
+import dioramas3d from "@/content/webdioramas";
 
-type WebDioramaPageProps = {
-  params: { id: string };
-  searchParams: { t?: string };
+type Props = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ t?: string }>;
 };
 
-export default async function WebDioramaPage({ params, searchParams }: WebDioramaPageProps) {
-  const { id } = params;
-  const token = searchParams?.t;
+export default async function WebDioramaPage({ params, searchParams }: Props) {
+  // ⚠️ Désormais on await params et searchParams
+  const { id } = await params;
+  const { t } = await searchParams;
 
-  const diorama = webdioramas[id];
-  if (!diorama || diorama.token !== token) {
+  const diorama = dioramas3d[id];
+  if (!diorama || diorama.token !== t) {
     notFound();
   }
 

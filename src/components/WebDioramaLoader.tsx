@@ -10,7 +10,8 @@ export type POI = {
   label: string;
   emptyName: string;
   icon: string;
-  zoom?: number;
+  zoom?: number; // distance caméra
+  lookAxis?: "x" | "y" | "z"; // axe de visée configurable
 };
 
 export type DioramaConfig3D = {
@@ -24,33 +25,92 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
-  const gltfRef = useRef<THREE.Object3D | null>(null);
   const emptyRefs = useRef<Record<string, THREE.Object3D>>({});
 
-  // Initialisation Three.js
+  // --- UTILS ---
+  const easeInOutCubic = (t: number) =>
+    t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+  const getWorldAxis = (obj: THREE.Object3D, axis: "x" | "y" | "z" = "x") => {
+    const v = new THREE.Vector3();
+    obj.updateMatrixWorld(true);
+    const colIndex = axis === "x" ? 0 : axis === "y" ? 1 : 2;
+    v.setFromMatrixColumn(obj.matrixWorld, colIndex);
+    return v.normalize();
+  };
+
+  const moveCameraTo = (
+    targetObj: THREE.Object3D,
+    distance = 3,
+    lookAxis: "x" | "y" | "z" = "x",
+    animate = true
+  ) => {
+    if (!cameraRef.current || !controlsRef.current) return;
+
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+
+    targetObj.updateMatrixWorld(true);
+    const axis = getWorldAxis(targetObj, lookAxis);
+
+    const finalPos = targetObj.position
+      .clone()
+      .add(axis.clone().multiplyScalar(-distance));
+    const finalTarget = targetObj.position.clone();
+
+    if (!animate) {
+      camera.position.copy(finalPos);
+      controls.target.copy(finalTarget);
+      controls.update();
+      return;
+    }
+
+    // Animate
+    const startPos = camera.position.clone();
+    const startTarget = controls.target.clone();
+    const duration = 1200;
+    const startTime = performance.now();
+
+    const animateStep = (time: number) => {
+      const tRaw = Math.min((time - startTime) / duration, 1);
+      const t = easeInOutCubic(tRaw);
+
+      camera.position.lerpVectors(startPos, finalPos, t);
+      controls.target.lerpVectors(startTarget, finalTarget, t);
+      controls.update();
+
+      if (tRaw < 1) requestAnimationFrame(animateStep);
+    };
+    requestAnimationFrame(animateStep);
+  };
+
+  const goToPOI = (poi: POI) => {
+    const obj = emptyRefs.current[poi.emptyName];
+    if (obj) {
+      moveCameraTo(obj, poi.zoom ?? 3, poi.lookAxis ?? "x", true);
+    }
+  };
+
+  // --- INIT THREE ---
   useEffect(() => {
     if (!containerRef.current) return;
 
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
 
-    // Scene
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
     sceneRef.current = scene;
 
-    // Camera
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
     camera.position.set(0, 2, 5);
     cameraRef.current = camera;
 
-    // Renderer
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Controls
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
@@ -58,41 +118,40 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     controls.enablePan = false;
     controls.maxPolarAngle = Math.PI / 2;
     controls.minDistance = 1;
-    controls.maxDistance = 10;
+    controls.maxDistance = 20;
     controlsRef.current = controls;
 
-    // Lumière
     const ambientLight = new THREE.AmbientLight(0xffffff, 1);
     scene.add(ambientLight);
 
-    // GLTF Loader
+    // Load GLB
     const loader = new GLTFLoader();
     loader.load(
       config.glb,
       (gltf) => {
-        gltfRef.current = gltf.scene;
         scene.add(gltf.scene);
 
-        // Récupération des empties
+        // Collect empties
         gltf.scene.traverse((child) => {
-          if (child.type === "Object3D" && child.name) {
+          if (child.name) {
             emptyRefs.current[child.name] = child;
           }
         });
 
-        // Position initiale caméra sur "start" si existant
-        const start = emptyRefs.current["start"];
-        if (start) {
-          camera.position.copy(start.position);
-          controls.target.copy(start.position);
-          controls.update();
+        // Initial camera view (start)
+        const startPOI = config.pois.find((p) => p.id === "start");
+        if (startPOI) {
+          const obj = emptyRefs.current[startPOI.emptyName];
+          if (obj) {
+            moveCameraTo(obj, startPOI.zoom ?? 3, startPOI.lookAxis ?? "x", false);
+          }
         }
       },
       undefined,
-      (error) => console.error(error)
+      (err) => console.error(err)
     );
 
-    // Animation loop
+    // Render loop
     const animate = () => {
       requestAnimationFrame(animate);
       controls.update();
@@ -101,31 +160,21 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     animate();
 
     // Resize
-    const handleResize = () => {
-      if (containerRef.current && cameraRef.current && rendererRef.current) {
-        const w = containerRef.current.clientWidth;
-        const h = containerRef.current.clientHeight;
-        cameraRef.current.aspect = w / h;
-        cameraRef.current.updateProjectionMatrix();
-        rendererRef.current.setSize(w, h);
-      }
+    const onResize = () => {
+      if (!containerRef.current || !cameraRef.current || !rendererRef.current) return;
+      const w = containerRef.current.clientWidth;
+      const h = containerRef.current.clientHeight;
+      cameraRef.current.aspect = w / h;
+      cameraRef.current.updateProjectionMatrix();
+      rendererRef.current.setSize(w, h);
     };
-    window.addEventListener("resize", handleResize);
+    window.addEventListener("resize", onResize);
+
     return () => {
-      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("resize", onResize);
       renderer.dispose();
     };
   }, [config.glb]);
-
-  // Fonction pour aller vers un POI
-  const goToPOI = (poi: POI) => {
-    const target = emptyRefs.current[poi.emptyName];
-    if (target && cameraRef.current && controlsRef.current) {
-      cameraRef.current.position.copy(target.position.clone().add(new THREE.Vector3(0, 1, 3)));
-      controlsRef.current.target.copy(target.position);
-      controlsRef.current.update();
-    }
-  };
 
   return (
     <div className="relative w-screen h-screen bg-black" ref={containerRef}>
