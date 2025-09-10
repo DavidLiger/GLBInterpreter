@@ -43,6 +43,10 @@ export type DioramaConfig3D = {
   pois: POI[];
 };
 
+export type DioramaConfig3DWithVideos = DioramaConfig3D & {
+  videos?: { name: string; src: string }[];
+};
+
 export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -245,6 +249,32 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
   const parentPOI = currentPOI ? findParentPOI(config.pois, currentPOI) : null;
 
+  const applyVideoObjects = (videos?: { name: string; src: string }[]) => {
+    if (!videos) return;
+
+    videos.forEach(({ name, src }) => {
+      const obj = emptyRefs.current[name];
+      if (!obj) return;
+
+      if (obj instanceof THREE.Mesh) {
+        const video = document.createElement("video");
+        video.src = src;
+        video.loop = true;
+        video.muted = true;
+        video.play();
+
+        const videoTexture = new THREE.VideoTexture(video);
+        videoTexture.minFilter = THREE.LinearFilter;
+        videoTexture.magFilter = THREE.LinearFilter;
+        videoTexture.format = THREE.RGBAFormat;
+
+        if (obj.material instanceof THREE.MeshStandardMaterial) {
+          obj.material.map = videoTexture;
+          obj.material.needsUpdate = true;
+        }
+      }
+    });
+  };
 
   // Init THREE.js
   useEffect(() => {
@@ -285,6 +315,9 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         gltf.scene.traverse((child) => {
           if (child.name) emptyRefs.current[child.name] = child;
         });
+
+        // 🔥 Appliquer les textures vidéo des objets
+        applyVideoObjects((config as DioramaConfig3DWithVideos).videos);
 
         const startPOI = config.pois.find((p) => p.id === "start");
         if (startPOI) {

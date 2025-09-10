@@ -1,6 +1,7 @@
-import type { POI, DioramaConfig3D } from "@/components/WebDioramaLoader";
+import type { DioramaConfig3DWithVideos } from "@/components/WebDioramaLoader";
 
-export const street: DioramaConfig3D = {
+
+export const street: DioramaConfig3DWithVideos  = {
   glb: "/models/glb/street.glb",
   pois: [
     {
@@ -53,7 +54,7 @@ export const street: DioramaConfig3D = {
               label: "Coffre",
               emptyName: "coffre",
               icon: "/icons/dioramas/test_street/coffre.png",
-              zoom: 0.2,
+              zoom: 0.05,
               lookAxis: "x",
               minDistance: 0.01,
               maxDistance: 0.05,
@@ -83,5 +84,11 @@ export const street: DioramaConfig3D = {
       enableZoom: true,
     },
   ],
+  videos: [
+    {
+      name: "TVScreen",      // Nom exact du mesh dans Blender
+      src: "/videos/test_street/Cab_Calloway_1933.mp4"
+    }
+  ]
 };
 
