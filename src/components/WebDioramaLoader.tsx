@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
@@ -14,10 +14,8 @@ export type POI = {
   lookAxis?: "x" | "y" | "z";
   minDistance?: number;
   maxDistance?: number;
-  // polar = haut/bas
   minPolarAngle?: number;
   maxPolarAngle?: number;
-  // azimut = gauche/droite
   minAzimuthAngle?: number;
   maxAzimuthAngle?: number;
   enableZoom?: boolean;
@@ -49,8 +47,8 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const emptyRefs = useRef<Record<string, THREE.Object3D>>({});
+  const [currentPOI, setCurrentPOI] = useState<string | null>(null);
 
-  // Interpolation fluide caméra + OrbitControls
   const animateCameraMove = (
     fromPos: THREE.Vector3,
     toPos: THREE.Vector3,
@@ -58,7 +56,8 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     toTarget: THREE.Vector3,
     fromOrbit?: OrbitParams,
     toPOI?: POI,
-    duration = 500
+    duration = 500,
+    onComplete?: () => void
   ) => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
@@ -76,11 +75,9 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       const tRaw = Math.min(elapsed / duration, 1);
       const t = easeInOutCubic(tRaw);
 
-      // Position caméra & cible
       camera.position.lerpVectors(fromPos, toPos, t);
       controls.target.lerpVectors(fromTarget, toTarget, t);
 
-      // Interpolation des paramètres OrbitControls
       controls.minDistance = lerp(fromOrbit?.minDistance, toPOI?.minDistance, t) ?? controls.minDistance;
       controls.maxDistance = lerp(fromOrbit?.maxDistance, toPOI?.maxDistance, t) ?? controls.maxDistance;
       controls.minPolarAngle = lerp(fromOrbit?.minPolarAngle, toPOI?.minPolarAngle, t) ?? controls.minPolarAngle;
@@ -94,12 +91,13 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
       controls.update();
       if (tRaw < 1) requestAnimationFrame(step);
+      else if (onComplete) onComplete();
     };
 
     requestAnimationFrame(step);
   };
 
-  const moveCameraTo = (obj: THREE.Object3D, poi: POI, smooth = true) => {
+  const moveCameraTo = (obj: THREE.Object3D, poi: POI, smooth = true, onComplete?: () => void) => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     if (!camera || !controls) return;
@@ -134,7 +132,9 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         controls.target.clone(),
         targetPos,
         currentOrbit,
-        poi
+        poi,
+        700,
+        onComplete
       );
     } else {
       camera.position.copy(finalPos);
@@ -151,18 +151,31 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         dampingFactor: poi.dampingFactor ?? controls.dampingFactor,
       });
       controls.update();
+      if (onComplete) onComplete();
     }
   };
 
   const goToPOI = (poi: POI) => {
+    const startPOI = config.pois.find((p) => p.id === "start");
+    const current = currentPOI;
     const targetObj = emptyRefs.current[poi.emptyName];
-    if (targetObj) moveCameraTo(targetObj, poi, true);
+    if (!targetObj) return;
+
+    if (current && current !== "start" && poi.id !== "start" && startPOI) {
+      const startObj = emptyRefs.current[startPOI.emptyName];
+      if (startObj) {
+        moveCameraTo(startObj, startPOI, true, () => {
+          moveCameraTo(targetObj, poi, true, () => setCurrentPOI(poi.id));
+        });
+      }
+    } else {
+      moveCameraTo(targetObj, poi, true, () => setCurrentPOI(poi.id));
+    }
   };
 
-  // Initialisation de Three.js
+  // Init THREE.js
   useEffect(() => {
     if (!containerRef.current) return;
-
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
 
@@ -203,7 +216,9 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         const startPOI = config.pois.find((p) => p.id === "start");
         if (startPOI) {
           const startObj = emptyRefs.current[startPOI.emptyName];
-          if (startObj) moveCameraTo(startObj, startPOI, false);
+          if (startObj) {
+            moveCameraTo(startObj, startPOI, false, () => setCurrentPOI("start"));
+          }
         }
       },
       undefined,
