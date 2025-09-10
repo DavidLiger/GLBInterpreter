@@ -14,8 +14,10 @@ export type POI = {
   lookAxis?: "x" | "y" | "z";
   minDistance?: number;
   maxDistance?: number;
+  // polar = haut/bas
   minPolarAngle?: number;
   maxPolarAngle?: number;
+  // azimut = gauche/droite
   minAzimuthAngle?: number;
   maxAzimuthAngle?: number;
   enableZoom?: boolean;
