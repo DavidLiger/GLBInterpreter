@@ -10,8 +10,20 @@ export type POI = {
   label: string;
   emptyName: string;
   icon: string;
-  zoom?: number; // distance caméra
+  zoom?: number;
   lookAxis?: "x" | "y" | "z";
+  minDistance?: number;
+  maxDistance?: number;
+  minPolarAngle?: number;
+  maxPolarAngle?: number;
+  minAzimuthAngle?: number;
+  maxAzimuthAngle?: number;
+  enableZoom?: boolean;
+  enablePan?: boolean;
+  dampingFactor?: number;
+};
+
+export type OrbitParams = {
   minDistance?: number;
   maxDistance?: number;
   minPolarAngle?: number;
@@ -36,11 +48,14 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const controlsRef = useRef<OrbitControls | null>(null);
   const emptyRefs = useRef<Record<string, THREE.Object3D>>({});
 
+  // Interpolation fluide caméra + OrbitControls
   const animateCameraMove = (
     fromPos: THREE.Vector3,
     toPos: THREE.Vector3,
     fromTarget: THREE.Vector3,
     toTarget: THREE.Vector3,
+    fromOrbit?: OrbitParams,
+    toPOI?: POI,
     duration = 500
   ) => {
     const camera = cameraRef.current;
@@ -51,16 +66,32 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     const easeInOutCubic = (t: number) =>
       t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
+    const lerp = (from?: number, to?: number, t = 0) =>
+      from !== undefined && to !== undefined ? from + (to - from) * t : to ?? from;
+
     const step = (time: number) => {
       const elapsed = time - startTime;
-      const t = Math.min(elapsed / duration, 1);
-      const tEased = easeInOutCubic(t);
+      const tRaw = Math.min(elapsed / duration, 1);
+      const t = easeInOutCubic(tRaw);
 
-      camera.position.lerpVectors(fromPos, toPos, tEased);
-      controls.target.lerpVectors(fromTarget, toTarget, tEased);
+      // Position caméra & cible
+      camera.position.lerpVectors(fromPos, toPos, t);
+      controls.target.lerpVectors(fromTarget, toTarget, t);
+
+      // Interpolation des paramètres OrbitControls
+      controls.minDistance = lerp(fromOrbit?.minDistance, toPOI?.minDistance, t) ?? controls.minDistance;
+      controls.maxDistance = lerp(fromOrbit?.maxDistance, toPOI?.maxDistance, t) ?? controls.maxDistance;
+      controls.minPolarAngle = lerp(fromOrbit?.minPolarAngle, toPOI?.minPolarAngle, t) ?? controls.minPolarAngle;
+      controls.maxPolarAngle = lerp(fromOrbit?.maxPolarAngle, toPOI?.maxPolarAngle, t) ?? controls.maxPolarAngle;
+      controls.minAzimuthAngle = lerp(fromOrbit?.minAzimuthAngle, toPOI?.minAzimuthAngle, t) ?? controls.minAzimuthAngle;
+      controls.maxAzimuthAngle = lerp(fromOrbit?.maxAzimuthAngle, toPOI?.maxAzimuthAngle, t) ?? controls.maxAzimuthAngle;
+      controls.dampingFactor = lerp(fromOrbit?.dampingFactor, toPOI?.dampingFactor, t) ?? controls.dampingFactor;
+
+      controls.enableZoom = t < 1 ? fromOrbit?.enableZoom ?? controls.enableZoom : toPOI?.enableZoom ?? controls.enableZoom;
+      controls.enablePan = t < 1 ? fromOrbit?.enablePan ?? controls.enablePan : toPOI?.enablePan ?? controls.enablePan;
+
       controls.update();
-
-      if (t < 1) requestAnimationFrame(step);
+      if (tRaw < 1) requestAnimationFrame(step);
     };
 
     requestAnimationFrame(step);
@@ -70,17 +101,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     if (!camera || !controls) return;
-
-    // Mise à jour des paramètres OrbitControls selon le POI
-    if (poi.minDistance !== undefined) controls.minDistance = poi.minDistance;
-    if (poi.maxDistance !== undefined) controls.maxDistance = poi.maxDistance;
-    if (poi.minPolarAngle !== undefined) controls.minPolarAngle = poi.minPolarAngle;
-    if (poi.maxPolarAngle !== undefined) controls.maxPolarAngle = poi.maxPolarAngle;
-    if (poi.minAzimuthAngle !== undefined) controls.minAzimuthAngle = poi.minAzimuthAngle;
-    if (poi.maxAzimuthAngle !== undefined) controls.maxAzimuthAngle = poi.maxAzimuthAngle;
-    if (poi.enableZoom !== undefined) controls.enableZoom = poi.enableZoom;
-    if (poi.enablePan !== undefined) controls.enablePan = poi.enablePan;
-    if (poi.dampingFactor !== undefined) controls.dampingFactor = poi.dampingFactor;
 
     const distance = poi.zoom ?? 3;
     const axis = poi.lookAxis ?? "x";
@@ -94,10 +114,40 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     const finalPos = targetPos.clone().add(offset);
 
     if (smooth) {
-      animateCameraMove(camera.position.clone(), finalPos, controls.target.clone(), targetPos);
+      const currentOrbit: OrbitParams = {
+        minDistance: controls.minDistance,
+        maxDistance: controls.maxDistance,
+        minPolarAngle: controls.minPolarAngle,
+        maxPolarAngle: controls.maxPolarAngle,
+        minAzimuthAngle: controls.minAzimuthAngle,
+        maxAzimuthAngle: controls.maxAzimuthAngle,
+        enableZoom: controls.enableZoom,
+        enablePan: controls.enablePan,
+        dampingFactor: controls.dampingFactor,
+      };
+
+      animateCameraMove(
+        camera.position.clone(),
+        finalPos,
+        controls.target.clone(),
+        targetPos,
+        currentOrbit,
+        poi
+      );
     } else {
       camera.position.copy(finalPos);
       controls.target.copy(targetPos);
+      Object.assign(controls, {
+        minDistance: poi.minDistance ?? controls.minDistance,
+        maxDistance: poi.maxDistance ?? controls.maxDistance,
+        minPolarAngle: poi.minPolarAngle ?? controls.minPolarAngle,
+        maxPolarAngle: poi.maxPolarAngle ?? controls.maxPolarAngle,
+        minAzimuthAngle: poi.minAzimuthAngle ?? controls.minAzimuthAngle,
+        maxAzimuthAngle: poi.maxAzimuthAngle ?? controls.maxAzimuthAngle,
+        enableZoom: poi.enableZoom ?? controls.enableZoom,
+        enablePan: poi.enablePan ?? controls.enablePan,
+        dampingFactor: poi.dampingFactor ?? controls.dampingFactor,
+      });
       controls.update();
     }
   };
@@ -107,6 +157,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     if (targetObj) moveCameraTo(targetObj, poi, true);
   };
 
+  // Initialisation de Three.js
   useEffect(() => {
     if (!containerRef.current) return;
 
