@@ -22,7 +22,9 @@ export type POI = {
   enableZoom?: boolean;
   enablePan?: boolean;
   dampingFactor?: number;
+  children?: POI[]; // 🔥 AJOUT
 };
+
 
 export type OrbitParams = {
   minDistance?: number;
@@ -157,12 +159,30 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   };
 
   const goToPOI = (poi: POI) => {
-    const startPOI = config.pois.find((p) => p.id === "start");
-    const current = currentPOI;
     const targetObj = emptyRefs.current[poi.emptyName];
     if (!targetObj) return;
 
-    if (current && current !== "start" && poi.id !== "start" && startPOI) {
+    const current = currentPOI;
+    const parent = current ? findParentPOI(config.pois, current) : null;
+
+    const goingToChild = current && poi && findParentPOI(config.pois, poi.id)?.id === current;
+    const goingToParent = parent?.id === poi.id;
+
+    // 🔥 Si on descend vers un enfant OU qu'on remonte, pas de passage par start
+    if (goingToChild || goingToParent) {
+      moveCameraTo(targetObj, poi, true, () => setCurrentPOI(poi.id));
+      return;
+    }
+
+    // 🔥 Si on va vers start → direct
+    if (poi.id === "start") {
+      moveCameraTo(targetObj, poi, true, () => setCurrentPOI(poi.id));
+      return;
+    }
+
+    // 🔥 Sinon (navigation libre) → passe par start
+    const startPOI = config.pois.find((p) => p.id === "start");
+    if (startPOI) {
       const startObj = emptyRefs.current[startPOI.emptyName];
       if (startObj) {
         moveCameraTo(startObj, startPOI, true, () => {
@@ -173,6 +193,87 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       moveCameraTo(targetObj, poi, true, () => setCurrentPOI(poi.id));
     }
   };
+
+  const findParentPOI = (
+    pois: POI[],
+    childId: string
+  ): POI | null => {
+    for (const poi of pois) {
+      if (poi.children?.some((c) => c.id === childId)) {
+        return poi; // trouvé
+      }
+      if (poi.children) {
+        const parent = findParentPOI(poi.children, childId);
+        if (parent) return parent;
+      }
+    }
+    return null;
+  };
+
+  // const getVisiblePOIs = () => {
+  //   if (!currentPOI) return config.pois;
+
+  //   const activePOI =
+  //     config.pois.find((p) => p.id === currentPOI) ||
+  //     findPOIRecursively(config.pois, currentPOI);
+
+  //   const parent = findParentPOI(config.pois, currentPOI);
+
+  //   if (parent) {
+  //     // 🔥 Si on est sur un enfant, montrer ses frères et ses éventuels enfants
+  //     const siblings = parent.children?.filter((p) => p.id !== currentPOI) ?? [];
+  //     const children = activePOI?.children ?? [];
+  //     return [...siblings, ...children];
+  //   }
+
+  //   // 🔥 Si on est sur un parent avec des enfants, montrer ses enfants
+  //   if (activePOI?.children?.length) {
+  //     return activePOI.children;
+  //   }
+
+  //   // 🔥 Sinon, montrer les autres POIs sauf le courant
+  //   return config.pois.filter((p) => p.id !== currentPOI);
+  // };
+
+  const getVisiblePOIs = () => {
+    if (!currentPOI) return config.pois;
+
+    const activePOI =
+      config.pois.find((p) => p.id === currentPOI) ||
+      findPOIRecursively(config.pois, currentPOI);
+
+    const parent = findParentPOI(config.pois, currentPOI);
+
+    if (parent) {
+      // 🔥 Si on est sur un enfant, montrer ses frères et ses enfants éventuels
+      const siblings = parent.children?.filter((p) => p.id !== currentPOI) ?? [];
+      const children = activePOI?.children ?? [];
+      return [...siblings, ...children];
+    } else {
+      // 🔥 Si on est sur un POI racine
+      const siblings = config.pois.filter((p) => p.id !== currentPOI);
+      const children = activePOI?.children ?? [];
+      return [...siblings, ...children];
+    }
+  };
+
+
+
+
+
+  const findPOIRecursively = (pois: POI[], id: string): POI | null => {
+    for (const poi of pois) {
+      if (poi.id === id) return poi;
+      if (poi.children) {
+        const found = findPOIRecursively(poi.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const parentPOI = currentPOI ? findParentPOI(config.pois, currentPOI) : null;
+
 
   // Init THREE.js
   useEffect(() => {
@@ -252,33 +353,52 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   return (
     <div className="relative w-screen h-screen bg-black" ref={containerRef}>
       <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
+
+        {/* 🔙 Bouton Retour */}
         <AnimatePresence>
-          {config.pois
-            .filter((poi) => poi.id !== currentPOI)
-            .map((poi) => (
-              <motion.button
-                key={poi.id}
-                onClick={() => goToPOI(poi)}
-                title={poi.label}
-                className="bg-white rounded-full p-2"
-                initial={{ scale: 0, opacity: 0 }}       // 🔥 Commence invisible et petit
-                animate={{ scale: 1, opacity: 1 }}       // 🔥 S'agrandit et devient visible
-                exit={{ scale: 0, opacity: 0 }}          // 🔥 Se rétrécit et disparaît
+          {parentPOI && (
+            <motion.button
+              key="back"
+              onClick={() => goToPOI(parentPOI)}
+              title="Retour"
+              className="bg-gray-800 text-white rounded-full p-2"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              🔙
+            </motion.button>
+          )}
+        </AnimatePresence>
+
+        {/* 🔥 Liste des POIs visibles */}
+        <AnimatePresence>
+          {getVisiblePOIs().map((poi) => (
+            <motion.button
+              key={poi.id}
+              onClick={() => goToPOI(poi)}
+              title={poi.label}
+              className="bg-white rounded-full p-2"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <motion.img
+                src={poi.icon}
+                alt={poi.label}
+                className="w-8 h-8"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0 }}
                 transition={{ duration: 0.3 }}
-              >
-                <motion.img
-                  src={poi.icon}
-                  alt={poi.label}
-                  className="w-8 h-8"
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  exit={{ scale: 0 }}
-                  transition={{ duration: 0.3 }}
-                />
-              </motion.button>
-            ))}
+              />
+            </motion.button>
+          ))}
         </AnimatePresence>
       </div>
     </div>
   );
+
 }

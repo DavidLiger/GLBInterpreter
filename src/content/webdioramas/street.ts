@@ -32,6 +32,40 @@ export const street: DioramaConfig3D = {
       minAzimuthAngle: 1.14,
       maxAzimuthAngle: 2.14,
       enableZoom: true,
+      children: [
+        {
+          id: "apartment",
+          label: "Appartement",
+          emptyName: "apartment",
+          icon: "/icons/dioramas/test_street/apartment.png",
+          zoom: 0.2,
+          lookAxis: "x",
+          minDistance: 0.01,
+          maxDistance: 0.05,
+          minPolarAngle: 1,
+          maxPolarAngle: 1.57,
+          minAzimuthAngle: 1.14,
+          maxAzimuthAngle: 2.14,
+          enableZoom: true,
+          children: [
+            {
+              id: "coffre",
+              label: "Coffre",
+              emptyName: "coffre",
+              icon: "/icons/dioramas/test_street/coffre.png",
+              zoom: 0.2,
+              lookAxis: "x",
+              minDistance: 0.01,
+              maxDistance: 0.05,
+              minPolarAngle: 1,
+              maxPolarAngle: 1.57,
+              minAzimuthAngle: 1.14,
+              maxAzimuthAngle: 2.14,
+              enableZoom: true,
+            }
+          ]
+        },
+      ],
     },
     {
       id: "window2",
@@ -50,3 +84,4 @@ export const street: DioramaConfig3D = {
     },
   ],
 };
+
