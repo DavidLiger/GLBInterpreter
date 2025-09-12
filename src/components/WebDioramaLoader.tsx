@@ -260,7 +260,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
   const parentPOI = currentPOI ? findParentPOI(config.pois, currentPOI) : null;
 
-
   const applyVideoTextures = (videos?: DioramaVideo[]) => {
     if (!videos || !sceneRef.current) return;
 
@@ -274,33 +273,44 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       video.loop = loop;
       video.muted = muted;
       video.playsInline = true;
-      if (autoplay) video.play();
 
-      const texture = new THREE.VideoTexture(video);
-      texture.colorSpace = THREE.SRGBColorSpace; // ✅ Correct for r150+
-      texture.needsUpdate = true;
+      // ✅ Attendre que la vidéo ait chargé suffisamment de données
+      video.addEventListener("loadeddata", () => {
+        const texture = new THREE.VideoTexture(video);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.needsUpdate = true;
 
-      const setMap = (mat: THREE.Material) => {
-        const m = mat as THREE.MeshStandardMaterial | THREE.MeshBasicMaterial; // Narrow type
-        if ("map" in m) {
-          m.map = texture;
-          m.needsUpdate = true;
+        const setMap = (mat: THREE.Material) => {
+          const m = mat as THREE.MeshStandardMaterial | THREE.MeshBasicMaterial;
+          if ("map" in m) {
+            m.map = texture;
+            m.needsUpdate = true;
+          }
+        };
+
+        if (typeof materialIndex === "number" && Array.isArray(mesh.material)) {
+          const mat = mesh.material[materialIndex];
+          if (mat) setMap(mat);
+        } else if (Array.isArray(mesh.material)) {
+          mesh.material.forEach((mat) => setMap(mat));
+        } else {
+          setMap(mesh.material);
         }
-      };
 
-      if (typeof materialIndex === "number" && Array.isArray(mesh.material)) {
-        const mat = mesh.material[materialIndex];
-        if (mat) setMap(mat);
-      } else if (Array.isArray(mesh.material)) {
-        mesh.material.forEach((mat) => setMap(mat));
-      } else {
-        setMap(mesh.material);
-      }
+        if (autoplay) {
+          const playPromise = video.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((err) => {
+              console.warn(`Autoplay bloqué pour la vidéo ${name}:`, err);
+            });
+          }
+        }
+      });
+
+      // Charger la vidéo
+      video.load();
     });
   };
-
-
-
 
   // Init THREE.js
   useEffect(() => {
