@@ -86,9 +86,17 @@ export const street: DioramaConfig3DWithVideos  = {
   ],
   videos: [
     {
-      name: "TVScreen",      // Nom exact du mesh dans Blender
-      src: "/videos/test_street/Cab_Calloway_1933.mp4"
-    }
-  ]
+      name: "TVScreen", // Nom exact dans Blender
+      src: "/videos/test_street/Cab_Calloway_1933.mp4",
+      materialIndex: 0, // Premier matériau
+      loop: true,
+      muted: true,
+    },
+    {
+      name: "TVScreen2", // chaque objet doit avoir un material différent
+      src: "/videos/test_street/Cab_Calloway_Minnie.mp4",
+      autoplay: true,
+    },
+  ],
 };
 

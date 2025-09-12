@@ -38,13 +38,24 @@ export type OrbitParams = {
   dampingFactor?: number;
 };
 
+export type DioramaVideo = {
+  name: string;          // Object name in Blender
+  src: string;           // Path to the video
+  materialIndex?: number; // Optional: which material index to apply it to
+  loop?: boolean;        // Default true
+  muted?: boolean;       // Default true
+  autoplay?: boolean;    // Default true
+};
+
 export type DioramaConfig3D = {
   glb: string;
   pois: POI[];
+  videos?: DioramaVideo[]; 
 };
 
+
 export type DioramaConfig3DWithVideos = DioramaConfig3D & {
-  videos?: { name: string; src: string }[];
+  videos?: DioramaVideo[];
 };
 
 export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }) {
@@ -249,32 +260,47 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
   const parentPOI = currentPOI ? findParentPOI(config.pois, currentPOI) : null;
 
-  const applyVideoObjects = (videos?: { name: string; src: string }[]) => {
-    if (!videos) return;
 
-    videos.forEach(({ name, src }) => {
+  const applyVideoTextures = (videos?: DioramaVideo[]) => {
+    if (!videos || !sceneRef.current) return;
+
+    videos.forEach(({ name, src, materialIndex, loop = true, muted = true, autoplay = true }) => {
       const obj = emptyRefs.current[name];
-      if (!obj) return;
+      if (!obj || !(obj as THREE.Mesh).isMesh) return;
 
-      if (obj instanceof THREE.Mesh) {
-        const video = document.createElement("video");
-        video.src = src;
-        video.loop = true;
-        video.muted = true;
-        video.play();
+      const mesh = obj as THREE.Mesh;
+      const video = document.createElement("video");
+      video.src = src;
+      video.loop = loop;
+      video.muted = muted;
+      video.playsInline = true;
+      if (autoplay) video.play();
 
-        const videoTexture = new THREE.VideoTexture(video);
-        videoTexture.minFilter = THREE.LinearFilter;
-        videoTexture.magFilter = THREE.LinearFilter;
-        videoTexture.format = THREE.RGBAFormat;
+      const texture = new THREE.VideoTexture(video);
+      texture.colorSpace = THREE.SRGBColorSpace; // ✅ Correct for r150+
+      texture.needsUpdate = true;
 
-        if (obj.material instanceof THREE.MeshStandardMaterial) {
-          obj.material.map = videoTexture;
-          obj.material.needsUpdate = true;
+      const setMap = (mat: THREE.Material) => {
+        const m = mat as THREE.MeshStandardMaterial | THREE.MeshBasicMaterial; // Narrow type
+        if ("map" in m) {
+          m.map = texture;
+          m.needsUpdate = true;
         }
+      };
+
+      if (typeof materialIndex === "number" && Array.isArray(mesh.material)) {
+        const mat = mesh.material[materialIndex];
+        if (mat) setMap(mat);
+      } else if (Array.isArray(mesh.material)) {
+        mesh.material.forEach((mat) => setMap(mat));
+      } else {
+        setMap(mesh.material);
       }
     });
   };
+
+
+
 
   // Init THREE.js
   useEffect(() => {
@@ -317,7 +343,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         });
 
         // 🔥 Appliquer les textures vidéo des objets
-        applyVideoObjects((config as DioramaConfig3DWithVideos).videos);
+        applyVideoTextures((config as DioramaConfig3DWithVideos).videos);
 
         const startPOI = config.pois.find((p) => p.id === "start");
         if (startPOI) {
