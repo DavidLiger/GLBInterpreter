@@ -100,14 +100,14 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   // helper pour (ré)ajuster la taille du renderer / camera
-const updateRendererSize = () => {
-  const w = containerRef.current?.clientWidth;
-  const h = containerRef.current?.clientHeight;
-  if (!w || !h || !cameraRef.current || !rendererRef.current) return;
-  cameraRef.current.aspect = w / h;
-  cameraRef.current.updateProjectionMatrix();
-  rendererRef.current.setSize(w, h);
-};
+  const updateRendererSize = () => {
+    const w = containerRef.current?.clientWidth;
+    const h = containerRef.current?.clientHeight;
+    if (!w || !h || !cameraRef.current || !rendererRef.current) return;
+    cameraRef.current.aspect = w / h;
+    cameraRef.current.updateProjectionMatrix();
+    rendererRef.current.setSize(w, h);
+  };
 
   // écoute les changements de fullscreen (cross-browser)
   useEffect(() => {
@@ -139,6 +139,25 @@ const updateRendererSize = () => {
       document.removeEventListener("MSFullscreenChange", handleFsChange as any);
     };
   }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      // petit délai pour laisser le navigateur recalculer les dimensions
+      setTimeout(() => updateRendererSize(), 100);
+    };
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+
+    // premier ajustement
+    updateRendererSize();
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
+    };
+  }, []);
+
 
   const animateCameraMove = (
     fromPos: THREE.Vector3,
@@ -604,101 +623,98 @@ const updateRendererSize = () => {
   }, [config.glb]);
 
   return (
-    <div className="relative w-screen h-screen bg-black" ref={containerRef}>
-      {/* 🔊 Bouton Muet/Son */}
-      <div className="absolute top-4 right-12 z-50">
-        <button
-          onClick={() => setMuted(!muted)}
-          className="bg-gray-100 text-white p-2 rounded-full"
-          title={muted ? "Activer le son" : "Couper le son"}
-        >
-          {muted ? "🔇" : "🔊"}
-        </button>
-      </div>
-      {/* 🔊 Bouton Fullscreen */}
-        <div className="absolute top-16 right-12 z-50">
-          <motion.button
-            key="fullscreen"
-            onClick={async () => {
-              const el = containerRef.current;
-              if (!el) return;
+  <div className="relative w-screen h-screen bg-black" ref={containerRef}>
+    {/* 🔊 Boutons top-right */}
+    <div className="absolute top-4 right-4 z-50 flex flex-col gap-3 items-end">
+      <button
+        onClick={() => setMuted(!muted)}
+        className="bg-gray-700 text-white rounded-full w-12 h-12 flex items-center justify-center"
+        title={muted ? "Activer le son" : "Couper le son"}
+      >
+        {muted ? "🔇" : "🔊"}
+      </button>
 
-              try {
-                if (!isFullscreen) {
-                  const req = (el.requestFullscreen ??
-                              (el as any).webkitRequestFullscreen ??
-                              (el as any).mozRequestFullScreen ??
-                              (el as any).msRequestFullscreen) as any;
-                  if (req) await req.call(el);
-                } else {
-                  const exit = (document.exitFullscreen ??
-                                (document as any).webkitExitFullscreen ??
-                                (document as any).mozCancelFullScreen ??
-                                (document as any).msExitFullscreen) as any;
-                  if (exit) await exit.call(document);
-                }
-              } catch (err) {
-                console.warn("Fullscreen API error:", err);
+      <motion.button
+        key="fullscreen"
+        onClick={async () => {
+            const el = containerRef.current;
+            if (!el) return;
+
+            try {
+              if (!isFullscreen) {
+                const req = (el.requestFullscreen ??
+                            (el as any).webkitRequestFullscreen ??
+                            (el as any).mozRequestFullScreen ??
+                            (el as any).msRequestFullscreen) as any;
+                if (req) await req.call(el);
+              } else {
+                const exit = (document.exitFullscreen ??
+                              (document as any).webkitExitFullscreen ??
+                              (document as any).mozCancelFullScreen ??
+                              (document as any).msExitFullscreen) as any;
+                if (exit) await exit.call(document);
               }
-            }}
-            title="Plein écran"
-            className="bg-gray-500 text-white rounded-full px-3 py-2"
+            } catch (err) {
+              console.warn("Fullscreen API error:", err);
+            }
+          }}
+          title="Plein écran"
+        className="bg-gray-500 text-white rounded-full w-12 h-12 flex items-center justify-center"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0, opacity: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        {isFullscreen ? "🡼" : "⛶"}
+      </motion.button>
+    </div>
+
+    {/* 🔙 Boutons POIs à gauche */}
+    <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
+      <AnimatePresence>
+        {parentPOI && (
+          <motion.button
+            key="back"
+            onClick={() => goToPOI(parentPOI)}
+            title="Retour"
+            className="bg-gray-800 text-white rounded-full w-12 h-12 flex items-center justify-center"
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
             transition={{ duration: 0.3 }}
           >
-            {isFullscreen ? "🡼" : "⛶"}
+            🔙
           </motion.button>
-        </div>
+        )}
+      </AnimatePresence>
 
-      {/* POIs et bouton retour */}
-      <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
-        {/* 🔙 Bouton Retour */}
-        <AnimatePresence>
-          {parentPOI && (
-            <motion.button
-              key="back"
-              onClick={() => goToPOI(parentPOI)}
-              title="Retour"
-              className="bg-gray-800 text-white rounded-full p-2"
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0, opacity: 0 }}
+      <AnimatePresence>
+        {getVisiblePOIs().map((poi) => (
+          <motion.button
+            key={poi.id}
+            onClick={() => goToPOI(poi)}
+            title={poi.label}
+            className="bg-white rounded-full w-12 h-12 flex items-center justify-center"
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <motion.img
+              src={poi.icon}
+              alt={poi.label}
+              className="w-8 h-8 object-contain"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0 }}
               transition={{ duration: 0.3 }}
-            >
-              🔙
-            </motion.button>
-          )}
-        </AnimatePresence>
-
-        {/* 🔥 Liste des POIs visibles */}
-        <AnimatePresence>
-          {getVisiblePOIs().map((poi) => (
-            <motion.button
-              key={poi.id}
-              onClick={() => goToPOI(poi)}
-              title={poi.label}
-              className="bg-white rounded-full p-2"
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0, opacity: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <motion.img
-                src={poi.icon}
-                alt={poi.label}
-                className="w-8 h-8"
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                exit={{ scale: 0 }}
-                transition={{ duration: 0.3 }}
-              />
-            </motion.button>
-          ))}
-        </AnimatePresence>
-      </div>
+            />
+          </motion.button>
+        ))}
+      </AnimatePresence>
     </div>
-  );
+  </div>
+);
+
 
 }
