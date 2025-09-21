@@ -98,5 +98,40 @@ export const street: DioramaConfig3DWithVideos  = {
       autoplay: true,
     },
   ],
+  lights: [
+    {
+      type: "ambient",
+      color: 0xffe0cc,
+      intensity: 0.5, // lumière chaude du soir
+    },
+    {
+      type: "spot",
+      emptyName: "spot_01", // nécessite l'ajout d'un empty nommé "spot_..._target" dans la scène
+      color: 0xfff2cc,
+      intensity: 0.8,
+      distance: 10,
+      angle: Math.PI / 4,
+      penumbra: 0.3,
+    },
+    {
+      type: "spot",
+      emptyName: "spot_02",
+      color: 0xfff2cc,
+      intensity: 0.05,
+      distance: 8,
+      angle: Math.PI / 3.5,
+      penumbra: 0.5,
+    },
+  ],
+  bulbs: [
+    { emptyName: "bulb_01", color: 0xfff2cc, intensity: 2, emissiveIntensity: 1.5, distance: 10 },
+    { emptyName: "bulb_02", color: 0xfff2cc, intensity: 1.8, emissiveIntensity: 1.2, distance: 8 },
+  ],
+  toonOutline: {
+    defaultThickness: 0.001,
+    defaultColor: [0, 0, 0],
+    defaultAlpha: 0.9,
+    defaultKeepAlive: true
+  }
 };
 

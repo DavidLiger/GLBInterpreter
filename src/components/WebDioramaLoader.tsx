@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 
 export type POI = {
   id: string;
@@ -47,11 +48,41 @@ export type DioramaVideo = {
   autoplay?: boolean;    // Default true
 };
 
+export type DioramaLight = {
+  type: "ambient" | "directional" | "spot";
+  emptyName?: string; // optionnel, seulement pour les spots
+  color?: number;
+  intensity?: number;
+  distance?: number; // pour spot
+  angle?: number;    // pour spot
+  penumbra?: number; // pour spot
+};
+
+export type DioramaBulb = {
+  emptyName: string; // mesh représentant l'ampoule
+  color?: number;
+  intensity?: number; // intensité de la lumière réelle
+  distance?: number; // portée
+  emissiveIntensity?: number; // intensité d'émission du matériau
+};
+
+export type ToonOutlineConfig = {
+  defaultThickness?: number; // épaisseur du contour
+  defaultColor?: [number, number, number]; // RGB 0-1 ou 0-255
+  defaultAlpha?: number; // opacité
+  defaultKeepAlive?: boolean; // garde le contour actif
+};
+
 export type DioramaConfig3D = {
   glb: string;
   pois: POI[];
-  videos?: DioramaVideo[]; 
+  videos?: DioramaVideo[];
+  lights?: DioramaLight[];
+  bulbs?: DioramaBulb[];
+  toonOutline?: ToonOutlineConfig; // 🔥 nouvel objet
 };
+
+
 
 
 export type DioramaConfig3DWithVideos = DioramaConfig3D & {
@@ -312,6 +343,96 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     });
   };
 
+  const applyLights = (lights?: DioramaLight[]) => {
+    if (!lights || !sceneRef.current) return;
+
+    lights.forEach((lightCfg) => {
+      let light: THREE.Light;
+
+      if (lightCfg.type === "ambient") {
+        light = new THREE.AmbientLight(
+          lightCfg.color ?? 0xffffff,
+          lightCfg.intensity ?? 0.5
+        );
+        sceneRef.current!.add(light);
+
+      } else if (lightCfg.type === "spot" && lightCfg.emptyName) {
+        const posObj = emptyRefs.current[lightCfg.emptyName];
+        if (!posObj) {
+          console.warn(`Spot position empty not found: ${lightCfg.emptyName}`);
+          return;
+        }
+
+        const spot = new THREE.SpotLight(
+          lightCfg.color ?? 0xffffff,
+          lightCfg.intensity ?? 1,
+          lightCfg.distance ?? 15,
+          lightCfg.angle ?? Math.PI / 6,
+          lightCfg.penumbra ?? 0.1
+        );
+
+        spot.position.copy(posObj.position);
+        spot.castShadow = true;
+        spot.shadow.mapSize.width = 1024;
+        spot.shadow.mapSize.height = 1024;
+
+        // Chercher un empty target optionnel
+        const targetName = lightCfg.emptyName + "_target"; 
+        const targetObj = emptyRefs.current[targetName];
+
+        if (targetObj) {
+          spot.target = targetObj;
+        } else {
+          // fallback : créer un target 1m plus bas
+          const lookAt = new THREE.Object3D();
+          lookAt.position.set(
+            posObj.position.x,
+            posObj.position.y - 1,
+            posObj.position.z
+          );
+          sceneRef.current!.add(lookAt);
+          spot.target = lookAt;
+        }
+
+        sceneRef.current!.add(spot);
+        sceneRef.current!.add(spot.target);
+      }
+    });
+  };
+
+  const applyBulbs = (bulbs?: DioramaBulb[]) => {
+    if (!bulbs || !sceneRef.current) return;
+
+    bulbs.forEach((b) => {
+      const bulbObj = emptyRefs.current[b.emptyName!];
+      if (!bulbObj || !(bulbObj as THREE.Mesh).isMesh) return;
+
+      const mesh = bulbObj as THREE.Mesh;
+
+      // 1️⃣ Émission sur le matériau
+      const color = new THREE.Color(b.color ?? 0xffffff);
+      const emissiveIntensity = b.emissiveIntensity ?? 1;
+      if (Array.isArray(mesh.material)) {
+        mesh.material.forEach((mat) => {
+          const m = mat as THREE.MeshStandardMaterial;
+          m.emissive = color;
+          m.emissiveIntensity = emissiveIntensity;
+          m.needsUpdate = true;
+        });
+      } else {
+        const m = mesh.material as THREE.MeshStandardMaterial;
+        m.emissive = color;
+        m.emissiveIntensity = emissiveIntensity;
+        m.needsUpdate = true;
+      }
+
+      // 2️⃣ Lumière réelle
+      // const pointLight = new THREE.PointLight(color, b.intensity ?? 1, b.distance ?? 10);
+      // pointLight.position.copy(mesh.position);
+      // sceneRef.current!.add(pointLight);
+    });
+  };
+
   // Init THREE.js
   useEffect(() => {
     if (!containerRef.current) return;
@@ -331,6 +452,17 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
+    let effect: OutlineEffect | null = null;
+
+    if (config.toonOutline) {
+      effect = new OutlineEffect(renderer, {
+        defaultThickness: config.toonOutline.defaultThickness ?? 0.01,
+        defaultColor: config.toonOutline.defaultColor ?? [0, 0, 0],
+        defaultAlpha: config.toonOutline.defaultAlpha ?? 0.8,
+        defaultKeepAlive: config.toonOutline.defaultKeepAlive ?? true,
+      });
+    }
+
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
@@ -340,22 +472,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     controls.minDistance = 0.5;
     controls.maxDistance = 20;
     controlsRef.current = controls;
-
-    // scene.add(new THREE.AmbientLight(0xffffff, 1));
-    // ────────────── Lights ──────────────
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-    scene.add(ambientLight);
-
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(5, 10, 5);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 1024;
-    dirLight.shadow.mapSize.height = 1024;
-    scene.add(dirLight);
-
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
-    fillLight.position.set(-5, 5, -5);
-    scene.add(fillLight);
 
     // ────────────── Load GLB ──────────────
 
@@ -367,9 +483,13 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         gltf.scene.traverse((child) => {
           if (child.name) emptyRefs.current[child.name] = child;
         });
+        console.log("empties:", Object.keys(emptyRefs.current));
+
 
         // 🔥 Appliquer les textures vidéo des objets
         applyVideoTextures((config as DioramaConfig3DWithVideos).videos);
+        applyLights((config as DioramaConfig3DWithVideos).lights);
+        applyBulbs((config as any).bulbs);
 
         const startPOI = config.pois.find((p) => p.id === "start");
         if (startPOI) {
@@ -386,7 +506,11 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     const animate = () => {
       requestAnimationFrame(animate);
       controls.update();
-      renderer.render(scene, camera);
+      if (effect) {
+        effect.render(scene, camera);
+      } else {
+        renderer.render(scene, camera);
+      }
     };
     animate();
 
