@@ -4,6 +4,7 @@ import type { DioramaConfig3DWithVideos } from "@/components/WebDioramaLoader";
 export const street: DioramaConfig3DWithVideos  = {
   glb: "/models/glb/street.glb",
   loaderImage: "/icons/dioramas/test_street/street-preview.png",
+  name: "La place du village",
   pois: [
     {
       id: "start",

@@ -6,6 +6,12 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
+import localFont from "next/font/local";
+
+const BullstandRegular = localFont({
+  src: "../../public/fonts/Bullstand-Regular.ttf",
+  variable: "--font-Bullstand-Regular",
+});
 
 export type POI = {
   id: string;
@@ -76,6 +82,7 @@ export type ToonOutlineConfig = {
 
 export type DioramaConfig3D = {
   glb: string;
+  name: string;
   pois: POI[];
   videos?: DioramaVideo[];
   loaderImage?: string;
@@ -657,7 +664,11 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
           transition={{ duration: 0.5 }}
         >
           {/* Title en haut */}
-          <h1 className="text-white text-2xl mb-8 font-bold">Chargement...</h1>
+          <h1
+            className={`${BullstandRegular.className} text-white text-5xl mb-8`}
+          >
+            {config.name ?? "Scene Diorama"}
+          </h1>
 
           {/* Belle image au centre, plus grande */}
           <img
