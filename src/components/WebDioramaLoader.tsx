@@ -83,9 +83,6 @@ export type DioramaConfig3D = {
   toonOutline?: ToonOutlineConfig; // 🔥 nouvel objet
 };
 
-
-
-
 export type DioramaConfig3DWithVideos = DioramaConfig3D & {
   videos?: DioramaVideo[];
 };
@@ -100,6 +97,46 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [currentPOI, setCurrentPOI] = useState<string | null>(null);
   const [muted, setMuted] = useState(true);
   const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  // ────────────── Resize dynamique ──────────────
+  const updateCanvasSize = () => {
+    if (!containerRef.current || !rendererRef.current || !cameraRef.current) return;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    containerRef.current.style.width = width + "px";
+    containerRef.current.style.height = height + "px";
+    cameraRef.current.aspect = width / height;
+    cameraRef.current.updateProjectionMatrix();
+    rendererRef.current.setSize(width, height);
+  };
+
+  useEffect(() => {
+    updateCanvasSize();
+    window.addEventListener("resize", updateCanvasSize);
+    return () => window.removeEventListener("resize", updateCanvasSize);
+  }, []);
+
+  // ────────────── Fullscreen ──────────────
+  const enterFullscreen = () => {
+    if (containerRef.current?.requestFullscreen) {
+      containerRef.current.requestFullscreen();
+    } else if ((containerRef.current as any).webkitRequestFullscreen) {
+      (containerRef.current as any).webkitRequestFullscreen();
+    }
+    setFullscreen(true);
+  };
+
+  const exitFullscreen = () => {
+    if (document.exitFullscreen) document.exitFullscreen();
+    else if ((document as any).webkitExitFullscreen) (document as any).webkitExitFullscreen();
+    setFullscreen(false);
+  };
+
+  const toggleFullscreen = () => {
+    if (fullscreen) exitFullscreen();
+    else enterFullscreen();
+  };
 
   const animateCameraMove = (
     fromPos: THREE.Vector3,
@@ -466,8 +503,11 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   // Init THREE.js
   useEffect(() => {
     if (!containerRef.current) return;
-    const width = containerRef.current.clientWidth;
-    const height = containerRef.current.clientHeight;
+    // const width = containerRef.current.clientWidth;
+    // const height = containerRef.current.clientHeight;
+
+    const width = window.innerWidth;
+    const height = window.innerHeight;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
@@ -544,20 +584,21 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     };
     animate();
 
-    const onResize = () => {
-      if (!cameraRef.current || !rendererRef.current || !containerRef.current) return;
-      const w = containerRef.current.clientWidth;
-      const h = containerRef.current.clientHeight;
-      cameraRef.current.aspect = w / h;
-      cameraRef.current.updateProjectionMatrix();
-      rendererRef.current.setSize(w, h);
-    };
-    window.addEventListener("resize", onResize);
+    // const onResize = () => {
+    //   if (!cameraRef.current || !rendererRef.current || !containerRef.current) return;
+    //   const w = containerRef.current.clientWidth;
+    //   const h = containerRef.current.clientHeight;
+    //   cameraRef.current.aspect = w / h;
+    //   cameraRef.current.updateProjectionMatrix();
+    //   rendererRef.current.setSize(w, h);
+    // };
+    // window.addEventListener("resize", onResize);
 
-    return () => {
-      window.removeEventListener("resize", onResize);
-      renderer.dispose();
-    };
+    // return () => {
+    //   window.removeEventListener("resize", onResize);
+    //   renderer.dispose();
+    // };
+    return () => renderer.dispose();
   }, [config.glb]);
 
   return (
@@ -619,6 +660,29 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
             </motion.button>
           ))}
         </AnimatePresence>
+        {/* 🔊 Bouton Fullscreen */}
+        <motion.button
+          key="fullscreen"
+          onClick={() => {
+            if (!document.fullscreenElement) {
+              containerRef.current?.requestFullscreen().then(() => {
+                updateCanvasSize(); // 🔄 ajuste après passage en plein écran
+              });
+            } else {
+              document.exitFullscreen().then(() => {
+                updateCanvasSize(); // 🔄 ajuste après sortie du plein écran
+              });
+            }
+          }}
+          title="Plein écran"
+          className="bg-gray-800 text-white rounded-full p-2"
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0, opacity: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          {fullscreen ? "🡼" : "⛶"}
+        </motion.button>
       </div>
     </div>
   );
