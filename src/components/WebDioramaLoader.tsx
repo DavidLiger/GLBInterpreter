@@ -723,9 +723,15 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         setTimeout(() => setIsLoaded(true), remaining);
       },
       (xhr) => {
+        let progress = 0;
         if (xhr.total) {
-          setLoadingProgress((xhr.loaded / xhr.total) * 100);
+          progress = (xhr.loaded / xhr.total) * 100;
         }
+
+        // clamp à 0-100
+        progress = Math.min(Math.max(progress, 0), 100);
+
+        setLoadingProgress(Math.round(progress));
       },
       (err) => console.error(err)
     );
@@ -752,7 +758,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     <AnimatePresence>
       {!isLoaded && (
         <motion.div
-          className="absolute inset-0 flex flex-col items-center justify-center bg-black z-50 px-4"
+          className="absolute inset-0 flex flex-col items-center justify-center bg-black z-100 px-4"
           initial={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.5 }}
