@@ -616,7 +616,7 @@ const updateRendererSize = () => {
         </button>
       </div>
       {/* 🔊 Bouton Fullscreen */}
-        <div className="absolute bottom-4 right-12 z-50">
+        <div className="absolute top-16 right-12 z-50">
           <motion.button
             key="fullscreen"
             onClick={async () => {
@@ -642,7 +642,7 @@ const updateRendererSize = () => {
               }
             }}
             title="Plein écran"
-            className="bg-gray-500 text-white rounded-full p-2"
+            className="bg-gray-500 text-white rounded-full px-3 py-2"
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
