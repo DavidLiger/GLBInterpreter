@@ -566,7 +566,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       <div className="absolute top-4 right-12 z-50">
         <button
           onClick={() => setMuted(!muted)}
-          className="bg-gray-800 text-white p-2 rounded-full"
+          className="bg-gray-100 text-white p-2 rounded-full"
           title={muted ? "Activer le son" : "Couper le son"}
         >
           {muted ? "🔇" : "🔊"}
