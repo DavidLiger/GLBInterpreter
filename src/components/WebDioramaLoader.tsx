@@ -98,6 +98,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [muted, setMuted] = useState(true);
   const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(false);
 
   // helper pour (ré)ajuster la taille du renderer / camera
   const updateRendererSize = () => {
@@ -158,6 +159,14 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     };
   }, []);
 
+  useEffect(() => {
+    const checkOrientation = () => {
+      setIsPortrait(window.matchMedia("(orientation: portrait)").matches);
+    };
+    checkOrientation();
+    window.addEventListener("resize", checkOrientation);
+    return () => window.removeEventListener("resize", checkOrientation);
+  }, []);
 
   const animateCameraMove = (
     fromPos: THREE.Vector3,
@@ -713,6 +722,17 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         ))}
       </AnimatePresence>
     </div>
+    {isPortrait && (
+      <div className="absolute top-4 inset-x-0 z-50 flex justify-center pointer-events-none">
+        <img
+          src="/icons/dioramas/UI/rotate-phone.png"
+          alt="Tournez le téléphone"
+          className="w-32 h-20 opacity-50 rounded-full"
+        />
+      </div>
+    )}
+
+
   </div>
 );
 
