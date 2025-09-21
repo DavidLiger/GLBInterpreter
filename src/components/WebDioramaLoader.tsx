@@ -78,6 +78,7 @@ export type DioramaConfig3D = {
   glb: string;
   pois: POI[];
   videos?: DioramaVideo[];
+  loaderImage?: string;
   lights?: DioramaLight[];
   bulbs?: DioramaBulb[];
   toonOutline?: ToonOutlineConfig; // 🔥 nouvel objet
@@ -85,6 +86,7 @@ export type DioramaConfig3D = {
 
 export type DioramaConfig3DWithVideos = DioramaConfig3D & {
   videos?: DioramaVideo[];
+  loaderImage?: string;
 };
 
 export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }) {
@@ -100,6 +102,27 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPortrait, setIsPortrait] = useState(false);
   const [showRotateHint, setShowRotateHint] = useState(false);
+  const [loadingProgress, setLoadingProgress] = useState(0);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // useEffect(() => {
+  //   if (!containerRef.current) return;
+
+  //   const loader = new GLTFLoader();
+  //   loader.load(
+  //     config.glb,
+  //     (gltf) => {
+  //       // Scene loaded
+  //       setIsLoaded(true);
+  //     },
+  //     (xhr) => {
+  //       if (xhr.total) {
+  //         setLoadingProgress((xhr.loaded / xhr.total) * 100);
+  //       }
+  //     },
+  //     (err) => console.error(err)
+  //   );
+  // }, [config.glb]);
 
   // helper pour (ré)ajuster la taille du renderer / camera
   const updateRendererSize = () => {
@@ -542,15 +565,100 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   }, [muted]);
 
 
-  // Init THREE.js
+  // // Init THREE.js
+  // useEffect(() => {
+  //   if (!containerRef.current) return;
+  //   // const width = containerRef.current.clientWidth;
+  //   // const height = containerRef.current.clientHeight;
+
+  //   const width = window.innerWidth;
+  //   const height = window.innerHeight;
+
+  //   const scene = new THREE.Scene();
+  //   scene.background = new THREE.Color(0x000000);
+  //   sceneRef.current = scene;
+
+  //   const camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 1000);
+  //   camera.position.set(0, 2, 5);
+  //   cameraRef.current = camera;
+
+  //   const renderer = new THREE.WebGLRenderer({ antialias: true });
+  //   renderer.setSize(width, height);
+  //   containerRef.current.appendChild(renderer.domElement);
+  //   rendererRef.current = renderer;
+
+  //   let effect: OutlineEffect | null = null;
+
+  //   if (config.toonOutline) {
+  //     effect = new OutlineEffect(renderer, {
+  //       defaultThickness: config.toonOutline.defaultThickness ?? 0.01,
+  //       defaultColor: config.toonOutline.defaultColor ?? [0, 0, 0],
+  //       defaultAlpha: config.toonOutline.defaultAlpha ?? 0.8,
+  //       defaultKeepAlive: config.toonOutline.defaultKeepAlive ?? true,
+  //     });
+  //   }
+
+  //   const controls = new OrbitControls(camera, renderer.domElement);
+  //   controls.enableDamping = true;
+  //   controls.dampingFactor = 0.05;
+  //   controls.enableZoom = true;
+  //   controls.enablePan = false;
+  //   controls.maxPolarAngle = Math.PI / 2;
+  //   controls.minDistance = 0.5;
+  //   controls.maxDistance = 20;
+  //   controlsRef.current = controls;
+
+  //   // ────────────── Load GLB ──────────────
+
+  //   const loader = new GLTFLoader();
+  //   loader.load(
+  //     config.glb,
+  //     (gltf) => {
+  //       scene.add(gltf.scene);
+  //       gltf.scene.traverse((child) => {
+  //         if (child.name) emptyRefs.current[child.name] = child;
+  //       });
+  //       console.log("empties:", Object.keys(emptyRefs.current));
+
+
+  //       // 🔥 Appliquer les textures vidéo des objets
+  //       applyVideoTextures((config as DioramaConfig3DWithVideos).videos);
+  //       applyLights((config as DioramaConfig3DWithVideos).lights);
+  //       applyBulbs((config as any).bulbs);
+
+  //       const startPOI = config.pois.find((p) => p.id === "start");
+  //       if (startPOI) {
+  //         const startObj = emptyRefs.current[startPOI.emptyName];
+  //         if (startObj) {
+  //           moveCameraTo(startObj, startPOI, false, () => setCurrentPOI("start"));
+  //         }
+  //       }
+  //     },
+  //     undefined,
+  //     (err) => console.error(err)
+  //   );
+
+  //   const animate = () => {
+  //     requestAnimationFrame(animate);
+  //     controls.update();
+  //     if (effect) {
+  //       effect.render(scene, camera);
+  //     } else {
+  //       renderer.render(scene, camera);
+  //     }
+  //   };
+  //   animate();
+
+  //   return () => renderer.dispose();
+  // }, [config.glb]);
+
   useEffect(() => {
     if (!containerRef.current) return;
-    // const width = containerRef.current.clientWidth;
-    // const height = containerRef.current.clientHeight;
 
     const width = window.innerWidth;
     const height = window.innerHeight;
 
+    // ────────────── Init scene, camera, renderer ──────────────
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
     sceneRef.current = scene;
@@ -565,7 +673,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     rendererRef.current = renderer;
 
     let effect: OutlineEffect | null = null;
-
     if (config.toonOutline) {
       effect = new OutlineEffect(renderer, {
         defaultThickness: config.toonOutline.defaultThickness ?? 0.01,
@@ -585,9 +692,10 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     controls.maxDistance = 20;
     controlsRef.current = controls;
 
-    // ────────────── Load GLB ──────────────
-
+    // ────────────── Load GLB avec loader progress ──────────────
     const loader = new GLTFLoader();
+    const loadStartTime = performance.now(); // pour temps minimum 3s
+
     loader.load(
       config.glb,
       (gltf) => {
@@ -595,10 +703,10 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         gltf.scene.traverse((child) => {
           if (child.name) emptyRefs.current[child.name] = child;
         });
+
         console.log("empties:", Object.keys(emptyRefs.current));
 
-
-        // 🔥 Appliquer les textures vidéo des objets
+        // Appliquer vidéos, lights et bulbs
         applyVideoTextures((config as DioramaConfig3DWithVideos).videos);
         applyLights((config as DioramaConfig3DWithVideos).lights);
         applyBulbs((config as any).bulbs);
@@ -606,15 +714,23 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         const startPOI = config.pois.find((p) => p.id === "start");
         if (startPOI) {
           const startObj = emptyRefs.current[startPOI.emptyName];
-          if (startObj) {
-            moveCameraTo(startObj, startPOI, false, () => setCurrentPOI("start"));
-          }
+          if (startObj) moveCameraTo(startObj, startPOI, false, () => setCurrentPOI("start"));
+        }
+
+        // 🔹 Temps minimum de 3s avant de cacher le loader
+        const elapsed = performance.now() - loadStartTime;
+        const remaining = Math.max(3000 - elapsed, 0);
+        setTimeout(() => setIsLoaded(true), remaining);
+      },
+      (xhr) => {
+        if (xhr.total) {
+          setLoadingProgress((xhr.loaded / xhr.total) * 100);
         }
       },
-      undefined,
       (err) => console.error(err)
     );
 
+    // ────────────── Animation loop ──────────────
     const animate = () => {
       requestAnimationFrame(animate);
       controls.update();
@@ -626,133 +742,181 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     };
     animate();
 
-    // const onResize = () => {
-    //   if (!cameraRef.current || !rendererRef.current || !containerRef.current) return;
-    //   const w = containerRef.current.clientWidth;
-    //   const h = containerRef.current.clientHeight;
-    //   cameraRef.current.aspect = w / h;
-    //   cameraRef.current.updateProjectionMatrix();
-    //   rendererRef.current.setSize(w, h);
-    // };
-    // window.addEventListener("resize", onResize);
-
-    // return () => {
-    //   window.removeEventListener("resize", onResize);
-    //   renderer.dispose();
-    // };
     return () => renderer.dispose();
   }, [config.glb]);
 
+
   return (
-  <div className="relative w-screen h-screen bg-black" ref={containerRef}>
-    {/* 🔊 Boutons top-right */}
-    <div className="absolute top-4 right-4 z-50 flex flex-col gap-3 items-end">
-      <button
-        onClick={() => setMuted(!muted)}
-        className="bg-gray-700 text-white rounded-full w-12 h-12 flex items-center justify-center"
-        title={muted ? "Activer le son" : "Couper le son"}
-      >
-        {muted ? "🔇" : "🔊"}
-      </button>
-
-      <motion.button
-        key="fullscreen"
-        onClick={async () => {
-            const el = containerRef.current;
-            if (!el) return;
-
-            try {
-              if (!isFullscreen) {
-                const req = (el.requestFullscreen ??
-                            (el as any).webkitRequestFullscreen ??
-                            (el as any).mozRequestFullScreen ??
-                            (el as any).msRequestFullscreen) as any;
-                if (req) await req.call(el);
-              } else {
-                const exit = (document.exitFullscreen ??
-                              (document as any).webkitExitFullscreen ??
-                              (document as any).mozCancelFullScreen ??
-                              (document as any).msExitFullscreen) as any;
-                if (exit) await exit.call(document);
-              }
-            } catch (err) {
-              console.warn("Fullscreen API error:", err);
-            }
-          }}
-          title="Plein écran"
-        className="bg-gray-500 text-white rounded-full w-12 h-12 flex items-center justify-center"
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0, opacity: 0 }}
-        transition={{ duration: 0.3 }}
-      >
-        {isFullscreen ? "🡼" : "⛶"}
-      </motion.button>
-    </div>
-
-    {/* 🔙 Boutons POIs à gauche */}
-    <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
-      <AnimatePresence>
-        {parentPOI && (
-          <motion.button
-            key="back"
-            onClick={() => goToPOI(parentPOI)}
-            title="Retour"
-            className="bg-gray-800 text-white rounded-full w-12 h-12 flex items-center justify-center"
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            🔙
-          </motion.button>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {getVisiblePOIs().map((poi) => (
-          <motion.button
-            key={poi.id}
-            onClick={() => goToPOI(poi)}
-            title={poi.label}
-            className="bg-white rounded-full w-12 h-12 flex items-center justify-center"
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <motion.img
-              src={poi.icon}
-              alt={poi.label}
-              className="w-8 h-8 object-contain"
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0 }}
-              transition={{ duration: 0.3 }}
-            />
-          </motion.button>
-        ))}
-      </AnimatePresence>
-    </div>
+    <div className="relative w-screen h-screen bg-black" ref={containerRef}>
+      {/* ────────────── Screen loader overlay ────────────── */}
     <AnimatePresence>
-      {showRotateHint && (
+      {!isLoaded && (
         <motion.div
-          className="absolute top-4 inset-x-0 z-50 flex justify-center pointer-events-none"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
+          className="absolute inset-0 flex flex-col items-center justify-center bg-black z-50 px-4"
+          initial={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.5 }} // 0.5s fade
+          transition={{ duration: 0.5 }}
         >
+          {/* Title en haut */}
+          <h1 className="text-white text-2xl mb-8 font-bold">Chargement...</h1>
+
+          {/* Belle image au centre, plus grande */}
           <img
-            src="/icons/dioramas/UI/rotate-phone.png"
-            alt="Tournez le téléphone"
-            className="w-32 h-20 opacity-80"
+            src={config.loaderImage ?? "/icons/dioramas/UI/scene-preview.png"}
+            alt="Scene Preview"
+            className="w-64 h-64 mb-8 object-contain"
           />
+
+          {/* Instructions côte à côte */}
+          <div className="flex items-center justify-center gap-12 mb-6">
+            <div className="flex flex-col items-center gap-2 text-white">
+              <img src="/icons/dioramas/UI/one-finger.png" className="w-10 h-10" />
+              <span>Un doigt pour tourner</span>
+            </div>
+            <div className="flex flex-col items-center gap-2 text-white">
+              <img src="/icons/dioramas/UI/two-fingers.png" className="w-10 h-10" />
+              <span>Deux doigts pour zoomer</span>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="w-80 h-4 bg-gray-700 rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-green-500"
+              initial={{ width: 0 }}
+              animate={{ width: `${loadingProgress}%` }}
+              transition={{ ease: "easeOut", duration: 0.2 }}
+            />
+          </div>
+          <span className="text-white mt-2">{Math.round(loadingProgress)}%</span>
         </motion.div>
       )}
     </AnimatePresence>
-  </div>
-);
+
+    {/* ────────────── Boutons et POIs ────────────── */}
+      {/* 🔊 Boutons top-right */}
+      <div className="absolute top-4 right-4 z-50 flex flex-col gap-3 items-end">
+        <button
+          onClick={() => setMuted(!muted)}
+          className="bg-white text-white rounded-full w-12 h-12 flex items-center justify-center"
+          title={muted ? "Activer le son" : "Couper le son"}
+        >
+          {/* {muted ? "🔇" : "🔊"} */}
+          <img
+            src={muted ? "/icons/dioramas/UI/muted.png" : "/icons/dioramas/UI/sound.png"}
+            alt={muted ? "Muet" : "Son"}
+            className="w-8 h-8 object-contain"
+          />
+        </button>
+
+        <motion.button
+          key="fullscreen"
+          onClick={async () => {
+              const el = containerRef.current;
+              if (!el) return;
+
+              try {
+                if (!isFullscreen) {
+                  const req = (el.requestFullscreen ??
+                              (el as any).webkitRequestFullscreen ??
+                              (el as any).mozRequestFullScreen ??
+                              (el as any).msRequestFullscreen) as any;
+                  if (req) await req.call(el);
+                } else {
+                  const exit = (document.exitFullscreen ??
+                                (document as any).webkitExitFullscreen ??
+                                (document as any).mozCancelFullScreen ??
+                                (document as any).msExitFullscreen) as any;
+                  if (exit) await exit.call(document);
+                }
+              } catch (err) {
+                console.warn("Fullscreen API error:", err);
+              }
+            }}
+            title="Plein écran"
+          className="bg-white text-white rounded-full w-12 h-12 flex items-center justify-center"
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0, opacity: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          {/* {isFullscreen ? "🡼" : "⛶"} */}
+          <img
+            src={isFullscreen ? "/icons/dioramas/UI/fullscreen-exit.png" : "/icons/dioramas/UI/fullscreen.png"}
+            alt={isFullscreen ? "Quitter plein écran" : "Plein écran"}
+            className="w-8 h-8 object-contain"
+          />
+        </motion.button>
+      </div>
+
+      {/* 🔙 Boutons POIs à gauche */}
+      <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
+        <AnimatePresence>
+          {parentPOI && (
+            <motion.button
+              key="back"
+              onClick={() => goToPOI(parentPOI)}
+              title="Retour"
+              className="bg-white text-white rounded-full w-12 h-12 flex items-center justify-center"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              {/* 🔙 */}
+              <img
+                src={"/icons/dioramas/UI/back.png"}
+                alt={"Retour"}
+                className="w-8 h-8 object-contain"
+              />
+            </motion.button>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {getVisiblePOIs().map((poi) => (
+            <motion.button
+              key={poi.id}
+              onClick={() => goToPOI(poi)}
+              title={poi.label}
+              className="bg-white rounded-full w-12 h-12 flex items-center justify-center"
+              initial={{ scale: 0, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <motion.img
+                src={poi.icon}
+                alt={poi.label}
+                className="w-8 h-8 object-contain"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0 }}
+                transition={{ duration: 0.3 }}
+              />
+            </motion.button>
+          ))}
+        </AnimatePresence>
+      </div>
+      <AnimatePresence>
+        {showRotateHint && (
+          <motion.div
+            className="absolute top-4 inset-x-0 z-50 flex justify-center pointer-events-none"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }} // 0.5s fade
+          >
+            <img
+              src="/icons/dioramas/UI/rotate-phone.png"
+              alt="Tournez le téléphone"
+              className="w-32 h-20 opacity-80"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 
 
 }
