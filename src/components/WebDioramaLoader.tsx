@@ -97,46 +97,48 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [currentPOI, setCurrentPOI] = useState<string | null>(null);
   const [muted, setMuted] = useState(true);
   const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
-  const [fullscreen, setFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // ────────────── Resize dynamique ──────────────
-  const updateCanvasSize = () => {
-    if (!containerRef.current || !rendererRef.current || !cameraRef.current) return;
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    containerRef.current.style.width = width + "px";
-    containerRef.current.style.height = height + "px";
-    cameraRef.current.aspect = width / height;
-    cameraRef.current.updateProjectionMatrix();
-    rendererRef.current.setSize(width, height);
-  };
+  // helper pour (ré)ajuster la taille du renderer / camera
+const updateRendererSize = () => {
+  const w = containerRef.current?.clientWidth;
+  const h = containerRef.current?.clientHeight;
+  if (!w || !h || !cameraRef.current || !rendererRef.current) return;
+  cameraRef.current.aspect = w / h;
+  cameraRef.current.updateProjectionMatrix();
+  rendererRef.current.setSize(w, h);
+};
 
+  // écoute les changements de fullscreen (cross-browser)
   useEffect(() => {
-    updateCanvasSize();
-    window.addEventListener("resize", updateCanvasSize);
-    return () => window.removeEventListener("resize", updateCanvasSize);
+    const handleFsChange = () => {
+      const fs = !!(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).mozFullScreenElement ||
+        (document as any).msFullscreenElement
+      );
+      setIsFullscreen(fs);
+      // ajuste la taille du canvas quand le fullscreen change
+      // (utile si tu as supprimé l'écoute resize)
+      setTimeout(updateRendererSize, 50);
+    };
+
+    document.addEventListener("fullscreenchange", handleFsChange);
+    document.addEventListener("webkitfullscreenchange", handleFsChange as any);
+    document.addEventListener("mozfullscreenchange", handleFsChange as any);
+    document.addEventListener("MSFullscreenChange", handleFsChange as any);
+
+    // init état
+    handleFsChange();
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFsChange);
+      document.removeEventListener("webkitfullscreenchange", handleFsChange as any);
+      document.removeEventListener("mozfullscreenchange", handleFsChange as any);
+      document.removeEventListener("MSFullscreenChange", handleFsChange as any);
+    };
   }, []);
-
-  // ────────────── Fullscreen ──────────────
-  const enterFullscreen = () => {
-    if (containerRef.current?.requestFullscreen) {
-      containerRef.current.requestFullscreen();
-    } else if ((containerRef.current as any).webkitRequestFullscreen) {
-      (containerRef.current as any).webkitRequestFullscreen();
-    }
-    setFullscreen(true);
-  };
-
-  const exitFullscreen = () => {
-    if (document.exitFullscreen) document.exitFullscreen();
-    else if ((document as any).webkitExitFullscreen) (document as any).webkitExitFullscreen();
-    setFullscreen(false);
-  };
-
-  const toggleFullscreen = () => {
-    if (fullscreen) exitFullscreen();
-    else enterFullscreen();
-  };
 
   const animateCameraMove = (
     fromPos: THREE.Vector3,
@@ -613,10 +615,45 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
           {muted ? "🔇" : "🔊"}
         </button>
       </div>
+      {/* 🔊 Bouton Fullscreen */}
+        <div className="absolute bottom-4 right-12 z-50">
+          <motion.button
+            key="fullscreen"
+            onClick={async () => {
+              const el = containerRef.current;
+              if (!el) return;
+
+              try {
+                if (!isFullscreen) {
+                  const req = (el.requestFullscreen ??
+                              (el as any).webkitRequestFullscreen ??
+                              (el as any).mozRequestFullScreen ??
+                              (el as any).msRequestFullscreen) as any;
+                  if (req) await req.call(el);
+                } else {
+                  const exit = (document.exitFullscreen ??
+                                (document as any).webkitExitFullscreen ??
+                                (document as any).mozCancelFullScreen ??
+                                (document as any).msExitFullscreen) as any;
+                  if (exit) await exit.call(document);
+                }
+              } catch (err) {
+                console.warn("Fullscreen API error:", err);
+              }
+            }}
+            title="Plein écran"
+            className="bg-gray-500 text-white rounded-full p-2"
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            {isFullscreen ? "🡼" : "⛶"}
+          </motion.button>
+        </div>
 
       {/* POIs et bouton retour */}
       <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
-
         {/* 🔙 Bouton Retour */}
         <AnimatePresence>
           {parentPOI && (
@@ -660,29 +697,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
             </motion.button>
           ))}
         </AnimatePresence>
-        {/* 🔊 Bouton Fullscreen */}
-        <motion.button
-          key="fullscreen"
-          onClick={() => {
-            if (!document.fullscreenElement) {
-              containerRef.current?.requestFullscreen().then(() => {
-                updateCanvasSize(); // 🔄 ajuste après passage en plein écran
-              });
-            } else {
-              document.exitFullscreen().then(() => {
-                updateCanvasSize(); // 🔄 ajuste après sortie du plein écran
-              });
-            }
-          }}
-          title="Plein écran"
-          className="bg-gray-800 text-white rounded-full p-2"
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0, opacity: 0 }}
-          transition={{ duration: 0.3 }}
-        >
-          {fullscreen ? "🡼" : "⛶"}
-        </motion.button>
       </div>
     </div>
   );
