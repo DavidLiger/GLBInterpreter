@@ -99,6 +99,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPortrait, setIsPortrait] = useState(false);
+  const [showRotateHint, setShowRotateHint] = useState(false);
 
   // helper pour (ré)ajuster la taille du renderer / camera
   const updateRendererSize = () => {
@@ -167,6 +168,17 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     window.addEventListener("resize", checkOrientation);
     return () => window.removeEventListener("resize", checkOrientation);
   }, []);
+
+  // surveille l’orientation
+  useEffect(() => {
+    if (isPortrait) {
+      setShowRotateHint(true);
+      const timer = setTimeout(() => setShowRotateHint(false), 5000); // cache après 3s
+      return () => clearTimeout(timer);
+    } else {
+      setShowRotateHint(false);
+    }
+  }, [isPortrait]);
 
   const animateCameraMove = (
     fromPos: THREE.Vector3,
@@ -722,17 +734,23 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         ))}
       </AnimatePresence>
     </div>
-    {isPortrait && (
-      <div className="absolute top-4 inset-x-0 z-50 flex justify-center pointer-events-none">
-        <img
-          src="/icons/dioramas/UI/rotate-phone.png"
-          alt="Tournez le téléphone"
-          className="w-32 h-20 opacity-50 rounded-full"
-        />
-      </div>
-    )}
-
-
+    <AnimatePresence>
+      {showRotateHint && (
+        <motion.div
+          className="absolute top-4 inset-x-0 z-50 flex justify-center pointer-events-none"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.5 }} // 0.5s fade
+        >
+          <img
+            src="/icons/dioramas/UI/rotate-phone.png"
+            alt="Tournez le téléphone"
+            className="w-32 h-20 opacity-80"
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
   </div>
 );
 
