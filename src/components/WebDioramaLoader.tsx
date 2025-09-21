@@ -105,25 +105,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // useEffect(() => {
-  //   if (!containerRef.current) return;
-
-  //   const loader = new GLTFLoader();
-  //   loader.load(
-  //     config.glb,
-  //     (gltf) => {
-  //       // Scene loaded
-  //       setIsLoaded(true);
-  //     },
-  //     (xhr) => {
-  //       if (xhr.total) {
-  //         setLoadingProgress((xhr.loaded / xhr.total) * 100);
-  //       }
-  //     },
-  //     (err) => console.error(err)
-  //   );
-  // }, [config.glb]);
-
   // helper pour (ré)ajuster la taille du renderer / camera
   const updateRendererSize = () => {
     const w = containerRef.current?.clientWidth;
@@ -563,94 +544,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       if (!muted) ambientAudioRef.current.play().catch(() => {});
     }
   }, [muted]);
-
-
-  // // Init THREE.js
-  // useEffect(() => {
-  //   if (!containerRef.current) return;
-  //   // const width = containerRef.current.clientWidth;
-  //   // const height = containerRef.current.clientHeight;
-
-  //   const width = window.innerWidth;
-  //   const height = window.innerHeight;
-
-  //   const scene = new THREE.Scene();
-  //   scene.background = new THREE.Color(0x000000);
-  //   sceneRef.current = scene;
-
-  //   const camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 1000);
-  //   camera.position.set(0, 2, 5);
-  //   cameraRef.current = camera;
-
-  //   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  //   renderer.setSize(width, height);
-  //   containerRef.current.appendChild(renderer.domElement);
-  //   rendererRef.current = renderer;
-
-  //   let effect: OutlineEffect | null = null;
-
-  //   if (config.toonOutline) {
-  //     effect = new OutlineEffect(renderer, {
-  //       defaultThickness: config.toonOutline.defaultThickness ?? 0.01,
-  //       defaultColor: config.toonOutline.defaultColor ?? [0, 0, 0],
-  //       defaultAlpha: config.toonOutline.defaultAlpha ?? 0.8,
-  //       defaultKeepAlive: config.toonOutline.defaultKeepAlive ?? true,
-  //     });
-  //   }
-
-  //   const controls = new OrbitControls(camera, renderer.domElement);
-  //   controls.enableDamping = true;
-  //   controls.dampingFactor = 0.05;
-  //   controls.enableZoom = true;
-  //   controls.enablePan = false;
-  //   controls.maxPolarAngle = Math.PI / 2;
-  //   controls.minDistance = 0.5;
-  //   controls.maxDistance = 20;
-  //   controlsRef.current = controls;
-
-  //   // ────────────── Load GLB ──────────────
-
-  //   const loader = new GLTFLoader();
-  //   loader.load(
-  //     config.glb,
-  //     (gltf) => {
-  //       scene.add(gltf.scene);
-  //       gltf.scene.traverse((child) => {
-  //         if (child.name) emptyRefs.current[child.name] = child;
-  //       });
-  //       console.log("empties:", Object.keys(emptyRefs.current));
-
-
-  //       // 🔥 Appliquer les textures vidéo des objets
-  //       applyVideoTextures((config as DioramaConfig3DWithVideos).videos);
-  //       applyLights((config as DioramaConfig3DWithVideos).lights);
-  //       applyBulbs((config as any).bulbs);
-
-  //       const startPOI = config.pois.find((p) => p.id === "start");
-  //       if (startPOI) {
-  //         const startObj = emptyRefs.current[startPOI.emptyName];
-  //         if (startObj) {
-  //           moveCameraTo(startObj, startPOI, false, () => setCurrentPOI("start"));
-  //         }
-  //       }
-  //     },
-  //     undefined,
-  //     (err) => console.error(err)
-  //   );
-
-  //   const animate = () => {
-  //     requestAnimationFrame(animate);
-  //     controls.update();
-  //     if (effect) {
-  //       effect.render(scene, camera);
-  //     } else {
-  //       renderer.render(scene, camera);
-  //     }
-  //   };
-  //   animate();
-
-  //   return () => renderer.dispose();
-  // }, [config.glb]);
 
   useEffect(() => {
     if (!containerRef.current) return;
