@@ -24,6 +24,7 @@ export type POI = {
   enablePan?: boolean;
   dampingFactor?: number;
   children?: POI[]; // 🔥 AJOUT
+  ambientSound?: string; // 🔥 chemin vers le son d'ambiance pour ce POI
 };
 
 
@@ -97,6 +98,8 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const controlsRef = useRef<OrbitControls | null>(null);
   const emptyRefs = useRef<Record<string, THREE.Object3D>>({});
   const [currentPOI, setCurrentPOI] = useState<string | null>(null);
+  const [muted, setMuted] = useState(true);
+  const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const animateCameraMove = (
     fromPos: THREE.Vector3,
@@ -433,6 +436,33 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     });
   };
 
+// 🔥 Charger le son d'ambiance du POI courant
+  useEffect(() => {
+    if (!currentPOI) return;
+    const poi = findPOIRecursively(config.pois, currentPOI);
+    if (!poi || !poi.ambientSound) return;
+
+    if (!ambientAudioRef.current) {
+      ambientAudioRef.current = new Audio(poi.ambientSound);
+      ambientAudioRef.current.loop = true;
+      ambientAudioRef.current.muted = true; // démarre en mute
+      ambientAudioRef.current.play().catch(() => {});
+    } else {
+      ambientAudioRef.current.src = poi.ambientSound;
+      ambientAudioRef.current.muted = muted;
+      ambientAudioRef.current.play().catch(() => {});
+    }
+  }, [currentPOI]);
+
+  // 🔊 Mettre à jour le son quand mute change
+  useEffect(() => {
+    if (ambientAudioRef.current) {
+      ambientAudioRef.current.muted = muted;
+      if (!muted) ambientAudioRef.current.play().catch(() => {});
+    }
+  }, [muted]);
+
+
   // Init THREE.js
   useEffect(() => {
     if (!containerRef.current) return;
@@ -532,6 +562,18 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
   return (
     <div className="relative w-screen h-screen bg-black" ref={containerRef}>
+      {/* 🔊 Bouton Muet/Son */}
+      <div className="absolute top-4 right-12 z-50">
+        <button
+          onClick={() => setMuted(!muted)}
+          className="bg-gray-800 text-white p-2 rounded-full"
+          title={muted ? "Activer le son" : "Couper le son"}
+        >
+          {muted ? "🔇" : "🔊"}
+        </button>
+      </div>
+
+      {/* POIs et bouton retour */}
       <div className="absolute top-4 left-4 z-50 flex flex-col gap-2">
 
         {/* 🔙 Bouton Retour */}
