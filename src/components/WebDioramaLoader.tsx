@@ -604,8 +604,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
           if (child.name) emptyRefs.current[child.name] = child;
         });
 
-        console.log("empties:", Object.keys(emptyRefs.current));
-
         // Appliquer vidéos, lights et bulbs
         applyVideoTextures((config as DioramaConfig3DWithVideos).videos);
         applyLights((config as DioramaConfig3DWithVideos).lights);
