@@ -111,6 +111,17 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [showRotateHint, setShowRotateHint] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [isMobile, setIsMobile] = useState(true);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      // matchMedia renvoie true si l'écran est petit
+      setIsMobile(window.matchMedia("(pointer: coarse)").matches);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // helper pour (ré)ajuster la taille du renderer / camera
   const updateRendererSize = () => {
@@ -678,12 +689,26 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
           {/* Instructions côte à côte */}
           <div className="flex items-center justify-center gap-12 mb-6">
             <div className="flex flex-col items-center gap-2 text-white">
-              <img src="/icons/dioramas/UI/one-finger.png" className="w-10 h-10" />
-              <span>Un doigt pour tourner</span>
+              <img
+                src={
+                  isMobile
+                    ? "/icons/dioramas/UI/one-finger.png"
+                    : "/icons/dioramas/UI/mouse-left-click.png"
+                }
+                className="w-10 h-10"
+              />
+              <span>{isMobile ? "Tourner" : "Cliquer / Glisser"}</span>
             </div>
             <div className="flex flex-col items-center gap-2 text-white">
-              <img src="/icons/dioramas/UI/two-fingers.png" className="w-10 h-10" />
-              <span>Deux doigts pour zoomer</span>
+              <img
+                src={
+                  isMobile
+                    ? "/icons/dioramas/UI/two-fingers.png"
+                    : "/icons/dioramas/UI/mouse-scroll.png"
+                }
+                className="w-10 h-10"
+              />
+              <span>{isMobile ? "Zoomer" : "Zoomer"}</span>
             </div>
           </div>
 
