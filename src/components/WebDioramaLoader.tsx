@@ -705,30 +705,61 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
                 />
 
                 {/* instructions */}
-                { !isPortrait ? (
+                {!isPortrait ? (
+                  // paysage → instructions à droite, centrées verticalement
                   <div className="absolute right-8 top-1/2 -translate-y-1/2 flex flex-col gap-4 text-white">
                     <div className="flex flex-col items-center gap-1">
-                      <img src="/icons/dioramas/UI/one-finger.png" className="w-8 h-8" />
-                      <span className="text-sm">Tourner</span>
+                      <img
+                        src={
+                          isMobile
+                            ? "/icons/dioramas/UI/one-finger.png"
+                            : "/icons/dioramas/UI/mouse-left-click.png"
+                        }
+                        className="w-8 h-8"
+                      />
+                      <span className="text-sm">{isMobile ? "Tourner" : "Cliquer / Glisser"}</span>
                     </div>
                     <div className="flex flex-col items-center gap-1">
-                      <img src="/icons/dioramas/UI/two-fingers.png" className="w-8 h-8" />
+                      <img
+                        src={
+                          isMobile
+                            ? "/icons/dioramas/UI/two-fingers.png"
+                            : "/icons/dioramas/UI/mouse-scroll.png"
+                        }
+                        className="w-8 h-8"
+                      />
                       <span className="text-sm">Zoomer</span>
                     </div>
                   </div>
                 ) : (
+                  // portrait → instructions en dessous, côte à côte
                   <div className="flex flex-row gap-12 mt-6 text-white">
                     <div className="flex flex-col items-center gap-1">
-                      <img src="/icons/dioramas/UI/mouse-left-click.png" className="w-8 h-8" />
-                      <span className="text-sm">Cliquer / Glisser</span>
+                      <img
+                        src={
+                          isMobile
+                            ? "/icons/dioramas/UI/one-finger.png"
+                            : "/icons/dioramas/UI/mouse-left-click.png"
+                        }
+                        className="w-8 h-8"
+                      />
+                      <span className="text-sm">{isMobile ? "Tourner" : "Cliquer / Glisser"}</span>
                     </div>
                     <div className="flex flex-col items-center gap-1">
-                      <img src="/icons/dioramas/UI/mouse-scroll.png" className="w-8 h-8" />
+                      <img
+                        src={
+                          isMobile
+                            ? "/icons/dioramas/UI/two-fingers.png"
+                            : "/icons/dioramas/UI/mouse-scroll.png"
+                        }
+                        className="w-8 h-8"
+                      />
                       <span className="text-sm">Zoomer</span>
                     </div>
                   </div>
                 )}
               </div>
+
 
               {/* progress bar (collée plus proche en paysage) */}
               <div className="w-full max-w-2xl flex flex-col items-center mt-3">
