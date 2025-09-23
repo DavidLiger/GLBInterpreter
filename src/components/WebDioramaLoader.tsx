@@ -664,66 +664,87 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   return (
     <div className="relative w-screen h-screen bg-black" ref={containerRef}>
       {/* ────────────── Screen loader overlay ────────────── */}
-    <AnimatePresence>
-      {!isLoaded && (
-        <motion.div
-          className="absolute inset-0 flex flex-col items-center justify-center bg-black z-100 px-4"
-          initial={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.5 }}
-        >
-          {/* Title en haut */}
-          <h1
-            className={`${BullstandRegular.className} text-white text-5xl mb-8`}
+      <AnimatePresence>
+        {!isLoaded && (
+          <motion.div
+            className="absolute inset-0 flex bg-black z-100 px-4"
+            initial={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5 }}
           >
-            {config.name ?? "Scene Diorama"}
-          </h1>
+            {/* principal container : on centre en paysage et on garde un flux normal en portrait */}
+            <div
+              className={`w-full flex flex-col items-center ${
+                !isPortrait ? "h-screen justify-center gap-4 py-4" : "justify-center gap-8 py-8"
+              }`}
+              style={{ minHeight: 0 }}
+            >
+              {/* Title : plus petit en paysage */}
+              <h1
+                className={`${BullstandRegular.className} text-white font-bold`}
+                style={{ fontSize: !isPortrait ? "clamp(20px, 4.5vw, 28px)" : "clamp(28px, 6vw, 48px)" }}
+              >
+                {config.name ?? "Scene Diorama"}
+              </h1>
 
-          {/* Belle image au centre, plus grande */}
-          <img
-            src={config.loaderImage ?? "/icons/dioramas/UI/scene-preview.png"}
-            alt="Scene Preview"
-            className="w-64 h-64 mb-8 object-contain"
-          />
+              {/* zone image + instructions */}
+              <div
+                className={`relative flex items-center justify-center w-full max-w-3xl px-4 ${
+                  !isPortrait ? "h-[60vh]" : "flex-col gap-6"
+                }`}
+              >
+                {/* image : toujours centrée */}
+                <img
+                  src={config.loaderImage ?? "/icons/dioramas/UI/scene-preview.png"}
+                  alt="Scene Preview"
+                  className="object-contain flex-shrink-0"
+                  style={{
+                    width: !isPortrait ? "clamp(140px, 30vw, 240px)" : "clamp(180px, 36vw, 320px)",
+                    height: !isPortrait ? "clamp(140px, 30vw, 240px)" : "clamp(180px, 36vw, 320px)",
+                  }}
+                />
 
-          {/* Instructions côte à côte */}
-          <div className="flex items-center justify-center gap-12 mb-6">
-            <div className="flex flex-col items-center gap-2 text-white">
-              <img
-                src={
-                  isMobile
-                    ? "/icons/dioramas/UI/one-finger.png"
-                    : "/icons/dioramas/UI/mouse-left-click.png"
-                }
-                className="w-10 h-10"
-              />
-              <span>{isMobile ? "Tourner" : "Cliquer / Glisser"}</span>
+                {/* instructions */}
+                { !isPortrait ? (
+                  <div className="absolute right-8 top-1/2 -translate-y-1/2 flex flex-col gap-4 text-white">
+                    <div className="flex flex-col items-center gap-1">
+                      <img src="/icons/dioramas/UI/one-finger.png" className="w-8 h-8" />
+                      <span className="text-sm">Tourner</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <img src="/icons/dioramas/UI/two-fingers.png" className="w-8 h-8" />
+                      <span className="text-sm">Zoomer</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-row gap-12 mt-6 text-white">
+                    <div className="flex flex-col items-center gap-1">
+                      <img src="/icons/dioramas/UI/mouse-left-click.png" className="w-8 h-8" />
+                      <span className="text-sm">Cliquer / Glisser</span>
+                    </div>
+                    <div className="flex flex-col items-center gap-1">
+                      <img src="/icons/dioramas/UI/mouse-scroll.png" className="w-8 h-8" />
+                      <span className="text-sm">Zoomer</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* progress bar (collée plus proche en paysage) */}
+              <div className="w-full max-w-2xl flex flex-col items-center mt-3">
+                <div className="w-64 h-3 bg-gray-700 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-green-500"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${loadingProgress}%` }}
+                    transition={{ ease: "easeOut", duration: 0.2 }}
+                  />
+                </div>
+                <span className="text-white mt-2 text-sm">{Math.round(loadingProgress)}%</span>
+              </div>
             </div>
-            <div className="flex flex-col items-center gap-2 text-white">
-              <img
-                src={
-                  isMobile
-                    ? "/icons/dioramas/UI/two-fingers.png"
-                    : "/icons/dioramas/UI/mouse-scroll.png"
-                }
-                className="w-10 h-10"
-              />
-              <span>{isMobile ? "Zoomer" : "Zoomer"}</span>
-            </div>
-          </div>
-
-          {/* Progress bar */}
-          <div className="w-80 h-4 bg-gray-700 rounded-full overflow-hidden">
-            <motion.div
-              className="h-full bg-green-500"
-              initial={{ width: 0 }}
-              animate={{ width: `${loadingProgress}%` }}
-              transition={{ ease: "easeOut", duration: 0.2 }}
-            />
-          </div>
-          <span className="text-white mt-2">{Math.round(loadingProgress)}%</span>
-        </motion.div>
-      )}
+          </motion.div>
+        )}
     </AnimatePresence>
 
     {/* ────────────── Boutons et POIs ────────────── */}
