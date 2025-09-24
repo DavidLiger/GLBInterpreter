@@ -405,6 +405,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       const mesh = obj as THREE.Mesh;
       const video = document.createElement("video");
       video.src = src;
+      video.crossOrigin = 'anonymous'; // 🔹 IMPORTANT
       video.loop = loop;
       video.muted = muted;
       video.playsInline = true;
