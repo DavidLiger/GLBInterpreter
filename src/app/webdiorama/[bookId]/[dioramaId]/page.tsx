@@ -22,7 +22,7 @@ export default async function DioramaPage({ params }: Props) {
     } else {
       // 🔹 Lecture prod sur Cloudflare
       const baseUrl = process.env.NEXT_PUBLIC_ASSETS_URL; // ex: https://webdioramas.r2.cloudflarestorage.com
-      const indexRes = await fetch(`${baseUrl}/books/${bookId}/index.json`);
+      const indexRes = await fetch(`${baseUrl}/assets/${bookId}/index.json`);
       if (!indexRes.ok) throw new Error("Index non trouvé");
       const indexJson = await indexRes.json() as Record<string, string>;
 
