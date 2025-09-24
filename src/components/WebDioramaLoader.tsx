@@ -104,8 +104,8 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const controlsRef = useRef<OrbitControls | null>(null);
   const emptyRefs = useRef<Record<string, THREE.Object3D>>({});
   const [currentPOI, setCurrentPOI] = useState<string | null>(null);
-  const [muted, setMuted] = useState(true);
-  const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [muted, setMuted] = useState(true);// Remplace ton ambientAudioRef actuel
+  const ambientAudioRefs = useRef<Record<string, HTMLAudioElement>>({});
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPortrait, setIsPortrait] = useState(false);
   const [showRotateHint, setShowRotateHint] = useState(false);
@@ -201,6 +201,21 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       setShowRotateHint(false);
     }
   }, [isPortrait]);
+
+  useEffect(() => {
+    const preloadPOIAudio = (poi: POI) => {
+      if (poi.ambientSound && !ambientAudioRefs.current[poi.id]) {
+        const audio = new Audio(poi.ambientSound);
+        audio.loop = true;
+        audio.muted = muted; // état initial
+        audio.load(); // précharge
+        ambientAudioRefs.current[poi.id] = audio;
+      }
+      poi.children?.forEach(preloadPOIAudio);
+    };
+
+    config.pois.forEach(preloadPOIAudio);
+  }, [config.pois, muted]);
 
   const animateCameraMove = (
     fromPos: THREE.Vector3,
@@ -538,31 +553,65 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     });
   };
 
-// 🔥 Charger le son d'ambiance du POI courant
   useEffect(() => {
+    // Stop tous les sons
+    Object.values(ambientAudioRefs.current).forEach((audio) => audio.pause());
+
     if (!currentPOI) return;
-    const poi = findPOIRecursively(config.pois, currentPOI);
-    if (!poi || !poi.ambientSound) return;
+    const poiAudio = ambientAudioRefs.current[currentPOI];
+    if (!poiAudio) return;
 
-    if (!ambientAudioRef.current) {
-      ambientAudioRef.current = new Audio(poi.ambientSound);
-      ambientAudioRef.current.loop = true;
-      ambientAudioRef.current.muted = true; // démarre en mute
-      ambientAudioRef.current.play().catch(() => {});
-    } else {
-      ambientAudioRef.current.src = poi.ambientSound;
-      ambientAudioRef.current.muted = muted;
-      ambientAudioRef.current.play().catch(() => {});
-    }
-  }, [currentPOI]);
+    poiAudio.muted = muted;
+    poiAudio.play().catch(() => {}); // play du son du POI courant
+  }, [currentPOI, muted]);
 
-  // 🔊 Mettre à jour le son quand mute change
-  useEffect(() => {
-    if (ambientAudioRef.current) {
-      ambientAudioRef.current.muted = muted;
-      if (!muted) ambientAudioRef.current.play().catch(() => {});
-    }
-  }, [muted]);
+
+//   useEffect(() => {
+//     config.pois.forEach((poi) => {
+//       if (poi.ambientSound && !audioRefs.current[poi.id]) {
+//         const audio = new Audio(poi.ambientSound);
+//         audio.loop = true;
+//         audio.muted = muted;
+//         audioRefs.current[poi.id] = audio;
+//         audio.load(); // précharge le son
+//       }
+//       poi.children?.forEach((child) => {
+//         if (child.ambientSound && !audioRefs.current[child.id]) {
+//           const audio = new Audio(child.ambientSound);
+//           audio.loop = true;
+//           audio.muted = muted;
+//           audioRefs.current[child.id] = audio;
+//           audio.load();
+//         }
+//       });
+//     });
+//   }, [config.pois, muted]);
+
+// // 🔥 Charger le son d'ambiance du POI courant
+//   useEffect(() => {
+//     if (!currentPOI) return;
+//     const poi = findPOIRecursively(config.pois, currentPOI);
+//     if (!poi || !poi.ambientSound) return;
+
+//     if (!ambientAudioRef.current) {
+//       ambientAudioRef.current = new Audio(poi.ambientSound);
+//       ambientAudioRef.current.loop = true;
+//       ambientAudioRef.current.muted = true; // démarre en mute
+//       ambientAudioRef.current.play().catch(() => {});
+//     } else {
+//       ambientAudioRef.current.src = poi.ambientSound;
+//       ambientAudioRef.current.muted = muted;
+//       ambientAudioRef.current.play().catch(() => {});
+//     }
+//   }, [currentPOI]);
+
+//   // 🔊 Mettre à jour le son quand mute change
+//   useEffect(() => {
+//     if (ambientAudioRef.current) {
+//       ambientAudioRef.current.muted = muted;
+//       if (!muted) ambientAudioRef.current.play().catch(() => {});
+//     }
+//   }, [muted]);
 
   useEffect(() => {
     if (!containerRef.current) return;
