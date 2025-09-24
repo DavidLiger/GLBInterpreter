@@ -5,9 +5,7 @@ import type { DioramaConfig3DWithVideos } from "@/components/WebDioramaLoader";
 
 export function useDioramaConfig(bookId: string, dioramaId: string) {
   const [config, setConfig] = useState<DioramaConfig3DWithVideos | null>(
-    process.env.NODE_ENV === "development"
-      ? require(`@/content/webdioramas/${bookId}/${dioramaId}`).default
-      : null
+    process.env.NODE_ENV === "development" ? require(`@/content/webdioramas/${bookId}/${dioramaId}`).street : null
   );
 
   useEffect(() => {
