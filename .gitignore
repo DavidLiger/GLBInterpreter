@@ -39,3 +39,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Ignore heavy assets (migrated to R2)
+public/models/
+public/videos/
+public/sounds/
+public/icons/dioramas/
+
+# build
+/dist
+
+

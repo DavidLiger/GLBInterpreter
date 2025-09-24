@@ -1,0 +1,7 @@
+name = "faerium-manifests"
+main = "index.js" # pas utilisé pour R2, mais obligatoire
+compatibility_date = "2023-12-01"
+
+[[r2_buckets]]
+binding = "MY_BUCKET"
+bucket_name = "<ton-bucket>"
