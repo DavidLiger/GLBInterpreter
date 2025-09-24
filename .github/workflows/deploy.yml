@@ -1,21 +1,46 @@
+name: Build & Deploy Dioramas
+
+# 🔹 Déclenche le workflow à chaque push sur main
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # permet déclenchement manuel depuis l'interface GitHub
+
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
+
     steps:
+      # 1️⃣ Récupérer le code
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # 2️⃣ Installer Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '22'
 
+      # 3️⃣ Installer les dépendances
       - name: Install dependencies
         run: npm ci
 
-      - name: Generate Diorama JSON
+      # 4️⃣ Vérifier le chemin et les fichiers (debug)
+      - name: List diorama files
+        run: |
+          pwd
+          ls -R src/content/webdioramas
+
+      # 5️⃣ Générer les JSON de production avec ton script
+      - name: Export Diorama JSON
         run: npx ts-node scripts/export-configs.ts
 
+      # 6️⃣ Vérifier que les JSON ont bien été créés
+      - name: List generated JSONs
+        run: ls -R dist/manifests
+
+      # 7️⃣ Déployer sur Vercel
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v41.1.4
         with:
