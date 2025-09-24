@@ -202,20 +202,33 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [isPortrait]);
 
+  // 🔹 Précharger tous les sons au démarrage
   useEffect(() => {
-    const preloadPOIAudio = (poi: POI) => {
-      if (poi.ambientSound && !ambientAudioRefs.current[poi.id]) {
+    config.pois.forEach((poi) => {
+      if (poi.ambientSound) {
         const audio = new Audio(poi.ambientSound);
         audio.loop = true;
-        audio.muted = muted; // état initial
-        audio.load(); // précharge
+        audio.muted = true; // on mute au départ
+        audio.preload = "auto"; // 🔹 préchargement
         ambientAudioRefs.current[poi.id] = audio;
-      }
-      poi.children?.forEach(preloadPOIAudio);
-    };
 
-    config.pois.forEach(preloadPOIAudio);
-  }, [config.pois, muted]);
+        // force le chargement
+        audio.load();
+      }
+
+      // si le POI a des enfants
+      poi.children?.forEach((child) => {
+        if (child.ambientSound) {
+          const audio = new Audio(child.ambientSound);
+          audio.loop = true;
+          audio.muted = true;
+          audio.preload = "auto";
+          ambientAudioRefs.current[child.id] = audio;
+          audio.load();
+        }
+      });
+    });
+  }, [config.pois]);
 
   const animateCameraMove = (
     fromPos: THREE.Vector3,
@@ -553,16 +566,22 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     });
   };
 
+  // 🔹 Jouer le son du POI courant
   useEffect(() => {
-    // Stop tous les sons
-    Object.values(ambientAudioRefs.current).forEach((audio) => audio.pause());
-
     if (!currentPOI) return;
-    const poiAudio = ambientAudioRefs.current[currentPOI];
-    if (!poiAudio) return;
+    const audio = ambientAudioRefs.current[currentPOI];
+    if (!audio) return;
 
-    poiAudio.muted = muted;
-    poiAudio.play().catch(() => {}); // play du son du POI courant
+    // on mute ou non selon l'état
+    audio.muted = muted;
+
+    // stop tous les autres sons
+    Object.entries(ambientAudioRefs.current).forEach(([id, a]) => {
+      if (id !== currentPOI) a.pause();
+    });
+
+    // play le POI courant
+    audio.play().catch(() => {});
   }, [currentPOI, muted]);
 
 
