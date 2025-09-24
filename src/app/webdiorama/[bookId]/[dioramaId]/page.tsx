@@ -10,16 +10,31 @@ type Props = {
 };
 
 export default async function DioramaPage({ params }: Props) {
-  const { bookId, dioramaId } = await params;
+  const { bookId, dioramaId } = params;
 
   try {
-    // 🔥 Import dynamique en fonction des paramètres d'URL
-    const module = await import(`@/content/webdioramas/${bookId}/${dioramaId}`);
-    const config = module.street ?? module.default as DioramaConfig3DWithVideos;
+    let config: DioramaConfig3DWithVideos | undefined;
 
-    if (!config) {
-      throw new Error("Config manquante pour ce diorama");
+    if (process.env.NODE_ENV === "development") {
+      // 🔹 Lecture locale
+      const module = await import(`@/content/webdioramas/${bookId}/${dioramaId}`);
+      config = Object.values(module)[0] as DioramaConfig3DWithVideos;
+    } else {
+      // 🔹 Lecture prod sur Cloudflare
+      const baseUrl = process.env.NEXT_PUBLIC_ASSETS_URL; // ex: https://webdioramas.r2.cloudflarestorage.com
+      const indexRes = await fetch(`${baseUrl}/books/${bookId}/index.json`);
+      if (!indexRes.ok) throw new Error("Index non trouvé");
+      const indexJson = await indexRes.json() as Record<string, string>;
+
+      const dioramaFile = indexJson[dioramaId];
+      if (!dioramaFile) throw new Error("Diorama non listé dans l'index");
+
+      const dioramaRes = await fetch(`${baseUrl}/books/${bookId}/${dioramaFile}`);
+      if (!dioramaRes.ok) throw new Error("Fichier diorama non trouvé");
+      config = await dioramaRes.json() as DioramaConfig3DWithVideos;
     }
+
+    if (!config) throw new Error("Config manquante pour ce diorama");
 
     return <WebDioramaLoader config={config} />;
   } catch (err) {
