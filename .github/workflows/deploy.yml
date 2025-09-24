@@ -8,9 +8,11 @@ jobs:
   build-deploy:
     runs-on: ubuntu-latest
     steps:
+      # 1️⃣ Récupérer le code
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # 2️⃣ Installer Node et dépendances
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
@@ -19,19 +21,32 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # 3️⃣ Vérifier le répertoire et le contenu (diagnostic)
+      - name: Check working directory
+        run: pwd
+
+      - name: List diorama files
+        run: ls -R src/content/webdioramas
+
+      # 4️⃣ Générer les JSON dynamiquement
       - name: Generate Diorama JSON
         run: npx ts-node scripts/export-configs.ts
 
+      # 5️⃣ Upload automatique vers R2
       - name: Upload JSONs to R2
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          for f in dist/manifests/**/*.json; do
-            bucket_path=$(echo $f | sed 's|dist/||')
-            npx wrangler r2 object put "webdioramas/$bucket_path" --file="$f"
+          echo "Uploading JSON manifests to R2..."
+          for f in dist/manifests/*/*.json; do
+            book=$(basename $(dirname $f))
+            file=$(basename $f)
+            echo "Uploading $file in book $book..."
+            npx wrangler r2 object put "webdioramas/$book/$file" --file="$f"
           done
 
+      # 6️⃣ Déploiement sur Vercel
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v41.1.4
         with:

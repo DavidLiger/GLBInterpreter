@@ -12,7 +12,7 @@ const CONTENT_DIR = path.resolve("src/content/webdioramas");
 // 🔧 Dossier de sortie
 const OUT_DIR = path.resolve("dist/manifests");
 
-// 🔄 Réécriture récursive des chemins locaux -> URLs R2
+// 🔄 Réécriture récursive des chemins locaux → URLs R2
 function rewritePaths(config: any): any {
   const replacer = (value: any) => {
     if (typeof value === "string") {
@@ -28,22 +28,18 @@ function rewritePaths(config: any): any {
     return value;
   };
 
-  if (Array.isArray(config)) {
-    return config.map(rewritePaths);
-  } else if (typeof config === "object" && config !== null) {
+  if (Array.isArray(config)) return config.map(rewritePaths);
+  if (typeof config === "object" && config !== null) {
     const out: any = {};
-    for (const [k, v] of Object.entries(config)) {
-      out[k] = rewritePaths(v);
-    }
+    for (const [k, v] of Object.entries(config)) out[k] = rewritePaths(v);
     return out;
-  } else {
-    return replacer(config);
   }
+  return replacer(config);
 }
 
 // 🚀 Générer les JSON
 async function exportConfigs() {
-  // Transforme les backslashes en slashes pour glob
+  // Transforme les backslashes en slashes pour glob (Windows safe)
   const pattern = path.join(CONTENT_DIR, "**/*.ts").replace(/\\/g, "/");
   const files = glob.sync(pattern, { windowsPathsNoEscape: true });
 
@@ -51,18 +47,19 @@ async function exportConfigs() {
   console.log("Fichiers trouvés :", files);
 
   for (const file of files) {
-    const relPath = path.relative(CONTENT_DIR, file).replace(/\\/g, "/"); // force /
-    const parts = relPath.split("/"); // split sur /
-    if (parts.length < 2) {
-      console.warn(`⚠️ Chemin inattendu : ${relPath}`);
-      continue;
-    }
+    const relPath = path.relative(CONTENT_DIR, file).replace(/\\/g, "/");
+    const parts = relPath.split("/");
+    if (parts.length < 2) continue;
+
     const [bookId, dioramaFile] = parts;
-    if (dioramaFile === "index.ts") continue;
+
+    // Ignore index.ts
+    if (dioramaFile.toLowerCase() === "index.ts") continue;
+
     const dioramaId = path.basename(dioramaFile, ".ts");
 
     try {
-      // Import dynamique en ESM (Windows compatible)
+      // Import dynamique compatible Windows ESM
       const mod = await import(`file://${path.resolve(file)}`);
 
       // Cherche export nommé ou default
@@ -76,8 +73,8 @@ async function exportConfigs() {
       // Réécriture des chemins
       const rewritten = rewritePaths(config);
 
-      // Création du dossier de sortie
-      const outDir = path.join(OUT_DIR, bookId); // /dist/manifests/1
+      // Création dynamique du dossier de sortie
+      const outDir = path.join(OUT_DIR, bookId);
       fs.mkdirSync(outDir, { recursive: true });
 
       // Sauvegarde en JSON
