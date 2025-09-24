@@ -1,5 +1,5 @@
 import { street } from "./street";
-import { castle } from "./castle"; // si nécessaire
+// import { castle } from "./castle"; // si nécessaire
 import type { DioramaConfig3D } from "@/components/WebDioramaLoader";
 
 export type WebDioramaConfigEntry = {
@@ -9,7 +9,7 @@ export type WebDioramaConfigEntry = {
 
 const webdioramas: Record<string, WebDioramaConfigEntry> = {
   street: { token: "abcd1234", config: street },
-  castle: { token: "efgh5678", config: castle },
+  // castle: { token: "efgh5678", config: castle },
 };
 
 export default webdioramas;
