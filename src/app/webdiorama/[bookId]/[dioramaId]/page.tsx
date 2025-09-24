@@ -1,6 +1,6 @@
-// src/app/webdiorama/[bookId]/[dioramaId]/page.tsx
 import { notFound } from "next/navigation";
-import DioramaClient from "./DioramaClient";
+import WebDioramaLoader from "@/components/WebDioramaLoader";
+import type { DioramaConfig3DWithVideos } from "@/components/WebDioramaLoader";
 
 type Props = {
   params: {
@@ -12,9 +12,18 @@ type Props = {
 export default async function DioramaPage({ params }: Props) {
   const { bookId, dioramaId } = await params;
 
-  if (!bookId || !dioramaId) {
+  try {
+    // 🔥 Import dynamique en fonction des paramètres d'URL
+    const module = await import(`@/content/webdioramas/${bookId}/${dioramaId}`);
+    const config = module.street ?? module.default as DioramaConfig3DWithVideos;
+
+    if (!config) {
+      throw new Error("Config manquante pour ce diorama");
+    }
+
+    return <WebDioramaLoader config={config} />;
+  } catch (err) {
+    console.error("Erreur lors du chargement du diorama:", err);
     notFound();
   }
-
-  return <DioramaClient bookId={bookId} dioramaId={dioramaId} />;
 }

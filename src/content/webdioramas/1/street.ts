@@ -1,17 +1,18 @@
 import type { DioramaConfig3DWithVideos } from "@/components/WebDioramaLoader";
 
+const BASE_URL = process.env.NEXT_PUBLIC_ASSET_BASE_URL || "";
 
-export const street: DioramaConfig3DWithVideos  = {
-  glb: "/models/glb/street.glb",
-  loaderImage: "/icons/dioramas/test_street/street-preview.png",
+export const street: DioramaConfig3DWithVideos = {
+  glb: `${BASE_URL}/models/glb/street.glb`,
+  loaderImage: `${BASE_URL}/icons/dioramas/test_street/street-preview.png`,
   name: "La place du village",
   pois: [
     {
       id: "start",
       label: "Vue initiale",
       emptyName: "start",
-      icon: "/icons/dioramas/test_street/start.png",
-      ambientSound: "/sounds/kids_playing.mp3",
+      icon: `${BASE_URL}/icons/dioramas/test_street/start.png`,
+      ambientSound: `${BASE_URL}/sounds/kids_playing.mp3`,
       zoom: 0.5,
       lookAxis: "x",
       minDistance: 1,
@@ -26,8 +27,8 @@ export const street: DioramaConfig3DWithVideos  = {
       id: "window",
       label: "Fenêtre appartement",
       emptyName: "window",
-      icon: "/icons/dioramas/test_street/window.png",
-      ambientSound: "/sounds/kids_playing.mp3",
+      icon: `${BASE_URL}/icons/dioramas/test_street/window.png`,
+      ambientSound: `${BASE_URL}/sounds/kids_playing.mp3`,
       zoom: 0.2,
       lookAxis: "x",
       minDistance: 0.05,
@@ -42,8 +43,8 @@ export const street: DioramaConfig3DWithVideos  = {
           id: "apartment",
           label: "Appartement",
           emptyName: "apartment",
-          icon: "/icons/dioramas/test_street/apartment.png",
-          ambientSound: "/sounds/tv_background.mp3",
+          icon: `${BASE_URL}/icons/dioramas/test_street/apartment.png`,
+          ambientSound: `${BASE_URL}/sounds/tv_background.mp3`,
           zoom: 0.2,
           lookAxis: "x",
           minDistance: 0.01,
@@ -58,8 +59,8 @@ export const street: DioramaConfig3DWithVideos  = {
               id: "coffre",
               label: "Coffre",
               emptyName: "coffre",
-              icon: "/icons/dioramas/test_street/coffre.png",
-              ambientSound: "/sounds/snoring_guy.mp3",
+              icon: `${BASE_URL}/icons/dioramas/test_street/coffre.png`,
+              ambientSound: `${BASE_URL}/sounds/snoring_guy.mp3`,
               zoom: 0.05,
               lookAxis: "x",
               minDistance: 0.01,
@@ -69,8 +70,8 @@ export const street: DioramaConfig3DWithVideos  = {
               minAzimuthAngle: 1.14,
               maxAzimuthAngle: 2.14,
               enableZoom: true,
-            }
-          ]
+            },
+          ],
         },
       ],
     },
@@ -78,7 +79,7 @@ export const street: DioramaConfig3DWithVideos  = {
       id: "window2",
       label: "Fenêtre appartement 2",
       emptyName: "window2",
-      icon: "/icons/dioramas/test_street/window.png",
+      icon: `${BASE_URL}/icons/dioramas/test_street/window.png`,
       zoom: 0.2,
       lookAxis: "x",
       minDistance: 0.05,
@@ -92,15 +93,15 @@ export const street: DioramaConfig3DWithVideos  = {
   ],
   videos: [
     {
-      name: "TVScreen", // Nom exact dans Blender
-      src: "/videos/test_street/Cab_Calloway_1933.mp4",
-      materialIndex: 0, // Premier matériau
+      name: "TVScreen",
+      src: `${BASE_URL}/videos/test_street/Cab_Calloway_1933.mp4`,
+      materialIndex: 0,
       loop: true,
       muted: true,
     },
     {
-      name: "TVScreen2", // chaque objet doit avoir un material différent
-      src: "/videos/test_street/Cab_Calloway_Minnie.mp4",
+      name: "TVScreen2",
+      src: `${BASE_URL}/videos/test_street/Cab_Calloway_Minnie.mp4`,
       autoplay: true,
     },
   ],
@@ -108,11 +109,11 @@ export const street: DioramaConfig3DWithVideos  = {
     {
       type: "ambient",
       color: 0xffe0cc,
-      intensity: 0.5, // lumière chaude du soir
+      intensity: 0.5,
     },
     {
       type: "spot",
-      emptyName: "spot_01", // nécessite l'ajout d'un empty nommé "spot_..._target" dans la scène
+      emptyName: "spot_01",
       color: 0xfff2cc,
       intensity: 0.8,
       distance: 10,
@@ -137,7 +138,6 @@ export const street: DioramaConfig3DWithVideos  = {
     defaultThickness: 0.001,
     defaultColor: [0, 0, 0],
     defaultAlpha: 0.9,
-    defaultKeepAlive: true
-  }
+    defaultKeepAlive: true,
+  },
 };
-
