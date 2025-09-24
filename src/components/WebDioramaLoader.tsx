@@ -202,33 +202,29 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [isPortrait]);
 
-  // 🔹 Précharger tous les sons au démarrage
-  useEffect(() => {
-    config.pois.forEach((poi) => {
+  // 🔹 Fonction récursive pour précharger tous les sons
+  const preloadPOISounds = (pois: POI[]) => {
+    pois.forEach((poi) => {
       if (poi.ambientSound) {
         const audio = new Audio(poi.ambientSound);
         audio.loop = true;
         audio.muted = true; // on mute au départ
-        audio.preload = "auto"; // 🔹 préchargement
+        audio.preload = "auto"; // préchargement
         ambientAudioRefs.current[poi.id] = audio;
-
-        // force le chargement
         audio.load();
       }
 
-      // si le POI a des enfants
-      poi.children?.forEach((child) => {
-        if (child.ambientSound) {
-          const audio = new Audio(child.ambientSound);
-          audio.loop = true;
-          audio.muted = true;
-          audio.preload = "auto";
-          ambientAudioRefs.current[child.id] = audio;
-          audio.load();
-        }
-      });
+      if (poi.children && poi.children.length > 0) {
+        preloadPOISounds(poi.children); // 🔹 récursion sur les enfants
+      }
     });
+  };
+
+  // 🔹 Précharger tous les sons au démarrage
+  useEffect(() => {
+    preloadPOISounds(config.pois);
   }, [config.pois]);
+
 
   const animateCameraMove = (
     fromPos: THREE.Vector3,
