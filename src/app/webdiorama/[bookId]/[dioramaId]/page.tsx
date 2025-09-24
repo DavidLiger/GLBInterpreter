@@ -29,7 +29,7 @@ export default async function DioramaPage({ params }: Props) {
       const dioramaFile = indexJson[dioramaId];
       if (!dioramaFile) throw new Error("Diorama non listé dans l'index");
 
-      const dioramaRes = await fetch(`${baseUrl}/books/${bookId}/${dioramaFile}`);
+      const dioramaRes = await fetch(`${baseUrl}/assets/${bookId}/${dioramaFile}`);
       if (!dioramaRes.ok) throw new Error("Fichier diorama non trouvé");
       config = await dioramaRes.json() as DioramaConfig3DWithVideos;
     }
