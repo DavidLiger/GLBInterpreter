@@ -1,28 +1,48 @@
+// scripts/export-configs.ts
 import fs from "fs";
 import path from "path";
 import { glob } from "glob";
 
-// Dossier racine des TS
+// 🔧 URL de ton bucket R2
+const R2_BASE_URL = "https://webdioramas.r2.cloudflarestorage.com";
+
+// 🔧 Dossier racine de tes dioramas
 const CONTENT_DIR = path.resolve("src/content/webdioramas");
 
-// Dossier de sortie pour les JSON de prod
+// 🔧 Dossier de sortie
 const OUT_DIR = path.resolve("dist/manifests");
 
+// 🔄 Réécriture récursive des chemins locaux → URLs R2
 function rewritePaths(config: any): any {
+  const replacer = (value: any) => {
+    if (typeof value === "string") {
+      if (
+        value.startsWith("/models") ||
+        value.startsWith("/icons") ||
+        value.startsWith("/sounds") ||
+        value.startsWith("/videos")
+      ) {
+        return `${R2_BASE_URL}${value}`;
+      }
+    }
+    return value;
+  };
+
   if (Array.isArray(config)) return config.map(rewritePaths);
   if (typeof config === "object" && config !== null) {
     const out: any = {};
-    for (const [k, v] of Object.entries(config)) {
-      out[k] = rewritePaths(v);
-    }
+    for (const [k, v] of Object.entries(config)) out[k] = rewritePaths(v);
     return out;
   }
-  return config; // ici, pas besoin de réécriture pour R2
+  return replacer(config);
 }
 
+// 🚀 Générer les JSON
 async function exportConfigs() {
+  // Transforme les backslashes en slashes pour glob (Windows safe)
   const pattern = path.join(CONTENT_DIR, "**/*.ts").replace(/\\/g, "/");
   const files = glob.sync(pattern, { windowsPathsNoEscape: true });
+
   console.log("Pattern :", pattern);
   console.log("Fichiers trouvés :", files);
 
@@ -30,20 +50,36 @@ async function exportConfigs() {
     const relPath = path.relative(CONTENT_DIR, file).replace(/\\/g, "/");
     const parts = relPath.split("/");
     if (parts.length < 2) continue;
+
     const [bookId, dioramaFile] = parts;
-    if (dioramaFile === "index.ts") continue;
+
+    // Ignore index.ts
+    if (dioramaFile.toLowerCase() === "index.ts") continue;
+
     const dioramaId = path.basename(dioramaFile, ".ts");
 
     try {
+      // Import dynamique compatible Windows ESM
       const mod = await import(`file://${path.resolve(file)}`);
-      const config = mod[dioramaId] ?? mod.default;
-      if (!config) continue;
 
+      // Cherche export nommé ou default
+      const config = mod[dioramaId] ?? mod.default;
+
+      if (!config) {
+        console.warn(`⚠️ Pas de config trouvée dans ${file}`);
+        continue;
+      }
+
+      // Réécriture des chemins
+      const rewritten = rewritePaths(config);
+
+      // Création dynamique du dossier de sortie
       const outDir = path.join(OUT_DIR, bookId);
       fs.mkdirSync(outDir, { recursive: true });
 
+      // Sauvegarde en JSON
       const outPath = path.join(outDir, `${dioramaId}.json`);
-      fs.writeFileSync(outPath, JSON.stringify(config, null, 2));
+      fs.writeFileSync(outPath, JSON.stringify(rewritten, null, 2));
 
       console.log(`✅ Exporté: ${outPath}`);
     } catch (err) {

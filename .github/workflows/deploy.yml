@@ -1,46 +1,60 @@
 name: Build & Deploy Dioramas
 
-# 🔹 Déclenche le workflow à chaque push sur main
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch: # permet déclenchement manuel depuis l'interface GitHub
+    branches: [main]
 
 jobs:
   build-deploy:
     runs-on: ubuntu-latest
-
     steps:
       # 1️⃣ Récupérer le code
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 2️⃣ Installer Node.js
+      # 2️⃣ Installer Node et dépendances
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '22'
 
-      # 3️⃣ Installer les dépendances
       - name: Install dependencies
         run: npm ci
 
-      # 4️⃣ Vérifier le chemin et les fichiers (debug)
+      # 3️⃣ Vérifier le répertoire et le contenu (diagnostic)
+      - name: Check working directory
+        run: pwd
+
       - name: List diorama files
+        run: ls -R src/content/webdioramas
+
+        # 4️⃣ Générer les JSON dynamiquement avec debug
+      - name: Generate Diorama JSON
         run: |
-          pwd
+          echo "PWD: $(pwd)"
+          echo "Listing webdioramas..."
           ls -R src/content/webdioramas
+          echo "Running export-configs..."
+          npx ts-node scripts/export-configs.ts
+        continue-on-error: false
 
-      # 5️⃣ Générer les JSON de production avec ton script
-      - name: Export Diorama JSON
-        run: npx ts-node scripts/export-configs.ts
+      # 5️⃣ Upload automatique vers R2 avec debug
+      - name: Upload JSONs to R2
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          echo "Listing generated JSONs..."
+          ls -R dist/manifests
+          for f in dist/manifests/*/*.json; do
+            book=$(basename $(dirname $f))
+            file=$(basename $f)
+            echo "Uploading $file from book $book..."
+            npx wrangler r2 object put "webdioramas/$book/$file" --file="$f"
+          done
 
-      # 6️⃣ Vérifier que les JSON ont bien été créés
-      - name: List generated JSONs
-        run: ls -R dist/manifests
 
-      # 7️⃣ Déployer sur Vercel
+      # 6️⃣ Déploiement sur Vercel
       - name: Deploy to Vercel
         uses: amondnet/vercel-action@v41.1.4
         with:
@@ -48,3 +62,4 @@ jobs:
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
           working-directory: ./
+          prod: true

@@ -4,4 +4,4 @@ compatibility_date = "2023-12-01"
 
 [[r2_buckets]]
 binding = "MY_BUCKET"
-bucket_name = "<ton-bucket>"
+bucket_name = "webdioramas"

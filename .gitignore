@@ -46,5 +46,7 @@ public/videos/
 public/sounds/
 public/icons/dioramas/
 
+# build
+/dist
 
 
