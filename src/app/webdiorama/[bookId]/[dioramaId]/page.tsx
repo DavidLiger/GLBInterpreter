@@ -10,7 +10,7 @@ type Props = {
 };
 
 export default async function DioramaPage({ params }: Props) {
-  const { bookId, dioramaId } = params;
+  const { bookId, dioramaId } = await params;
 
   try {
     let config: DioramaConfig3DWithVideos;
