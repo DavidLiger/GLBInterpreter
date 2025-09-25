@@ -1,4 +1,4 @@
-import type { DioramaConfig3DWithVideos } from "@/components/WebDioramaLoader";
+import type { DioramaConfig3DWithVideos } from "@/components/diorama/WebDioramaLoader";
 
 
 export const castle: DioramaConfig3DWithVideos  = {

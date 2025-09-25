@@ -1,5 +1,5 @@
 import Image from "next/image";
-import content from "../content/content.json";
+import content from "../../content/content.json";
 
 interface AmazonButtonProps {
   href: string;

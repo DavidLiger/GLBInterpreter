@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from "react";
-import AmazonButton from "./AmazonButton";
+import AmazonButton from "../common/AmazonButton";
 
 interface Detail {
   image: string;

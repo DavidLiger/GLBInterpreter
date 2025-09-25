@@ -9,7 +9,7 @@ import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import localFont from "next/font/local";
 
 const BullstandRegular = localFont({
-  src: "../../public/fonts/Bullstand-Regular.ttf",
+  src: "../../../public/fonts/Bullstand-Regular.ttf",
   variable: "--font-Bullstand-Regular",
 });
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from "react";
-import content from "../content/content.json";
+import content from "../../content/content.json";
 import localFont from "next/font/local";
 
 interface HeaderProps {
@@ -9,17 +9,17 @@ interface HeaderProps {
 }
 
 const VictorianPolice = localFont({
-  src: "../../public/fonts/Victorian_Art_Magic_Remains.ttf",
+  src: "../../../public/fonts/Victorian_Art_Magic_Remains.ttf",
   variable: "--font-Victorian_Art_Magic_Remains", // optionnel si tu veux l'utiliser avec Tailwind
 });
 
 const BullstandRegular = localFont({
-  src: "../../public/fonts/Bullstand-Regular.ttf",
+  src: "../../../public/fonts/Bullstand-Regular.ttf",
   variable: "--font-Bullstand-Regular", // optionnel si tu veux l'utiliser avec Tailwind
 });
 
 const Alstoria = localFont({
-  src: "../../public/fonts/Alstoria.ttf",
+  src: "../../../public/fonts/Alstoria.ttf",
   variable: "--font-Alstoria", // optionnel si tu veux l'utiliser avec Tailwind
 });
 

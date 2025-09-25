@@ -1,7 +1,7 @@
 // components/Copyright.tsx
 'use client'
 
-import content from "../content/content.json";
+import content from "../../content/content.json";
 
 export default function Copyright() {
   return (

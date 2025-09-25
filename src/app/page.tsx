@@ -1,12 +1,11 @@
 'use client'
 
 import { useRef } from "react";
-import Header from "../components/Header";
-import BooksSection from "../components/BooksSection";
-import Footer from "../components/Footer";
-import DiscoverSection from "../components/DiscoverSection";
-import content from "../content/content.json";
-import Copyright from "@/components/Copyright";
+import Header from "../components/common/Header";
+import BooksSection from "../components/books/BooksSection";
+import Footer from "../components/common/Footer";
+import DiscoverSection from "../components/books/DiscoverSection";
+import Copyright from "@/components/common/Copyright";
 
 export default function Home() {
   const discoverRef = useRef<HTMLDivElement>(null);

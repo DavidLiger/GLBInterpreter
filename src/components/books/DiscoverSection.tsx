@@ -1,12 +1,12 @@
 'use client'
 
 import { useEffect, useRef, useState } from "react";
-import content from "../content/content.json";
+import content from "../../content/content.json";
 import localFont from "next/font/local";
 import DiscoverModal from "./DiscoverModal";
 
 const Alstoria = localFont({
-  src: "../../public/fonts/Alstoria.ttf",
+  src: "../../../public/fonts/Alstoria.ttf",
   variable: "--font-Alstoria", // optionnel si tu veux l'utiliser avec Tailwind
 });
 

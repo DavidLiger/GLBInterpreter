@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import content from "../content/content.json";
+import content from "../../content/content.json";
 import BookModal from "./BookModal";
-import AmazonButton from "./AmazonButton";
+import AmazonButton from "../common/AmazonButton";
 import localFont from "next/font/local";
 
 const Alstoria = localFont({
-  src: "../../public/fonts/Alstoria.ttf",
+  src: "../../../public/fonts/Alstoria.ttf",
   variable: "--font-Alstoria", // optionnel si tu veux l'utiliser avec Tailwind
 });
 

@@ -1,4 +1,4 @@
-import type { DioramaConfig3DWithVideos } from "@/components/WebDioramaLoader";
+import type { DioramaConfig3DWithVideos } from "@/components/diorama/WebDioramaLoader";
 
 const BASE_URL = process.env.NEXT_PUBLIC_ASSET_BASE_URL || "";
 

@@ -1,6 +1,6 @@
 import { street } from "./street";
 import { castle } from "./castle"; // si nécessaire
-import type { DioramaConfig3D } from "@/components/WebDioramaLoader";
+import type { DioramaConfig3D } from "@/components/diorama/WebDioramaLoader";
 
 export type WebDioramaConfigEntry = {
   token: string;
