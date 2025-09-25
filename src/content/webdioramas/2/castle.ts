@@ -2,7 +2,7 @@ import type { DioramaConfig3DWithVideos } from "@/types/diorama";
 
 
 export const castle: DioramaConfig3DWithVideos  = {
-  glb: "/models/glb/street.glb",
+  glb: "/models/street.glb",
   loaderImage: "/icons/dioramas/test_street/street-preview.png",
   name: "La place du village",
   navigationType: "fps",
