@@ -112,6 +112,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(true);
+  const [startSoundReady, setStartSoundReady] = useState(false);
 
   useEffect(() => {
     const checkMobile = () => {
@@ -220,11 +221,36 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     });
   };
 
-  // 🔹 Précharger tous les sons au démarrage
-  useEffect(() => {
-    preloadPOISounds(config.pois);
-  }, [config.pois]);
+  // // 🔹 Précharger tous les sons au démarrage
+  // useEffect(() => {
+  //   preloadPOISounds(config.pois);
+  // }, [config.pois]);
 
+  useEffect(() => {
+    const startPOI = config.pois.find((p) => p.id === "start");
+
+    if (startPOI?.ambientSound) {
+      const startAudio = new Audio(startPOI.ambientSound);
+      startAudio.loop = true;
+      startAudio.muted = true;
+      startAudio.preload = "auto";
+
+      // dès que le son est prêt → débloque
+      startAudio.addEventListener("canplaythrough", () => {
+        ambientAudioRefs.current[startPOI.id] = startAudio;
+        setStartSoundReady(true);
+
+        // ensuite seulement → charger les autres
+        preloadPOISounds(config.pois.filter((p) => p.id !== "start"));
+      });
+
+      startAudio.load();
+    } else {
+      // pas de son start → charger tout direct
+      preloadPOISounds(config.pois);
+      setStartSoundReady(true);
+    }
+  }, [config.pois]);
 
   const animateCameraMove = (
     fromPos: THREE.Vector3,
@@ -846,18 +872,20 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     {/* ────────────── Boutons et POIs ────────────── */}
       {/* 🔊 Boutons top-right */}
       <div className="absolute top-4 right-4 z-50 flex flex-col gap-3 items-end">
-        <button
-          onClick={() => setMuted(!muted)}
-          className="bg-white text-white rounded-full w-12 h-12 flex items-center justify-center"
-          title={muted ? "Activer le son" : "Couper le son"}
-        >
-          {/* {muted ? "🔇" : "🔊"} */}
-          <img
-            src={muted ? "/icons/dioramas/UI/muted.png" : "/icons/dioramas/UI/sound.png"}
-            alt={muted ? "Muet" : "Son"}
-            className="w-8 h-8 object-contain"
-          />
-        </button>
+        { startSoundReady &&
+          <button
+            onClick={() => setMuted(!muted)}
+            className="bg-white text-white rounded-full w-12 h-12 flex items-center justify-center"
+            title={muted ? "Activer le son" : "Couper le son"}
+          >
+            {/* {muted ? "🔇" : "🔊"} */}
+            <img
+              src={muted ? "/icons/dioramas/UI/muted.png" : "/icons/dioramas/UI/sound.png"}
+              alt={muted ? "Muet" : "Son"}
+              className="w-8 h-8 object-contain"
+            />
+          </button>
+        }
 
         <motion.button
           key="fullscreen"
