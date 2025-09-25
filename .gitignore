@@ -45,7 +45,15 @@ public/models/
 public/videos/
 public/sounds/
 public/jsons
-public/icons/dioramas/
+# Ignore tout dans public/icons/dioramas
+public/icons/dioramas/*
+
+# Mais ne pas ignorer le dossier UI
+!public/icons/dioramas/UI/
+
+# Et ne pas ignorer son contenu
+!public/icons/dioramas/UI/**
+
 
 
 
