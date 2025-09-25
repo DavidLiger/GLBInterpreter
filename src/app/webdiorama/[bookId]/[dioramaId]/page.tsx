@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import WebDioramaLoader from "@/components/diorama/WebDioramaLoader";
-import type { DioramaConfig3DWithVideos } from "@/components/diorama/WebDioramaLoader";
+import type { DioramaConfig3DWithVideos } from "@/types/diorama"; 
 
 type Props = {
   params: {
