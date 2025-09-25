@@ -1,10 +1,11 @@
-import type { DioramaConfig3DWithVideos } from "@/components/diorama/WebDioramaLoader";
+import type { DioramaConfig3DWithVideos } from "@/types/diorama";
 
 
 export const castle: DioramaConfig3DWithVideos  = {
   glb: "/models/glb/street.glb",
   loaderImage: "/icons/dioramas/test_street/street-preview.png",
   name: "La place du village",
+  navigationType: "fps",
   pois: [
     {
       id: "start",
