@@ -13,8 +13,9 @@ type Props = {
 };
 
 export default async function DioramaPage({ params, searchParams }: Props) {
-  const { bookId, dioramaId } = params;
-  const token = searchParams?.t;
+  const { bookId, dioramaId } = await params;
+  const searchParamsData = await searchParams
+  const token =  searchParamsData?.t;
 
   try {
     let config: DioramaConfig3DWithVideos;
@@ -37,6 +38,7 @@ export default async function DioramaPage({ params, searchParams }: Props) {
     } else {
       // 🔹 Prod → charger index depuis R2
       const baseUrl = process.env.NEXT_PUBLIC_ASSETS_URL;
+      console.log(`${baseUrl}/assets/${bookId}/index.json`)
       const indexRes = await fetch(`${baseUrl}/assets/${bookId}/index.json`);
       if (!indexRes.ok) throw new Error("Index non trouvé");
       const indexJson = (await indexRes.json()) as Record<string, { path: string; token: string }>;
