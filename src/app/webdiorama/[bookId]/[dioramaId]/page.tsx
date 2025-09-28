@@ -13,49 +13,50 @@ type Props = {
 };
 
 export default async function DioramaPage({ params, searchParams }: Props) {
-  const { bookId, dioramaId } = await params;
-  const { t: token } = await searchParams ?? {};
+  const { bookId, dioramaId } = params;
+  const token = searchParams?.t;
 
   try {
     let config: DioramaConfig3DWithVideos;
-
-    // 🔹 Import dynamique de l’index correspondant au livre
-    const indexModule = await import(`@/content/webdioramas/${bookId}/index`);
-    const webdioramas = indexModule.default as Record<
-      string,
-      { token: string; config: DioramaConfig3DWithVideos }
-    >;
-
-    // Vérifier si le diorama existe
-    const entry = webdioramas[dioramaId];
-    if (!entry) return notFound();
-
-    // Vérifier le token
-    if (!token || token !== entry.token) {
-      console.warn("Token invalide", dioramaId, "fourni:", token);
-      return notFound();
-    }
+    let entryToken: string | undefined;
+    let dioramaFile: string | undefined;
 
     if (process.env.NODE_ENV === "development") {
-      // 🔹 En dev → on prend la config directe
+      // 🔹 Dev → import index local
+      const indexModule = await import(`@/content/webdioramas/${bookId}/index`);
+      const webdioramas = indexModule.default as Record<
+        string,
+        { token: string; config: DioramaConfig3DWithVideos }
+      >;
+
+      const entry = webdioramas[dioramaId];
+      if (!entry) return notFound();
+
+      entryToken = entry.token;
       config = entry.config;
     } else {
-      // 🔹 En prod → on va chercher le JSON (mais le token a déjà été validé ci-dessus)
+      // 🔹 Prod → charger index depuis R2
       const baseUrl = process.env.NEXT_PUBLIC_ASSETS_URL;
-
-      // 1️⃣ Charger l’index JSON stocké dans R2
       const indexRes = await fetch(`${baseUrl}/assets/${bookId}/index.json`);
       if (!indexRes.ok) throw new Error("Index non trouvé");
-      const indexJson = (await indexRes.json()) as Record<string, string>;
+      const indexJson = (await indexRes.json()) as Record<string, { path: string; token: string }>;
 
-      // 2️⃣ Trouver le fichier correspondant
-      const dioramaFile = indexJson[dioramaId];
-      if (!dioramaFile) throw new Error("Diorama non listé dans l'index");
+      const entry = indexJson[dioramaId];
+      if (!entry) return notFound();
 
-      // 3️⃣ Charger la config JSON
+      entryToken = entry.token;
+      dioramaFile = entry.path;
+
+      // Charger la config JSON du diorama
       const dioramaRes = await fetch(`${baseUrl}/assets/${bookId}/${dioramaFile}`);
       if (!dioramaRes.ok) throw new Error("Fichier diorama non trouvé");
       config = (await dioramaRes.json()) as DioramaConfig3DWithVideos;
+    }
+
+    // 🔹 Vérification du token après récupération
+    if (!token || token !== entryToken) {
+      console.warn("Token invalide", dioramaId, "fourni:", token);
+      return notFound();
     }
 
     return <WebDioramaLoader config={config} />;
