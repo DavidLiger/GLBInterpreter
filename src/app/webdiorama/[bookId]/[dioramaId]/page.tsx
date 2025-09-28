@@ -14,13 +14,12 @@ type Props = {
 
 export default async function DioramaPage({ params, searchParams }: Props) {
   const { bookId, dioramaId } = await params;
-  const searchParamsData = await searchParams
-  const token =  searchParamsData?.t;
+  const awaitedSearchParams = await searchParams;
+  const token = awaitedSearchParams?.t;
 
   try {
     let config: DioramaConfig3DWithVideos;
-    let entryToken: string | undefined;
-    let dioramaFile: string | undefined;
+    let entryToken: string;
 
     if (process.env.NODE_ENV === "development") {
       // 🔹 Dev → import index local
@@ -38,18 +37,23 @@ export default async function DioramaPage({ params, searchParams }: Props) {
     } else {
       // 🔹 Prod → charger index depuis R2
       const baseUrl = process.env.NEXT_PUBLIC_ASSETS_URL;
-      console.log(`${baseUrl}/assets/${bookId}/index.json`)
+
+      // 1️⃣ Charger l’index JSON (avec token + path)
       const indexRes = await fetch(`${baseUrl}/assets/${bookId}/index.json`);
       if (!indexRes.ok) throw new Error("Index non trouvé");
-      const indexJson = (await indexRes.json()) as Record<string, { path: string; token: string }>;
+
+      const indexJson = (await indexRes.json()) as Record<
+        string,
+        { path: string; token: string }
+      >;
 
       const entry = indexJson[dioramaId];
       if (!entry) return notFound();
 
       entryToken = entry.token;
-      dioramaFile = entry.path;
+      const dioramaFile = entry.path;
 
-      // Charger la config JSON du diorama
+      // 2️⃣ Charger la config JSON du diorama
       const dioramaRes = await fetch(`${baseUrl}/assets/${bookId}/${dioramaFile}`);
       if (!dioramaRes.ok) throw new Error("Fichier diorama non trouvé");
       config = (await dioramaRes.json()) as DioramaConfig3DWithVideos;
