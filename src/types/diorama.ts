@@ -1,3 +1,12 @@
+// 🔹 Type pour éléments animés attachés à un POI
+export type AnimatedElement = {
+  name: string;      // Nom de l'objet ou armature dans la scène
+  type: "armature" | "mesh"; 
+  clipName: string;  // Nom du clip à jouer
+  autoplay: boolean; 
+  loop: boolean;
+};
+
 export type POI = {
   id: string;
   label: string;
@@ -16,7 +25,15 @@ export type POI = {
   enablePan?: boolean;
   dampingFactor?: number;
   children?: POI[];
+  elements?: AnimatedElement[];
 };
+
+// 🔹 POI avec éventuellement des éléments animés
+export type POIWithElements = POI & {
+  elements?: AnimatedElement[];
+};
+
+
 
 export type OrbitParams = {
   minDistance?: number;

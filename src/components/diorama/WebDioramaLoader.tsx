@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
+import { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import localFont from "next/font/local";
@@ -21,6 +21,7 @@ import { applyBulbs } from "./rendering/applyBulbs";
 import { useOrientation } from "./hooks/useOrientation";
 import { useFullscreen } from "./hooks/useFullscreen";
 import { useResize } from "./hooks/useResize";
+import { POI, POIWithElements } from "@/types/diorama"; 
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -36,6 +37,14 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const emptyRefs = useRef<Record<string, THREE.Object3D>>({});
+  // 🔹 Types utiles
+
+  interface Mixers {
+    mixerArmature?: THREE.AnimationMixer;
+    mixerEmpty?: THREE.AnimationMixer;
+  }
+  const mixerRef = useRef<Mixers>({});
+  const clockRef = useRef(new THREE.Clock());
   const { currentPOI, goToPOI, getVisiblePOIs, findParentPOI, moveCameraTo, setCurrentPOI } = usePOINavigation(
     config,
     cameraRef,
@@ -62,6 +71,20 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   useResize(updateRendererSize);
 
   const parentPOI = currentPOI ? findParentPOI(currentPOI) : null;
+
+  function findArmature(obj: THREE.Object3D): THREE.Object3D | undefined {
+    if (obj.type === "Skeleton" || obj.type === "Bone" || obj.type === "SkinnedMesh" || obj.name.toLowerCase().includes("armature")) {
+      return obj;
+    }
+    for (const child of obj.children) {
+      const result = findArmature(child);
+      if (result) {
+        console.log(result)
+        return result;
+      }
+    }
+    return undefined;
+  }
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -102,53 +125,84 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     controls.maxDistance = 20;
     controlsRef.current = controls;
 
+
     const loader = new GLTFLoader();
-    const loadStartTime = performance.now(); // pour temps minimum 3s
+    const mixers: Record<string, THREE.AnimationMixer> = {};
 
-    loader.load(
-      config.glb,
-      (gltf) => {
-        scene.add(gltf.scene);
-        gltf.scene.traverse((child) => {
-          if (child.name) emptyRefs.current[child.name] = child;
+    loader.load(config.glb, (gltf: GLTF) => {
+      scene.add(gltf.scene);
+
+      const mixers: Record<string, THREE.AnimationMixer> = {};
+      const emptyRefsCurrent: Record<string, THREE.Object3D> = {};
+
+      // 🔹 Stocker toutes les refs et créer un mixer pour chaque SkinnedMesh ou Mesh
+      gltf.scene.traverse((child) => {
+        if (child.name) emptyRefsCurrent[child.name] = child;
+
+        if (child.type === "SkinnedMesh") {
+          // Mixer sur l'armature (parent du SkinnedMesh)
+          const armature = child.parent;
+          if (armature && !mixers[armature.name]) {
+            mixers[armature.name] = new THREE.AnimationMixer(armature);
+          }
+        } else if (child.type === "Mesh") {
+          // Mixer pour objets animés simples
+          if (!mixers[child.name]) mixers[child.name] = new THREE.AnimationMixer(child);
+        }
+      });
+
+      // 🔹 Récupérer le POI de départ (start)
+      const startPOI: POIWithElements | undefined = (config.pois as POIWithElements[])
+        .find(p => p.id === "start");
+
+      if (!startPOI) {
+        console.warn("⚠️ POI 'start' introuvable");
+      } else {
+        // Positionner la caméra sur le POI start
+        const startObj = emptyRefsCurrent[startPOI.emptyName];
+        if (startObj) moveCameraTo(startObj, startPOI, false, () => setCurrentPOI("start"));
+
+        // Jouer les animations des éléments du POI
+        startPOI.elements?.forEach(el => {
+          const mixer = mixers[el.name];
+          if (!mixer) return console.warn(`⚠️ Mixer not found for ${el.name}`);
+
+          const clip = gltf.animations.find(
+            a => a.name.toLowerCase() === el.clipName.toLowerCase()
+          );
+          if (!clip) return console.warn(`⚠️ Clip not found: ${el.clipName}`);
+
+          const action = mixer.clipAction(clip);
+          action.reset();
+          action.setLoop(el.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+          if (el.autoplay) action.play();
         });
+      }
 
-        // 🔹 Corrigé : on passe root + emptyRefs + data
-        applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
-        applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
-        applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
+      // 🔹 Appliquer vidéos, lumières, bulbs
+      applyVideoTextures(gltf.scene, emptyRefsCurrent, (config as DioramaConfig3DWithVideos).videos);
+      applyLights(gltf.scene, emptyRefsCurrent, (config as DioramaConfig3DWithVideos).lights);
+      applyBulbs(gltf.scene, emptyRefsCurrent, (config as any).bulbs);
 
-        const startPOI = config.pois.find((p) => p.id === "start");
-        if (startPOI) {
-          const startObj = emptyRefs.current[startPOI.emptyName];
-          if (startObj) moveCameraTo(startObj, startPOI, false, () => setCurrentPOI("start"));
-        }
+      setIsLoaded(true);
 
-        const elapsed = performance.now() - loadStartTime;
-        const remaining = Math.max(3000 - elapsed, 0);
-        setTimeout(() => setIsLoaded(true), remaining);
-      },
-      (xhr) => {
-        let progress = 0;
-        if (xhr.total) {
-          progress = (xhr.loaded / xhr.total) * 100;
-        }
-        progress = Math.min(Math.max(progress, 0), 100);
-        setLoadingProgress(Math.round(progress));
-      },
-      (err) => console.error(err)
-    );
+      // 🔹 Stocker les mixers pour la boucle animate
+      mixerRef.current = mixers;
+    });
 
+    // -------------------- Animate --------------------
+    const clock = new THREE.Clock();
     const animate = () => {
       requestAnimationFrame(animate);
-      controls.update();
-      if (effect) {
-        effect.render(scene, camera);
-      } else {
-        renderer.render(scene, camera);
-      }
+      const delta = clock.getDelta();
+
+      Object.values(mixerRef.current as Record<string, THREE.AnimationMixer>).forEach(m => m.update(delta));
+      controlsRef.current?.update();
+
+      if (rendererRef.current) rendererRef.current.render(sceneRef.current!, cameraRef.current!);
     };
     animate();
+
 
     return () => renderer.dispose();
   }, [config.glb]);

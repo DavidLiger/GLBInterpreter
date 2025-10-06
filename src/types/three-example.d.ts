@@ -1,15 +1,29 @@
 declare module 'three/examples/jsm/loaders/GLTFLoader' {
-  import { Loader } from 'three';
-  import { Object3D } from 'three';
+  import {
+    Loader,
+    AnimationClip,
+    Object3D,
+  } from 'three';
+
+  export interface GLTF {
+    scene: Object3D;
+    scenes: Object3D[];
+    animations: AnimationClip[];
+    asset: Record<string, any>;
+    parser: any;
+    userData: Record<string, any>;
+  }
+
   export class GLTFLoader extends Loader {
     load(
       url: string,
-      onLoad: (gltf: { scene: Object3D }) => void,
+      onLoad: (gltf: GLTF) => void,
       onProgress?: (event: ProgressEvent<EventTarget>) => void,
       onError?: (event: ErrorEvent) => void
     ): void;
   }
 }
+
 
 declare module 'three/examples/jsm/controls/OrbitControls' {
   import { Camera, MOUSE, EventDispatcher, Vector3 } from 'three';
