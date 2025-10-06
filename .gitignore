@@ -54,7 +54,7 @@ public/icons/dioramas/*
 # Et ne pas ignorer son contenu
 !public/icons/dioramas/UI/**
 
-src/content/webdioramas
+# src/content/webdioramas
 
 
 
