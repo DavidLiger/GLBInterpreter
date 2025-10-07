@@ -43,8 +43,8 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     mixerArmature?: THREE.AnimationMixer;
     mixerEmpty?: THREE.AnimationMixer;
   }
-  const mixerRef = useRef<Mixers>({});
-  const clockRef = useRef(new THREE.Clock());
+  const mixerRef = useRef<Record<string, THREE.AnimationMixer>>({});
+  const clock = useRef(new THREE.Clock());
   const { currentPOI, goToPOI, getVisiblePOIs, findParentPOI, moveCameraTo, setCurrentPOI } = usePOINavigation(
     config,
     cameraRef,
@@ -121,7 +121,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     controls.enableZoom = true;
     controls.enablePan = false;
     controls.maxPolarAngle = Math.PI / 2;
-    controls.minDistance = 0.5;
+    controls.minDistance = 0.5; 
     controls.maxDistance = 20;
     controlsRef.current = controls;
 
@@ -130,78 +130,65 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     const mixers: Record<string, THREE.AnimationMixer> = {};
 
     loader.load(config.glb, (gltf: GLTF) => {
-      scene.add(gltf.scene);
+    scene.add(gltf.scene);
 
-      const mixers: Record<string, THREE.AnimationMixer> = {};
-      const emptyRefsCurrent: Record<string, THREE.Object3D> = {};
+    // Stocker toutes les références nommées
+    gltf.scene.traverse((child) => {
+      if (child.name) emptyRefs.current[child.name] = child;
 
-      // 🔹 Stocker toutes les refs et créer un mixer pour chaque SkinnedMesh ou Mesh
-      gltf.scene.traverse((child) => {
-        if (child.name) emptyRefsCurrent[child.name] = child;
-
-        if (child.type === "SkinnedMesh") {
-          // Mixer sur l'armature (parent du SkinnedMesh)
-          const armature = child.parent;
-          if (armature && !mixers[armature.name]) {
-            mixers[armature.name] = new THREE.AnimationMixer(armature);
-          }
-        } else if (child.type === "Mesh") {
-          // Mixer pour objets animés simples
-          if (!mixers[child.name]) mixers[child.name] = new THREE.AnimationMixer(child);
+      // Créer un mixer pour chaque armature trouvée
+      if (child.type === "SkinnedMesh" && child.parent) {
+        const armature = child.parent;
+        if (!mixerRef.current[armature.name]) {
+          mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
         }
-      });
-
-      // 🔹 Récupérer le POI de départ (start)
-      const startPOI: POIWithElements | undefined = (config.pois as POIWithElements[])
-        .find(p => p.id === "start");
-
-      if (!startPOI) {
-        console.warn("⚠️ POI 'start' introuvable");
-      } else {
-        // Positionner la caméra sur le POI start
-        const startObj = emptyRefsCurrent[startPOI.emptyName];
-        if (startObj) moveCameraTo(startObj, startPOI, false, () => setCurrentPOI("start"));
-
-        // Jouer les animations des éléments du POI
-        startPOI.elements?.forEach(el => {
-          const mixer = mixers[el.name];
-          if (!mixer) return console.warn(`⚠️ Mixer not found for ${el.name}`);
-
-          const clip = gltf.animations.find(
-            a => a.name.toLowerCase() === el.clipName.toLowerCase()
-          );
-          if (!clip) return console.warn(`⚠️ Clip not found: ${el.clipName}`);
-
-          const action = mixer.clipAction(clip);
-          action.reset();
-          action.setLoop(el.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
-          if (el.autoplay) action.play();
-        });
       }
-
-      // 🔹 Appliquer vidéos, lumières, bulbs
-      applyVideoTextures(gltf.scene, emptyRefsCurrent, (config as DioramaConfig3DWithVideos).videos);
-      applyLights(gltf.scene, emptyRefsCurrent, (config as DioramaConfig3DWithVideos).lights);
-      applyBulbs(gltf.scene, emptyRefsCurrent, (config as any).bulbs);
-
-      setIsLoaded(true);
-
-      // 🔹 Stocker les mixers pour la boucle animate
-      mixerRef.current = mixers;
     });
 
-    // -------------------- Animate --------------------
-    const clock = new THREE.Clock();
-    const animate = () => {
-      requestAnimationFrame(animate);
-      const delta = clock.getDelta();
+    // Appliquer les assets de la scène
+    applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
+    applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
+    applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
 
-      Object.values(mixerRef.current as Record<string, THREE.AnimationMixer>).forEach(m => m.update(delta));
-      controlsRef.current?.update();
+    // Positionner la caméra sur le POI start
+    const startPOI = (config.pois as POIWithElements[]).find(p => p.id === "start");
+    if (startPOI) {
+      const startObj = emptyRefs.current[startPOI.emptyName];
+      if (startObj) moveCameraTo(startObj, startPOI, false, () => setCurrentPOI("start"));
 
-      if (rendererRef.current) rendererRef.current.render(sceneRef.current!, cameraRef.current!);
-    };
-    animate();
+      // Jouer les animations associées à ce POI
+      startPOI.elements?.forEach(el => {
+        const target = emptyRefs.current[el.name];
+        const mixer = mixerRef.current[target?.name || ""] || new THREE.AnimationMixer(target);
+        const clip = gltf.animations.find(a => a.name.toLowerCase() === el.clipName.toLowerCase());
+        if (clip) {
+          const action = mixer.clipAction(clip);
+          action.setLoop(el.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+          if (el.autoplay) action.play();
+          mixerRef.current[target?.name || ""] = mixer;
+        }
+      });
+    }
+
+    setIsLoaded(true);
+  });
+
+
+  const animate = () => {
+    requestAnimationFrame(animate);
+    const delta = clock.current.getDelta();
+
+    Object.values(mixerRef.current).forEach(m => m.update(delta));
+    controlsRef.current?.update();
+
+    if (effect) {
+      effect.render(scene, camera);
+    } else {
+      renderer.render(scene, camera);
+    }
+  };
+  animate();
+
 
 
     return () => renderer.dispose();
