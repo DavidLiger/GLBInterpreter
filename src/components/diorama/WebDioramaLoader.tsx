@@ -21,6 +21,7 @@ import { applyBulbs } from "./rendering/applyBulbs";
 import { useOrientation } from "./hooks/useOrientation";
 import { useFullscreen } from "./hooks/useFullscreen";
 import { useResize } from "./hooks/useResize";
+import { usePOIAnimations } from "./hooks/usePOIAnimations";
 import { POI, POIWithElements } from "@/types/diorama"; 
 
 const BullstandRegular = localFont({
@@ -37,13 +38,8 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const emptyRefs = useRef<Record<string, THREE.Object3D>>({});
-  // 🔹 Types utiles
-
-  interface Mixers {
-    mixerArmature?: THREE.AnimationMixer;
-    mixerEmpty?: THREE.AnimationMixer;
-  }
-  const mixerRef = useRef<Record<string, THREE.AnimationMixer>>({});
+  const { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers } =
+  usePOIAnimations(emptyRefs);
   const clock = useRef(new THREE.Clock());
   const { currentPOI, goToPOI, getVisiblePOIs, findParentPOI, moveCameraTo, setCurrentPOI } = usePOINavigation(
     config,
@@ -72,19 +68,27 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
   const parentPOI = currentPOI ? findParentPOI(currentPOI) : null;
 
-  function findArmature(obj: THREE.Object3D): THREE.Object3D | undefined {
-    if (obj.type === "Skeleton" || obj.type === "Bone" || obj.type === "SkinnedMesh" || obj.name.toLowerCase().includes("armature")) {
-      return obj;
-    }
-    for (const child of obj.children) {
-      const result = findArmature(child);
-      if (result) {
-        console.log(result)
-        return result;
+  function findPOIById(pois: POIWithElements[], id: string): POIWithElements | null {
+    for (const p of pois) {
+      if (p.id === id) return p;
+      if (p.children) {
+        const found = findPOIById(p.children as POIWithElements[], id);
+        if (found) return found;
       }
     }
-    return undefined;
+    return null;
   }
+
+  useEffect(() => {
+    if (!currentPOI) return;
+    stopAllAnimations();
+
+    const poi = findPOIById(config.pois as POIWithElements[], currentPOI);
+    if (poi && sceneRef.current?.userData?.gltfAnimations) {
+      playPOIAnimations(poi, sceneRef.current.userData.gltfAnimations);
+    }
+  }, [currentPOI]);
+
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -125,66 +129,31 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     controls.maxDistance = 20;
     controlsRef.current = controls;
 
-
     const loader = new GLTFLoader();
-    const mixers: Record<string, THREE.AnimationMixer> = {};
 
     loader.load(config.glb, (gltf: GLTF) => {
       scene.add(gltf.scene);
+      sceneRef.current = scene;
 
-      // 🔹 Stocker toutes les références nommées
+      // 🔹 Stocker les animations dans scene.userData pour les POI suivants
+      scene.userData.gltfAnimations = gltf.animations;
+      // 🔹 Stocker références et init mixers
       gltf.scene.traverse((child) => {
         if (child.name) emptyRefs.current[child.name] = child;
-
-        // 🔸 Cas 1 : SkinnedMesh → créer un mixer sur l'armature parente
-        if (child.type === "SkinnedMesh" && child.parent) {
-          const armature = child.parent;
-          if (armature && !mixerRef.current[armature.name]) {
-            mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
-          }
-        }
-
-        // 🔸 Cas 2 : Mesh animé sans armature (porte, ballon, etc.)
-        else if (child.type === "Mesh" && !mixerRef.current[child.name]) {
-          mixerRef.current[child.name] = new THREE.AnimationMixer(child);
-        }
       });
+      initMixers(gltf.scene);
 
       // 🔹 Appliquer vidéos, lumières, bulbs
       applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
       applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
       applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
 
-      // 🔹 Positionner la caméra sur le POI start
+      // 🔹 Démarrage sur le POI start
       const startPOI = (config.pois as POIWithElements[]).find(p => p.id === "start");
       if (startPOI) {
         const startObj = emptyRefs.current[startPOI.emptyName];
         if (startObj) moveCameraTo(startObj, startPOI, false, () => setCurrentPOI("start"));
-
-        // 🔹 Jouer les animations associées à ce POI
-        startPOI.elements?.forEach(el => {
-          const target = emptyRefs.current[el.name];
-          if (!target) return console.warn(`⚠️ Objet non trouvé : ${el.name}`);
-
-          // Cherche un mixer déjà existant ou en crée un nouveau
-          let mixer = mixerRef.current[target.name];
-          if (!mixer) {
-            mixer = new THREE.AnimationMixer(target);
-            mixerRef.current[target.name] = mixer;
-          }
-
-          // Trouver le bon clip
-          const clip = gltf.animations.find(
-            a => a.name.toLowerCase() === el.clipName.toLowerCase()
-          );
-          if (!clip) return console.warn(`⚠️ Clip non trouvé : ${el.clipName}`);
-
-          // Configurer l’action
-          const action = mixer.clipAction(clip);
-          action.reset();
-          action.setLoop(el.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
-          if (el.autoplay) action.play();
-        });
+        playPOIAnimations(startPOI, gltf.animations);
       }
 
       setIsLoaded(true);
@@ -193,19 +162,13 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     const animate = () => {
       requestAnimationFrame(animate);
       const delta = clock.current.getDelta();
-
-      Object.values(mixerRef.current).forEach(m => m.update(delta));
+      updateMixers(delta);
       controlsRef.current?.update();
-
-      if (effect) {
-        effect.render(scene, camera);
-      } else {
-        renderer.render(scene, camera);
-      }
+      renderer.render(scene, camera);
     };
     animate();
 
-    return () => renderer.dispose();
+      return () => renderer.dispose();
   }, [config.glb]);
 
   return (

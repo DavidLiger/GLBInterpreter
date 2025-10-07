@@ -48,6 +48,15 @@ export const street: DioramaConfig3DWithVideos = {
       minAzimuthAngle: 1.14,
       maxAzimuthAngle: 2.14,
       enableZoom: true,
+      elements: [
+        {
+          name: "ArmatureAppart",
+          type: "armature",
+          clipName: "walkAppart",
+          autoplay: true,
+          loop: true
+        }
+      ],
       children: [
         {
           id: "apartment",
