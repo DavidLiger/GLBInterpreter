@@ -130,66 +130,80 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     const mixers: Record<string, THREE.AnimationMixer> = {};
 
     loader.load(config.glb, (gltf: GLTF) => {
-    scene.add(gltf.scene);
+      scene.add(gltf.scene);
 
-    // Stocker toutes les références nommées
-    gltf.scene.traverse((child) => {
-      if (child.name) emptyRefs.current[child.name] = child;
+      // 🔹 Stocker toutes les références nommées
+      gltf.scene.traverse((child) => {
+        if (child.name) emptyRefs.current[child.name] = child;
 
-      // Créer un mixer pour chaque armature trouvée
-      if (child.type === "SkinnedMesh" && child.parent) {
-        const armature = child.parent;
-        if (!mixerRef.current[armature.name]) {
-          mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
+        // 🔸 Cas 1 : SkinnedMesh → créer un mixer sur l'armature parente
+        if (child.type === "SkinnedMesh" && child.parent) {
+          const armature = child.parent;
+          if (armature && !mixerRef.current[armature.name]) {
+            mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
+          }
         }
-      }
-    });
 
-    // Appliquer les assets de la scène
-    applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
-    applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
-    applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
-
-    // Positionner la caméra sur le POI start
-    const startPOI = (config.pois as POIWithElements[]).find(p => p.id === "start");
-    if (startPOI) {
-      const startObj = emptyRefs.current[startPOI.emptyName];
-      if (startObj) moveCameraTo(startObj, startPOI, false, () => setCurrentPOI("start"));
-
-      // Jouer les animations associées à ce POI
-      startPOI.elements?.forEach(el => {
-        const target = emptyRefs.current[el.name];
-        const mixer = mixerRef.current[target?.name || ""] || new THREE.AnimationMixer(target);
-        const clip = gltf.animations.find(a => a.name.toLowerCase() === el.clipName.toLowerCase());
-        if (clip) {
-          const action = mixer.clipAction(clip);
-          action.setLoop(el.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
-          if (el.autoplay) action.play();
-          mixerRef.current[target?.name || ""] = mixer;
+        // 🔸 Cas 2 : Mesh animé sans armature (porte, ballon, etc.)
+        else if (child.type === "Mesh" && !mixerRef.current[child.name]) {
+          mixerRef.current[child.name] = new THREE.AnimationMixer(child);
         }
       });
-    }
 
-    setIsLoaded(true);
-  });
+      // 🔹 Appliquer vidéos, lumières, bulbs
+      applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
+      applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
+      applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
 
+      // 🔹 Positionner la caméra sur le POI start
+      const startPOI = (config.pois as POIWithElements[]).find(p => p.id === "start");
+      if (startPOI) {
+        const startObj = emptyRefs.current[startPOI.emptyName];
+        if (startObj) moveCameraTo(startObj, startPOI, false, () => setCurrentPOI("start"));
 
-  const animate = () => {
-    requestAnimationFrame(animate);
-    const delta = clock.current.getDelta();
+        // 🔹 Jouer les animations associées à ce POI
+        startPOI.elements?.forEach(el => {
+          const target = emptyRefs.current[el.name];
+          if (!target) return console.warn(`⚠️ Objet non trouvé : ${el.name}`);
 
-    Object.values(mixerRef.current).forEach(m => m.update(delta));
-    controlsRef.current?.update();
+          // Cherche un mixer déjà existant ou en crée un nouveau
+          let mixer = mixerRef.current[target.name];
+          if (!mixer) {
+            mixer = new THREE.AnimationMixer(target);
+            mixerRef.current[target.name] = mixer;
+          }
 
-    if (effect) {
-      effect.render(scene, camera);
-    } else {
-      renderer.render(scene, camera);
-    }
-  };
-  animate();
+          // Trouver le bon clip
+          const clip = gltf.animations.find(
+            a => a.name.toLowerCase() === el.clipName.toLowerCase()
+          );
+          if (!clip) return console.warn(`⚠️ Clip non trouvé : ${el.clipName}`);
 
+          // Configurer l’action
+          const action = mixer.clipAction(clip);
+          action.reset();
+          action.setLoop(el.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+          if (el.autoplay) action.play();
+        });
+      }
 
+      setIsLoaded(true);
+    });
+
+    const animate = () => {
+      requestAnimationFrame(animate);
+      const delta = clock.current.getDelta();
+
+      Object.values(mixerRef.current).forEach(m => m.update(delta));
+      controlsRef.current?.update();
+
+      if (effect) {
+        effect.render(scene, camera);
+      } else {
+        renderer.render(scene, camera);
+      }
+    };
+    animate();
 
     return () => renderer.dispose();
   }, [config.glb]);
