@@ -55,6 +55,13 @@ export const street: DioramaConfig3DWithVideos = {
           clipName: "walkAppart",
           autoplay: true,
           loop: true
+        },
+        {
+          name: "Suzanne",
+          type: "mesh",
+          clipName: "monkeyFly",
+          autoplay: true,
+          loop: true
         }
       ],
       children: [
