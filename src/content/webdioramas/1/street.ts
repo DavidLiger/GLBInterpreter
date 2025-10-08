@@ -30,6 +30,13 @@ export const street: DioramaConfig3DWithVideos = {
           clipName: "walk",
           autoplay: true,
           loop: true
+        },
+        {
+          name: "ArmatureDonutCycle",
+          type: "armature",
+          clipName: "Action",
+          autoplay: true,
+          loop: true
         }
       ]
     },
