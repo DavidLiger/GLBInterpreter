@@ -157,6 +157,19 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       }
 
       setIsLoaded(true);
+    },
+    (xhr) => {
+      // ➤ Pendant le chargement (progression)
+      if (xhr.lengthComputable) {
+        const progress = (xhr.loaded / xhr.total) * 100;
+        setLoadingProgress(progress);
+      } else {
+        // Fallback si le serveur ne fournit pas Content-Length
+        setLoadingProgress((prev) => Math.min(prev + 1, 95));
+      }
+    },
+    (error) => {
+      console.error("Erreur lors du chargement du GLB :", error);
     });
 
     const animate = () => {
@@ -168,7 +181,11 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     };
     animate();
 
-      return () => renderer.dispose();
+      return () => {
+        renderer.dispose();
+        controls.dispose();
+        scene.clear();
+      };
   }, [config.glb]);
 
   return (
