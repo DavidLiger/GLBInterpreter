@@ -34,7 +34,7 @@ export const street: DioramaConfig3DWithVideos = {
         {
           name: "ArmatureDonutCycle",
           type: "armature",
-          clipName: "Action",
+          clipName: "donutWalkReverse",
           autoplay: true,
           loop: true
         }
