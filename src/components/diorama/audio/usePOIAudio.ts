@@ -1,95 +1,128 @@
-// src/components/diorama/hooks/usePOIAudio.ts
-"use client";
-
 import { useEffect, useRef, useState } from "react";
 import type { POI } from "@/types/diorama";
 
 export default function usePOIAudio(pois: POI[], currentPOI: string | null, muted: boolean) {
   const ambientAudioRefs = useRef<Record<string, HTMLAudioElement>>({});
+  const sceneAudioRef = useRef<HTMLAudioElement | null>(null);
+  const scenePlayingRef = useRef(false);
   const [startSoundReady, setStartSoundReady] = useState(false);
+  const [sceneProgress, setSceneProgress] = useState(0);
 
-  // préchargement récursif (ne recrée pas si déjà existant)
+  // 🔹 Préchargement récursif des sons d'ambiance
   const preloadPOISounds = (list: POI[]) => {
-    list.forEach((poi) => {
+    list.forEach(poi => {
       if (poi.ambientSound && !ambientAudioRefs.current[poi.id]) {
         const audio = new Audio(poi.ambientSound);
         audio.loop = true;
-        audio.muted = true; // start muted until user toggles
+        audio.muted = true; // start muted
         audio.preload = "auto";
         ambientAudioRefs.current[poi.id] = audio;
         audio.load();
       }
-      if (poi.children && poi.children.length) preloadPOISounds(poi.children);
+      if (poi.children?.length) preloadPOISounds(poi.children);
     });
   };
 
-  // Charger d'abord le son "start" puis les autres
+  // 🔹 Précharger tous les sons au montage
   useEffect(() => {
-    if (!pois || pois.length === 0) {
-      setStartSoundReady(true);
-      return;
-    }
+    if (!pois.length) return;
+    preloadPOISounds(pois);
+    setStartSoundReady(true);
+  }, [JSON.stringify(pois)]);
 
-    const startPOI = pois.find((p) => p.id === "start");
-
-    if (startPOI?.ambientSound) {
-      const startAudio = new Audio(startPOI.ambientSound);
-      startAudio.loop = true;
-      startAudio.muted = true;
-      startAudio.preload = "auto";
-
-      const onCanPlay = () => {
-        ambientAudioRefs.current[startPOI.id] = startAudio;
-        setStartSoundReady(true);
-        // charger les autres (sauf start)
-        preloadPOISounds(pois.filter((p) => p.id !== "start"));
-      };
-
-      startAudio.addEventListener("canplaythrough", onCanPlay, { once: true });
-      startAudio.load();
-
-      return () => {
-        startAudio.removeEventListener("canplaythrough", onCanPlay);
-      };
-    } else {
-      // pas de start -> charger tout
-      preloadPOISounds(pois);
-      setStartSoundReady(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(pois)]); // stringify pour éviter trigger infini si la référence change
-
-  // Quand currentPOI change -> pause tous, play POI courant
+  // 🔹 Changement de POI → stopper toutes les autres ambiances, jouer celle du POI courant si aucun sceneSound actif
   useEffect(() => {
     if (!currentPOI) return;
 
-    Object.values(ambientAudioRefs.current).forEach((a) => {
-      try { a.pause(); } catch {}
+    Object.entries(ambientAudioRefs.current).forEach(([id, audio]) => {
+      if (id === currentPOI) return; // ne touche pas celle du POI courant pour l'instant
+      audio.pause();
+      audio.currentTime = 0;
     });
 
-    const current = ambientAudioRefs.current[currentPOI];
-    if (current) {
-      current.muted = muted;
-      current.play().catch(() => {});
+    const ambient = ambientAudioRefs.current[currentPOI];
+    if (ambient && !scenePlayingRef.current) {
+      ambient.muted = muted;
+      ambient.play().catch(() => {});
     }
   }, [currentPOI, muted]);
 
-  // Si on mute/unmute global -> appliquer sur tous les audios chargés
+  // 🔹 Mute global → appliquer à tous les sons
   useEffect(() => {
-    Object.values(ambientAudioRefs.current).forEach((a) => {
+    Object.values(ambientAudioRefs.current).forEach(a => {
       try { a.muted = muted; } catch {}
     });
+    if (sceneAudioRef.current) {
+      sceneAudioRef.current.muted = muted;
+    }
   }, [muted]);
 
-  // cleanup on unmount
-  useEffect(() => {
-    return () => {
-      Object.values(ambientAudioRefs.current).forEach((a) => {
-        try { a.pause(); a.src = ""; } catch {}
-      });
-      ambientAudioRefs.current = {};
-    };
-  }, []);
+  // 🔹 Play / Replay d'une scène
+  const handleSceneStart = (poiId: string, sceneSound?: string) => {
+    // 🔹 Couper toutes les ambiances
+    Object.entries(ambientAudioRefs.current).forEach(([id, audio]) => {
+      audio.pause();
+      if (id === poiId) audio.muted = true;
+    });
 
-  return { startSoundReady, ambientAudioRefs };
+    // Stop ancien sceneSound
+    if (sceneAudioRef.current) {
+      sceneAudioRef.current.pause();
+      sceneAudioRef.current = null;
+      scenePlayingRef.current = false;
+    }
+
+    if (sceneSound) {
+      const audio = new Audio(sceneSound);
+      audio.loop = false;
+      audio.muted = muted;
+      audio.play().catch(() => {});
+      sceneAudioRef.current = audio;
+      scenePlayingRef.current = true;
+
+      const interval = setInterval(() => {
+        if (!audio.paused) setSceneProgress(audio.currentTime);
+      }, 50);
+
+      audio.onended = () => {
+        clearInterval(interval);
+        scenePlayingRef.current = false;
+        // 🔹 relancer l'ambiance propre au POI
+        const amb = ambientAudioRefs.current[poiId];
+        if (amb) {
+          amb.muted = muted;
+          amb.play().catch(() => {});
+        }
+      };
+    }
+  };
+
+  // 🔹 Fin de scène manuelle (utile pour Replay)
+  const handleSceneEnd = (poiId: string) => {
+    if (sceneAudioRef.current) {
+      sceneAudioRef.current.pause();
+      sceneAudioRef.current = null;
+      scenePlayingRef.current = false;
+    }
+    const ambient = ambientAudioRefs.current[poiId];
+    if (ambient) {
+      ambient.muted = muted;
+      ambient.play().catch(() => {});
+    }
+  };
+
+  // 🔹 Replay → relance la scène en respectant le mute de l'ambiance
+  const handleReplay = (poiId: string, sceneSound?: string) => {
+    if (sceneAudioRef.current) sceneAudioRef.current.currentTime = 0;
+    setSceneProgress(0); // reset immédiat pour la barre
+    handleSceneStart(poiId, sceneSound);
+  };
+
+  return {
+    startSoundReady,
+    ambientAudioRefs,
+    handleSceneStart,
+    handleSceneEnd,
+    handleReplay,
+  };
 }

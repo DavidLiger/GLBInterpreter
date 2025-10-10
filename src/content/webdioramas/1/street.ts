@@ -13,7 +13,7 @@ export const street: DioramaConfig3DWithVideos = {
       label: "Vue initiale",
       emptyName: "start",
       icon: `${BASE_URL}/icons/dioramas/test_street/start.png`,
-      ambientSound: `${BASE_URL}/sounds/kids_playing.mp3`,
+      ambientSound: `${BASE_URL}/sounds/aquatic_ambience.mp3`,
       zoom: 0.5,
       lookAxis: "x",
       minDistance: 1,

@@ -53,22 +53,32 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [muted, setMuted] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(true);
-  const { startSoundReady, ambientAudioRefs } = usePOIAudio(config.pois, currentPOI, muted);
+  // const { startSoundReady, ambientAudioRefs } = usePOIAudio(config.pois, currentPOI, muted);
   const {
+    startSoundReady,
+    ambientAudioRefs,
+    handleSceneStart,
+    handleSceneEnd,
+  } = usePOIAudio(config.pois, currentPOI, muted);
+
+const {
     isPlaying,
     isPaused,
     isEnded,
-    progress,
+    progress,   // ← c’est ça qu’il faut utiliser
     duration,
     togglePlayPause,
     seekScene,
-  } = usePOIScenePlayer({
+} = usePOIScenePlayer({
     poi: currentPoi,
     animations: sceneRef.current?.userData?.gltfAnimations || [],
     mixerRef: mixerRef.current,
     ambientAudioRefs: ambientAudioRefs.current,
     muted,
-  });
+    onSceneStart: handleSceneStart,
+    onSceneEnd: handleSceneEnd,
+});
+
 
   // Resize helper
   const updateRendererSize = () => {
@@ -291,10 +301,10 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
           isPlaying={isPlaying}
           isPaused={isPaused}
           isEnded={isEnded}
-          progress={progress}
+          progress={progress} 
           duration={duration}
           onTogglePlayPause={togglePlayPause}
-          onSeek={seekScene}
+          onSeek={seekScene} // 👈 remis ici
         />
       )}
     </div>
