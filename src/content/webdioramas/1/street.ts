@@ -114,7 +114,7 @@ export const street: DioramaConfig3DWithVideos = {
       emptyName: "window2",
       icon: `${BASE_URL}/icons/dioramas/test_street/window.png`,
       ambientSound: `${BASE_URL}/sounds/kids_playing.mp3`,
-      sceneSound: "/sounds/dialogue_bonjour.mp3",
+      sceneSound: "/sounds/bonjour_exuberant.mp3",
       zoom: 0.2,
       lookAxis: "x",
       minDistance: 0.05,

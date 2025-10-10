@@ -67,6 +67,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     animations: sceneRef.current?.userData?.gltfAnimations || [],
     mixerRef: mixerRef.current,
     ambientAudioRefs: ambientAudioRefs.current,
+    muted,
   });
 
   // Resize helper
