@@ -36,6 +36,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const sceneRef = useRef<THREE.Scene | null>(null);
   const { isPortrait, showRotateHint } = useOrientation(5000);
   const [loadingProgress, setLoadingProgress] = useState(0);
+  // const [scenePlaying, setScenePlaying] = useState(false);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
@@ -50,16 +51,28 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     emptyRefs
   );
   const currentPoi = currentPOI ? findPOIRecursively(currentPOI) : null;
-  const [muted, setMuted] = useState(true);
+  // const [muted, setMuted] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(true);
   // const { startSoundReady, ambientAudioRefs } = usePOIAudio(config.pois, currentPOI, muted);
-  const {
-    startSoundReady,
-    ambientAudioRefs,
-    handleSceneStart,
-    handleSceneEnd,
-  } = usePOIAudio(config.pois, currentPOI, muted);
+const {
+  startSoundReady,
+  muted,
+  toggleMute,
+  scenePlaying,
+  ambientAudioRefs,
+  handleSceneStart,
+  handleSceneEnd,
+} = usePOIAudio({
+  pois: config.pois,
+  currentPOI,
+  onScenePlayingChange: (playing) => {
+    // tu peux mettre à jour un state local si besoin
+  },
+});
+
+
+
 
 const {
     isPlaying,
@@ -259,9 +272,12 @@ const {
         )}
       </AnimatePresence>
       <div className="absolute top-4 right-4 z-50 flex flex-col gap-3 items-end">
-        { startSoundReady &&
-            <SoundButton muted={muted} onToggle={() => setMuted((m) => !m)} />
-        }
+        {startSoundReady && !scenePlaying && (
+          <SoundButton muted={muted} onToggle={toggleMute} />
+        )}
+
+
+
         <FullscreenButton
           isFullscreen={isFullscreen}
           onToggle={async () => {
