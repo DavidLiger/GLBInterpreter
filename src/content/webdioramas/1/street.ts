@@ -28,15 +28,15 @@ export const street: DioramaConfig3DWithVideos = {
           name: "Armature",
           type: "armature",
           clipName: "walk",
-          autoplay: true,
-          loop: true
+          autoplay: false,
+          loop: false
         },
         {
           name: "ArmatureDonutCycle",
           type: "armature",
           clipName: "Action",
-          autoplay: true,
-          loop: true
+          autoplay: false,
+          loop: false
         }
       ]
     },
@@ -60,15 +60,15 @@ export const street: DioramaConfig3DWithVideos = {
           name: "ArmatureAppart",
           type: "armature",
           clipName: "walkAppart",
-          autoplay: true,
-          loop: true
+          autoplay: false,
+          loop: false
         },
         {
           name: "Suzanne",
           type: "mesh",
           clipName: "monkeyFly",
-          autoplay: true,
-          loop: true
+          autoplay: false,
+          loop: false
         }
       ],
       children: [
@@ -114,6 +114,7 @@ export const street: DioramaConfig3DWithVideos = {
       emptyName: "window2",
       icon: `${BASE_URL}/icons/dioramas/test_street/window.png`,
       ambientSound: `${BASE_URL}/sounds/kids_playing.mp3`,
+      sceneSound: "/sounds/dialogue_bonjour.mp3",
       zoom: 0.2,
       lookAxis: "x",
       minDistance: 0.05,
@@ -128,15 +129,15 @@ export const street: DioramaConfig3DWithVideos = {
           name: "ArmatureRecoiffage",
           type: "armature",
           clipName: "recoiffageMain",
-          autoplay: true,
-          loop: true
+          autoplay: false,
+          loop: false
         },
         {
           name: "Character_Salesman_Male_01012",
           type: "mesh",
           clipName: "bonjour_exuberant_blendshape_data.001",
-          autoplay: true,
-          loop: true
+          autoplay: false,
+          loop: false
         }
       ]
     },

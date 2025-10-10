@@ -13,6 +13,7 @@ export type POI = {
   emptyName: string;
   icon?: string;
   ambientSound?: string;
+  sceneSound?: string;  
   zoom?: number;
   lookAxis?: "x" | "y" | "z";
   minDistance?: number;
@@ -28,12 +29,9 @@ export type POI = {
   elements?: AnimatedElement[];
 };
 
-// 🔹 POI avec éventuellement des éléments animés
 export type POIWithElements = POI & {
   elements?: AnimatedElement[];
 };
-
-
 
 export type OrbitParams = {
   minDistance?: number;

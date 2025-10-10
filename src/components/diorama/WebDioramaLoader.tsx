@@ -23,6 +23,8 @@ import { useFullscreen } from "./hooks/useFullscreen";
 import { useResize } from "./hooks/useResize";
 import { usePOIAnimations } from "./hooks/usePOIAnimations";
 import { POI, POIWithElements } from "@/types/diorama"; 
+import POIPlayer from "@/components/diorama/ui/POIPlayer";
+import { usePOIScenePlayer } from "@/components/diorama/hooks/usePOIScenePlayer";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -41,16 +43,23 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers } =
   usePOIAnimations(emptyRefs);
   const clock = useRef(new THREE.Clock());
-  const { currentPOI, goToPOI, getVisiblePOIs, findParentPOI, moveCameraTo, setCurrentPOI } = usePOINavigation(
+  const { currentPOI, goToPOI, getVisiblePOIs, findParentPOI, moveCameraTo, setCurrentPOI, findPOIRecursively } = usePOINavigation(
     config,
     cameraRef,
     controlsRef,
     emptyRefs
   );
+  const currentPoi = currentPOI ? findPOIRecursively(currentPOI) : null;
   const [muted, setMuted] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(true);
   const { startSoundReady, ambientAudioRefs } = usePOIAudio(config.pois, currentPOI, muted);
+  const { isPlaying, playScene, stopScene, replayScene } = usePOIScenePlayer({
+    poi: currentPoi,
+    animations: sceneRef.current?.userData?.gltfAnimations || [],
+    mixerRef: mixerRef.current,
+    ambientAudioRefs: ambientAudioRefs.current,
+  });
 
   // Resize helper
   const updateRendererSize = () => {
@@ -268,6 +277,14 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
           goToPOI={goToPOI}
         />
       <RotateHint show={showRotateHint} />
+      {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
+        <POIPlayer
+          isPlaying={isPlaying}
+          onPlay={playScene}
+          onStop={stopScene}
+          onReplay={replayScene}
+        />
+      )}
     </div>
   );
 }

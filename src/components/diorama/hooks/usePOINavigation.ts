@@ -194,5 +194,5 @@ export const usePOINavigation = (
     }
   }, [currentPOI, emptyRefs, moveCameraTo, config.pois, findParentPOI]);
 
-  return { currentPOI, goToPOI, getVisiblePOIs, findParentPOI, moveCameraTo, setCurrentPOI };
+  return { currentPOI, goToPOI, getVisiblePOIs, findParentPOI, moveCameraTo, setCurrentPOI, findPOIRecursively  };
 };
