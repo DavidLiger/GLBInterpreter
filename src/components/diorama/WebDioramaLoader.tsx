@@ -54,7 +54,15 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [isLoaded, setIsLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(true);
   const { startSoundReady, ambientAudioRefs } = usePOIAudio(config.pois, currentPOI, muted);
-  const { isPlaying, playScene, stopScene, replayScene } = usePOIScenePlayer({
+  const {
+    isPlaying,
+    isPaused,
+    isEnded,
+    progress,
+    duration,
+    togglePlayPause,
+    seekScene,
+  } = usePOIScenePlayer({
     poi: currentPoi,
     animations: sceneRef.current?.userData?.gltfAnimations || [],
     mixerRef: mixerRef.current,
@@ -280,9 +288,12 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
         <POIPlayer
           isPlaying={isPlaying}
-          onPlay={playScene}
-          onStop={stopScene}
-          onReplay={replayScene}
+          isPaused={isPaused}
+          isEnded={isEnded}
+          progress={progress}
+          duration={duration}
+          onTogglePlayPause={togglePlayPause}
+          onSeek={seekScene}
         />
       )}
     </div>
