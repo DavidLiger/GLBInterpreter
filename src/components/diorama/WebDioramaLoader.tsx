@@ -137,10 +137,38 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
       // 🔹 Stocker les animations dans scene.userData pour les POI suivants
       scene.userData.gltfAnimations = gltf.animations;
-      // 🔹 Stocker références et init mixers
       gltf.scene.traverse((child) => {
-        if (child.name) emptyRefs.current[child.name] = child;
+        if (!child.name) return;
+
+        // ✅ on stocke tout ce qui a un nom
+        emptyRefs.current[child.name] = child;
+
+        // 🦴 Si c’est un SkinnedMesh → on crée un mixer sur son armature
+        if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
+          const skinned = child as THREE.SkinnedMesh;
+          const armature = skinned.skeleton?.bones?.[0]?.parent;
+
+          if (armature && !mixerRef.current[armature.name]) {
+            mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
+          } else if (!mixerRef.current[skinned.name]) {
+            mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
+          }
+        }
+
+        // 💠 Si c’est un Mesh simple (ex : pour morph targets)
+        else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
+          mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+        }
+
+        // 🩻 Si c’est un Bone ou un objet nommé “Armature”
+        else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
+          if (!mixerRef.current[child.name]) {
+            mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+          }
+        }
       });
+      // console.log("🧩 emptyRefs:", Object.keys(emptyRefs.current));
+      // console.log("🎬 Animations:", gltf.animations.map(a => a.name));  
       initMixers(gltf.scene);
 
       // 🔹 Appliquer vidéos, lumières, bulbs

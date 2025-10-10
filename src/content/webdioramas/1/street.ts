@@ -34,7 +34,7 @@ export const street: DioramaConfig3DWithVideos = {
         {
           name: "ArmatureDonutCycle",
           type: "armature",
-          clipName: "donutWalkReverse",
+          clipName: "Action",
           autoplay: true,
           loop: true
         }
@@ -113,6 +113,7 @@ export const street: DioramaConfig3DWithVideos = {
       label: "Fenêtre appartement 2",
       emptyName: "window2",
       icon: `${BASE_URL}/icons/dioramas/test_street/window.png`,
+      ambientSound: `${BASE_URL}/sounds/kids_playing.mp3`,
       zoom: 0.2,
       lookAxis: "x",
       minDistance: 0.05,
@@ -122,6 +123,22 @@ export const street: DioramaConfig3DWithVideos = {
       minAzimuthAngle: 3.14,
       maxAzimuthAngle: 4.14,
       enableZoom: true,
+      elements: [
+        {
+          name: "ArmatureRecoiffage",
+          type: "armature",
+          clipName: "recoiffageMain",
+          autoplay: true,
+          loop: true
+        },
+        {
+          name: "Character_Salesman_Male_01012",
+          type: "mesh",
+          clipName: "bonjour_exuberant_blendshape_data.001",
+          autoplay: true,
+          loop: true
+        }
+      ]
     },
   ],
   videos: [

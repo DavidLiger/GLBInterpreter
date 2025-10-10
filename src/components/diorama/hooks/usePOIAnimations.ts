@@ -3,7 +3,7 @@ import * as THREE from "three";
 import type { POIWithElements } from "@/types/diorama";
 
 export const usePOIAnimations = (
-  emptyRefs: React.MutableRefObject<Record<string, THREE.Object3D>>
+  emptyRefs: React.RefObject<Record<string, THREE.Object3D>>
 ) => {
   const mixerRef = useRef<Record<string, THREE.AnimationMixer>>({});
 
@@ -19,9 +19,14 @@ export const usePOIAnimations = (
           mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
         }
       }
-      // Mesh simple → mixer sur lui-même
-      else if (child.type === "Mesh" && !mixerRef.current[child.name]) {
-        mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+      // 🔹 Mesh simple ou avec morph targets
+      else if (child.type === "Mesh") {
+        const mesh = child as THREE.Mesh;
+
+        // ✅ Si le mesh a des morph targets (shape keys)
+        if ((mesh.morphTargetInfluences && mesh.morphTargetInfluences.length > 0) || !mixerRef.current[child.name]) {
+          mixerRef.current[child.name] = new THREE.AnimationMixer(mesh);
+        }
       }
     });
   }, []);

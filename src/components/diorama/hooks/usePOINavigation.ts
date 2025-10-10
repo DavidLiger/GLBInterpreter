@@ -5,9 +5,9 @@ import type { POI, DioramaConfig3D } from "@/types/diorama";
 
 export const usePOINavigation = (
   config: DioramaConfig3D,
-  cameraRef: React.MutableRefObject<THREE.PerspectiveCamera | null>,
-  controlsRef: React.MutableRefObject<any>,
-  emptyRefs: React.MutableRefObject<Record<string, THREE.Object3D>>
+  cameraRef: React.RefObject<THREE.PerspectiveCamera | null>,
+  controlsRef: React.RefObject<any>,
+  emptyRefs: React.RefObject<Record<string, THREE.Object3D>>,
 ) => {
   const [currentPOI, setCurrentPOI] = useState<string | null>(null);
 
