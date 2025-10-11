@@ -25,6 +25,7 @@ import { usePOIAnimations } from "./hooks/usePOIAnimations";
 import { POI, POIWithElements } from "@/types/diorama"; 
 import POIPlayer from "@/components/diorama/ui/POIPlayer";
 import { usePOIScenePlayer } from "@/components/diorama/hooks/usePOIScenePlayer";
+import TapToStart from "./ui/TapToStart";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -273,12 +274,28 @@ const {
           />
         )}
       </AnimatePresence>
+      {/* 🟢 Écran “Appuyer pour commencer” */}
+{isLoaded && (
+  <TapToStart
+    onStart={() => {
+      console.log("🚀 Diorama démarré");
+      // 🔈 Unmute général pour que les sons ambiants démarrent
+      if (muted) toggleMute();
+    }}
+    playSceneSound={() => {
+      // Même logique : on se contente d’unmute le son d’ambiance
+      if (muted) toggleMute();
+    }}
+  />
+)}
+
       <div className="absolute top-4 right-4 z-50 flex flex-col gap-3 items-end">
-        <AnimatePresence>
+<AnimatePresence>
           {startSoundReady && (isEnded || (!isPlaying && !isPaused)) && (
             <SoundButton muted={muted} onToggle={toggleMute} />
           )}
         </AnimatePresence>
+
         <FullscreenButton
           isFullscreen={isFullscreen}
           onToggle={async () => {

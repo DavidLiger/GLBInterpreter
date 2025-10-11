@@ -24,9 +24,7 @@ export default function usePOIAudio({ pois, currentPOI, onScenePlayingChange }: 
         audio.preload = "auto";
         ambientAudioRefs.current[poi.id] = audio;
       }
-      if (poi.children?.length) {
-        preloadAmbientSounds(poi.children);
-      }
+      if (poi.children?.length) preloadAmbientSounds(poi.children);
     });
   };
 
@@ -39,6 +37,7 @@ export default function usePOIAudio({ pois, currentPOI, onScenePlayingChange }: 
   useEffect(() => {
     if (!currentPOI) return;
 
+    // stop tout le reste
     Object.entries(ambientAudioRefs.current).forEach(([id, audio]) => {
       if (id !== currentPOI) {
         audio.pause();
@@ -46,6 +45,7 @@ export default function usePOIAudio({ pois, currentPOI, onScenePlayingChange }: 
       }
     });
 
+    // joue l’ambiance du POI courant
     const ambient = ambientAudioRefs.current[currentPOI];
     if (ambient && !scenePlaying) {
       ambient.muted = muted;
@@ -59,19 +59,28 @@ export default function usePOIAudio({ pois, currentPOI, onScenePlayingChange }: 
       const next = !prev;
       Object.values(ambientAudioRefs.current).forEach(a => (a.muted = next));
       if (sceneAudioRef.current) sceneAudioRef.current.muted = next;
+
+      // si on vient de UNMUTE → relance l’ambiance actuelle
+      if (!next && currentPOI) {
+        const ambient = ambientAudioRefs.current[currentPOI];
+        if (ambient) {
+          ambient.muted = false;
+          ambient.play().catch(() => {});
+        }
+      }
+
       return next;
     });
   };
 
-  // ────────────── Lancer une scène ──────────────
+  // ────────────── Lancer une scène (sceneSound) ──────────────
   const handleSceneStart = (poiId: string, sceneSound?: string) => {
     setScenePlaying(true);
     onScenePlayingChange?.(true);
 
-    // Couper toutes les ambiances
+    // stop toutes les ambiances
     Object.values(ambientAudioRefs.current).forEach(audio => audio.pause());
 
-    // Lancer le son de scène
     if (sceneSound) {
       const audio = new Audio(sceneSound);
       audio.loop = false;
@@ -83,7 +92,7 @@ export default function usePOIAudio({ pois, currentPOI, onScenePlayingChange }: 
         setScenePlaying(false);
         onScenePlayingChange?.(false);
 
-        // relancer l’ambiance du POI
+        // relance l’ambiance du POI
         const ambient = ambientAudioRefs.current[poiId];
         if (ambient) {
           ambient.muted = muted;

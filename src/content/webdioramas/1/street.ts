@@ -88,6 +88,15 @@ export const street: DioramaConfig3DWithVideos = {
           minAzimuthAngle: 1.14,
           maxAzimuthAngle: 2.14,
           enableZoom: true,
+          elements: [
+            {
+              name: "Suzanne",
+              type: "mesh",
+              clipName: "monkeyFly",
+              autoplay: false,
+              loop: false
+            }
+          ],
           children: [
             {
               id: "coffre",
