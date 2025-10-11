@@ -29,19 +29,9 @@ export type POI = {
   elements?: AnimatedElement[];
 };
 
-export type CameraStep = {
-  poi: string;        // ID du POI vers lequel déplacer la caméra
-  time: number;       // moment de déclenchement (en secondes)
-  duration?: number;  // durée du déplacement (optionnel, ms)
-};
-
 export type POIWithElements = POI & {
   elements?: AnimatedElement[];
 };
-
-export interface POIWithCameraPath extends POIWithElements {
-  cameraPath?: CameraStep[];
-}
 
 export type OrbitParams = {
   minDistance?: number;
