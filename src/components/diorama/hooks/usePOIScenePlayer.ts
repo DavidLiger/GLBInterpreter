@@ -32,7 +32,7 @@ export const usePOIScenePlayer = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [duration, setDuration] = useState(1);
+  const [duration, setDuration] = useState(1); // Durée initiale par défaut
   const [isEnded, setIsEnded] = useState(false);
 
   const activeActionsRef = useRef<THREE.AnimationAction[]>([]);
@@ -51,7 +51,6 @@ export const usePOIScenePlayer = ({
     setIsPlaying(false);
     setIsPaused(false);
     setProgress(0);
-    setDuration(1);
     setIsEnded(false);
 
     if (sceneAudioRef.current) {
@@ -70,6 +69,22 @@ export const usePOIScenePlayer = ({
       resetSceneStable();
     }
   }, [poi, resetSceneStable, findParentPOI]);
+
+  // 🔹 Calculer la durée totale du POI avant lecture
+  useEffect(() => {
+    if (!poi) return;
+
+    const actionsDurations: number[] = [];
+    poi.elements?.forEach(el => {
+      const clip = animations.find(a => a.name.toLowerCase() === el.clipName.toLowerCase());
+      if (clip) actionsDurations.push(clip.duration);
+    });
+
+    if (actionsDurations.length > 0) {
+      const maxDuration = Math.max(...actionsDurations);
+      setDuration(maxDuration);
+    }
+  }, [poi, animations]);
 
   // 🔹 Play scene (pause / resume / seek aware)
   const playScene = useCallback((forceReplay = false) => {
@@ -100,7 +115,7 @@ export const usePOIScenePlayer = ({
       actions.push(action);
     });
 
-    const maxDuration = actions.length > 0 ? Math.max(...actions.map(a => a.getClip().duration)) : 1;
+    const maxDuration = actions.length > 0 ? Math.max(...actions.map(a => a.getClip().duration)) : duration;
     setDuration(maxDuration);
     activeActionsRef.current = actions;
     setIsPlaying(true);
@@ -145,7 +160,7 @@ export const usePOIScenePlayer = ({
         setProgress(maxDuration);
       };
     }
-  }, [poi, mixerRef, animations, ambientAudioRefs, fadeDuration, muted, resetSceneStable, findParentPOI]);
+  }, [poi, mixerRef, animations, ambientAudioRefs, fadeDuration, muted, resetSceneStable, findParentPOI, duration]);
 
   // 🔹 Replay depuis le début
   const replayScene = useCallback(() => {
@@ -239,6 +254,6 @@ export const usePOIScenePlayer = ({
     togglePlayPause,
     seekScene,
     playScene,
-    replayScene, // ✅ ajout du replay
+    replayScene,
   };
 };

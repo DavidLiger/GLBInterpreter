@@ -20,7 +20,6 @@ export default function POIPlayer({
   onTogglePlayPause,
   onSeek,
 }: Props) {
-  const progressPercent = (progress / duration) * 100;
   const progressBarRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
@@ -65,6 +64,14 @@ export default function POIPlayer({
     };
   }, [isDragging]);
 
+  const formatTime = (time: number) => {
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  };
+
+  const progressPercent = duration > 0 ? (progress / duration) * 100 : 0;
+
   const renderControlButton = () => {
     if (isEnded) {
       return (
@@ -92,26 +99,26 @@ export default function POIPlayer({
   return (
     <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3/4 max-w-2xl bg-black/30 backdrop-blur-xl rounded-full px-4 py-2 flex items-center justify-between shadow-lg text-white gap-3">
       <div className="flex items-center gap-3">{renderControlButton()}</div>
+
       <div
         ref={progressBarRef}
         className="relative flex-1 h-2 bg-gray-600 rounded-full cursor-pointer mx-3 touch-none"
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}
       >
-        {/* Barre de progression */}
         <motion.div
           className="absolute top-0 left-0 h-2 bg-white rounded-full"
           style={{ width: `${progressPercent}%` }}
           transition={{ duration: 0.05 }}
         />
-        {/* Thumb */}
         <motion.div
           className="absolute -top-1 w-4 h-4 bg-white rounded-full shadow-md pointer-events-auto touch-none"
           style={{ left: `calc(${progressPercent}% - 8px)` }}
         />
       </div>
+
       <div className="text-xs text-gray-300 whitespace-nowrap">
-        {progress.toFixed(1)}s / {duration.toFixed(1)}s
+        {formatTime(progress)} / {formatTime(duration)}
       </div>
     </div>
   );
