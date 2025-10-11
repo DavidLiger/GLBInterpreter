@@ -11,6 +11,8 @@ type UsePOIScenePlayerProps = {
   muted?: boolean;
   onSceneStart?: (poiId: string, sceneSound?: string) => void;
   onSceneEnd?: (poiId: string) => void;
+  goToPOI?: (poi: POIWithElements) => void; // 🆕 injecté depuis usePOINavigation
+  findPOIRecursively?: (id: string) => POIWithElements | null;
 };
 
 export const usePOIScenePlayer = ({
@@ -30,7 +32,8 @@ export const usePOIScenePlayer = ({
   const activeActionsRef = useRef<THREE.AnimationAction[]>([]);
   const sceneAudioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number | undefined>(undefined);
-
+  const lastSeekTimeRef = useRef(0); 
+  const triggeredCameraSteps = useRef<Set<number>>(new Set());
 
   // 🔹 Reset stable de la scène
   const resetSceneStable = useCallback(() => {
@@ -54,6 +57,7 @@ export const usePOIScenePlayer = ({
 
   // 🔹 Play / Replay
   const playScene = useCallback(() => {
+    triggeredCameraSteps.current.clear();
     if (!poi) return;
 
     resetSceneStable();
@@ -82,7 +86,14 @@ export const usePOIScenePlayer = ({
     setIsPlaying(true);
     setIsPaused(false);
 
-    // 🔊 Couper toutes les ambiances
+    // 🕒 Si on avait cherché pendant la pause, repartir de là
+    if (lastSeekTimeRef.current > 0) {
+      actions.forEach(a => {
+        a.time = Math.min(lastSeekTimeRef.current, a.getClip().duration);
+      });
+    }
+
+    // 🔊 Couper les ambiances
     Object.values(ambientAudioRefs).forEach(a => {
       if (a) {
         a.pause();
@@ -90,13 +101,18 @@ export const usePOIScenePlayer = ({
       }
     });
 
-    // 🔊 Scene sound
+    // 🎵 Lecture du son de scène
     if (poi.sceneSound) {
       const audio = new Audio(poi.sceneSound);
       audio.loop = false;
       audio.muted = muted;
       audio.play().catch(() => {});
       sceneAudioRef.current = audio;
+
+      // 🕒 Avancer le son à la même position si on avait cherché pendant pause
+      if (lastSeekTimeRef.current > 0) {
+        audio.currentTime = Math.min(lastSeekTimeRef.current, audio.duration || maxDuration);
+      }
 
       audio.onended = () => {
         const ambientAudio = poi.id ? ambientAudioRefs[poi.id] : undefined;
@@ -118,35 +134,72 @@ export const usePOIScenePlayer = ({
     } else if (!isPlaying) {
       playScene();
     } else if (isPaused) {
-      activeActionsRef.current.forEach(a => (a.paused = false));
-      if (sceneAudioRef.current?.paused) sceneAudioRef.current.play().catch(() => {});
+      // 🧭 Repart de la dernière position cherchée
+      activeActionsRef.current.forEach((a) => {
+        a.paused = false;
+        a.time = Math.min(lastSeekTimeRef.current, a.getClip().duration);
+        a.play();
+      });
+
+      if (sceneAudioRef.current) {
+        sceneAudioRef.current.currentTime = Math.min(
+          lastSeekTimeRef.current,
+          sceneAudioRef.current.duration
+        );
+        sceneAudioRef.current.play().catch(() => {});
+      }
+
       setIsPaused(false);
+      setIsPlaying(true);
     } else {
-      activeActionsRef.current.forEach(a => (a.paused = true));
+      activeActionsRef.current.forEach((a) => (a.paused = true));
       if (!sceneAudioRef.current?.paused) sceneAudioRef.current?.pause();
       setIsPaused(true);
     }
   }, [isPlaying, isPaused, isEnded, playScene]);
 
-  // 🔹 Seek
-  const seekScene = useCallback((time: number) => {
-    activeActionsRef.current.forEach(a => {
-      const clipDuration = a.getClip().duration;
-      a.time = Math.min(time, clipDuration);
-      a.paused = false;
-      a.play();
-    });
+  // 🔹 Seek (mise à jour de la timeline sans relancer la lecture si en pause)
+  const seekScene = useCallback(
+    (time: number) => {
+      const clampedTime = Math.min(time, duration);
+      lastSeekTimeRef.current = clampedTime; // 🧭 mémoriser le dernier temps choisi
 
-    if (sceneAudioRef.current) {
-      sceneAudioRef.current.currentTime = Math.min(time, sceneAudioRef.current.duration);
-      sceneAudioRef.current.play().catch(() => {});
-    }
+      activeActionsRef.current.forEach((a) => {
+        const clipDuration = a.getClip().duration;
+        a.time = Math.min(clampedTime, clipDuration);
+        if (!isPaused) {
+          a.paused = false;
+          a.play();
+        } else {
+          a.paused = true;
+        }
+      });
 
-    setProgress(time);
-    setIsPlaying(true);
-    setIsPaused(false);
-    setIsEnded(time >= duration);
-  }, [duration]);
+      if (sceneAudioRef.current) {
+        sceneAudioRef.current.currentTime = Math.min(
+          clampedTime,
+          sceneAudioRef.current.duration
+        );
+        if (!isPaused) {
+          sceneAudioRef.current.play().catch(() => {});
+        } else {
+          sceneAudioRef.current.pause();
+        }
+      }
+
+      setProgress(clampedTime);
+      if (isPaused) {
+        setIsPlaying(false);
+        setIsEnded(clampedTime >= duration);
+      } else {
+        setIsPlaying(true);
+        setIsEnded(clampedTime >= duration);
+      }
+    },
+    [duration, isPaused]
+  );
+
+  
 
   // 🔄 Boucle progression
   useEffect(() => {

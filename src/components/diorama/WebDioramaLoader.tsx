@@ -54,6 +54,8 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   // const [muted, setMuted] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(true);
+  const [playerState, setPlayerState] = useState<"idle" | "playing" | "paused" | "ended">("idle");
+
   // const { startSoundReady, ambientAudioRefs } = usePOIAudio(config.pois, currentPOI, muted);
 const {
   startSoundReady,
@@ -272,12 +274,11 @@ const {
         )}
       </AnimatePresence>
       <div className="absolute top-4 right-4 z-50 flex flex-col gap-3 items-end">
-        {startSoundReady && !scenePlaying && (
-          <SoundButton muted={muted} onToggle={toggleMute} />
-        )}
-
-
-
+        <AnimatePresence>
+          {startSoundReady && (isEnded || (!isPlaying && !isPaused)) && (
+            <SoundButton muted={muted} onToggle={toggleMute} />
+          )}
+        </AnimatePresence>
         <FullscreenButton
           isFullscreen={isFullscreen}
           onToggle={async () => {
