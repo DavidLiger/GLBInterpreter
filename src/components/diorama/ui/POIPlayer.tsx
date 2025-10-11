@@ -32,11 +32,25 @@ export default function POIPlayer({
     onSeek(newTime);
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => { setIsDragging(true); handleSeek(e.clientX); };
-  const handleTouchStart = (e: React.TouchEvent) => { setIsDragging(true); handleSeek(e.touches[0].clientX); };
-  const handleMouseMove = (e: MouseEvent) => { if (!isDragging) return; handleSeek(e.clientX); };
-  const handleTouchMove = (e: TouchEvent) => { if (!isDragging) return; handleSeek(e.touches[0].clientX); };
-  const handleEnd = () => { if (isDragging) setIsDragging(false); };
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    handleSeek(e.clientX);
+  };
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsDragging(true);
+    handleSeek(e.touches[0].clientX);
+  };
+  const handleMouseMove = (e: MouseEvent) => {
+    if (!isDragging) return;
+    handleSeek(e.clientX);
+  };
+  const handleTouchMove = (e: TouchEvent) => {
+    if (!isDragging) return;
+    handleSeek(e.touches[0].clientX);
+  };
+  const handleEnd = () => {
+    if (isDragging) setIsDragging(false);
+  };
 
   useEffect(() => {
     window.addEventListener("mousemove", handleMouseMove);
@@ -80,17 +94,19 @@ export default function POIPlayer({
       <div className="flex items-center gap-3">{renderControlButton()}</div>
       <div
         ref={progressBarRef}
-        className="relative flex-1 h-2 bg-gray-600 rounded-full cursor-pointer mx-3"
+        className="relative flex-1 h-2 bg-gray-600 rounded-full cursor-pointer mx-3 touch-none"
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}
       >
+        {/* Barre de progression */}
         <motion.div
           className="absolute top-0 left-0 h-2 bg-white rounded-full"
           style={{ width: `${progressPercent}%` }}
           transition={{ duration: 0.05 }}
         />
+        {/* Thumb */}
         <motion.div
-          className="absolute -top-1 w-4 h-4 bg-white rounded-full shadow-md"
+          className="absolute -top-1 w-4 h-4 bg-white rounded-full shadow-md pointer-events-auto touch-none"
           style={{ left: `calc(${progressPercent}% - 8px)` }}
         />
       </div>
