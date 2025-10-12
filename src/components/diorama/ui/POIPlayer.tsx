@@ -9,6 +9,7 @@ type Props = {
   duration: number;
   onTogglePlayPause: () => void;
   onSeek: (time: number) => void;
+  isPortrait?: boolean; // <- nouveau
 };
 
 export default function POIPlayer({
@@ -19,6 +20,7 @@ export default function POIPlayer({
   duration,
   onTogglePlayPause,
   onSeek,
+  isPortrait = false,
 }: Props) {
   const progressBarRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -97,7 +99,13 @@ export default function POIPlayer({
   };
 
   return (
-    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-3/4 max-w-2xl bg-black/30 backdrop-blur-xl rounded-full px-4 py-2 flex items-center justify-between shadow-lg text-white gap-3">
+    <div 
+      className="absolute bottom-2 -translate-x-1/2 w-3/4 max-w-2xl bg-black/30 backdrop-blur-xl rounded-full px-4 py-2 flex items-center justify-between shadow-lg text-white gap-3"
+      style={{
+        width: isPortrait ? "60%" : "75%", // réduit en portrait
+        left: isPortrait ? "35%" : "40%",
+      }}
+      >
       <div className="flex items-center gap-3">{renderControlButton()}</div>
 
       <div

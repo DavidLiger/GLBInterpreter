@@ -349,6 +349,7 @@ const {
         duration={duration}
         onTogglePlayPause={togglePlayPause}
         onSeek={seekScene}
+        isPortrait={isPortrait}
       />
     )}
   </div>
