@@ -21,7 +21,7 @@ export default function FullscreenButton({
     <motion.button
       onClick={onToggle}
       title={isFullscreen ? "Quitter plein écran" : "Plein écran"}
-      className={`bg-white text-white rounded-full w-12 h-12 flex items-center justify-center ${className}`}
+      className={`text-white rounded-full w-8 h-8 flex items-center justify-center ${className}`}
       initial={{ scale: 0, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
       exit={{ scale: 0, opacity: 0 }}

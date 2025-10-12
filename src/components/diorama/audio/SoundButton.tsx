@@ -9,7 +9,7 @@ export default function SoundButton({ muted, onToggle }: SoundButtonProps) {
   return (
     <button
       onClick={onToggle}
-      className="bg-white rounded-full w-12 h-12 flex items-center justify-center shadow-lg"
+      className="rounded-full w-8 h-8 flex items-center justify-center shadow-lg"
       title={muted ? "Activer le son" : "Couper le son"}
     >
       <img

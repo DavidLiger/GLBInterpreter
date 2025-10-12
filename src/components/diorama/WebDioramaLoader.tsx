@@ -274,10 +274,8 @@ const {
                 loaderImage={config.loaderImage}
                 fontClassName={BullstandRegular.className}
                 onStart={() => {
-                  console.log("🚀 Diorama démarré");
                   // 🔈 Unmute général (débloquer audio)
                   if (muted) toggleMute();
-
                   // cacher l'overlay pour révéler la scène
                   setShowLoaderOverlay(false);
                 }}
@@ -285,7 +283,7 @@ const {
             )}
           </AnimatePresence>
 
-      <div className="absolute top-4 right-4 z-50 flex flex-col gap-3 items-end">
+      <div className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end">
         <AnimatePresence>
           {startSoundReady && (isEnded || (!isPlaying && !isPaused)) && (
             <SoundButton muted={muted} onToggle={toggleMute} />
