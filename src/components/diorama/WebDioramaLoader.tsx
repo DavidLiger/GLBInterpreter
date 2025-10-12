@@ -133,10 +133,6 @@ const {
     };
   }, [isFullscreen]);
 
-
-
-  const isReducedUI = !isFullscreen && viewportHeight < windowHeight;
-
   const parentPOI = currentPOI ? findParentPOI(currentPOI) : null;
 
   function findPOIById(pois: POIWithElements[], id: string): POIWithElements | null {
@@ -316,7 +312,6 @@ const {
     {/* Boutons bas à droite */}
     <div
       className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end"
-      // style={{ bottom: isReducedUI ? 60 : 12 }} // 60px si barre de nav visible, sinon 12px
     >
       <AnimatePresence>
         {(isPlaying || (!isPlaying && !isEnded && isPaused)) && (
