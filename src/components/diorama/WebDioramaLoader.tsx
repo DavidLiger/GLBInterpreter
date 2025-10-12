@@ -86,6 +86,8 @@ const {
     duration,
     togglePlayPause,
     seekScene,
+    sceneMuted,
+    toggleSceneMute,
 } = usePOIScenePlayer({
     poi: currentPoi,
     animations: sceneRef.current?.userData?.gltfAnimations || [],
@@ -284,12 +286,36 @@ const {
           </AnimatePresence>
 
       <div className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end">
+        {/* <AnimatePresence>
+          {scenePlaying && (
+            <SoundButton
+              muted={sceneMuted}
+              onToggle={toggleSceneMute}
+            />
+          )}
+
+          {!scenePlaying && (startSoundReady && (isEnded || (!isPlaying && !isPaused))) && (
+            <SoundButton
+              muted={muted}
+              onToggle={toggleMute}
+            />
+          )}
+        </AnimatePresence> */}
         <AnimatePresence>
-          {startSoundReady && (isEnded || (!isPlaying && !isPaused)) && (
-            <SoundButton muted={muted} onToggle={toggleMute} />
+          {(isPlaying || (!isPlaying && !isEnded && isPaused)) && (
+            <SoundButton
+              muted={sceneMuted}
+              onToggle={toggleSceneMute}
+            />
+          )}
+
+          {!scenePlaying && (startSoundReady && (isEnded || (!isPlaying && !isPaused))) && (
+            <SoundButton
+              muted={muted}
+              onToggle={toggleMute}
+            />
           )}
         </AnimatePresence>
-
         <FullscreenButton
           isFullscreen={isFullscreen}
           onToggle={async () => {

@@ -34,6 +34,7 @@ export const usePOIScenePlayer = ({
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(1); // Durée initiale par défaut
   const [isEnded, setIsEnded] = useState(false);
+  const [sceneMuted, setSceneMuted] = useState(false);
 
   const activeActionsRef = useRef<THREE.AnimationAction[]>([]);
   const sceneAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -85,6 +86,20 @@ export const usePOIScenePlayer = ({
       setDuration(maxDuration);
     }
   }, [poi, animations]);
+
+  // Toggle du mute local scène
+  const toggleSceneMute = useCallback(() => {
+    setSceneMuted(prev => {
+      const next = !prev;
+      if (sceneAudioRef.current) {
+        sceneAudioRef.current.muted = next;
+        if (!next && isPlaying && !isPaused) {
+          sceneAudioRef.current.play().catch(() => {});
+        }
+      }
+      return next;
+    });
+  }, [isPlaying, isPaused]);
 
   // 🔹 Play scene (pause / resume / seek aware)
   const playScene = useCallback((forceReplay = false) => {
@@ -141,7 +156,11 @@ export const usePOIScenePlayer = ({
     if (poi.sceneSound) {
       const audio = new Audio(poi.sceneSound);
       audio.loop = false;
-      audio.muted = muted;
+      
+      // ⚡ Forcer à unmute au lancement de la scène
+      audio.muted = false;
+      setSceneMuted(false);
+
       audio.play().catch(() => {});
       sceneAudioRef.current = audio;
 
@@ -169,28 +188,38 @@ export const usePOIScenePlayer = ({
 
   // 🔹 Toggle play/pause
   const togglePlayPause = useCallback(() => {
-    if (!isPlaying && isEnded) {
-      replayScene();
-    } else if (!isPlaying) {
-      playScene();
-    } else if (isPaused) {
-      activeActionsRef.current.forEach(a => {
-        a.paused = false;
-        a.time = Math.min(lastSeekTimeRef.current, a.getClip().duration);
-        a.play();
-      });
-      if (sceneAudioRef.current) {
-        sceneAudioRef.current.currentTime = Math.min(lastSeekTimeRef.current, sceneAudioRef.current.duration);
-        sceneAudioRef.current.play().catch(() => {});
-      }
-      setIsPaused(false);
-      setIsPlaying(true);
-    } else {
-      activeActionsRef.current.forEach(a => (a.paused = true));
-      if (!sceneAudioRef.current?.paused) sceneAudioRef.current?.pause();
-      setIsPaused(true);
+  if (isPaused) {
+    // reprendre là où on était réellement
+    activeActionsRef.current.forEach(a => {
+      a.paused = false;
+      a.play();
+    });
+
+    if (sceneAudioRef.current) {
+      // si l'utilisateur a fait un seek, lastSeekTimeRef contient ce temps
+      // sinon, reprendre depuis currentTime réel
+      const resumeTime = lastSeekTimeRef.current ?? sceneAudioRef.current.currentTime;
+      sceneAudioRef.current.currentTime = resumeTime;
+      sceneAudioRef.current.play().catch(() => {});
     }
-  }, [isPlaying, isPaused, isEnded, playScene, replayScene]);
+
+    setIsPaused(false);
+    setIsPlaying(true);
+  } else if (!isPlaying && isEnded) {
+    // replay depuis le début
+    replayScene();
+  } else if (!isPlaying) {
+    // play depuis le début
+    playScene();
+  } else {
+    // pause
+    activeActionsRef.current.forEach(a => (a.paused = true));
+    if (!sceneAudioRef.current?.paused) sceneAudioRef.current?.pause();
+    setIsPaused(true);
+  }
+}, [isPlaying, isPaused, isEnded, playScene, replayScene]);
+
+
 
   // 🔹 Seek
   const seekScene = useCallback((time: number) => {
@@ -255,5 +284,7 @@ export const usePOIScenePlayer = ({
     seekScene,
     playScene,
     replayScene,
+    sceneMuted,
+    toggleSceneMute,
   };
 };
