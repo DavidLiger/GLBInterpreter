@@ -34,18 +34,22 @@ export default function LoaderOverlay({
   // ⚡ Ne pas utiliser window ici directement
   useEffect(() => {
     const updateVH = () => {
-      setViewportHeight(window.visualViewport?.height || window.innerHeight);
+      const vh = window.visualViewport?.height || window.innerHeight;
+      // On prend la plus petite valeur entre visualViewport et innerHeight
+      setViewportHeight(Math.min(vh, window.innerHeight));
     };
     updateVH();
     window.addEventListener("resize", updateVH);
     window.addEventListener("orientationchange", updateVH);
     window.visualViewport?.addEventListener("resize", updateVH);
+
     return () => {
       window.removeEventListener("resize", updateVH);
       window.removeEventListener("orientationchange", updateVH);
       window.visualViewport?.removeEventListener("resize", updateVH);
     };
   }, []);
+
 
   // Ne rien rendre côté serveur
   const height = viewportHeight ?? 0;
@@ -72,7 +76,7 @@ export default function LoaderOverlay({
     {showOverlay && (
       <motion.div
         className="absolute inset-0 flex items-center justify-center bg-black z-[100] px-4"
-        style={{ height }} // plein viewport
+        style={{ height: viewportHeight ?? '100vh', maxHeight: '100%' }}
         initial={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.45 }}
