@@ -315,8 +315,8 @@ const {
 
     {/* Boutons bas à droite */}
     <div
-      className="absolute right-2 z-50 flex flex-row gap-2 items-end"
-      style={{ bottom: isReducedUI ? 60 : 12 }} // 60px si barre de nav visible, sinon 12px
+      className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end"
+      // style={{ bottom: isReducedUI ? 60 : 12 }} // 60px si barre de nav visible, sinon 12px
     >
       <AnimatePresence>
         {(isPlaying || (!isPlaying && !isEnded && isPaused)) && (
