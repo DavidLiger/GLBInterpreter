@@ -34,22 +34,18 @@ export default function LoaderOverlay({
   // ⚡ Ne pas utiliser window ici directement
   useEffect(() => {
     const updateVH = () => {
-      const vh = window.visualViewport?.height || window.innerHeight;
-      // On prend la plus petite valeur entre visualViewport et innerHeight
-      setViewportHeight(Math.min(vh, window.innerHeight));
+      setViewportHeight(window.visualViewport?.height || window.innerHeight);
     };
     updateVH();
     window.addEventListener("resize", updateVH);
     window.addEventListener("orientationchange", updateVH);
     window.visualViewport?.addEventListener("resize", updateVH);
-
     return () => {
       window.removeEventListener("resize", updateVH);
       window.removeEventListener("orientationchange", updateVH);
       window.visualViewport?.removeEventListener("resize", updateVH);
     };
   }, []);
-
 
   // Ne rien rendre côté serveur
   const height = viewportHeight ?? 0;
@@ -72,69 +68,60 @@ export default function LoaderOverlay({
   };
 
   return (
-  <AnimatePresence>
-    {showOverlay && (
-      <motion.div
-        className="absolute inset-0 flex items-center justify-center bg-black z-[100] px-4"
-        style={{ height: viewportHeight ?? '100vh', maxHeight: '100%' }}
-        initial={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        transition={{ duration: 0.45 }}
-      >
-        <div
-          className={`w-full flex flex-col items-center justify-center gap-8`}
-          style={{ minHeight: 0 }}
-        >
-          <h1
-            className={`${fontClassName} text-white font-bold text-center`}
-            style={{
-              fontSize: !isPortrait ? "clamp(20px, 4.5vw, 28px)" : "clamp(28px, 6vw, 48px)",
-            }}
-          >
-            {sceneName ?? "Scene Diorama"}
-          </h1>
+    <AnimatePresence>
+      {showOverlay && (
+        <motion.div
+  className="absolute inset-0 flex flex-col justify-between bg-black z-[100] px-4"
+  style={{ height: viewportHeight ?? '100vh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+  initial={{ opacity: 1 }}
+  exit={{ opacity: 0 }}
+  transition={{ duration: 0.45 }}
+>
+  {/* Haut : titre + image */}
+  <div className="flex flex-col items-center gap-4 pt-4">
+    <h1 className={`${fontClassName} text-white font-bold text-center`} style={{ fontSize: !isPortrait ? 'clamp(20px, 4.5vw, 28px)' : 'clamp(28px, 6vw, 48px)' }}>
+      {sceneName ?? 'Scene Diorama'}
+    </h1>
 
-          <div
-            className="flex flex-col items-center justify-center w-full max-w-3xl px-4 gap-6"
-          >
-            <img
-              src={loaderImage ?? "/icons/dioramas/UI/scene-preview.png"}
-              alt="Scene Preview"
-              className="object-contain flex-shrink-0"
-              style={{
-                width: !isPortrait ? "clamp(140px, 30vw, 240px)" : "clamp(180px, 36vw, 320px)",
-                height: !isPortrait ? "clamp(140px, 30vw, 240px)" : "clamp(180px, 36vw, 320px)",
-              }}
-            />
+    <img
+      src={loaderImage ?? '/icons/dioramas/UI/scene-preview.png'}
+      alt="Scene Preview"
+      className="object-contain flex-shrink-0"
+      style={{
+        width: !isPortrait ? 'clamp(140px, 30vw, 240px)' : 'clamp(180px, 36vw, 320px)',
+        height: !isPortrait ? 'clamp(140px, 30vw, 240px)' : 'clamp(180px, 36vw, 320px)',
+      }}
+    />
+  </div>
 
-            {!isReady ? (
-              <>
-                <div className="w-64 h-3 bg-gray-700 rounded-full overflow-hidden">
-                  <motion.div
-                    className="h-full bg-green-500"
-                    initial={{ width: 0 }}
-                    animate={{ width: `${Math.min(100, loadingProgress)}%` }}
-                    transition={{ ease: "easeOut", duration: 0.2 }}
-                  />
-                </div>
-                <span className="text-white mt-2 text-sm">
-                  {Math.round(Math.min(100, loadingProgress))}%
-                </span>
-              </>
-            ) : (
-              <motion.button
-                onClick={handleStart}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.98 }}
-                className="mt-4 px-6 py-3 bg-green-500 text-black font-semibold rounded-full shadow-lg text-sm uppercase tracking-wider"
-              >
-                {isMobile ? "Toucher pour commencer" : "Cliquer pour commencer"}
-              </motion.button>
-            )}
-          </div>
+  {/* Bas : loader ou bouton start */}
+  <div className="flex flex-col items-center gap-2 mb-4">
+    {!isReady ? (
+      <>
+        <div className="w-64 h-3 bg-gray-700 rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-green-500"
+            initial={{ width: 0 }}
+            animate={{ width: `${Math.min(100, loadingProgress)}%` }}
+            transition={{ ease: 'easeOut', duration: 0.2 }}
+          />
         </div>
-      </motion.div>
+        <span className="text-white mt-2 text-sm">{Math.round(Math.min(100, loadingProgress))}%</span>
+      </>
+    ) : (
+      <motion.button
+        onClick={handleStart}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.98 }}
+        className="px-6 py-3 bg-green-500 text-black font-semibold rounded-full shadow-lg text-sm uppercase tracking-wider"
+      >
+        {isMobile ? 'Toucher pour commencer' : 'Cliquer pour commencer'}
+      </motion.button>
     )}
-  </AnimatePresence>
-);
+  </div>
+</motion.div>
+
+      )}
+    </AnimatePresence>
+  );
 }
