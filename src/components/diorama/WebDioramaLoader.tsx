@@ -57,7 +57,9 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [isMobile, setIsMobile] = useState(true);
   const [playerState, setPlayerState] = useState<"idle" | "playing" | "paused" | "ended">("idle");
   const [showLoaderOverlay, setShowLoaderOverlay] = useState(true);
-  const [viewportHeight, setViewportHeight] = useState(window.innerHeight);
+  const [viewportHeight, setViewportHeight] = useState<number>(0);
+  const [windowHeight, setWindowHeight] = useState<number>(0);
+
 
   // const { startSoundReady, ambientAudioRefs } = usePOIAudio(config.pois, currentPOI, muted);
 const {
@@ -75,8 +77,6 @@ const {
     // tu peux mettre à jour un state local si besoin
   },
 });
-
-
 
 
 const {
@@ -99,7 +99,6 @@ const {
     onSceneEnd: handleSceneEnd,
 });
 
-
   // Resize helper
   const updateRendererSize = () => {
     const w = containerRef.current?.clientWidth;
@@ -109,27 +108,35 @@ const {
     cameraRef.current.updateProjectionMatrix();
     rendererRef.current.setSize(w, h);
   };
-
   // ✅ hooks
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(containerRef, () => setTimeout(updateRendererSize, 50));
   useResize(updateRendererSize);
 
-    useEffect(() => {
-    const onResize = () => {
+  useEffect(() => {
+    const updateVH = () => {
       const vh = window.visualViewport?.height || window.innerHeight;
       setViewportHeight(vh);
+      setWindowHeight(window.innerHeight);
+      updateRendererSize();
     };
 
-    window.addEventListener("resize", onResize);
-    window.visualViewport?.addEventListener("resize", onResize);
+    // initial call
+    updateVH();
+
+    window.addEventListener("resize", updateVH);
+    window.addEventListener("orientationchange", updateVH);
+    window.visualViewport?.addEventListener("resize", updateVH);
 
     return () => {
-      window.removeEventListener("resize", onResize);
-      window.visualViewport?.removeEventListener("resize", onResize);
+      window.removeEventListener("resize", updateVH);
+      window.removeEventListener("orientationchange", updateVH);
+      window.visualViewport?.removeEventListener("resize", updateVH);
     };
-  }, []);
+  }, [isFullscreen]);
 
-  const isReducedUI = !isFullscreen && viewportHeight < window.innerHeight;
+
+
+  const isReducedUI = !isFullscreen && viewportHeight < windowHeight;
 
   const parentPOI = currentPOI ? findParentPOI(currentPOI) : null;
 
@@ -282,80 +289,70 @@ const {
   }, [config.glb]);
 
   return (
-    <div className="relative w-screen h-screen bg-black" ref={containerRef}>
-         <AnimatePresence>
-            {showLoaderOverlay && (
-              <LoaderOverlay
-                isPortrait={isPortrait}
-                isMobile={isMobile}
-                loadingProgress={loadingProgress}
-                isLoaded={isLoaded}                     // <-- IMPORTANT
-                sceneName={config.name}
-                loaderImage={config.loaderImage}
-                fontClassName={BullstandRegular.className}
-                onStart={() => {
-                  // 🔈 Unmute général (débloquer audio)
-                  if (muted) toggleMute();
-                  // cacher l'overlay pour révéler la scène
-                  setShowLoaderOverlay(false);
-                }}
-              />
-            )}
-          </AnimatePresence>
-
-      <div className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end">
-        {/* <AnimatePresence>
-          {scenePlaying && (
-            <SoundButton
-              muted={sceneMuted}
-              onToggle={toggleSceneMute}
-            />
-          )}
-
-          {!scenePlaying && (startSoundReady && (isEnded || (!isPlaying && !isPaused))) && (
-            <SoundButton
-              muted={muted}
-              onToggle={toggleMute}
-            />
-          )}
-        </AnimatePresence> */}
-        <AnimatePresence>
-          {(isPlaying || (!isPlaying && !isEnded && isPaused)) && (
-            <SoundButton
-              muted={sceneMuted}
-              onToggle={toggleSceneMute}
-            />
-          )}
-
-          {!scenePlaying && (startSoundReady && (isEnded || (!isPlaying && !isPaused))) && (
-            <SoundButton
-              muted={muted}
-              onToggle={toggleMute}
-            />
-          )}
-        </AnimatePresence>
-                <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
-
-      </div>
-
-      {/* 🔙 Boutons POIs à gauche */}
-      <POIButtons
-          parentPOI={parentPOI}
-          visiblePOIs={getVisiblePOIs()}
-          goToPOI={goToPOI}
-        />
-      <RotateHint show={showRotateHint} />
-      {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
-        <POIPlayer
-          isPlaying={isPlaying}
-          isPaused={isPaused}
-          isEnded={isEnded}
-          progress={progress} 
-          duration={duration}
-          onTogglePlayPause={togglePlayPause}
-          onSeek={seekScene} // 👈 remis ici
+  <div
+    ref={containerRef}
+    style={{ height: viewportHeight }}
+    className="relative w-screen bg-black"
+  >
+    <AnimatePresence>
+      {showLoaderOverlay && (
+        <LoaderOverlay
+          isPortrait={isPortrait}
+          isMobile={isMobile}
+          loadingProgress={loadingProgress}
+          isLoaded={isLoaded}
+          sceneName={config.name}
+          loaderImage={config.loaderImage}
+          fontClassName={BullstandRegular.className}
+          onStart={() => {
+            // 🔈 Unmute général (débloquer audio)
+            if (muted) toggleMute();
+            // cacher l'overlay pour révéler la scène
+            setShowLoaderOverlay(false);
+          }}
         />
       )}
+    </AnimatePresence>
+
+    {/* Boutons bas à droite */}
+    <div
+      className="absolute right-2 z-50 flex flex-row gap-2 items-end"
+      style={{ bottom: isReducedUI ? 60 : 12 }} // 60px si barre de nav visible, sinon 12px
+    >
+      <AnimatePresence>
+        {(isPlaying || (!isPlaying && !isEnded && isPaused)) && (
+          <SoundButton muted={sceneMuted} onToggle={toggleSceneMute} />
+        )}
+
+        {!scenePlaying && (startSoundReady && (isEnded || (!isPlaying && !isPaused))) && (
+          <SoundButton muted={muted} onToggle={toggleMute} />
+        )}
+      </AnimatePresence>
+
+      <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
     </div>
-  );
+
+    {/* Boutons POIs à gauche */}
+    <POIButtons
+      parentPOI={parentPOI}
+      visiblePOIs={getVisiblePOIs()}
+      goToPOI={goToPOI}
+    />
+
+    <RotateHint show={showRotateHint} />
+
+    {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
+      <POIPlayer
+        isPlaying={isPlaying}
+        isPaused={isPaused}
+        isEnded={isEnded}
+        progress={progress}
+        duration={duration}
+        onTogglePlayPause={togglePlayPause}
+        onSeek={seekScene}
+      />
+    )}
+  </div>
+);
+
 }
