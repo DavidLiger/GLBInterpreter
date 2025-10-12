@@ -98,6 +98,16 @@ const {
     onSceneEnd: handleSceneEnd,
 });
 
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth < 768); // seuil à ajuster selon ton design
+    };
+
+    checkIsMobile(); // première détection immédiate
+    window.addEventListener("resize", checkIsMobile);
+    return () => window.removeEventListener("resize", checkIsMobile);
+  }, []);
+
   // Resize helper
   const updateRendererSize = () => {
     const w = containerRef.current?.clientWidth;
