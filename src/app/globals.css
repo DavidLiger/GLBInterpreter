@@ -24,3 +24,13 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.reduced-ui {
+  height: calc(100vh - env(safe-area-inset-bottom));
+  padding-bottom: 60px; /* ajuster selon la taille des boutons */
+}
+
+.reduced-buttons {
+  bottom: 60px !important; /* remonter les boutons */
+}
+

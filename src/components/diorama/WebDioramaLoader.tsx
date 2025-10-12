@@ -57,6 +57,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [isMobile, setIsMobile] = useState(true);
   const [playerState, setPlayerState] = useState<"idle" | "playing" | "paused" | "ended">("idle");
   const [showLoaderOverlay, setShowLoaderOverlay] = useState(true);
+  const [viewportHeight, setViewportHeight] = useState(window.innerHeight);
 
   // const { startSoundReady, ambientAudioRefs } = usePOIAudio(config.pois, currentPOI, muted);
 const {
@@ -112,6 +113,23 @@ const {
   // ✅ hooks
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(containerRef, () => setTimeout(updateRendererSize, 50));
   useResize(updateRendererSize);
+
+    useEffect(() => {
+    const onResize = () => {
+      const vh = window.visualViewport?.height || window.innerHeight;
+      setViewportHeight(vh);
+    };
+
+    window.addEventListener("resize", onResize);
+    window.visualViewport?.addEventListener("resize", onResize);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.visualViewport?.removeEventListener("resize", onResize);
+    };
+  }, []);
+
+  const isReducedUI = !isFullscreen && viewportHeight < window.innerHeight;
 
   const parentPOI = currentPOI ? findParentPOI(currentPOI) : null;
 
@@ -316,31 +334,8 @@ const {
             />
           )}
         </AnimatePresence>
-        <FullscreenButton
-          isFullscreen={isFullscreen}
-          onToggle={async () => {
-            const el = containerRef.current;
-            if (!el) return;
+                <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
 
-            try {
-              if (!isFullscreen) {
-                const req = (el.requestFullscreen ??
-                            (el as any).webkitRequestFullscreen ??
-                            (el as any).mozRequestFullScreen ??
-                            (el as any).msRequestFullscreen) as any;
-                if (req) await req.call(el);
-              } else {
-                const exit = (document.exitFullscreen ??
-                              (document as any).webkitExitFullscreen ??
-                              (document as any).mozCancelFullScreen ??
-                              (document as any).msExitFullscreen) as any;
-                if (exit) await exit.call(document);
-              }
-            } catch (err) {
-              console.warn("Fullscreen API error:", err);
-            }
-          }}
-        />
       </div>
 
       {/* 🔙 Boutons POIs à gauche */}
