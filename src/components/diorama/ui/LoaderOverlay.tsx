@@ -28,34 +28,27 @@ export default function LoaderOverlay({
 }: LoaderOverlayProps) {
   const [showOverlay, setShowOverlay] = useState(true);
   const [isReady, setIsReady] = useState(false);
-  const [viewportHeight, setViewportHeight] = useState(() => {
-    if (typeof window !== "undefined") {
-      return window.visualViewport?.height || window.innerHeight;
-    }
-    return 1000; // valeur par défaut SSR
-  });
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+
   
   // ⚡ Ne pas utiliser window ici directement
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
     const updateVH = () => {
-      const vh = window.visualViewport?.height || window.innerHeight;
-      setViewportHeight(vh);
+      setViewportHeight(window.visualViewport?.height || window.innerHeight);
     };
-
-    updateVH(); // initial call
-
+    updateVH();
     window.addEventListener("resize", updateVH);
     window.addEventListener("orientationchange", updateVH);
     window.visualViewport?.addEventListener("resize", updateVH);
-
     return () => {
       window.removeEventListener("resize", updateVH);
       window.removeEventListener("orientationchange", updateVH);
       window.visualViewport?.removeEventListener("resize", updateVH);
     };
   }, []);
+
+  // Ne rien rendre côté serveur
+  const height = viewportHeight ?? 0;
 
   // Quand le loader dit que la scène est chargée, on passe en mode "tap to start"
   useEffect(() => {
@@ -79,7 +72,7 @@ export default function LoaderOverlay({
       {showOverlay && (
         <motion.div
           className="absolute inset-0 flex bg-black z-[100] px-4"
-          style={{ height: viewportHeight }} //
+          style={{ height }}//
           initial={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.45 }}
