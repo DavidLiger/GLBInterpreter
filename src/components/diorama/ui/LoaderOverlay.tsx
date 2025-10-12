@@ -28,10 +28,17 @@ export default function LoaderOverlay({
 }: LoaderOverlayProps) {
   const [showOverlay, setShowOverlay] = useState(true);
   const [isReady, setIsReady] = useState(false);
-  const [viewportHeight, setViewportHeight] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.visualViewport?.height || window.innerHeight;
+    }
+    return 1000; // valeur par défaut SSR
+  });
   
   // ⚡ Ne pas utiliser window ici directement
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
     const updateVH = () => {
       const vh = window.visualViewport?.height || window.innerHeight;
       setViewportHeight(vh);
