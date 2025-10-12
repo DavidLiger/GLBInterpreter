@@ -22,11 +22,6 @@ export default function TapToStart({ onStart, playSceneSound }: TapToStartProps)
       await audioCtxRef.current.resume();
     }
 
-    // 🎵 Jouer le son de scène si dispo
-    // if (playSceneSound) {
-    //   playSceneSound();
-    // }
-
     // 🚀 Lancer le diorama / la scène
     onStart();
 

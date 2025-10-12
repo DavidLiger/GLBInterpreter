@@ -56,6 +56,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [isLoaded, setIsLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(true);
   const [playerState, setPlayerState] = useState<"idle" | "playing" | "paused" | "ended">("idle");
+  const [showLoaderOverlay, setShowLoaderOverlay] = useState(true);
 
   // const { startSoundReady, ambientAudioRefs } = usePOIAudio(config.pois, currentPOI, muted);
 const {
@@ -262,35 +263,30 @@ const {
 
   return (
     <div className="relative w-screen h-screen bg-black" ref={containerRef}>
-      <AnimatePresence>
-        {!isLoaded && (
-          <LoaderOverlay
-            isPortrait={isPortrait}
-            isMobile={isMobile}
-            loadingProgress={loadingProgress}
-            sceneName={config.name}
-            loaderImage={config.loaderImage}
-            fontClassName={BullstandRegular.className}
-          />
-        )}
-      </AnimatePresence>
-      {/* 🟢 Écran “Appuyer pour commencer” */}
-{isLoaded && (
-  <TapToStart
-    onStart={() => {
-      console.log("🚀 Diorama démarré");
-      // 🔈 Unmute général pour que les sons ambiants démarrent
-      if (muted) toggleMute();
-    }}
-    playSceneSound={() => {
-      // Même logique : on se contente d’unmute le son d’ambiance
-      if (muted) toggleMute();
-    }}
-  />
-)}
+         <AnimatePresence>
+            {showLoaderOverlay && (
+              <LoaderOverlay
+                isPortrait={isPortrait}
+                isMobile={isMobile}
+                loadingProgress={loadingProgress}
+                isLoaded={isLoaded}                     // <-- IMPORTANT
+                sceneName={config.name}
+                loaderImage={config.loaderImage}
+                fontClassName={BullstandRegular.className}
+                onStart={() => {
+                  console.log("🚀 Diorama démarré");
+                  // 🔈 Unmute général (débloquer audio)
+                  if (muted) toggleMute();
+
+                  // cacher l'overlay pour révéler la scène
+                  setShowLoaderOverlay(false);
+                }}
+              />
+            )}
+          </AnimatePresence>
 
       <div className="absolute top-4 right-4 z-50 flex flex-col gap-3 items-end">
-<AnimatePresence>
+        <AnimatePresence>
           {startSoundReady && (isEnded || (!isPlaying && !isPaused)) && (
             <SoundButton muted={muted} onToggle={toggleMute} />
           )}
