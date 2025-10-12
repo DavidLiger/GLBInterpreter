@@ -71,56 +71,56 @@ export default function LoaderOverlay({
     <AnimatePresence>
       {showOverlay && (
         <motion.div
-  className="absolute inset-0 flex flex-col justify-between bg-black z-[100] px-4"
-  style={{ height: viewportHeight ?? '100vh', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
-  initial={{ opacity: 1 }}
-  exit={{ opacity: 0 }}
-  transition={{ duration: 0.45 }}
->
-  {/* Haut : titre + image */}
-  <div className="flex flex-col items-center gap-4 pt-4">
-    <h1 className={`${fontClassName} text-white font-bold text-center`} style={{ fontSize: !isPortrait ? 'clamp(20px, 4.5vw, 28px)' : 'clamp(28px, 6vw, 48px)' }}>
-      {sceneName ?? 'Scene Diorama'}
-    </h1>
+          className="absolute inset-0 flex flex-col items-center justify-center bg-black z-[100] px-4"
+          style={{ height: viewportHeight ?? '100vh', position: 'relative' }}
+          initial={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.45 }}
+        >
+          {/* Image + titre */}
+          <div className="flex flex-col items-center gap-4">
+            <h1 className={`${fontClassName} text-white font-bold text-center`} style={{ fontSize: !isPortrait ? 'clamp(20px, 4.5vw, 28px)' : 'clamp(28px, 6vw, 48px)' }}>
+              {sceneName ?? 'Scene Diorama'}
+            </h1>
 
-    <img
-      src={loaderImage ?? '/icons/dioramas/UI/scene-preview.png'}
-      alt="Scene Preview"
-      className="object-contain flex-shrink-0"
-      style={{
-        width: !isPortrait ? 'clamp(140px, 30vw, 240px)' : 'clamp(180px, 36vw, 320px)',
-        height: !isPortrait ? 'clamp(140px, 30vw, 240px)' : 'clamp(180px, 36vw, 320px)',
-      }}
-    />
-  </div>
+            <img
+              src={loaderImage ?? '/icons/dioramas/UI/scene-preview.png'}
+              alt="Scene Preview"
+              className="object-contain flex-shrink-0"
+              style={{
+                width: !isPortrait ? 'clamp(140px, 30vw, 240px)' : 'clamp(180px, 36vw, 320px)',
+                height: !isPortrait ? 'clamp(140px, 30vw, 240px)' : 'clamp(180px, 36vw, 320px)',
+              }}
+            />
+          </div>
 
-  {/* Bas : loader ou bouton start */}
-  <div className="flex flex-col items-center gap-2 mb-4">
-    {!isReady ? (
-      <>
-        <div className="w-64 h-3 bg-gray-700 rounded-full overflow-hidden">
-          <motion.div
-            className="h-full bg-green-500"
-            initial={{ width: 0 }}
-            animate={{ width: `${Math.min(100, loadingProgress)}%` }}
-            transition={{ ease: 'easeOut', duration: 0.2 }}
-          />
-        </div>
-        <span className="text-white mt-2 text-sm">{Math.round(Math.min(100, loadingProgress))}%</span>
-      </>
-    ) : (
-      <motion.button
-        onClick={handleStart}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.98 }}
-        className="px-6 py-3 bg-green-500 text-black font-semibold rounded-full shadow-lg text-sm uppercase tracking-wider"
-      >
-        {isMobile ? 'Toucher pour commencer' : 'Cliquer pour commencer'}
-      </motion.button>
-    )}
-  </div>
-</motion.div>
+          {/* Bouton START toujours visible en bas */}
+          {isReady && (
+            <motion.button
+              onClick={handleStart}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.98 }}
+              className="absolute bottom-4 px-6 py-3 bg-green-500 text-black font-semibold rounded-full shadow-lg text-sm uppercase tracking-wider"
+            >
+              {isMobile ? 'Toucher pour commencer' : 'Cliquer pour commencer'}
+            </motion.button>
+          )}
 
+          {/* Loader progress bar */}
+          {!isReady && (
+            <div className="absolute bottom-4 flex flex-col items-center gap-2">
+              <div className="w-64 h-3 bg-gray-700 rounded-full overflow-hidden">
+                <motion.div
+                  className="h-full bg-green-500"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, loadingProgress)}%` }}
+                  transition={{ ease: 'easeOut', duration: 0.2 }}
+                />
+              </div>
+              <span className="text-white mt-2 text-sm">{Math.round(Math.min(100, loadingProgress))}%</span>
+            </div>
+          )}
+        </motion.div>
       )}
     </AnimatePresence>
   );
