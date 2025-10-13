@@ -5,6 +5,15 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "webdiorama-proxy.david-liger-pro.workers.dev",
+        pathname: "/**",
+      },
+    ],
+  },
 };
 
 export default nextConfig;
