@@ -105,7 +105,6 @@ const {
     onSceneEnd: handleSceneEnd,
 });
 
-const visiblePOIs = getVisiblePOIs();
 const activePOIIcon = React.useMemo(() => {
   if (!currentPOI) return undefined;
 
