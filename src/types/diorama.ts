@@ -15,7 +15,7 @@ export type DialogueCharacter = {
 
 export type DialogueLine = {
   time: number;            // moment d’apparition (en secondes)
-  text: string;            // texte à afficher
+  text: string | string[];          // texte à afficher
   characterId: string;     // id du personnage qui parle
 };
 

@@ -26,6 +26,7 @@ import { POI, POIWithElements } from "@/types/diorama";
 import POIPlayer from "@/components/diorama/ui/POIPlayer";
 import { usePOIScenePlayer } from "@/components/diorama/hooks/usePOIScenePlayer";
 import DialogueModal from "./ui/DialogueModal";
+import DialogueButton from "./ui/DialogueButton";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -59,6 +60,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [showLoaderOverlay, setShowLoaderOverlay] = useState(true);
   const [viewportHeight, setViewportHeight] = useState<number>(0);
   const [windowHeight, setWindowHeight] = useState<number>(0);
+  const [showDialogue, setShowDialogue] = useState(true);
 
 
   // const { startSoundReady, ambientAudioRefs } = usePOIAudio(config.pois, currentPOI, muted);
@@ -294,77 +296,80 @@ const {
   }, [config.glb]);
 
   return (
-  <div
-    ref={containerRef}
-    style={{ height: viewportHeight }}
-    className="relative w-screen bg-black"
-  >
-    <AnimatePresence>
-      {showLoaderOverlay && (
-        <LoaderOverlay
-          isPortrait={isPortrait}
-          isMobile={isMobile}
-          loadingProgress={loadingProgress}
-          isLoaded={isLoaded}
-          sceneName={config.name}
-          loaderImage={config.loaderImage}
-          fontClassName={BullstandRegular.className}
-          onStart={() => {
-            // 🔈 Unmute général (débloquer audio)
-            if (muted) toggleMute();
-            // cacher l'overlay pour révéler la scène
-            setShowLoaderOverlay(false);
-          }}
-        />
-      )}
-    </AnimatePresence>
-
-    {/* Boutons bas à droite */}
     <div
-      className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end"
+      ref={containerRef}
+      style={{ height: viewportHeight }}
+      className="relative w-screen bg-black"
     >
       <AnimatePresence>
-        {(isPlaying || (!isPlaying && !isEnded && isPaused)) && (
-          <SoundButton muted={sceneMuted} onToggle={toggleSceneMute} />
-        )}
-
-        {!scenePlaying && (startSoundReady && (isEnded || (!isPlaying && !isPaused))) && (
-          <SoundButton muted={muted} onToggle={toggleMute} />
+        {showLoaderOverlay && (
+          <LoaderOverlay
+            isPortrait={isPortrait}
+            isMobile={isMobile}
+            loadingProgress={loadingProgress}
+            isLoaded={isLoaded}
+            sceneName={config.name}
+            loaderImage={config.loaderImage}
+            fontClassName={BullstandRegular.className}
+            onStart={() => {
+              // 🔈 Unmute général (débloquer audio)
+              if (muted) toggleMute();
+              // cacher l'overlay pour révéler la scène
+              setShowLoaderOverlay(false);
+            }}
+          />
         )}
       </AnimatePresence>
 
-      <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
+      {/* Boutons bas à droite */}
+      <div
+        className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end"
+      >
+        {/* 👇 Bouton pour afficher / cacher la modale de dialogue */}
+        <DialogueButton visible={showDialogue} onToggle={() => setShowDialogue(v => !v)} />
+        <AnimatePresence>
+          {(isPlaying || (!isPlaying && !isEnded && isPaused)) && (
+            <SoundButton muted={sceneMuted} onToggle={toggleSceneMute} />
+          )}
+
+          {!scenePlaying && (startSoundReady && (isEnded || (!isPlaying && !isPaused))) && (
+            <SoundButton muted={muted} onToggle={toggleMute} />
+          )}
+        </AnimatePresence>
+
+        <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
+      </div>
+
+      {/* Boutons POIs à gauche */}
+      <POIButtons
+        parentPOI={parentPOI}
+        visiblePOIs={getVisiblePOIs()}
+        goToPOI={goToPOI}
+      />
+
+      <RotateHint show={showRotateHint} />
+
+      
+
+      {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
+        <POIPlayer
+          isPlaying={isPlaying}
+          isPaused={isPaused}
+          isEnded={isEnded}
+          progress={progress}
+          duration={duration}
+          onTogglePlayPause={togglePlayPause}
+          onSeek={seekScene}
+          isPortrait={isPortrait}
+        />
+      )}
+      {currentPoi && currentPoi.dialogue && showDialogue && (
+        <DialogueModal
+          dialogue={currentPoi.dialogue}
+          progress={progress}
+          isPlaying={isPlaying}
+        />
+      )}
     </div>
-
-    {/* Boutons POIs à gauche */}
-    <POIButtons
-      parentPOI={parentPOI}
-      visiblePOIs={getVisiblePOIs()}
-      goToPOI={goToPOI}
-    />
-
-    <RotateHint show={showRotateHint} />
-
-    {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
-      <POIPlayer
-        isPlaying={isPlaying}
-        isPaused={isPaused}
-        isEnded={isEnded}
-        progress={progress}
-        duration={duration}
-        onTogglePlayPause={togglePlayPause}
-        onSeek={seekScene}
-        isPortrait={isPortrait}
-      />
-    )}
-    {currentPoi && currentPoi.dialogue && (
-      <DialogueModal
-        dialogue={currentPoi.dialogue}
-        progress={progress}
-        isPlaying={isPlaying}
-      />
-    )}
-  </div>
-);
-
+  );
 }

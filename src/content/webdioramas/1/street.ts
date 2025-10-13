@@ -46,9 +46,25 @@ export const street: DioramaConfig3DWithVideos = {
           { id: "guide", name: "Luna", image: `${BASE_URL}/images/dioramas/test_street/characters/icone-goblin.png` }
         ],
         lines: [
-          { time: 0.5, text: "Salut ! Bienvenue dans le diorama.", characterId: "hero" },
-          { time: 3.0, text: "Ici, tu peux explorer la scène en 3D.", characterId: "guide" },
-          { time: 12.5, text: "Allons voir ce qu’il se passe plus loin !", characterId: "hero" }
+          {
+            time: 0.5,
+            text: "Salut ! Bienvenue dans le diorama.",
+            characterId: "hero"
+          },
+          {
+            time: 3.0,
+            text: [
+              "Ici, tu peux explorer la scène en 3D.",
+              "Tu peux zoomer, tourner la caméra, et cliquer sur les points d'intérêt.",
+              "Amuse-toi bien !"
+            ],
+            characterId: "guide"
+          },
+          {
+            time: 12.5,
+            text: "Allons voir ce qu’il se passe plus loin !",
+            characterId: "hero"
+          }
         ]
       }
     },
