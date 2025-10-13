@@ -29,6 +29,7 @@ import DialogueModal from "./ui/DialogueModal";
 import DialogueButton from "./ui/DialogueButton";
 import InfoButton from "./ui/InfoButton";
 import InfoModal from "./ui/InfoModal";
+import POIBreadcrumbs from "./ui/POIBreadcrumbs";
 
 
 const BullstandRegular = localFont({
@@ -103,6 +104,23 @@ const {
     onSceneStart: handleSceneStart,
     onSceneEnd: handleSceneEnd,
 });
+
+const visiblePOIs = getVisiblePOIs();
+const activePOIIcon = React.useMemo(() => {
+  if (!currentPOI) return undefined;
+
+  const active = findPOIRecursively(currentPOI);
+  if (!active) return undefined;
+
+  // Dernier enfant ? -> prendre icône du parent
+  const parent = findParentPOI(active.id);
+  if (parent && (!active.children || active.children.length === 0)) {
+    return parent.icon ?? active.icon;
+  }
+
+  return active.icon;
+}, [currentPOI, findPOIRecursively, findParentPOI]);
+
 
   useEffect(() => {
     const checkIsMobile = () => {
@@ -336,7 +354,9 @@ const {
         className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end"
       >
         {/* 👇 Bouton pour afficher / cacher la modale de dialogue */}
-        <DialogueButton visible={showDialogue} onToggle={() => setShowDialogue(v => !v)} />
+        {currentPoi && currentPoi.dialogue &&
+          <DialogueButton visible={showDialogue} onToggle={() => setShowDialogue(v => !v)} />
+        }
         <AnimatePresence>
           {(isPlaying || (!isPlaying && !isEnded && isPaused)) && (
             <SoundButton muted={sceneMuted} onToggle={toggleSceneMute} />
@@ -349,17 +369,14 @@ const {
 
         <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
       </div>
-
-      {/* Boutons POIs à gauche */}
-      <POIButtons
-        parentPOI={parentPOI}
-        visiblePOIs={getVisiblePOIs()}
+      <POIBreadcrumbs
+        currentPOI={currentPOI}
         goToPOI={goToPOI}
+        findPOIRecursively={findPOIRecursively}
+        findParentPOI={findParentPOI}
+        configPOIs={config.pois}
       />
-
       <RotateHint show={showRotateHint} />
-
-      
 
       {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
         <POIPlayer
@@ -385,6 +402,7 @@ const {
         onClose={() => setShowInfoModal(false)}
         credits={config.credits}
         isMobile={isMobile}
+        poiIcon={activePOIIcon}
       />
     </div>
   );

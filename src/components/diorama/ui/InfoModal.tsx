@@ -10,13 +10,15 @@ interface InfoModalProps {
   onClose: () => void;
   credits?: DioramaCredits;
   isMobile: boolean;
+  poiIcon?: string;
 }
 
-export default function InfoModal({ show, onClose, credits, isMobile }: InfoModalProps) {
+export default function InfoModal({ show, onClose, credits, isMobile, poiIcon }: InfoModalProps) {
   // Images selon device
   const rotateIcon = isMobile ? "/icons/dioramas/UI/one-finger.png" : "/icons/dioramas/UI/mouse-left-click.png";
   const zoomIcon = isMobile ? "/icons/dioramas/UI/two-fingers.png" : "/icons/dioramas/UI/mouse-scroll.png";
   const soundIcon = "/icons/dioramas/UI/sound.png"
+  const subtitlesIcon = "/icons/dioramas/UI/chat_on.png"
 
   return (
     <AnimatePresence>
@@ -56,17 +58,32 @@ export default function InfoModal({ show, onClose, credits, isMobile }: InfoModa
                     <img src={rotateIcon} alt="Rotation" className="w-7 h-7" />
                     <span>Tourner la scène {isMobile ? "(glisser avec un doigt)" : "(cliquer-glisser souris)"}</span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                     <img src={zoomIcon} alt="Zoom" className="w-8 h-8" />
                     <span>Zoomer {isMobile ? "(pincer deux doigts)" : "(molette souris)"}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                    <span>📍</span>
-                    <span>Cliquer sur les points d’intérêt (POI) pour naviguer</span>
-                </div>
                 <div className="flex items-center gap-3">
+                    {poiIcon ? (
+                        <motion.img
+                            src={poiIcon}
+                            alt="POI"
+                            className="w-6 h-6 object-contain"
+                            animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
+                            transition={{ duration: 2, repeat: Infinity }}
+                            />
+                    ) : (
+                        <span>📍</span>
+                    )}
+                <span>Cliquer sur les icônes des lieux pour naviguer</span>
+                </div>
+
+                <div className="flex items-center gap-4">
                     <img src={soundIcon} alt="Rotation" className="w-5 h-4" />
                     <span>Activer / désactiver le son avec le bouton dédié</span>
+                </div>
+                <div className="flex items-center gap-3">
+                    <img src={subtitlesIcon} alt="soustitres" className="w-6 h-6" />
+                    <span>Afficher / masquer les textes avec le bouton dédié</span>
                 </div>
                 </div>
 
