@@ -228,4 +228,18 @@ export const street: DioramaConfig3DWithVideos = {
     defaultAlpha: 0.9,
     defaultKeepAlive: true,
   },
+  credits: {
+    description: "Scène 3D immersive du village. Explore les différents points d’intérêt et découvre la vie du quartier.",
+    music: [
+      { title: "Aquatic Ambience", author: "David Wise", source: "No royalties - remix version" },
+      { title: "Cab Calloway 1933", source: "Domaine public" },
+    ],
+    sounds: [
+      { title: "kids_playing.mp3", source: "freesound.org" },
+      { title: "snoring_guy.mp3", source: "mixkit.co" },
+    ],
+    licenses: ["Copyright", "Les Editions Liger"],
+    project: "Diorama 3D Demo",
+    year: "2025",
+  },
 };

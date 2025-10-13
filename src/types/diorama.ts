@@ -110,7 +110,17 @@ export type DioramaConfig3D = {
   lights?: DioramaLight[];
   bulbs?: DioramaBulb[];
   toonOutline?: ToonOutlineConfig; // 🔥 nouvel objet
+  credits?: DioramaCredits;
 };
+
+export interface DioramaCredits {
+  description?: string; // Texte d'intro ou aide
+  music?: { title: string; author?: string; source?: string }[];
+  sounds?: { title: string; source?: string }[];
+  licenses?: string[]; // CC0, CC-BY, etc.
+  year?: string;
+  project?: string;
+}
 
 export type DioramaConfig3DWithVideos = DioramaConfig3D & {
   videos?: DioramaVideo[];

@@ -27,6 +27,9 @@ import POIPlayer from "@/components/diorama/ui/POIPlayer";
 import { usePOIScenePlayer } from "@/components/diorama/hooks/usePOIScenePlayer";
 import DialogueModal from "./ui/DialogueModal";
 import DialogueButton from "./ui/DialogueButton";
+import InfoButton from "./ui/InfoButton";
+import InfoModal from "./ui/InfoModal";
+
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -61,6 +64,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [viewportHeight, setViewportHeight] = useState<number>(0);
   const [windowHeight, setWindowHeight] = useState<number>(0);
   const [showDialogue, setShowDialogue] = useState(true);
+  const [showInfoModal, setShowInfoModal] = useState(false);
 
 
   // const { startSoundReady, ambientAudioRefs } = usePOIAudio(config.pois, currentPOI, muted);
@@ -320,6 +324,12 @@ const {
           />
         )}
       </AnimatePresence>
+      <div
+        className="absolute top-2 right-2 z-50 flex flex-row gap-2 items-end"
+      >
+        <InfoButton onClick={() => setShowInfoModal(true)} />
+      </div>
+
 
       {/* Boutons bas à droite */}
       <div
@@ -370,6 +380,12 @@ const {
           isPlaying={isPlaying}
         />
       )}
+      <InfoModal
+        show={showInfoModal}
+        onClose={() => setShowInfoModal(false)}
+        credits={config.credits}
+        isMobile={isMobile}
+      />
     </div>
   );
 }
