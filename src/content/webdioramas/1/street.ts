@@ -39,7 +39,18 @@ export const street: DioramaConfig3DWithVideos = {
           autoplay: false,
           loop: false
         }
-      ]
+      ],
+      dialogue: {
+        characters: [
+          { id: "hero", name: "Alex", image: `${BASE_URL}/images/dioramas/test_street/characters/icone-elf.png` },
+          { id: "guide", name: "Luna", image: `${BASE_URL}/images/dioramas/test_street/characters/icone-goblin.png` }
+        ],
+        lines: [
+          { time: 0.5, text: "Salut ! Bienvenue dans le diorama.", characterId: "hero" },
+          { time: 3.0, text: "Ici, tu peux explorer la scène en 3D.", characterId: "guide" },
+          { time: 12.5, text: "Allons voir ce qu’il se passe plus loin !", characterId: "hero" }
+        ]
+      }
     },
     {
       id: "window",

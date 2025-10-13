@@ -45,6 +45,7 @@ public/models/
 public/videos/
 public/sounds/
 public/jsons
+public/image/dioramas
 # Ignore tout dans public/icons/dioramas
 public/icons/dioramas/*
 

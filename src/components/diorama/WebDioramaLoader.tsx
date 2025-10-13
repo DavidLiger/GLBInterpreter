@@ -25,7 +25,7 @@ import { usePOIAnimations } from "./hooks/usePOIAnimations";
 import { POI, POIWithElements } from "@/types/diorama"; 
 import POIPlayer from "@/components/diorama/ui/POIPlayer";
 import { usePOIScenePlayer } from "@/components/diorama/hooks/usePOIScenePlayer";
-import TapToStart from "./ui/TapToStart";
+import DialogueModal from "./ui/DialogueModal";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -355,6 +355,13 @@ const {
         onTogglePlayPause={togglePlayPause}
         onSeek={seekScene}
         isPortrait={isPortrait}
+      />
+    )}
+    {currentPoi && currentPoi.dialogue && (
+      <DialogueModal
+        dialogue={currentPoi.dialogue}
+        progress={progress}
+        isPlaying={isPlaying}
       />
     )}
   </div>

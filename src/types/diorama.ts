@@ -7,6 +7,23 @@ export type AnimatedElement = {
   loop: boolean;
 };
 
+export type DialogueCharacter = {
+  id: string;              // identifiant unique (ex: "hero", "guide")
+  name?: string;           // nom affiché (optionnel)
+  image: string;           // image/avatar du personnage
+};
+
+export type DialogueLine = {
+  time: number;            // moment d’apparition (en secondes)
+  text: string;            // texte à afficher
+  characterId: string;     // id du personnage qui parle
+};
+
+export type POIDialogue = {
+  characters: DialogueCharacter[]; // tous les personnages impliqués
+  lines: DialogueLine[];           // les répliques synchronisées
+};
+
 export type POI = {
   id: string;
   label: string;
@@ -27,7 +44,11 @@ export type POI = {
   dampingFactor?: number;
   children?: POI[];
   elements?: AnimatedElement[];
+
+  /** ✅ Nouveau champ pour dialogues synchronisés */
+  dialogue?: POIDialogue;
 };
+
 
 export type POIWithElements = POI & {
   elements?: AnimatedElement[];
