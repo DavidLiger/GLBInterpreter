@@ -342,8 +342,6 @@ const activePOIIcon = React.useMemo(() => {
       >
         <InfoButton onClick={() => setShowInfoModal(true)} />
       </div>
-
-
       {/* Boutons bas à droite */}
       <div
         className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end"
