@@ -394,6 +394,7 @@ const activePOIIcon = React.useMemo(() => {
           dialogue={currentPoi.dialogue}
           progress={progress}
           isPlaying={isPlaying}
+          isPortrait={isPortrait}
         />
       )}
       <InfoModal
