@@ -106,11 +106,6 @@ export const usePOINavigation = (
     requestAnimationFrame(step);
   }, [cameraRef, controlsRef]);
 
-  //------> Reponse chatGPT <------------
-  
-
-  //------> Comportement presaue bon <----------
-
   const moveCameraDuringAnimation = useCallback(
   (
     obj: THREE.Object3D,
@@ -177,8 +172,6 @@ export const usePOINavigation = (
   },
   [cameraRef, controlsRef]
 );
-
-//------> Comportement de base <----------
 
 const moveCameraToPOI = useCallback((obj: THREE.Object3D, poi: POI, smooth = true, onComplete?: () => void) => {
     const camera = cameraRef.current;

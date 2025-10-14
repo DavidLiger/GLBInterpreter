@@ -13,8 +13,6 @@ import SoundButton from "./audio/SoundButton";
 import { usePOINavigation } from "./hooks/usePOINavigation"; 
 import LoaderOverlay from "./ui/LoaderOverlay";
 import FullscreenButton from "./ui/FullscreenButton";
-import POIButtons from "./ui/POIButtons";
-import RotateHint from "./ui/RotateHint";
 import { applyVideoTextures } from "./rendering/applyVideos";
 import { applyLights } from "./rendering/applyLights"; 
 import { applyBulbs } from "./rendering/applyBulbs";
@@ -22,7 +20,7 @@ import { useOrientation } from "./hooks/useOrientation";
 import { useFullscreen } from "./hooks/useFullscreen";
 import { useResize } from "./hooks/useResize";
 import { usePOIAnimations } from "./hooks/usePOIAnimations";
-import { POI, POIWithElements } from "@/types/diorama"; 
+import { POIWithElements } from "@/types/diorama"; 
 import POIPlayer from "@/components/diorama/ui/POIPlayer";
 import { usePOIScenePlayer } from "@/components/diorama/hooks/usePOIScenePlayer";
 import DialogueModal from "./ui/DialogueModal";
@@ -42,7 +40,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const sceneRef = useRef<THREE.Scene | null>(null);
   const { isPortrait, showRotateHint } = useOrientation(5000);
   const [loadingProgress, setLoadingProgress] = useState(0);
-  // const [scenePlaying, setScenePlaying] = useState(false);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
@@ -50,24 +47,20 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers } =
   usePOIAnimations(emptyRefs);
   const clock = useRef(new THREE.Clock());
-  const { currentPOI, goToPOI, getVisiblePOIs, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively } = usePOINavigation(
+  const { currentPOI, goToPOI, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively } = usePOINavigation(
     config,
     cameraRef,
     controlsRef,
     emptyRefs
   );
   const currentPoi = currentPOI ? findPOIRecursively(currentPOI) : null;
-  // const [muted, setMuted] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(true);
   const [showLoaderOverlay, setShowLoaderOverlay] = useState(true);
   const [viewportHeight, setViewportHeight] = useState<number>(0);
-  const [windowHeight, setWindowHeight] = useState<number>(0);
   const [showDialogue, setShowDialogue] = useState(true);
   const [showInfoModal, setShowInfoModal] = useState(false);
 
-
-  // const { startSoundReady, ambientAudioRefs } = usePOIAudio(config.pois, currentPOI, muted);
 const {
   startSoundReady,
   muted,
@@ -152,7 +145,6 @@ const activePOIIcon = React.useMemo(() => {
     const updateVH = () => {
       const vh = window.visualViewport?.height || window.innerHeight;
       setViewportHeight(vh);
-      setWindowHeight(window.innerHeight);
       updateRendererSize();
     };
 
