@@ -24,6 +24,14 @@ export type POIDialogue = {
   lines: DialogueLine[];           // les répliques synchronisées
 };
 
+export type POICameraStep = {
+  point: string;       // Nom du Empty vers lequel déplacer la caméra
+  target?: string;     // (optionnel) Empty vers lequel orienter la caméra
+  time: number;        // Temps en secondes où le mouvement commence
+  duration?: number;   // Durée de la transition (en secondes)
+  zoom?: number;
+};
+
 export type POI = {
   id: string;
   label: string;
@@ -44,14 +52,15 @@ export type POI = {
   dampingFactor?: number;
   children?: POI[];
   elements?: AnimatedElement[];
-
-  /** ✅ Nouveau champ pour dialogues synchronisés */
   dialogue?: POIDialogue;
+  cameraPath?: POICameraStep[];
+  cameraPathTarget?: string;
 };
 
 
 export type POIWithElements = POI & {
   elements?: AnimatedElement[];
+  cameraPath?: POICameraStep[];
 };
 
 export type OrbitParams = {

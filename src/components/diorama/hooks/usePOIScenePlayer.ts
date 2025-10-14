@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import * as THREE from "three";
 import type { POIWithElements } from "@/types/diorama";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 
 type UsePOIScenePlayerProps = {
   poi?: POIWithElements | null;
@@ -14,10 +15,12 @@ type UsePOIScenePlayerProps = {
 
   goToPOI?: (poi: POIWithElements, smooth?: boolean, duration?: number) => void;
   findPOIRecursively?: (id: string) => POIWithElements | null;
-  moveCameraTo?: (obj: THREE.Object3D, poi: POIWithElements, smooth?: boolean, onComplete?: () => void, duration?: number) => void;
+  moveCameraToPOI?: (obj: THREE.Object3D, poi: POIWithElements, smooth?: boolean, onComplete?: () => void, duration?: number) => void;
+  moveCameraDuringAnimation?: (obj: THREE.Object3D, poi: POIWithElements, smooth?: boolean, onComplete?: () => void, duration?: number) => void;
   emptyRefs?: React.RefObject<Record<string, THREE.Object3D>>;
 
   findParentPOI?: (childId: string) => POIWithElements | null;
+  controlsRef?: React.RefObject<OrbitControls | null>;
 };
 
 export const usePOIScenePlayer = ({
@@ -28,6 +31,10 @@ export const usePOIScenePlayer = ({
   fadeDuration = 0.15,
   muted = false,
   findParentPOI,
+  emptyRefs, 
+  controlsRef,
+  moveCameraToPOI,
+  moveCameraDuringAnimation
 }: UsePOIScenePlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -243,36 +250,387 @@ export const usePOIScenePlayer = ({
     setIsEnded(clampedTime >= duration);
   }, [duration, isPlaying, isPaused]);
 
-  // 🔄 Boucle progression
-  useEffect(() => {
-    const update = () => {
-      if (!isPlaying || isPaused || activeActionsRef.current.length === 0) {
-        rafRef.current = requestAnimationFrame(update);
-        return;
-      }
+  function normalizeCameraPath(poi: POIWithElements) {
+  if (!poi.cameraPath?.length) return [];
 
-      const t = Math.max(...activeActionsRef.current.map(a => a.time));
-      if (t >= duration) {
-        setProgress(duration);
-        setIsPlaying(false);
-        setIsPaused(false);
-        setIsEnded(true);
-        activeActionsRef.current.forEach(a => {
-          a.stop();
-          a.paused = true;
-        });
-      } else {
-        setProgress(t);
-      }
+  const steps = [
+    { point: poi.emptyName, target: poi.emptyName, time: 0, duration: 0 },
+    ...poi.cameraPath,
+  ];
 
+  const last = poi.cameraPath[poi.cameraPath.length - 1];
+
+  // ⚡ Forcer le retour au POI de base
+  steps.push({
+    point: poi.emptyName,
+    target: poi.emptyName,
+    time: (last.time ?? 0) + (last.duration ?? 0),
+    duration: 0.01, // quasi instantané
+    zoom: poi.zoom, // zoom de base
+  });
+
+  return steps;
+}
+
+
+function getCameraStepAtTime(poi: POIWithElements, t: number) {
+  const steps = normalizeCameraPath(poi);
+  for (let i = 0; i < steps.length - 1; i++) {
+    const curr = steps[i];
+    const next = steps[i + 1];
+    const currDuration = curr.duration ?? 0; // 👈 fallback if undefined
+    const currTime = curr.time ?? 0;
+
+    if (t >= currTime && t <= currTime + currDuration) {
+      return { curr, next };
+    }
+  }
+  return null;
+}
+
+//------> Comportement presque bon <----------
+
+// useEffect(() => {
+//   if (!poi || !emptyRefs?.current || !moveCameraTo || !controlsRef?.current) return;
+//   const controls = controlsRef.current;
+
+//   const getLookOffset = (axis: "x" | "y" | "z" = "x") => {
+//     switch (axis) {
+//       case "x": return new THREE.Vector3(1, 0, 0);
+//       case "y": return new THREE.Vector3(0, 1, 0);
+//       case "z": return new THREE.Vector3(0, 0, 1);
+//       default: return new THREE.Vector3(1, 0, 0);
+//     }
+//   };
+
+//   const applyOrbitControlsSettings = (poi: POIWithElements) => {
+//     if (poi.minDistance !== undefined) controls.minDistance = poi.minDistance;
+//     if (poi.maxDistance !== undefined) controls.maxDistance = poi.maxDistance;
+//     if (poi.minPolarAngle !== undefined) controls.minPolarAngle = poi.minPolarAngle;
+//     if (poi.maxPolarAngle !== undefined) controls.maxPolarAngle = poi.maxPolarAngle;
+//     if (poi.minAzimuthAngle !== undefined) controls.minAzimuthAngle = poi.minAzimuthAngle;
+//     if (poi.maxAzimuthAngle !== undefined) controls.maxAzimuthAngle = poi.maxAzimuthAngle;
+//     if (poi.enableZoom !== undefined) controls.enableZoom = poi.enableZoom;
+//   };
+
+//   const resetCameraToPOI = () => {
+//     const baseObj = emptyRefs.current[poi.emptyName];
+//     if (!baseObj) return;
+//     const tempObj = new THREE.Object3D();
+//     tempObj.position.copy(baseObj.position);
+//     tempObj.lookAt(baseObj.position.clone().add(getLookOffset(poi.lookAxis)));
+//     applyOrbitControlsSettings(poi);
+//     moveCameraTo(tempObj, poi, false);
+//   };
+
+//   resetCameraToPOI();
+
+//   const update = () => {
+//     if (activeActionsRef.current.length === 0) {
+//       rafRef.current = requestAnimationFrame(update);
+//       return;
+//     }
+
+//     // 🔹 Progress basé sur mixers pour garder le seek exact
+//     const t = Math.max(...activeActionsRef.current.map(a => a.time));
+//     setProgress(Math.min(t, duration));
+
+//     // 🔹 Gestion caméra
+//     if (poi.cameraPath?.length) {
+//       const step = getCameraStepAtTime(poi, t);
+//       if (step) {
+//         const { curr, next } = step;
+//         const pointA = emptyRefs.current[curr.point];
+//         const pointB = emptyRefs.current[next.point];
+//         const targetA = emptyRefs.current[curr.target || curr.point];
+//         const targetB = emptyRefs.current[next.target || next.point];
+
+//         if (pointA && pointB && targetA && targetB) {
+//           const progressStep = Math.min((t - (curr.time ?? 0)) / (curr.duration ?? 1), 1);
+//           const pos = new THREE.Vector3().lerpVectors(pointA.position, pointB.position, progressStep);
+//           const look = new THREE.Vector3().lerpVectors(targetA.position, targetB.position, progressStep);
+
+//           const tempObj = new THREE.Object3D();
+//           tempObj.position.copy(pos);
+//           tempObj.lookAt(look);
+
+//           if (curr.zoom !== undefined && next.zoom !== undefined) {
+//             const zoomDistance = curr.zoom + (next.zoom - curr.zoom) * progressStep;
+//             const direction = new THREE.Vector3().subVectors(tempObj.position, look).normalize();
+//             tempObj.position.copy(look).addScaledVector(direction, zoomDistance);
+//           }
+
+//           moveCameraTo(tempObj, poi, false);
+//         }
+//       }
+//     }
+
+//     if (t >= duration) {
+//       setIsPlaying(false);
+//       setIsPaused(false);
+//       setIsEnded(true);
+//       activeActionsRef.current.forEach(a => { a.stop(); a.paused = true; });
+
+//       // 🔹 Appliquer POI final et OrbitControls
+//       const baseObj = emptyRefs.current[poi.emptyName];
+//       if (baseObj) {
+//         const tempObj = new THREE.Object3D();
+//         tempObj.position.copy(baseObj.position);
+//         const lookOffset = (() => {
+//           switch (poi.lookAxis) {
+//             case "x": return new THREE.Vector3(1,0,0);
+//             case "y": return new THREE.Vector3(0,1,0);
+//             case "z": return new THREE.Vector3(0,0,1);
+//             default: return new THREE.Vector3(1,0,0);
+//           }
+//         })();
+//         tempObj.lookAt(baseObj.position.clone().add(lookOffset));
+        
+//         // ✅ OrbitControls settings appliqués **après mouvement**
+//         if (poi.minDistance !== undefined) controls.minDistance = poi.minDistance;
+//         if (poi.maxDistance !== undefined) controls.maxDistance = poi.maxDistance;
+//         if (poi.minPolarAngle !== undefined) controls.minPolarAngle = poi.minPolarAngle;
+//         if (poi.maxPolarAngle !== undefined) controls.maxPolarAngle = poi.maxPolarAngle;
+//         if (poi.minAzimuthAngle !== undefined) controls.minAzimuthAngle = poi.minAzimuthAngle;
+//         if (poi.maxAzimuthAngle !== undefined) controls.maxAzimuthAngle = poi.maxAzimuthAngle;
+//         if (poi.enableZoom !== undefined) controls.enableZoom = poi.enableZoom;
+
+//         moveCameraTo(tempObj, poi, false);
+//       }
+//     }
+
+//     rafRef.current = requestAnimationFrame(update);
+//   };
+
+//   rafRef.current = requestAnimationFrame(update);
+//   return () => cancelAnimationFrame(rafRef.current!);
+// }, [poi, duration, moveCameraTo, emptyRefs, controlsRef]);
+
+//------> Comportement de base <----------
+
+// useEffect(() => {
+//     const update = () => {
+//       if (!isPlaying || isPaused || activeActionsRef.current.length === 0) {
+//         rafRef.current = requestAnimationFrame(update);
+//         return;
+//       }
+
+//       const t = Math.max(...activeActionsRef.current.map(a => a.time));
+//       if (t >= duration) {
+//         setProgress(duration);
+//         setIsPlaying(false);
+//         setIsPaused(false);
+//         setIsEnded(true);
+//         activeActionsRef.current.forEach(a => {
+//           a.stop();
+//           a.paused = true;
+//         });
+//       } else {
+//         setProgress(t);
+//       }
+
+//       rafRef.current = requestAnimationFrame(update);
+//     };
+
+//     rafRef.current = requestAnimationFrame(update);
+//     return () => {
+//       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+//     };
+//   }, [isPlaying, isPaused, duration]);
+
+//------> Comportement de base <----------
+
+// useEffect(() => {
+//   if (!poi || !emptyRefs?.current || !moveCameraTo || !controlsRef?.current) return;
+//   const controls = controlsRef.current;
+
+//   const getLookOffset = (axis: "x" | "y" | "z" = "x") => {
+//     switch (axis) {
+//       case "x": return new THREE.Vector3(1, 0, 0);
+//       case "y": return new THREE.Vector3(0, 1, 0);
+//       case "z": return new THREE.Vector3(0, 0, 1);
+//       default: return new THREE.Vector3(1, 0, 0);
+//     }
+//   };
+
+//   const applyOrbitControlsSettings = (poi: POIWithElements) => {
+//     if (poi.minDistance !== undefined) controls.minDistance = poi.minDistance;
+//     if (poi.maxDistance !== undefined) controls.maxDistance = poi.maxDistance;
+//     if (poi.minPolarAngle !== undefined) controls.minPolarAngle = poi.minPolarAngle;
+//     if (poi.maxPolarAngle !== undefined) controls.maxPolarAngle = poi.maxPolarAngle;
+//     if (poi.minAzimuthAngle !== undefined) controls.minAzimuthAngle = poi.minAzimuthAngle;
+//     if (poi.maxAzimuthAngle !== undefined) controls.maxAzimuthAngle = poi.maxAzimuthAngle;
+//     if (poi.enableZoom !== undefined) controls.enableZoom = poi.enableZoom;
+//   };
+
+//   // 🔹 Reset initial de la caméra sur le POI (avant animation)
+//   const resetCameraToPOI = () => {
+//     const baseObj = emptyRefs.current[poi.emptyName];
+//     if (!baseObj) return;
+//     const tempObj = new THREE.Object3D();
+//     tempObj.position.copy(baseObj.position);
+//     tempObj.lookAt(baseObj.position.clone().add(getLookOffset(poi.lookAxis)));
+//     applyOrbitControlsSettings(poi);
+//     moveCameraTo(tempObj, poi, false);
+//   };
+
+//   resetCameraToPOI();
+
+//   const update = () => {
+//     // 🔹 Si pas de lecture, laisser l'utilisateur contrôler la caméra
+//     if (!isPlaying || isPaused || activeActionsRef.current.length === 0) {
+//       rafRef.current = requestAnimationFrame(update);
+//       return;
+//     }
+
+//     // 🔹 Temps courant basé sur les mixers (seek exact)
+//     const t = Math.max(...activeActionsRef.current.map(a => a.time));
+//     setProgress(Math.min(t, duration));
+
+//     // 🔹 Gestion du cameraPath pendant l'animation
+//     if (poi.cameraPath?.length) {
+//       const step = getCameraStepAtTime(poi, t);
+//       if (step) {
+//         const { curr, next } = step;
+//         const pointA = emptyRefs.current[curr.point];
+//         const pointB = emptyRefs.current[next.point];
+//         const targetA = emptyRefs.current[curr.target || curr.point];
+//         const targetB = emptyRefs.current[next.target || next.point];
+
+//         if (pointA && pointB && targetA && targetB) {
+//           const progressStep = Math.min((t - (curr.time ?? 0)) / (curr.duration ?? 1), 1);
+
+//           const pos = new THREE.Vector3().lerpVectors(pointA.position, pointB.position, progressStep);
+//           const look = new THREE.Vector3().lerpVectors(targetA.position, targetB.position, progressStep);
+
+//           const tempObj = new THREE.Object3D();
+//           tempObj.position.copy(pos);
+//           tempObj.lookAt(look);
+
+//           // Gestion du zoom
+//           if (curr.zoom !== undefined && next.zoom !== undefined) {
+//             const zoomDistance = curr.zoom + (next.zoom - curr.zoom) * progressStep;
+//             const direction = new THREE.Vector3().subVectors(tempObj.position, look).normalize();
+//             tempObj.position.copy(look).addScaledVector(direction, zoomDistance);
+//           }
+
+//           moveCameraTo(tempObj, poi, false);
+//         }
+//       }
+//     }
+
+//     // 🔹 Fin de l'animation
+//     if (t >= duration) {
+//       setIsPlaying(false);
+//       setIsPaused(false);
+//       setIsEnded(true);
+//       activeActionsRef.current.forEach(a => { a.stop(); a.paused = true; });
+
+//       // 🔹 Appliquer uniquement les réglages OrbitControls du POI
+//       applyOrbitControlsSettings(poi);
+//       controls.update();
+
+//       // 🔹 Ne pas forcer la position de la caméra → utilisateur reprend contrôle
+//     }
+
+//     rafRef.current = requestAnimationFrame(update);
+//   };
+
+//   rafRef.current = requestAnimationFrame(update);
+//   return () => cancelAnimationFrame(rafRef.current!);
+// }, [poi, duration, moveCameraTo, emptyRefs, controlsRef, isPlaying, isPaused]);
+
+useEffect(() => {
+  if (!poi || !emptyRefs?.current || !controlsRef?.current || !moveCameraDuringAnimation || !moveCameraToPOI) return;
+
+  const controls = controlsRef.current;
+
+  const getLookOffset = (axis: "x" | "y" | "z" = "x") => {
+    switch (axis) {
+      case "x": return new THREE.Vector3(1, 0, 0);
+      case "y": return new THREE.Vector3(0, 1, 0);
+      case "z": return new THREE.Vector3(0, 0, 1);
+      default: return new THREE.Vector3(1, 0, 0);
+    }
+  };
+
+  // 🔹 Fonction pour reset camera POI de base (utilisateur)
+  const resetCameraToPOI = () => {
+    const baseObj = emptyRefs.current[poi.emptyName];
+    if (!baseObj) return;
+
+    const tempObj = new THREE.Object3D();
+    tempObj.position.copy(baseObj.position);
+    tempObj.lookAt(baseObj.position.clone().add(getLookOffset(poi.lookAxis)));
+
+    moveCameraToPOI(tempObj, poi, false);
+  };
+
+  resetCameraToPOI();
+
+  const update = () => {
+    if (activeActionsRef.current.length === 0) {
       rafRef.current = requestAnimationFrame(update);
-    };
+      return;
+    }
+
+    // 🔹 Progress basé sur mixers pour keep seek
+    const t = Math.max(...activeActionsRef.current.map(a => a.time));
+    setProgress(Math.min(t, duration));
+
+    // 🔹 Gestion cameraPath pendant animation
+    if (poi.cameraPath?.length) {
+      const step = getCameraStepAtTime(poi, t);
+      if (step) {
+        const { curr, next } = step;
+        const pointA = emptyRefs.current[curr.point];
+        const pointB = emptyRefs.current[next.point];
+        const targetA = emptyRefs.current[curr.target || curr.point];
+        const targetB = emptyRefs.current[next.target || next.point];
+
+        if (pointA && pointB && targetA && targetB) {
+          const progressStep = Math.min((t - (curr.time ?? 0)) / (curr.duration ?? 1), 1);
+
+          const pos = new THREE.Vector3().lerpVectors(pointA.position, pointB.position, progressStep);
+          const look = new THREE.Vector3().lerpVectors(targetA.position, targetB.position, progressStep);
+
+          const tempObj = new THREE.Object3D();
+          tempObj.position.copy(pos);
+          tempObj.lookAt(look);
+
+          // 🔹 Zoom progressif si défini
+          if (curr.zoom !== undefined && next.zoom !== undefined) {
+            const zoomDistance = curr.zoom + (next.zoom - curr.zoom) * progressStep;
+            const direction = new THREE.Vector3().subVectors(tempObj.position, look).normalize();
+            tempObj.position.copy(look).addScaledVector(direction, zoomDistance);
+          }
+
+          moveCameraDuringAnimation(tempObj, poi, false);
+        }
+      }
+    }
+
+    // 🔹 Fin de l’animation
+    if (t >= duration) {
+      setIsPlaying(false);
+      setIsPaused(false);
+      setIsEnded(true);
+      activeActionsRef.current.forEach(a => { a.stop(); a.paused = true; });
+
+      // 🔹 Reset à la position de base pour que l'utilisateur reprenne le contrôle
+      resetCameraToPOI();
+    }
 
     rafRef.current = requestAnimationFrame(update);
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [isPlaying, isPaused, duration]);
+  };
+
+  rafRef.current = requestAnimationFrame(update);
+  return () => cancelAnimationFrame(rafRef.current!);
+}, [poi, duration, emptyRefs, controlsRef, moveCameraDuringAnimation, moveCameraToPOI]);
+
+
+
+
 
   return {
     isPlaying,

@@ -66,7 +66,11 @@ export const street: DioramaConfig3DWithVideos = {
             characterId: "hero"
           }
         ]
-      }
+      },
+      cameraPath: [
+        { point: "start_01", target: "start_01_track", time: 3.0, duration: 3.0, zoom: 0.3 },
+        { point: "start_02", target: "start_02_track", time: 8.0, duration: 4.0, zoom: 0.8 }
+      ]
     },
     {
       id: "window",

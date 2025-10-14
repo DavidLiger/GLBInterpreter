@@ -1,7 +1,7 @@
 // hooks/usePOINavigation.ts
 import { useState, useCallback } from "react";
 import * as THREE from "three";
-import type { POI, DioramaConfig3D } from "@/types/diorama";
+import type { POI, POIWithElements, DioramaConfig3D } from "@/types/diorama";
 
 export const usePOINavigation = (
   config: DioramaConfig3D,
@@ -106,7 +106,81 @@ export const usePOINavigation = (
     requestAnimationFrame(step);
   }, [cameraRef, controlsRef]);
 
-  const moveCameraTo = useCallback((obj: THREE.Object3D, poi: POI, smooth = true, onComplete?: () => void) => {
+  //------> Reponse chatGPT <------------
+  
+
+  //------> Comportement presaue bon <----------
+
+  const moveCameraDuringAnimation = useCallback(
+  (
+    obj: THREE.Object3D,
+    poi: POIWithElements,
+    smooth = true,
+    onComplete?: () => void,
+    duration = 1
+  ) => {
+    if (!cameraRef.current || !controlsRef.current) return;
+
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+
+    const fromPos = camera.position.clone();
+    const toPos = obj.position.clone();
+
+    const lookAt = new THREE.Vector3();
+    obj.getWorldDirection(lookAt);
+    lookAt.add(obj.position);
+
+    if (smooth) {
+      // interpolation fluide (ex: 1s)
+      const startTime = performance.now();
+      const animate = (time: number) => {
+        const elapsed = (time - startTime) / 1000;
+        const t = Math.min(elapsed / duration, 1);
+
+        camera.position.lerpVectors(fromPos, toPos, t);
+        camera.lookAt(lookAt);
+        controls.target.lerp(lookAt, t);
+        controls.update();
+
+        if (t < 1) requestAnimationFrame(animate);
+        else if (onComplete) onComplete();
+      };
+      requestAnimationFrame(animate);
+    } else {
+      camera.position.copy(toPos);
+      camera.lookAt(lookAt);
+      controls.target.copy(lookAt);
+      controls.update();
+      if (onComplete) onComplete?.();
+    }
+
+    // 🔹 Appliquer les réglages du POI
+    controls.minDistance = poi.minDistance ?? 1;
+    controls.maxDistance = poi.maxDistance ?? 20;
+    controls.minPolarAngle = poi.minPolarAngle ?? 0;
+    controls.maxPolarAngle = poi.maxPolarAngle ?? Math.PI / 2;
+    controls.minAzimuthAngle = poi.minAzimuthAngle ?? -Math.PI;
+    controls.maxAzimuthAngle = poi.maxAzimuthAngle ?? Math.PI;
+    controls.enableZoom = poi.enableZoom ?? true;
+
+    // Si zoom est défini → on rapproche/éloigne la caméra
+    if (poi.zoom !== undefined && poi.zoom !== 1) {
+      const dir = new THREE.Vector3()
+        .subVectors(camera.position, controls.target)
+        .normalize()
+        .multiplyScalar(poi.zoom);
+      camera.position.copy(controls.target.clone().add(dir));
+    }
+
+    controls.update();
+  },
+  [cameraRef, controlsRef]
+);
+
+//------> Comportement de base <----------
+
+const moveCameraToPOI = useCallback((obj: THREE.Object3D, poi: POI, smooth = true, onComplete?: () => void) => {
     const camera = cameraRef.current;
     const controls = controlsRef.current;
     if (!camera || !controls) return;
@@ -164,6 +238,8 @@ export const usePOINavigation = (
     }
   }, [cameraRef, controlsRef, animateCameraMove]);
 
+//------> Comportement de base <----------
+
   // ────────────── Navigation principale ──────────────
   const goToPOI = useCallback((poi: POI) => {
     const targetObj = emptyRefs.current[poi.emptyName];
@@ -176,7 +252,7 @@ export const usePOINavigation = (
     const goingToParent = parent?.id === poi.id;
 
     if (goingToChild || goingToParent || poi.id === "start") {
-      moveCameraTo(targetObj, poi, true, () => setCurrentPOI(poi.id));
+      moveCameraToPOI(targetObj, poi, true, () => setCurrentPOI(poi.id));
       return;
     }
 
@@ -185,14 +261,14 @@ export const usePOINavigation = (
     if (startPOI) {
       const startObj = emptyRefs.current[startPOI.emptyName];
       if (startObj) {
-        moveCameraTo(startObj, startPOI, true, () => {
-          moveCameraTo(targetObj, poi, true, () => setCurrentPOI(poi.id));
+        moveCameraToPOI(startObj, startPOI, true, () => {
+          moveCameraToPOI(targetObj, poi, true, () => setCurrentPOI(poi.id));
         });
       }
     } else {
-      moveCameraTo(targetObj, poi, true, () => setCurrentPOI(poi.id));
+      moveCameraToPOI(targetObj, poi, true, () => setCurrentPOI(poi.id));
     }
-  }, [currentPOI, emptyRefs, moveCameraTo, config.pois, findParentPOI]);
+  }, [currentPOI, emptyRefs, moveCameraToPOI, config.pois, findParentPOI]);
 
-  return { currentPOI, goToPOI, getVisiblePOIs, findParentPOI, moveCameraTo, setCurrentPOI, findPOIRecursively  };
+  return { currentPOI, goToPOI, getVisiblePOIs, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively  };
 };

@@ -50,7 +50,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers } =
   usePOIAnimations(emptyRefs);
   const clock = useRef(new THREE.Clock());
-  const { currentPOI, goToPOI, getVisiblePOIs, findParentPOI, moveCameraTo, setCurrentPOI, findPOIRecursively } = usePOINavigation(
+  const { currentPOI, goToPOI, getVisiblePOIs, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively } = usePOINavigation(
     config,
     cameraRef,
     controlsRef,
@@ -102,6 +102,11 @@ const {
     muted,
     onSceneStart: handleSceneStart,
     onSceneEnd: handleSceneEnd,
+    emptyRefs,       
+    controlsRef,
+    moveCameraToPOI,
+    moveCameraDuringAnimation,
+    goToPOI
 });
 
 const activePOIIcon = React.useMemo(() => {
@@ -279,7 +284,7 @@ const activePOIIcon = React.useMemo(() => {
       const startPOI = (config.pois as POIWithElements[]).find(p => p.id === "start");
       if (startPOI) {
         const startObj = emptyRefs.current[startPOI.emptyName];
-        if (startObj) moveCameraTo(startObj, startPOI, false, () => setCurrentPOI("start"));
+        if (startObj) moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
         playPOIAnimations(startPOI, gltf.animations);
       }
 
