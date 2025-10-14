@@ -12,16 +12,16 @@ export default function RotateHint({ show }: RotateHintProps) {
     <AnimatePresence>
       {show && (
         <motion.div
-          className="absolute top-4 inset-x-0 z-50 flex justify-center pointer-events-none"
+          className="absolute top-24 inset-x-0 z-50 flex justify-center pointer-events-none"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.3 }}
         >
           <img
             src="/icons/dioramas/UI/rotate-phone.png"
             alt="Tournez le téléphone"
-            className="w-32 h-20 opacity-80"
+            className="w-32 h-20 opacity-60 rounded-lg"
           />
         </motion.div>
       )}

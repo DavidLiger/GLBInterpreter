@@ -60,7 +60,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   // const [muted, setMuted] = useState(true);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(true);
-  const [playerState, setPlayerState] = useState<"idle" | "playing" | "paused" | "ended">("idle");
   const [showLoaderOverlay, setShowLoaderOverlay] = useState(true);
   const [viewportHeight, setViewportHeight] = useState<number>(0);
   const [windowHeight, setWindowHeight] = useState<number>(0);
@@ -374,8 +373,9 @@ const activePOIIcon = React.useMemo(() => {
         findPOIRecursively={findPOIRecursively}
         findParentPOI={findParentPOI}
         configPOIs={config.pois}
+        isPortrait={isPortrait}
       />
-      <RotateHint show={showRotateHint} />
+      {/* <RotateHint show={showRotateHint} /> */}
 
       {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
         <POIPlayer
