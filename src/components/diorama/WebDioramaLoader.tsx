@@ -233,6 +233,18 @@ const activePOIIcon = React.useMemo(() => {
 
       // 🔹 Stocker les animations dans scene.userData pour les POI suivants
       scene.userData.gltfAnimations = gltf.animations;
+      
+      // 🔹 Désactiver le frustum culling pour éviter les disparitions de meshes
+      gltf.scene.traverse((child: any) => {
+        if (child.isMesh) {
+          child.frustumCulled = false;
+          // Optionnel : recalculer la bounding box
+          if (child.geometry && !child.geometry.boundingBox) {
+            child.geometry.computeBoundingBox();
+            child.geometry.computeBoundingSphere();
+          }
+        }
+      });
       gltf.scene.traverse((child) => {
         if (!child.name) return;
 
