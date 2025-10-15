@@ -61,63 +61,66 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [showDialogue, setShowDialogue] = useState(true);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
-  const useTouchIcons = isTouchDevice && isMobile;
+  const [isSmallScreen, setIsSmallScreen] = useState(false);
+  // Montre les icônes tactiles si : appareil tactile ET (portrait ou petit écran)
+  const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
 
-const {
-  startSoundReady,
-  muted,
-  toggleMute,
-  scenePlaying,
-  ambientAudioRefs,
-  handleSceneStart,
-  handleSceneEnd,
-} = usePOIAudio({
-  pois: config.pois,
-  currentPOI,
-  onScenePlayingChange: (playing) => {
-    // tu peux mettre à jour un state local si besoin
-  },
-});
 
-const {
-    isPlaying,
-    isPaused,
-    isEnded,
-    progress,   // ← c’est ça qu’il faut utiliser
-    duration,
-    togglePlayPause,
-    seekScene,
-    sceneMuted,
-    toggleSceneMute,
-} = usePOIScenePlayer({
-    poi: currentPoi,
-    animations: sceneRef.current?.userData?.gltfAnimations || [],
-    mixerRef: mixerRef.current,
-    ambientAudioRefs: ambientAudioRefs.current,
+  const {
+    startSoundReady,
     muted,
-    onSceneStart: handleSceneStart,
-    onSceneEnd: handleSceneEnd,
-    emptyRefs,       
-    controlsRef,
-    moveCameraToPOI,
-    moveCameraDuringAnimation,
-    goToPOI
-});
+    toggleMute,
+    scenePlaying,
+    ambientAudioRefs,
+    handleSceneStart,
+    handleSceneEnd,
+  } = usePOIAudio({
+    pois: config.pois,
+    currentPOI,
+    onScenePlayingChange: (playing) => {
+      // tu peux mettre à jour un state local si besoin
+    },
+  });
 
-const activePOIIcon = React.useMemo(() => {
-  if (!currentPOI) return undefined;
+  const {
+      isPlaying,
+      isPaused,
+      isEnded,
+      progress,   // ← c’est ça qu’il faut utiliser
+      duration,
+      togglePlayPause,
+      seekScene,
+      sceneMuted,
+      toggleSceneMute,
+  } = usePOIScenePlayer({
+      poi: currentPoi,
+      animations: sceneRef.current?.userData?.gltfAnimations || [],
+      mixerRef: mixerRef.current,
+      ambientAudioRefs: ambientAudioRefs.current,
+      muted,
+      onSceneStart: handleSceneStart,
+      onSceneEnd: handleSceneEnd,
+      emptyRefs,       
+      controlsRef,
+      moveCameraToPOI,
+      moveCameraDuringAnimation,
+      goToPOI
+  });
 
-  const active = findPOIRecursively(currentPOI);
-  if (!active) return undefined;
+  const activePOIIcon = React.useMemo(() => {
+    if (!currentPOI) return undefined;
 
-  // Dernier enfant ? -> prendre icône du parent
-  const parent = findParentPOI(active.id);
-  if (parent && (!active.children || active.children.length === 0)) {
-    return parent.icon ?? active.icon;
-  }
+    const active = findPOIRecursively(currentPOI);
+    if (!active) return undefined;
 
-  return active.icon;
-}, [currentPOI, findPOIRecursively, findParentPOI]);
+    // Dernier enfant ? -> prendre icône du parent
+    const parent = findParentPOI(active.id);
+    if (parent && (!active.children || active.children.length === 0)) {
+      return parent.icon ?? active.icon;
+    }
+
+    return active.icon;
+  }, [currentPOI, findPOIRecursively, findParentPOI]);
 
 
   useEffect(() => {
@@ -130,53 +133,50 @@ const activePOIIcon = React.useMemo(() => {
     return () => window.removeEventListener("resize", checkIsMobile);
   }, []);
 
-
-  // détecte côté client si l'appareil est tactile (robuste)
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const supportsMatchMedia = typeof window.matchMedia === "function";
     const mm = supportsMatchMedia ? window.matchMedia("(pointer: coarse)") : null;
 
-    const detect = () => {
-      // priorité : matchMedia -> navigator.maxTouchPoints -> ontouchstart
+    const detectTouch = () => {
       const mmMatches = mm?.matches ?? false;
-      const maxTouch = navigator.maxTouchPoints && navigator.maxTouchPoints > 0;
+      const maxTouch = !!(navigator.maxTouchPoints && navigator.maxTouchPoints > 0);
       const hasTouchEvent = "ontouchstart" in window;
-      setIsTouchDevice(mmMatches || !!maxTouch || !!hasTouchEvent);
+      setIsTouchDevice(mmMatches || maxTouch || hasTouchEvent);
     };
 
-    detect();
+    const detectSmall = () => {
+      // seuil à ajuster selon tes besoins (ex: 900) — considère tablettes larges
+      setIsSmallScreen(window.innerWidth <= 900);
+    };
 
-    const handler = (e: MediaQueryListEvent) => setIsTouchDevice(e.matches);
+    detectTouch();
+    detectSmall();
+
+    const mmHandler = (e: MediaQueryListEvent) => setIsTouchDevice(e.matches);
     if (mm) {
-      // addEventListener preferred, fallback to addListener
-      if (typeof mm.addEventListener === "function") mm.addEventListener("change", handler);
-      else if (typeof (mm as any).addListener === "function") (mm as any).addListener(handler);
+      if (typeof mm.addEventListener === "function") mm.addEventListener("change", mmHandler);
+      else if (typeof (mm as any).addListener === "function") (mm as any).addListener(mmHandler);
     }
 
-    window.addEventListener("resize", detect);
+    const onResize = () => {
+      detectTouch(); // optionnel : matchMedia / maxTouchPoints ne changent souvent pas, mais on garde
+      detectSmall();
+    };
+
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
 
     return () => {
       if (mm) {
-        if (typeof mm.removeEventListener === "function") mm.removeEventListener("change", handler);
-        else if (typeof (mm as any).removeListener === "function") (mm as any).removeListener(handler);
+        if (typeof mm.removeEventListener === "function") mm.removeEventListener("change", mmHandler);
+        else if (typeof (mm as any).removeListener === "function") (mm as any).removeListener(mmHandler);
       }
-      window.removeEventListener("resize", detect);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
     };
   }, []);
-
-
-  // useEffect(() => {
-  //   const checkIsMobile = () => {
-  //     const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-  //     setIsMobile(window.innerWidth < 768 || isTouchDevice);
-  //   };
-
-  //   checkIsMobile();
-  //   window.addEventListener("resize", checkIsMobile);
-  //   return () => window.removeEventListener("resize", checkIsMobile);
-  // }, []);
 
   // Resize helper
   const updateRendererSize = () => {
