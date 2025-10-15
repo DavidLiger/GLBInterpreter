@@ -8,24 +8,22 @@ export const usePOIEffects = (
   textureLoader?: THREE.TextureLoader
 ) => {
   useEffect(() => {
-    if (!poi?.effects) return;
+    if (!poi?.effects?.enabled) return; // ✅ vérifier si effects.enabled est vrai
 
     const group = new THREE.Group();
     scene.add(group);
 
     // 🌿 Particules dynamiques
     if (poi.effects.particles) {
-      const { type, intensity = 1, color = "#ffffff", area = [3, 3, 3] } = poi.effects.particles;
+      const { type, intensity = 1, color = 0xffffff, area = [3, 3, 3], texture } = poi.effects.particles;
       const count = Math.floor(200 * intensity);
       const geom = new THREE.BufferGeometry();
       const positions = new Float32Array(count * 3);
-
       for (let i = 0; i < count; i++) {
         positions[i * 3 + 0] = (Math.random() - 0.5) * area[0];
         positions[i * 3 + 1] = Math.random() * area[1];
         positions[i * 3 + 2] = (Math.random() - 0.5) * area[2];
       }
-
       geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
 
       const mat = new THREE.PointsMaterial({
@@ -33,40 +31,42 @@ export const usePOIEffects = (
         size: 0.05,
         transparent: true,
         opacity: 0.8,
-        map: type && textureLoader && poi.effects.particles?.texture
-            ? textureLoader.load(poi.effects.particles.texture)
-            : undefined,
+        map: textureLoader && texture ? textureLoader.load(texture) : undefined,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
-        });
+      });
 
       const points = new THREE.Points(geom, mat);
       group.add(points);
     }
 
     // 🌇 Skybox dynamique
-    if (poi.effects.skybox && textureLoader && poi.effects.skybox.texture) {
-        const skyTex = textureLoader.load(poi.effects.skybox.texture);
+    if (poi.effects.skybox) {
+      const { texture, tint } = poi.effects.skybox;
+      if (texture && textureLoader) {
+        const skyTex = textureLoader.load(texture);
         const skyMat = new THREE.MeshBasicMaterial({
-            map: skyTex,
-            color: new THREE.Color(poi.effects.skybox.tint || "#ffffff"),
-            side: THREE.BackSide,
+          map: skyTex,
+          color: new THREE.Color(tint ?? 0xffffff),
+          side: THREE.BackSide,
         });
         const skyGeo = new THREE.SphereGeometry(100, 32, 32);
         const sky = new THREE.Mesh(skyGeo, skyMat);
         group.add(sky);
+      }
     }
 
     // 💡 Lumière dynamique
     if (poi.effects.lighting) {
       const { temperature = 5500, ambientIntensity = 0.5 } = poi.effects.lighting;
-      // Convertir température en HSL approximatif
-      const h = Math.max(0, Math.min(60, (6500 - temperature) / 100));
-      const ambient = new THREE.AmbientLight(new THREE.Color(`hsl(${h}, 80%, 60%)`), ambientIntensity);
+      const ambient = new THREE.AmbientLight(
+        new THREE.Color(`hsl(${Math.max(0, Math.min(60, (6500 - temperature) / 100))}, 80%, 60%)`),
+        ambientIntensity
+      );
       group.add(ambient);
     }
 
-    // Cleanup à la sortie
+    // Nettoyage
     return () => {
       scene.remove(group);
       group.traverse((obj) => {
@@ -77,5 +77,5 @@ export const usePOIEffects = (
         }
       });
     };
-  }, [scene, poi, textureLoader]);
+  }, [poi, scene, textureLoader]);
 };

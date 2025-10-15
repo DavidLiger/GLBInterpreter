@@ -108,6 +108,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
         maxblur: 0.01,
       },
       effects: {
+        enabled: false,
         particles: {
           type: "leaves", 
           intensity: 0.6,

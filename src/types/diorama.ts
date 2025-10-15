@@ -63,6 +63,7 @@ export type POI = {
   cameraPathTarget?: string;
   dofConfig?: DOFConfig;
   effects?: {
+    enabled?: boolean;
     particles?: {
       type: string;        // ex: 'leaves', 'snow', 'embers'
       intensity?: number;  // 0..1
