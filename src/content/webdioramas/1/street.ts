@@ -147,6 +147,22 @@ export const street: DioramaConfig3DWithVideos = {
             },
           ],
         },
+        {
+          id: "door",
+          label: "Door",
+          emptyName: "door",
+          icon: `${BASE_URL}/icons/dioramas/test_street/apartment.png`,
+          ambientSound: `${BASE_URL}/sounds/tv_background.mp3`,
+          zoom: 0.2,
+          lookAxis: "x",
+          minDistance: 0.01,
+          maxDistance: 0.05,
+          minPolarAngle: 1,
+          maxPolarAngle: 1.57,
+          minAzimuthAngle: 1.14,
+          maxAzimuthAngle: 2.14,
+          enableZoom: true,
+        }
       ],
     },
     {

@@ -1,5 +1,4 @@
-"use client";
-
+// "use client";
 import React, { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { POI } from "@/types/diorama";
@@ -11,7 +10,7 @@ interface POIBreadcrumbsProps {
   findParentPOI: (id: string) => POI | null;
   configPOIs: POI[];
   isPortrait: boolean;
-  viewportHeight: number; 
+  viewportHeight: number;
 }
 
 export default function POIBreadcrumbs({
@@ -21,7 +20,7 @@ export default function POIBreadcrumbs({
   findParentPOI,
   configPOIs,
   isPortrait,
-  viewportHeight
+  viewportHeight,
 }: POIBreadcrumbsProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const activeRef = useRef<HTMLButtonElement | null>(null);
@@ -29,28 +28,38 @@ export default function POIBreadcrumbs({
   const activePOI = currentPOI ? findPOIRecursively(currentPOI) : null;
   const parent = activePOI ? findParentPOI(activePOI.id) : null;
 
-  // ── Construire la liste ordonnée des POIs ──
-  const breadcrumbList: { poi: POI; type: "sibling" | "parent" | "active" | "child" }[] = [];
+  // ── Construire la liste des breadcrumbs
+  const breadcrumbList: { poi: POI; type: "parent" | "active" | "sibling" | "child" }[] = [];
 
-  if (parent) {
+  if (!activePOI) {
+    // 🔹 Aucun actif → afficher tous les POIs racine
+    configPOIs.forEach((p) => breadcrumbList.push({ poi: p, type: "active" }));
+  } else if (parent) {
+    // 🔹 On est sur un enfant → parent > actif > enfants
     breadcrumbList.push({ poi: parent, type: "parent" });
-    parent.children?.forEach((sibling) => {
-      if (sibling.id !== activePOI?.id)
-        breadcrumbList.push({ poi: sibling, type: "sibling" });
+    breadcrumbList.push({ poi: activePOI, type: "active" });
+
+    activePOI.children?.forEach((child) => {
+      breadcrumbList.push({ poi: child, type: "child" });
     });
+    // Les frères de l’enfant actif ne sont pas affichés
   } else {
+    // 🔹 On est sur un parent racine
+    // 1️⃣ Ajouter d'abord les siblings racine (les autres parents)
     configPOIs.forEach((p) => {
-      if (p.id !== activePOI?.id)
-        breadcrumbList.push({ poi: p, type: "sibling" });
+      if (p.id !== activePOI.id) breadcrumbList.push({ poi: p, type: "sibling" });
+    });
+
+    // 2️⃣ Ajouter le parent actif
+    breadcrumbList.push({ poi: activePOI, type: "active" });
+
+    // 3️⃣ Ajouter ses enfants
+    activePOI.children?.forEach((child) => {
+      breadcrumbList.push({ poi: child, type: "child" });
     });
   }
 
-  if (activePOI) breadcrumbList.push({ poi: activePOI, type: "active" });
-  activePOI?.children?.forEach((child) =>
-    breadcrumbList.push({ poi: child, type: "child" })
-  );
-
-  // ── Layout responsive ──
+  // ── Layout responsive
   const containerClass = isPortrait
     ? `
       absolute top-2 left-2 z-50 flex flex-row items-center gap-2 
@@ -64,10 +73,9 @@ export default function POIBreadcrumbs({
       overflow-y-auto scrollbar-none
     `;
 
-
   const separatorClass = isPortrait ? "text-white/50" : "text-white/50 rotate-90";
 
-  // 🪄 Centrer automatiquement l’actif dans la vue
+  // ── Centrer automatiquement le POI actif
   useEffect(() => {
     if (!currentPOI) return;
     const container = containerRef.current;
@@ -75,30 +83,25 @@ export default function POIBreadcrumbs({
     if (container && active) {
       if (isPortrait) {
         const scrollLeft =
-          active.offsetLeft -
-          container.offsetWidth / 2 +
-          active.offsetWidth / 2;
+          active.offsetLeft - container.offsetWidth / 2 + active.offsetWidth / 2;
         container.scrollTo({ left: scrollLeft, behavior: "smooth" });
       } else {
         const scrollTop =
-          active.offsetTop -
-          container.offsetHeight / 2 +
-          active.offsetHeight / 2;
+          active.offsetTop - container.offsetHeight / 2 + active.offsetHeight / 2;
         container.scrollTo({ top: scrollTop, behavior: "smooth" });
       }
     }
   }, [currentPOI, isPortrait]);
 
-  // 🧱 Important : Rendu conditionnel APRÈS les hooks
   if (!currentPOI) return null;
 
+  // ── Rendu
   return (
-    <div 
-      ref={containerRef} 
+    <div
+      ref={containerRef}
       className={containerClass}
-      style={{
-      maxHeight: !isPortrait ? `${viewportHeight - 60}px` : undefined, // 👈 ajustement auto
-    }}>
+      style={{ maxHeight: !isPortrait ? `${viewportHeight - 60}px` : undefined }}
+    >
       <AnimatePresence mode="sync">
         {breadcrumbList.map((item, index) => {
           const prevItem = breadcrumbList[index - 1];
@@ -107,16 +110,13 @@ export default function POIBreadcrumbs({
           if (index > 0) {
             if (prevItem?.type === "parent" && item.type === "active") separator = "<";
             else if (prevItem?.type === "active" && item.type === "child") separator = ">";
+            else if (prevItem?.type === "active" && item.type === "sibling") separator = "|";
             else separator = "|";
           }
 
           return (
             <React.Fragment key={`${item.poi.id}-${item.type}`}>
-              {separator && (
-                <span className={separatorClass} key={`sep-${index}`}>
-                  {separator}
-                </span>
-              )}
+              {separator && <span className={separatorClass}>{separator}</span>}
 
               <motion.button
                 ref={item.type === "active" ? activeRef : null}
