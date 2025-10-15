@@ -1,3 +1,5 @@
+// WebDioramaLoader.tsx - Modifications nécessaires
+
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
@@ -28,7 +30,9 @@ import DialogueButton from "./ui/DialogueButton";
 import InfoButton from "./ui/InfoButton";
 import InfoModal from "./ui/InfoModal";
 import POIBreadcrumbs from "./ui/POIBreadcrumbs";
-
+import PostProcessingControls from "./rendering/PostProcessingControls";
+// ✅ AJOUT : Import de la fonction de setup
+import { setupPostProcessing, setupEmissiveMaterials } from "./rendering/setupPostProcessing"; 
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -45,8 +49,12 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const controlsRef = useRef<OrbitControls | null>(null);
   const emptyRefs = useRef<Record<string, THREE.Object3D>>({});
   const { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers } =
-  usePOIAnimations(emptyRefs);
+    usePOIAnimations(emptyRefs);
   const clock = useRef(new THREE.Clock());
+  
+  // ✅ AJOUT : Ref pour le post-processing
+  const composerRef = useRef<ReturnType<typeof setupPostProcessing> | null>(null);
+  
   const { currentPOI, goToPOI, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively } = usePOINavigation(
     config,
     cameraRef,
@@ -62,9 +70,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
-  // Montre les icônes tactiles si : appareil tactile ET (portrait ou petit écran)
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
-
 
   const {
     startSoundReady,
@@ -77,65 +83,56 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   } = usePOIAudio({
     pois: config.pois,
     currentPOI,
-    onScenePlayingChange: (playing) => {
-      // tu peux mettre à jour un state local si besoin
-    },
+    onScenePlayingChange: (playing) => {},
   });
 
   const {
-      isPlaying,
-      isPaused,
-      isEnded,
-      progress,   // ← c’est ça qu’il faut utiliser
-      duration,
-      togglePlayPause,
-      seekScene,
-      sceneMuted,
-      toggleSceneMute,
+    isPlaying,
+    isPaused,
+    isEnded,
+    progress,
+    duration,
+    togglePlayPause,
+    seekScene,
+    sceneMuted,
+    toggleSceneMute,
   } = usePOIScenePlayer({
-      poi: currentPoi,
-      animations: sceneRef.current?.userData?.gltfAnimations || [],
-      mixerRef: mixerRef.current,
-      ambientAudioRefs: ambientAudioRefs.current,
-      muted,
-      onSceneStart: handleSceneStart,
-      onSceneEnd: handleSceneEnd,
-      emptyRefs,       
-      controlsRef,
-      moveCameraToPOI,
-      moveCameraDuringAnimation,
-      goToPOI
+    poi: currentPoi,
+    animations: sceneRef.current?.userData?.gltfAnimations || [],
+    mixerRef: mixerRef.current,
+    ambientAudioRefs: ambientAudioRefs.current,
+    muted,
+    onSceneStart: handleSceneStart,
+    onSceneEnd: handleSceneEnd,
+    emptyRefs,
+    controlsRef,
+    moveCameraToPOI,
+    moveCameraDuringAnimation,
+    goToPOI
   });
 
   const activePOIIcon = React.useMemo(() => {
     if (!currentPOI) return undefined;
-
     const active = findPOIRecursively(currentPOI);
     if (!active) return undefined;
-
-    // Dernier enfant ? -> prendre icône du parent
     const parent = findParentPOI(active.id);
     if (parent && (!active.children || active.children.length === 0)) {
       return parent.icon ?? active.icon;
     }
-
     return active.icon;
   }, [currentPOI, findPOIRecursively, findParentPOI]);
 
-
   useEffect(() => {
     const checkIsMobile = () => {
-      setIsMobile(window.innerWidth < 768); // seuil à ajuster selon ton design
+      setIsMobile(window.innerWidth < 768);
     };
-
-    checkIsMobile(); // première détection immédiate
+    checkIsMobile();
     window.addEventListener("resize", checkIsMobile);
     return () => window.removeEventListener("resize", checkIsMobile);
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     const supportsMatchMedia = typeof window.matchMedia === "function";
     const mm = supportsMatchMedia ? window.matchMedia("(pointer: coarse)") : null;
 
@@ -147,7 +144,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     };
 
     const detectSmall = () => {
-      // seuil à ajuster selon tes besoins (ex: 900) — considère tablettes larges
       setIsSmallScreen(window.innerWidth <= 900);
     };
 
@@ -161,7 +157,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
 
     const onResize = () => {
-      detectTouch(); // optionnel : matchMedia / maxTouchPoints ne changent souvent pas, mais on garde
+      detectTouch();
       detectSmall();
     };
 
@@ -178,16 +174,22 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     };
   }, []);
 
-  // Resize helper
+  // ✅ MODIFICATION : Mise à jour du resize pour inclure le composer
   const updateRendererSize = () => {
     const w = containerRef.current?.clientWidth;
     const h = containerRef.current?.clientHeight;
     if (!w || !h || !cameraRef.current || !rendererRef.current) return;
+    
     cameraRef.current.aspect = w / h;
     cameraRef.current.updateProjectionMatrix();
     rendererRef.current.setSize(w, h);
+    
+    // ✅ Mettre à jour le post-processing
+    if (composerRef.current) {
+      composerRef.current.updateSize(w, h);
+    }
   };
-  // ✅ hooks
+
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(containerRef, () => setTimeout(updateRendererSize, 50));
   useResize(updateRendererSize);
 
@@ -198,9 +200,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       updateRendererSize();
     };
 
-    // initial call
     updateVH();
-
     window.addEventListener("resize", updateVH);
     window.addEventListener("orientationchange", updateVH);
     window.visualViewport?.addEventListener("resize", updateVH);
@@ -235,7 +235,28 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [currentPOI]);
 
+  // ✅ AJOUT : useEffect pour mettre à jour le DOF selon le POI
+  useEffect(() => {
+    if (!composerRef.current || !currentPOI) return;
 
+    const poi = findPOIById(config.pois as POIWithElements[], currentPOI);
+    if (!poi) return;
+
+    // Vérifier si le POI a une config DOF personnalisée
+    const hasDOFConfig = (poi as any).dofConfig;
+    if (hasDOFConfig) {
+      composerRef.current.enableDOF(true);
+      composerRef.current.updateDOF(
+        (poi as any).dofConfig.focus,
+        (poi as any).dofConfig.aperture,
+        (poi as any).dofConfig.maxblur
+      );
+    } else {
+      composerRef.current.enableDOF(false);
+    }
+  }, [currentPOI, config.pois]);
+
+  // ✅ MODIFICATION : useEffect principal avec post-processing
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -252,9 +273,32 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // ✅ Performance
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
+    // ✅ AJOUT : Configuration du post-processing
+    const configWithPP = config as any; // Cast pour accéder aux propriétés PP
+    const toneMappingMap: Record<string, THREE.ToneMapping> = {
+      "ACESFilmic": THREE.ACESFilmicToneMapping,
+      "Linear": THREE.LinearToneMapping,
+      "Reinhard": THREE.ReinhardToneMapping,
+      "Cineon": THREE.CineonToneMapping,
+    };
+
+    const ppConfig = configWithPP.postProcessing ? {
+      ...configWithPP.postProcessing,
+      toneMapping: configWithPP.postProcessing.toneMapping ? {
+        ...configWithPP.postProcessing.toneMapping,
+        type: configWithPP.postProcessing.toneMapping.type 
+          ? toneMappingMap[configWithPP.postProcessing.toneMapping.type] 
+          : THREE.ACESFilmicToneMapping,
+      } : undefined,
+    } : undefined;
+
+    composerRef.current = setupPostProcessing(renderer, scene, camera, ppConfig);
+
+    // OutlineEffect (optionnel)
     let effect: OutlineEffect | null = null;
     if (config.toonOutline) {
       effect = new OutlineEffect(renderer, {
@@ -271,107 +315,103 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     controls.enableZoom = true;
     controls.enablePan = false;
     controls.maxPolarAngle = Math.PI / 2;
-    controls.minDistance = 0.5; 
+    controls.minDistance = 0.5;
     controls.maxDistance = 20;
     controlsRef.current = controls;
 
     const loader = new GLTFLoader();
 
-    loader.load(config.glb, (gltf: GLTF) => {
-      scene.add(gltf.scene);
-      sceneRef.current = scene;
+    loader.load(
+      config.glb,
+      (gltf: GLTF) => {
+        scene.add(gltf.scene);
+        sceneRef.current = scene;
+        scene.userData.gltfAnimations = gltf.animations;
 
-      // 🔹 Stocker les animations dans scene.userData pour les POI suivants
-      scene.userData.gltfAnimations = gltf.animations;
-
-      // 🔹 Désactiver le frustum culling pour éviter les disparitions de meshes
-      gltf.scene.traverse((child: any) => {
-        if (child.isMesh) {
-          child.frustumCulled = false;
-          // Optionnel : recalculer la bounding box
-          if (child.geometry && !child.geometry.boundingBox) {
-            child.geometry.computeBoundingBox();
-            child.geometry.computeBoundingSphere();
+        gltf.scene.traverse((child: any) => {
+          if (child.isMesh) {
+            child.frustumCulled = false;
+            if (child.geometry && !child.geometry.boundingBox) {
+              child.geometry.computeBoundingBox();
+              child.geometry.computeBoundingSphere();
+            }
           }
-        }
-      });
-      gltf.scene.traverse((child) => {
-        if (!child.name) return;
+        });
 
-        // ✅ on stocke tout ce qui a un nom
-        emptyRefs.current[child.name] = child;
+        gltf.scene.traverse((child) => {
+          if (!child.name) return;
+          emptyRefs.current[child.name] = child;
 
-        // 🦴 Si c’est un SkinnedMesh → on crée un mixer sur son armature
-        if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
-          const skinned = child as THREE.SkinnedMesh;
-          const armature = skinned.skeleton?.bones?.[0]?.parent;
-
-          if (armature && !mixerRef.current[armature.name]) {
-            mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
-          } else if (!mixerRef.current[skinned.name]) {
-            mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
-          }
-        }
-
-        // 💠 Si c’est un Mesh simple (ex : pour morph targets)
-        else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
-          mixerRef.current[child.name] = new THREE.AnimationMixer(child);
-        }
-
-        // 🩻 Si c’est un Bone ou un objet nommé “Armature”
-        else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
-          if (!mixerRef.current[child.name]) {
+          if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
+            const skinned = child as THREE.SkinnedMesh;
+            const armature = skinned.skeleton?.bones?.[0]?.parent;
+            if (armature && !mixerRef.current[armature.name]) {
+              mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
+            } else if (!mixerRef.current[skinned.name]) {
+              mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
+            }
+          } else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
             mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+          } else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
+            if (!mixerRef.current[child.name]) {
+              mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+            }
           }
+        });
+
+        initMixers(gltf.scene);
+        applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
+        applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
+        applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
+
+        // ✅ AJOUT : Configurer les objets émissifs pour le bloom
+        if (configWithPP.emissiveObjects) {
+          setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
         }
-      });
-      // console.log("🧩 emptyRefs:", Object.keys(emptyRefs.current));
-      // console.log("🎬 Animations:", gltf.animations.map(a => a.name));  
-      initMixers(gltf.scene);
 
-      // 🔹 Appliquer vidéos, lumières, bulbs
-      applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
-      applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
-      applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
+        const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
+        if (startPOI) {
+          const startObj = emptyRefs.current[startPOI.emptyName];
+          if (startObj) moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
+          playPOIAnimations(startPOI, gltf.animations);
+        }
 
-      // 🔹 Démarrage sur le POI start
-      const startPOI = (config.pois as POIWithElements[]).find(p => p.id === "start");
-      if (startPOI) {
-        const startObj = emptyRefs.current[startPOI.emptyName];
-        if (startObj) moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
-        playPOIAnimations(startPOI, gltf.animations);
+        setIsLoaded(true);
+      },
+      (xhr) => {
+        if (xhr.lengthComputable) {
+          const progress = (xhr.loaded / xhr.total) * 100;
+          setLoadingProgress(progress);
+        } else {
+          setLoadingProgress((prev) => Math.min(prev + 1, 95));
+        }
+      },
+      (error) => {
+        console.error("Erreur lors du chargement du GLB :", error);
       }
+    );
 
-      setIsLoaded(true);
-    },
-    (xhr) => {
-      // ➤ Pendant le chargement (progression)
-      if (xhr.lengthComputable) {
-        const progress = (xhr.loaded / xhr.total) * 100;
-        setLoadingProgress(progress);
-      } else {
-        // Fallback si le serveur ne fournit pas Content-Length
-        setLoadingProgress((prev) => Math.min(prev + 1, 95));
-      }
-    },
-    (error) => {
-      console.error("Erreur lors du chargement du GLB :", error);
-    });
-
+    // ✅ MODIFICATION : Boucle d'animation avec post-processing
     const animate = () => {
       requestAnimationFrame(animate);
       const delta = clock.current.getDelta();
       updateMixers(delta);
       controlsRef.current?.update();
-      renderer.render(scene, camera);
+      
+      // Utiliser le composer si disponible, sinon le renderer normal
+      if (composerRef.current) {
+        composerRef.current.composer.render();
+      } else {
+        renderer.render(scene, camera);
+      }
     };
     animate();
 
-      return () => {
-        renderer.dispose();
-        controls.dispose();
-        scene.clear();
-      };
+    return () => {
+      renderer.dispose();
+      controls.dispose();
+      scene.clear();
+    };
   }, [config.glb]);
 
   return (
@@ -391,39 +431,32 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
             loaderImage={config.loaderImage}
             fontClassName={BullstandRegular.className}
             onStart={() => {
-              // 🔈 Unmute général (débloquer audio)
               if (muted) toggleMute();
-              // cacher l'overlay pour révéler la scène
               setShowLoaderOverlay(false);
             }}
           />
         )}
       </AnimatePresence>
-      <div
-        className="absolute top-2 right-2 z-50 flex flex-row gap-2 items-end"
-      >
+      
+      <div className="absolute top-2 right-2 z-50 flex flex-row gap-2 items-end">
         <InfoButton onClick={() => setShowInfoModal(true)} />
       </div>
-      {/* Boutons bas à droite */}
-      <div
-        className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end"
-      >
-        {/* 👇 Bouton pour afficher / cacher la modale de dialogue */}
-        {currentPoi && currentPoi.dialogue &&
-          <DialogueButton visible={showDialogue} onToggle={() => setShowDialogue(v => !v)} />
-        }
+      
+      <div className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end">
+        {currentPoi && currentPoi.dialogue && (
+          <DialogueButton visible={showDialogue} onToggle={() => setShowDialogue((v) => !v)} />
+        )}
         <AnimatePresence>
           {(isPlaying || (!isPlaying && !isEnded && isPaused)) && (
             <SoundButton muted={sceneMuted} onToggle={toggleSceneMute} />
           )}
-
           {!scenePlaying && (startSoundReady && (isEnded || (!isPlaying && !isPaused))) && (
             <SoundButton muted={muted} onToggle={toggleMute} />
           )}
         </AnimatePresence>
-
         <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
       </div>
+      
       <POIBreadcrumbs
         currentPOI={currentPOI}
         goToPOI={goToPOI}
@@ -433,7 +466,22 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         isPortrait={isPortrait}
         viewportHeight={viewportHeight}
       />
-      {/* <RotateHint show={showRotateHint} /> */}
+      
+      {/* ✅ AJOUT : Contrôles de post-processing (uniquement en dev) */}
+      {process.env.NODE_ENV === 'development' && composerRef.current && (
+        <PostProcessingControls
+          composer={composerRef.current}
+          onUpdate={(type, values) => {
+            if (!composerRef.current) return;
+            if (type === 'bloom') composerRef.current.updateBloom(values.strength, values.radius, values.threshold);
+            if (type === 'ssao') composerRef.current.updateSSAO(values.kernelRadius, values.minDistance);
+            if (type === 'dof') {
+              if ('enabled' in values) composerRef.current.enableDOF(values.enabled);
+              else composerRef.current.updateDOF(values.focus, values.aperture, values.maxblur);
+            }
+          }}
+        />
+      )}
 
       {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
         <POIPlayer
@@ -447,6 +495,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
           isPortrait={isPortrait}
         />
       )}
+      
       {currentPoi && currentPoi.dialogue && showDialogue && (
         <DialogueModal
           dialogue={currentPoi.dialogue}
@@ -455,6 +504,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
           isPortrait={isPortrait}
         />
       )}
+      
       <InfoModal
         show={showInfoModal}
         onClose={() => setShowInfoModal(false)}

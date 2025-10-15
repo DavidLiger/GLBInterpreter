@@ -1,12 +1,43 @@
-import type { DioramaConfig3DWithVideos } from "@/types/diorama";
+import type { DioramaConfig3DWithPostProcessing } from "@/types/diorama";
 
 const BASE_URL = process.env.NEXT_PUBLIC_ASSET_BASE_URL || "";
 
-export const street: DioramaConfig3DWithVideos = {
+export const street: DioramaConfig3DWithPostProcessing = {
   glb: `${BASE_URL}/models/street.glb`,
   loaderImage: `${BASE_URL}/icons/dioramas/test_street/street-preview.png`,
   name: "La place du village",
   navigationType: "fps",
+  postProcessing: {
+    bloom: {
+      enabled: true,
+      strength: 0.2,
+      radius: 0.5,
+      threshold: 1.0,
+    },
+    ssao: {
+      enabled: true,
+      kernelRadius: 32,
+      minDistance: 0.001,
+      maxDistance: 0.15,
+    },
+    dof: {
+      enabled: false, // Activé dynamiquement selon le POI
+      focus: 5.0,
+      aperture: 0.02,
+      maxblur: 0.015,
+    },
+    toneMapping: {
+      enabled: true,
+      exposure: 1.3,
+      type: "Linear",
+    },
+  },
+  emissiveObjects: [
+    { name: "bulb_01", color: 0xfff2cc, intensity: 2.5 },
+    { name: "bulb_02", color: 0xfff2cc, intensity: 2.0 },
+    { name: "TVScreen", color: 0x4488ff, intensity: 0.1 },
+    { name: "TVScreen2", color: 0x4488ff, intensity: 0.2 },
+  ],
   pois: [
     {
       id: "start",
@@ -17,7 +48,7 @@ export const street: DioramaConfig3DWithVideos = {
       sceneSound: "/sounds/goofy_Ahh_trap_short.mp3",
       zoom: 0.5,
       lookAxis: "x",
-      minDistance: 1,
+      minDistance: 0.1,
       maxDistance: 20,
       minPolarAngle: 0,
       maxPolarAngle: 1.57,
@@ -70,7 +101,12 @@ export const street: DioramaConfig3DWithVideos = {
       cameraPath: [
         { point: "start_01", target: "start_01_track", time: 3.0, duration: 3.0, zoom: 0.3 },
         { point: "start_02", target: "start_02_track", time: 8.0, duration: 4.0, zoom: 0.8 }
-      ]
+      ],
+      dofConfig: {
+        focus: 8.0,
+        aperture: 0.015,
+        maxblur: 0.01,
+      },
     },
     {
       id: "window",
@@ -164,6 +200,11 @@ export const street: DioramaConfig3DWithVideos = {
           enableZoom: true,
         }
       ],
+      dofConfig: {
+        focus: 0.08,
+        aperture: 0.04,
+        maxblur: 0.02,
+      },
     },
     {
       id: "window2",

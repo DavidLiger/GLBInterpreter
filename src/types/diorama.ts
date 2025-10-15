@@ -32,6 +32,12 @@ export type POICameraStep = {
   zoom?: number;
 };
 
+export interface DOFConfig {
+  focus: number;
+  aperture?: number;
+  maxblur?: number;
+}
+
 export type POI = {
   id: string;
   label: string;
@@ -55,6 +61,7 @@ export type POI = {
   dialogue?: POIDialogue;
   cameraPath?: POICameraStep[];
   cameraPathTarget?: string;
+  dofConfig?: DOFConfig;
 };
 
 
@@ -109,6 +116,32 @@ export type ToonOutlineConfig = {
   defaultKeepAlive?: boolean; // garde le contour actif
 };
 
+export interface PostProcessingConfig {
+  bloom?: {
+    enabled: boolean;
+    strength?: number;
+    radius?: number;
+    threshold?: number;
+  };
+  ssao?: {
+    enabled: boolean;
+    kernelRadius?: number;
+    minDistance?: number;
+    maxDistance?: number;
+  };
+  dof?: {
+    enabled: boolean;
+    focus?: number;
+    aperture?: number;
+    maxblur?: number;
+  };
+  toneMapping?: {
+    enabled: boolean;
+    exposure?: number;
+    type?: "ACESFilmic" | "Linear" | "Reinhard" | "Cineon";
+  };
+}
+
 export type DioramaConfig3D = {
   glb: string;
   name: string;
@@ -135,3 +168,12 @@ export type DioramaConfig3DWithVideos = DioramaConfig3D & {
   videos?: DioramaVideo[];
   loaderImage?: string;
 };
+
+export interface DioramaConfig3DWithPostProcessing extends DioramaConfig3DWithVideos {
+  postProcessing?: PostProcessingConfig;
+  emissiveObjects?: Array<{
+    name: string;
+    color: number;
+    intensity: number;
+  }>;
+}
