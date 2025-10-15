@@ -479,6 +479,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
               if ('enabled' in values) composerRef.current.enableDOF(values.enabled);
               else composerRef.current.updateDOF(values.focus, values.aperture, values.maxblur);
             }
+            if (type === 'toneMapping') composerRef.current?.updateToneMapping(values.type, values.exposure);
           }}
         />
       )}

@@ -258,7 +258,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
     {
       type: "ambient",
       color: 0xffe0cc,
-      intensity: 0.5,
+      intensity: 0.6,
     },
     {
       type: "spot",

@@ -169,6 +169,15 @@ export function setupPostProcessing(
         if (maxDistance !== undefined) ssaoPass.maxDistance = maxDistance;
       }
     },
+    updateToneMapping: (type?: string, exposure?: number) => {
+        if (type && (THREE as any)[type]) {
+            renderer.toneMapping = (THREE as any)[type];
+        }
+        if (exposure !== undefined) {
+            renderer.toneMappingExposure = exposure;
+        }
+    },
+
   };
 }
 
