@@ -61,7 +61,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [showDialogue, setShowDialogue] = useState(true);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
-  const useTouchIcons = isTouchDevice && isPortrait;;
+  const useTouchIcons = isTouchDevice && isMobile;
 
 const {
   startSoundReady,
