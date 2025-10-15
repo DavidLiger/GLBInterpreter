@@ -55,11 +55,13 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   );
   const currentPoi = currentPOI ? findPOIRecursively(currentPOI) : null;
   const [isLoaded, setIsLoaded] = useState(false);
-  const [isMobile, setIsMobile] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
   const [showLoaderOverlay, setShowLoaderOverlay] = useState(true);
   const [viewportHeight, setViewportHeight] = useState<number>(0);
   const [showDialogue, setShowDialogue] = useState(true);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const useTouchIcons = isTouchDevice && isMobile;;
 
 const {
   startSoundReady,
@@ -127,6 +129,54 @@ const activePOIIcon = React.useMemo(() => {
     window.addEventListener("resize", checkIsMobile);
     return () => window.removeEventListener("resize", checkIsMobile);
   }, []);
+
+
+  // détecte côté client si l'appareil est tactile (robuste)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const supportsMatchMedia = typeof window.matchMedia === "function";
+    const mm = supportsMatchMedia ? window.matchMedia("(pointer: coarse)") : null;
+
+    const detect = () => {
+      // priorité : matchMedia -> navigator.maxTouchPoints -> ontouchstart
+      const mmMatches = mm?.matches ?? false;
+      const maxTouch = navigator.maxTouchPoints && navigator.maxTouchPoints > 0;
+      const hasTouchEvent = "ontouchstart" in window;
+      setIsTouchDevice(mmMatches || !!maxTouch || !!hasTouchEvent);
+    };
+
+    detect();
+
+    const handler = (e: MediaQueryListEvent) => setIsTouchDevice(e.matches);
+    if (mm) {
+      // addEventListener preferred, fallback to addListener
+      if (typeof mm.addEventListener === "function") mm.addEventListener("change", handler);
+      else if (typeof (mm as any).addListener === "function") (mm as any).addListener(handler);
+    }
+
+    window.addEventListener("resize", detect);
+
+    return () => {
+      if (mm) {
+        if (typeof mm.removeEventListener === "function") mm.removeEventListener("change", handler);
+        else if (typeof (mm as any).removeListener === "function") (mm as any).removeListener(handler);
+      }
+      window.removeEventListener("resize", detect);
+    };
+  }, []);
+
+
+  // useEffect(() => {
+  //   const checkIsMobile = () => {
+  //     const isTouchDevice = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  //     setIsMobile(window.innerWidth < 768 || isTouchDevice);
+  //   };
+
+  //   checkIsMobile();
+  //   window.addEventListener("resize", checkIsMobile);
+  //   return () => window.removeEventListener("resize", checkIsMobile);
+  // }, []);
 
   // Resize helper
   const updateRendererSize = () => {
@@ -233,7 +283,7 @@ const activePOIIcon = React.useMemo(() => {
 
       // 🔹 Stocker les animations dans scene.userData pour les POI suivants
       scene.userData.gltfAnimations = gltf.animations;
-      
+
       // 🔹 Désactiver le frustum culling pour éviter les disparitions de meshes
       gltf.scene.traverse((child: any) => {
         if (child.isMesh) {
@@ -408,7 +458,7 @@ const activePOIIcon = React.useMemo(() => {
         show={showInfoModal}
         onClose={() => setShowInfoModal(false)}
         credits={config.credits}
-        isMobile={isMobile}
+        isMobile={useTouchIcons}
         poiIcon={activePOIIcon}
       />
     </div>
