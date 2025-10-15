@@ -26,11 +26,26 @@ body {
 }
 
 .reduced-ui {
-  height: calc(100vh - env(safe-area-inset-bottom));
-  padding-bottom: 60px; /* ajuster selon la taille des boutons */
+  /* ✅ Prend en compte la barre du navigateur mobile */
+  height: 100dvh;
+  height: calc(100dvh - env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+/* Variante pour les appareils en paysage */
+@media (orientation: landscape) and (max-height: 600px) {
+  .reduced-ui {
+    height: calc(100dvh - 40px); /* réduit encore un peu si la barre du navigateur reste visible */
+    padding-bottom: 30px;
+  }
 }
 
 .reduced-buttons {
-  bottom: 60px !important; /* remonter les boutons */
+  position: absolute;
+  bottom: max(env(safe-area-inset-bottom, 0px), 50px);
+  z-index: 50;
 }
+
 
