@@ -18,7 +18,7 @@ export default function PostProcessingControls({ composer, onUpdate }: PostProce
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-4 left-4 z-500 bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition"
+        className="fixed bottom-24 right-4 z-500 bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition"
         title="Post-Processing Controls"
       >
         <Settings size={24} />
@@ -27,7 +27,7 @@ export default function PostProcessingControls({ composer, onUpdate }: PostProce
   }
 
   return (
-    <div className="fixed bottom-4 left-4 z-500 bg-gray-900 text-white p-4 rounded-lg shadow-2xl max-w-sm w-full max-h-96 overflow-y-auto">
+    <div className="fixed bottom-24 right-4 z-500 bg-gray-900 text-white p-4 rounded-lg shadow-2xl max-w-sm w-full max-h-96 overflow-y-auto">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-bold">Post-Processing</h3>
         <button
