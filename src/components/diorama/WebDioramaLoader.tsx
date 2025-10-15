@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import * as THREE from "three";
 import { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
@@ -33,6 +33,7 @@ import POIBreadcrumbs from "./ui/POIBreadcrumbs";
 import PostProcessingControls from "./rendering/PostProcessingControls";
 // ✅ AJOUT : Import de la fonction de setup
 import { setupPostProcessing, setupEmissiveMaterials } from "./rendering/setupPostProcessing"; 
+import { usePOIEffects } from "./hooks/usePOIEffects";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -54,6 +55,8 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   
   // ✅ AJOUT : Ref pour le post-processing
   const composerRef = useRef<ReturnType<typeof setupPostProcessing> | null>(null);
+  const textureLoader = useMemo(() => new THREE.TextureLoader(), []);
+
   
   const { currentPOI, goToPOI, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively } = usePOINavigation(
     config,
@@ -61,7 +64,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     controlsRef,
     emptyRefs
   );
-  const currentPoi = currentPOI ? findPOIRecursively(currentPOI) : null;
+  const currentPoi = currentPOI ? findPOIRecursively(currentPOI) ?? undefined : undefined;
   const [isLoaded, setIsLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [showLoaderOverlay, setShowLoaderOverlay] = useState(true);
@@ -71,6 +74,8 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
+
+  usePOIEffects(sceneRef.current!, currentPoi, textureLoader);
 
   const {
     startSoundReady,

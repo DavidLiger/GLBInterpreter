@@ -62,6 +62,24 @@ export type POI = {
   cameraPath?: POICameraStep[];
   cameraPathTarget?: string;
   dofConfig?: DOFConfig;
+  effects?: {
+    particles?: {
+      type: string;        // ex: 'leaves', 'snow', 'embers'
+      intensity?: number;  // 0..1
+      color?: string;      // hex ou string CSS
+      area?: [number, number, number];
+      texture?: string; 
+    };
+    skybox?: {
+      texture?: string;    // nom de fichier HDR ou jpg
+      intensity?: number;  // 0..1
+      tint?: string;       // couleur
+    };
+    lighting?: {
+      temperature?: number;       // en Kelvin
+      ambientIntensity?: number;  // 0..1
+    };
+  };
 };
 
 

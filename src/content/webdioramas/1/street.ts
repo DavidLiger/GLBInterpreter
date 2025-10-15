@@ -107,6 +107,24 @@ export const street: DioramaConfig3DWithPostProcessing = {
         aperture: 0.015,
         maxblur: 0.01,
       },
+      effects: {
+        particles: {
+          type: "leaves", 
+          intensity: 0.6,
+          color: "#ffcc66",
+          area: [5, 3, 5],
+          texture: `${BASE_URL}/images/textures/leaf.png`,
+        },
+        skybox: {
+          intensity: 0.8,
+          tint: "#ffd9b3",
+          texture: `${BASE_URL}/images/hdr/city.png`,
+        },
+        lighting: {
+          temperature: 3200,
+          ambientIntensity: 0.7
+        }
+      }
     },
     {
       id: "window",
