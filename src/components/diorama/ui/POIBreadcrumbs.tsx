@@ -11,6 +11,7 @@ interface POIBreadcrumbsProps {
   findParentPOI: (id: string) => POI | null;
   configPOIs: POI[];
   isPortrait: boolean;
+  viewportHeight: number; 
 }
 
 export default function POIBreadcrumbs({
@@ -20,6 +21,7 @@ export default function POIBreadcrumbs({
   findParentPOI,
   configPOIs,
   isPortrait,
+  viewportHeight
 }: POIBreadcrumbsProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const activeRef = useRef<HTMLButtonElement | null>(null);
@@ -59,8 +61,9 @@ export default function POIBreadcrumbs({
       absolute top-2 left-2 z-40 
       flex flex-col items-center gap-1
       bg-zinc-900/70 backdrop-blur-md rounded-2xl px-2 py-3 shadow-lg border border-white/10
-      max-h-[calc(108vh-6rem)] overflow-y-auto scrollbar-none
+      overflow-y-auto scrollbar-none
     `;
+
 
   const separatorClass = isPortrait ? "text-white/50" : "text-white/50 rotate-90";
 
@@ -90,7 +93,12 @@ export default function POIBreadcrumbs({
   if (!currentPOI) return null;
 
   return (
-    <div ref={containerRef} className={containerClass}>
+    <div 
+      ref={containerRef} 
+      className={containerClass}
+      style={{
+      maxHeight: !isPortrait ? `${viewportHeight - 60}px` : undefined, // 👈 ajustement auto
+    }}>
       <AnimatePresence mode="sync">
         {breadcrumbList.map((item, index) => {
           const prevItem = breadcrumbList[index - 1];

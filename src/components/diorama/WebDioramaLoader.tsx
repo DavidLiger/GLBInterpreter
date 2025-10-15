@@ -431,6 +431,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         findParentPOI={findParentPOI}
         configPOIs={config.pois}
         isPortrait={isPortrait}
+        viewportHeight={viewportHeight}
       />
       {/* <RotateHint show={showRotateHint} /> */}
 
