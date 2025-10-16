@@ -9,13 +9,13 @@ export const street: DioramaConfig3DWithPostProcessing = {
   navigationType: "fps",
   postProcessing: {
     bloom: {
-      enabled: true,
+      enabled: false,
       strength: 0.2,
       radius: 0.5,
       threshold: 1.0,
     },
     ssao: {
-      enabled: true,
+      enabled: false,
       kernelRadius: 32,
       minDistance: 0.001,
       maxDistance: 0.15,
@@ -27,16 +27,16 @@ export const street: DioramaConfig3DWithPostProcessing = {
       maxblur: 0.015,
     },
     toneMapping: {
-      enabled: true,
+      enabled: false,
       exposure: 1.3,
       type: "Linear",
     },
   },
   emissiveObjects: [
-    { name: "bulb_01", color: 0xfff2cc, intensity: 2.5 },
-    { name: "bulb_02", color: 0xfff2cc, intensity: 2.0 },
-    { name: "TVScreen", color: 0x4488ff, intensity: 0.1 },
-    { name: "TVScreen2", color: 0x4488ff, intensity: 0.2 },
+    // { name: "bulb_01", color: 0xfff2cc, intensity: 2.5 },
+    // { name: "bulb_02", color: 0xfff2cc, intensity: 2.0 },
+    // { name: "TVScreen", color: 0x4488ff, intensity: 0.1 },
+    // { name: "TVScreen2", color: 0x4488ff, intensity: 0.2 },
   ],
   pois: [
     {
