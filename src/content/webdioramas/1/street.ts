@@ -69,6 +69,13 @@ export const street: DioramaConfig3DWithPostProcessing = {
           clipName: "Action",
           autoplay: false,
           loop: false
+        },
+        {
+          name: "donutCycle",
+          type: "armature",
+          clipName: "Action_001",
+          autoplay: false,
+          loop: false
         }
       ],
       dialogue: {
