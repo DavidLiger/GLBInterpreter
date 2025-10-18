@@ -264,80 +264,23 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [currentPOI, config.pois]);
 
-  // ✅ Fonction pour vider le cache des GLB
-  const clearGLBCache = async () => {
+  // ✅ Fonction pour vider le cache spécifiquement pour un GLB
+  const clearGLBCache = async (glbUrl: string) => {
     if ('caches' in window) {
-      const cacheNames = await caches.keys();
-      await Promise.all(
-        cacheNames.map(name => 
-          caches.open(name).then(cache => 
-            cache.keys().then(requests => 
-              Promise.all(
-                requests
-                  .filter(req => req.url.includes('.glb'))
-                  .map(req => cache.delete(req))
-              )
-            )
-          )
-        )
-      );
-    }
-  };
-
-  // ✅ Fonction de validation et retry pour le chargement GLB
-  const loadGLBWithRetry = async (
-    url: string, 
-    loader: GLTFLoader, 
-    maxRetries = 3
-  ): Promise<GLTF> => {
-    let lastError: any;
-    
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
-        if (attempt === 1) {
-          console.log("Clearing GLB cache...");
-          await clearGLBCache();
+        const cacheNames = await caches.keys();
+        for (const cacheName of cacheNames) {
+          const cache = await caches.open(cacheName);
+          await cache.delete(glbUrl);
+          await cache.delete(new Request(glbUrl));
+          // Aussi avec query params
+          await cache.delete(`${glbUrl}?v=${Date.now()}`);
         }
-        // Ajouter un timestamp pour forcer le bypass du cache en cas de retry
-        const cacheBustedUrl = attempt > 0 
-          ? `${url}?v=${Date.now()}` 
-          : url;
-        
-        const gltf = await new Promise<GLTF>((resolve, reject) => {
-          loader.load(
-            cacheBustedUrl,
-            (gltf) => resolve(gltf),
-            (xhr) => {
-              if (xhr.lengthComputable) {
-                const progress = (xhr.loaded / xhr.total) * 100;
-                setLoadingProgress(progress);
-              } else {
-                setLoadingProgress((prev) => Math.min(prev + 1, 95));
-              }
-            },
-            (error) => reject(error)
-          );
-        });
-        
-        // ✅ Validation basique du GLB chargé
-        if (!gltf.scene || gltf.scene.children.length === 0) {
-          throw new Error("GLB loaded but scene is empty");
-        }
-        
-        return gltf;
-        
+        console.log("✅ GLB cache cleared");
       } catch (error) {
-        lastError = error;
-        console.error(`GLB load attempt ${attempt + 1}/${maxRetries} failed:`, error);
-        
-        // Si ce n'est pas la dernière tentative, attendre avant de réessayer
-        if (attempt < maxRetries - 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
-        }
+        console.error("❌ Failed to clear cache:", error);
       }
     }
-    
-    throw lastError;
   };
 
   // ✅ MODIFICATION : useEffect principal avec post-processing
@@ -405,76 +348,151 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
     const loader = new GLTFLoader();
 
-    loadGLBWithRetry(config.glb, loader)
-    .then((gltf: GLTF) => {
-        scene.add(gltf.scene);
-        sceneRef.current = scene;
-        scene.userData.gltfAnimations = gltf.animations;
-
-        gltf.scene.traverse((child: any) => {
-          if (child.isMesh) {
-            child.frustumCulled = false;
-            if (child.geometry && !child.geometry.boundingBox) {
-              child.geometry.computeBoundingBox();
-              child.geometry.computeBoundingSphere();
-            }
-          }
-        });
-
-        gltf.scene.traverse((child) => {
-          if (!child.name) return;
-          emptyRefs.current[child.name] = child;
-
-          if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
-            const skinned = child as THREE.SkinnedMesh;
-            const armature = skinned.skeleton?.bones?.[0]?.parent;
-            if (armature && !mixerRef.current[armature.name]) {
-              mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
-            } else if (!mixerRef.current[skinned.name]) {
-              mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
-            }
-          } else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
-            mixerRef.current[child.name] = new THREE.AnimationMixer(child);
-          } else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
-            if (!mixerRef.current[child.name]) {
-              mixerRef.current[child.name] = new THREE.AnimationMixer(child);
-            }
-          }
-        });
-
-        initMixers(gltf.scene);
-        applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
-        applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
-        applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
-
-        // ✅ AJOUT : Configurer les objets émissifs pour le bloom
-        if (configWithPP.emissiveObjects) {
-          setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
-        }
-
-        const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
-        if (startPOI) {
-          const startObj = emptyRefs.current[startPOI.emptyName];
-          if (startObj) moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
-          playPOIAnimations(startPOI, gltf.animations);
-        }
-
-        setIsLoaded(true);
-      },
-      (xhr) => {
-        if (xhr.lengthComputable) {
-          const progress = (xhr.loaded / xhr.total) * 100;
-          setLoadingProgress(progress);
-        } else {
-          setLoadingProgress((prev) => Math.min(prev + 1, 95));
-        }
-      })
-      .catch((error) => {
-      console.error("Échec définitif du chargement du GLB après retries:", error);
+    // ✅ Vider le cache avant de charger
+    clearGLBCache(config.glb).then(() => {
+      // Ajouter un timestamp pour forcer le bypass du cache
+      const cacheBustedUrl = `${config.glb}?t=${Date.now()}`;
       
-      // ✅ Afficher un message d'erreur à l'utilisateur
-      alert("Erreur de chargement. Veuillez rafraîchir la page.");
+      loader.load(
+        cacheBustedUrl,
+        (gltf: GLTF) => {
+          scene.add(gltf.scene);
+          sceneRef.current = scene;
+          scene.userData.gltfAnimations = gltf.animations;
+
+          gltf.scene.traverse((child: any) => {
+            if (child.isMesh) {
+              child.frustumCulled = false;
+              if (child.geometry && !child.geometry.boundingBox) {
+                child.geometry.computeBoundingBox();
+                child.geometry.computeBoundingSphere();
+              }
+            }
+          });
+
+          gltf.scene.traverse((child) => {
+            if (!child.name) return;
+            emptyRefs.current[child.name] = child;
+
+            if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
+              const skinned = child as THREE.SkinnedMesh;
+              const armature = skinned.skeleton?.bones?.[0]?.parent;
+              if (armature && !mixerRef.current[armature.name]) {
+                mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
+              } else if (!mixerRef.current[skinned.name]) {
+                mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
+              }
+            } else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
+              mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+            } else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
+              if (!mixerRef.current[child.name]) {
+                mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+              }
+            }
+          });
+
+          initMixers(gltf.scene);
+          applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
+          applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
+          applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
+
+          // ✅ AJOUT : Configurer les objets émissifs pour le bloom
+          if (configWithPP.emissiveObjects) {
+            setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
+          }
+
+          const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
+          if (startPOI) {
+            const startObj = emptyRefs.current[startPOI.emptyName];
+            if (startObj) moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
+            playPOIAnimations(startPOI, gltf.animations);
+          }
+
+          setIsLoaded(true);
+        },
+        (xhr) => {
+          if (xhr.lengthComputable) {
+            const progress = (xhr.loaded / xhr.total) * 100;
+            setLoadingProgress(progress);
+          } else {
+            setLoadingProgress((prev) => Math.min(prev + 1, 95));
+          }
+        },
+        (error) => {
+          console.error("Erreur chargement GLB:", error);
+        }
+      );
     });
+
+    // loader.load(
+    //   config.glb,
+    //   (gltf: GLTF) => {
+    //     scene.add(gltf.scene);
+    //     sceneRef.current = scene;
+    //     scene.userData.gltfAnimations = gltf.animations;
+
+    //     gltf.scene.traverse((child: any) => {
+    //       if (child.isMesh) {
+    //         child.frustumCulled = false;
+    //         if (child.geometry && !child.geometry.boundingBox) {
+    //           child.geometry.computeBoundingBox();
+    //           child.geometry.computeBoundingSphere();
+    //         }
+    //       }
+    //     });
+
+    //     gltf.scene.traverse((child) => {
+    //       if (!child.name) return;
+    //       emptyRefs.current[child.name] = child;
+
+    //       if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
+    //         const skinned = child as THREE.SkinnedMesh;
+    //         const armature = skinned.skeleton?.bones?.[0]?.parent;
+    //         if (armature && !mixerRef.current[armature.name]) {
+    //           mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
+    //         } else if (!mixerRef.current[skinned.name]) {
+    //           mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
+    //         }
+    //       } else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
+    //         mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+    //       } else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
+    //         if (!mixerRef.current[child.name]) {
+    //           mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+    //         }
+    //       }
+    //     });
+
+    //     initMixers(gltf.scene);
+    //     applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
+    //     applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
+    //     applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
+
+    //     // ✅ AJOUT : Configurer les objets émissifs pour le bloom
+    //     if (configWithPP.emissiveObjects) {
+    //       setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
+    //     }
+
+    //     const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
+    //     if (startPOI) {
+    //       const startObj = emptyRefs.current[startPOI.emptyName];
+    //       if (startObj) moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
+    //       playPOIAnimations(startPOI, gltf.animations);
+    //     }
+
+    //     setIsLoaded(true);
+    //   },
+    //   (xhr) => {
+    //     if (xhr.lengthComputable) {
+    //       const progress = (xhr.loaded / xhr.total) * 100;
+    //       setLoadingProgress(progress);
+    //     } else {
+    //       setLoadingProgress((prev) => Math.min(prev + 1, 95));
+    //     }
+    //   },
+    //   (error) => {
+    //     console.error("Erreur lors du chargement du GLB :", error);
+    //   }
+    // );
 
     // ✅ MODIFICATION : Boucle d'animation avec post-processing
     const animate = () => {
