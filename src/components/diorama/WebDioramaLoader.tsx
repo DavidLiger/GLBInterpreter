@@ -52,6 +52,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers } =
     usePOIAnimations(emptyRefs);
   const clock = useRef(new THREE.Clock());
+  const hasAutoUnmutedRef = useRef(false);
   
   // ✅ AJOUT : Ref pour le post-processing
   const composerRef = useRef<ReturnType<typeof setupPostProcessing> | null>(null);
@@ -74,6 +75,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
+  const autoplay = config.autoplay ?? false;
 
   usePOIEffects(sceneRef.current!, currentPoi, textureLoader);
 
@@ -419,6 +421,29 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     };
   }, [config.glb]);
 
+  useEffect(() => {
+      if (isPlaying && !isEnded) {
+        hasAutoUnmutedRef.current = false;
+      }
+    }, [isPlaying, isEnded]);
+
+  // ✅ AUTO-UNMUTE de l'ambiance quand l'autoplay se termine (UNE SEULE FOIS)
+  useEffect(() => {
+    if (
+      // config.autoplay && 
+      isEnded && 
+      !scenePlaying && 
+      muted && 
+      !hasAutoUnmutedRef.current // ← Vérifier qu'on ne l'a pas déjà fait
+    ) {
+      const timeout = setTimeout(() => {
+        toggleMute();
+        hasAutoUnmutedRef.current = true; // ← Marquer comme fait
+      }, 500);
+      return () => clearTimeout(timeout);
+    }
+  }, [isEnded, scenePlaying, muted, toggleMute]);
+
   return (
     <div
       ref={containerRef}
@@ -436,8 +461,28 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
             loaderImage={config.loaderImage}
             fontClassName={BullstandRegular.className}
             onStart={() => {
-              if (muted) toggleMute();
+              // ✅ MODE AUTOPLAY (tutoriel débutant)
+              if (autoplay) {
+                // 1. Fullscreen
+                if (!isFullscreen) toggleFullscreen();
+                
+                // 2. Unmute le son de scène
+                if (sceneMuted) toggleSceneMute();
+                
+                // 3. Lance l'animation automatiquement
+                if (!isPlaying) togglePlayPause();
+                
+                setShowLoaderOverlay(false);
+                return;
+              }
+
+              // ✅ MODE NORMAL (exploration libre)
+              // 1. Fullscreen
               if (!isFullscreen) toggleFullscreen();
+              
+              // 2. Unmute l'ambiance seulement
+              if (muted) toggleMute();
+              
               setShowLoaderOverlay(false);
             }}
           />

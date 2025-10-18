@@ -172,6 +172,7 @@ export type DioramaConfig3D = {
   bulbs?: DioramaBulb[];
   toonOutline?: ToonOutlineConfig; // 🔥 nouvel objet
   credits?: DioramaCredits;
+  autoplay?: boolean;
 };
 
 export interface DioramaCredits {

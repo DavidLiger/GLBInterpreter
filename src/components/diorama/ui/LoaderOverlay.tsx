@@ -12,6 +12,7 @@ interface LoaderOverlayProps {
   sceneName?: string;
   loaderImage?: string;
   fontClassName?: string;
+  autoplay?: boolean; // ← NOUVEAU
   /** callback appelé quand l'utilisateur appuie sur le bouton pour activer le son */
   onStart?: () => void;
 }
@@ -24,6 +25,7 @@ export default function LoaderOverlay({
   sceneName,
   loaderImage,
   fontClassName,
+  autoplay = false,
   onStart,
 }: LoaderOverlayProps) {
   const [showOverlay, setShowOverlay] = useState(true);
@@ -102,7 +104,10 @@ export default function LoaderOverlay({
               whileTap={{ scale: 0.98 }}
               className="absolute bottom-4 px-6 py-3 bg-green-500 text-black font-semibold rounded-full shadow-lg text-sm uppercase tracking-wider"
             >
-              {isMobile ? 'Toucher pour commencer' : 'Cliquer pour commencer'}
+              {autoplay 
+                ? (isMobile ? 'Toucher pour lancer le tutoriel' : 'Cliquer pour lancer le tutoriel')
+                : (isMobile ? 'Toucher pour commencer' : 'Cliquer pour commencer')
+              }
             </motion.button>
           )}
 
