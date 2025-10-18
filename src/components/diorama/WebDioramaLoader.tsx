@@ -51,6 +51,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const controlsRef = useRef<OrbitControls | null>(null);
   const emptyRefs = useRef<Record<string, THREE.Object3D>>({});
   const animationFrameRef = useRef<number | undefined>(undefined);
+  const hasInitializedRef = useRef(false); // ✅ NOUVEAU
   const { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers } =
     usePOIAnimations(emptyRefs);
   const clock = useRef(new THREE.Clock());
@@ -270,6 +271,60 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // ✅ Empêcher les réinitialisations multiples
+    if (hasInitializedRef.current) {
+      console.log("⚠️ Already initialized, skipping");
+      return;
+    }
+
+    hasInitializedRef.current = true;
+    console.log("✅ First initialization");
+
+    // ✅ 1. NETTOYER TOUT CE QUI EXISTE DÉJÀ
+    const existingCanvas = containerRef.current.querySelector('canvas');
+    if (existingCanvas) {
+      console.log("🧹 Removing existing canvas");
+      existingCanvas.remove();
+    }
+
+    // ✅ 2. Disposer l'ancien renderer s'il existe
+    if (rendererRef.current) {
+      console.log("🧹 Disposing old renderer");
+      rendererRef.current.dispose();
+      rendererRef.current.forceContextLoss(); // ⚡ Forcer la perte du vieux contexte
+      rendererRef.current = null;
+    }
+
+    // ✅ 3. Disposer les anciens controls
+    if (controlsRef.current) {
+      controlsRef.current.dispose();
+      controlsRef.current = null;
+    }
+
+    // ✅ 4. Nettoyer l'ancienne scène
+    if (sceneRef.current) {
+      sceneRef.current.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          object.geometry?.dispose();
+          if (Array.isArray(object.material)) {
+            object.material.forEach(mat => mat.dispose());
+          } else {
+            object.material?.dispose();
+          }
+        }
+      });
+      sceneRef.current.clear();
+      sceneRef.current = null;
+    }
+
+    // ✅ 5. Annuler l'animation frame en cours
+    if (animationFrameRef.current !== undefined) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = undefined;
+    }
+
+    console.log("✅ Cleanup complet - Création d'un nouveau contexte WebGL");
+
     const width = window.innerWidth;
     const height = window.innerHeight;
 
@@ -280,32 +335,41 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 1000);
     camera.position.set(0, 2, 5);
     cameraRef.current = camera;
+    // ✅ 6. Créer le nouveau renderer avec gestion d'erreur
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ 
+        antialias: true,
+        powerPreference: "high-performance",
+        failIfMajorPerformanceCaveat: false,
+        preserveDrawingBuffer: false,
+        alpha: false,
+      });
 
-    const renderer = new THREE.WebGLRenderer({ 
-      antialias: true,
-      powerPreference: "high-performance", // ✅ Important pour mobile
-      failIfMajorPerformanceCaveat: false, // ✅ Ne pas échouer sur mobile faible
-      preserveDrawingBuffer: false, // ✅ Performance
-      alpha: false, // ✅ Performance (si vous n'avez pas besoin de transparence)
-    });
+      // ✅ Limiter la résolution sur mobile
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      const pixelRatio = isMobile ? Math.min(window.devicePixelRatio, 2) : window.devicePixelRatio;
+      renderer.setPixelRatio(pixelRatio);
 
-    // ✅ Limiter la résolution sur mobile
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    const pixelRatio = isMobile ? Math.min(window.devicePixelRatio, 2) : window.devicePixelRatio;
-    renderer.setPixelRatio(pixelRatio);
-
-    // ✅ Forcer la préservation du contexte (peut aider)
-    const gl = renderer.getContext();
-    if (gl) {
-      const contextAttributes = gl.getContextAttributes();
-      if (contextAttributes) {
-        console.log("WebGL context attributes:", contextAttributes);
+      // ✅ Forcer la préservation du contexte (peut aider)
+      const gl = renderer.getContext();
+      if (gl) {
+        const contextAttributes = gl.getContextAttributes();
+        if (contextAttributes) {
+          console.log("WebGL context attributes:", contextAttributes);
+        }
       }
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // ✅ Performance
+      containerRef.current.appendChild(renderer.domElement);
+      rendererRef.current = renderer;
+      console.log("✅ WebGL context créé avec succès");
+
+    } catch (error) {
+      console.error("❌ Erreur création WebGL context:", error);
+      setIsContextLost(true);
+      return; // ⚡ Arrêter ici si échec
     }
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // ✅ Performance
-    containerRef.current.appendChild(renderer.domElement);
-    rendererRef.current = renderer;
 
     // ✅ AJOUT : Configuration du post-processing
     const configWithPP = config as any; // Cast pour accéder aux propriétés PP
@@ -541,27 +605,73 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     //   scene.clear();
     // };
 
-    // ✅ MODIFICATION : Boucle d'animation avec post-processing
-    const animate = () => {
-      requestAnimationFrame(animate);
+    // ✅ Boucle d'animation
+  const animate = () => {
+    if (rendererRef.current) {
+      const gl = rendererRef.current.getContext();
+      if (gl.isContextLost()) {
+        console.error("❌ Contexte perdu pendant l'animation");
+        setIsContextLost(true);
+        return;
+      }
+    }
+
+    if (!document.hidden) {
       const delta = clock.current.getDelta();
       updateMixers(delta);
       controlsRef.current?.update();
       
-      // Utiliser le composer si disponible, sinon le renderer normal
       if (composerRef.current) {
         composerRef.current.composer.render();
-      } else {
-        renderer.render(scene, camera);
+      } else if (rendererRef.current && cameraRef.current) {
+        rendererRef.current.render(scene, camera);
       }
-    };
-    animate();
+    }
 
-    return () => {
-      renderer.dispose();
-      controls.dispose();
-      scene.clear();
-    };
+    animationFrameRef.current = requestAnimationFrame(animate);
+  };
+  
+  animationFrameRef.current = requestAnimationFrame(animate);
+
+  // ✅ CLEANUP au démontage
+  return () => {
+    console.log("🧹 Component unmounting - Cleanup");
+    
+    if (animationFrameRef.current !== undefined) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    if (rendererRef.current) {
+      rendererRef.current.dispose();
+      rendererRef.current.forceContextLoss();
+      rendererRef.current = null;
+    }
+
+    if (controlsRef.current) {
+      controlsRef.current.dispose();
+      controlsRef.current = null;
+    }
+
+    if (sceneRef.current) {
+      sceneRef.current.traverse((object) => {
+        if (object instanceof THREE.Mesh) {
+          object.geometry?.dispose();
+          if (Array.isArray(object.material)) {
+            object.material.forEach(mat => mat.dispose());
+          } else {
+            object.material?.dispose();
+          }
+        }
+      });
+      sceneRef.current.clear();
+      sceneRef.current = null;
+    }
+
+    const canvas = containerRef.current?.querySelector('canvas');
+    if (canvas) {
+      canvas.remove();
+    }
+  };
   }, [config.glb]);
 
   // ✅ AJOUT : useEffect pour mettre à jour le DOF selon le POI
@@ -719,21 +829,19 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   }, [isEnded, scenePlaying, muted, toggleMute]);
 
   if (isContextLost) {
-    return (
-      <div className="w-screen h-screen flex items-center justify-center bg-black text-white">
-        <div className="text-center p-8">
-          <h2 className="text-2xl font-bold mb-4">⚠️ Contexte WebGL perdu</h2>
-          <p className="mb-4">L'application doit être rechargée</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-green-500 text-black font-semibold rounded-full"
-          >
-            Recharger
-          </button>
-        </div>
-      </div>
-    );
-  }
+    const handleReload = async () => {
+      try {
+        if ('caches' in window) {
+          const names = await caches.keys();
+          await Promise.all(names.map(name => caches.delete(name)));
+        }
+      } catch (error) {
+        console.error("Erreur lors du vidage du cache:", error);
+      } finally {
+        window.location.reload();
+      }
+    }
+  } 
 
   return (
     <div
