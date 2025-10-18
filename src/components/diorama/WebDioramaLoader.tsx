@@ -264,6 +264,82 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [currentPOI, config.pois]);
 
+  // ✅ Fonction pour vider le cache des GLB
+  const clearGLBCache = async () => {
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(
+        cacheNames.map(name => 
+          caches.open(name).then(cache => 
+            cache.keys().then(requests => 
+              Promise.all(
+                requests
+                  .filter(req => req.url.includes('.glb'))
+                  .map(req => cache.delete(req))
+              )
+            )
+          )
+        )
+      );
+    }
+  };
+
+  // ✅ Fonction de validation et retry pour le chargement GLB
+  const loadGLBWithRetry = async (
+    url: string, 
+    loader: GLTFLoader, 
+    maxRetries = 3
+  ): Promise<GLTF> => {
+    let lastError: any;
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        if (attempt === 1) {
+          console.log("Clearing GLB cache...");
+          await clearGLBCache();
+        }
+        // Ajouter un timestamp pour forcer le bypass du cache en cas de retry
+        const cacheBustedUrl = attempt > 0 
+          ? `${url}?v=${Date.now()}` 
+          : url;
+        
+        const gltf = await new Promise<GLTF>((resolve, reject) => {
+          loader.load(
+            cacheBustedUrl,
+            (gltf) => resolve(gltf),
+            (xhr) => {
+              if (xhr.lengthComputable) {
+                const progress = (xhr.loaded / xhr.total) * 100;
+                setLoadingProgress(progress);
+              } else {
+                setLoadingProgress((prev) => Math.min(prev + 1, 95));
+              }
+            },
+            (error) => reject(error)
+          );
+        });
+        
+        // ✅ Validation basique du GLB chargé
+        if (!gltf.scene || gltf.scene.children.length === 0) {
+          throw new Error("GLB loaded but scene is empty");
+        }
+        
+        return gltf;
+        
+      } catch (error) {
+        lastError = error;
+        console.error(`GLB load attempt ${attempt + 1}/${maxRetries} failed:`, error);
+        
+        // Si ce n'est pas la dernière tentative, attendre avant de réessayer
+        if (attempt < maxRetries - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+        }
+      }
+    }
+    
+    throw lastError;
+  };
+
   // ✅ MODIFICATION : useEffect principal avec post-processing
   useEffect(() => {
     if (!containerRef.current) return;
@@ -329,9 +405,8 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
     const loader = new GLTFLoader();
 
-    loader.load(
-      config.glb,
-      (gltf: GLTF) => {
+    loadGLBWithRetry(config.glb, loader)
+    .then((gltf: GLTF) => {
         scene.add(gltf.scene);
         sceneRef.current = scene;
         scene.userData.gltfAnimations = gltf.animations;
@@ -393,11 +468,13 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         } else {
           setLoadingProgress((prev) => Math.min(prev + 1, 95));
         }
-      },
-      (error) => {
-        console.error("Erreur lors du chargement du GLB :", error);
-      }
-    );
+      })
+      .catch((error) => {
+      console.error("Échec définitif du chargement du GLB après retries:", error);
+      
+      // ✅ Afficher un message d'erreur à l'utilisateur
+      alert("Erreur de chargement. Veuillez rafraîchir la page.");
+    });
 
     // ✅ MODIFICATION : Boucle d'animation avec post-processing
     const animate = () => {
