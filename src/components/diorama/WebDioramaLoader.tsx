@@ -245,112 +245,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [currentPOI]);
 
-  // ✅ AJOUT : useEffect pour mettre à jour le DOF selon le POI
-  useEffect(() => {
-    if (!composerRef.current || !currentPOI) return;
-
-    const poi = findPOIById(config.pois as POIWithElements[], currentPOI);
-    if (!poi) return;
-
-    // Vérifier si le POI a une config DOF personnalisée
-    const hasDOFConfig = (poi as any).dofConfig;
-    if (hasDOFConfig) {
-      composerRef.current.enableDOF(true);
-      composerRef.current.updateDOF(
-        (poi as any).dofConfig.focus,
-        (poi as any).dofConfig.aperture,
-        (poi as any).dofConfig.maxblur
-      );
-    } else {
-      composerRef.current.enableDOF(false);
-    }
-  }, [currentPOI, config.pois]);
-
-  // ✅ Gérer la visibilité de la page (passage en arrière-plan)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        // Page en arrière-plan
-        console.log("📱 App en arrière-plan");
-        
-        // Pause les animations
-        if (animationFrameRef.current !== undefined) {
-          cancelAnimationFrame(animationFrameRef.current);
-        }
-        
-        // Pause les sons
-        Object.values(ambientAudioRefs.current).forEach(audio => {
-          if (!audio.paused) {
-            audio.pause();
-          }
-        });
-        
-      } else {
-        // Page revenue au premier plan
-        console.log("📱 App revenue au premier plan");
-        
-        // Vérifier si le contexte WebGL est toujours valide
-        if (rendererRef.current) {
-          const gl = rendererRef.current.getContext();
-          if (gl.isContextLost()) {
-            console.error("❌ Contexte WebGL perdu");
-            setIsContextLost(true);
-            // Forcer un reload
-            window.location.reload();
-          } else {
-            // Reprendre les animations
-            console.log("✅ Contexte WebGL OK - Reprise");
-            
-            // Reprendre les sons si nécessaire
-            if (!muted && currentPOI) {
-              const ambient = ambientAudioRefs.current[currentPOI];
-              if (ambient) {
-                ambient.play().catch(() => {});
-              }
-            }
-          }
-        }
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [muted, currentPOI]);
-
-  // ✅ Gérer la perte/restauration du contexte WebGL
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const canvas = containerRef.current.querySelector('canvas');
-    if (!canvas) return;
-
-    const handleContextLost = (event: Event) => {
-      event.preventDefault();
-      console.error("❌ WebGL context lost");
-      setIsContextLost(true);
-      
-      if (animationFrameRef.current !== undefined) { // ✅ CORRECTION
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-
-    const handleContextRestored = () => {
-      console.log("✅ WebGL context restored");
-      window.location.reload();
-    };
-
-    canvas.addEventListener('webglcontextlost', handleContextLost);
-    canvas.addEventListener('webglcontextrestored', handleContextRestored);
-
-    return () => {
-      canvas.removeEventListener('webglcontextlost', handleContextLost);
-      canvas.removeEventListener('webglcontextrestored', handleContextRestored);
-    };
-  }, []);
-
   // ✅ Fonction pour vider le cache spécifiquement pour un GLB
   const clearGLBCache = async (glbUrl: string) => {
     if ('caches' in window) {
@@ -370,30 +264,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   };
 
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!sceneRef.current) return;
-
-      sceneRef.current.traverse((child) => {
-        if (child instanceof THREE.Mesh && child.material) {
-          const materials = Array.isArray(child.material) ? child.material : [child.material];
-          materials.forEach((mat) => {
-            if (mat.map && mat.map instanceof THREE.VideoTexture) {
-              const video = mat.map.image as HTMLVideoElement;
-              if (document.hidden) {
-                video.pause();
-              } else {
-                video.play().catch(() => {});
-              }
-            }
-          });
-        }
-      });
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, []);
+  
 
   // ✅ MODIFICATION : useEffect principal avec post-processing
   useEffect(() => {
@@ -692,6 +563,137 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     //   scene.clear();
     // };
   }, [config.glb]);
+
+  // ✅ AJOUT : useEffect pour mettre à jour le DOF selon le POI
+  useEffect(() => {
+    if (!composerRef.current || !currentPOI) return;
+
+    const poi = findPOIById(config.pois as POIWithElements[], currentPOI);
+    if (!poi) return;
+
+    // Vérifier si le POI a une config DOF personnalisée
+    const hasDOFConfig = (poi as any).dofConfig;
+    if (hasDOFConfig) {
+      composerRef.current.enableDOF(true);
+      composerRef.current.updateDOF(
+        (poi as any).dofConfig.focus,
+        (poi as any).dofConfig.aperture,
+        (poi as any).dofConfig.maxblur
+      );
+    } else {
+      composerRef.current.enableDOF(false);
+    }
+  }, [currentPOI, config.pois]);
+
+  // ✅ Gérer la visibilité de la page (passage en arrière-plan)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Page en arrière-plan
+        console.log("📱 App en arrière-plan");
+        
+        // Pause les animations
+        if (animationFrameRef.current !== undefined) {
+          cancelAnimationFrame(animationFrameRef.current);
+        }
+        
+        // Pause les sons
+        Object.values(ambientAudioRefs.current).forEach(audio => {
+          if (!audio.paused) {
+            audio.pause();
+          }
+        });
+        
+      } else {
+        // Page revenue au premier plan
+        console.log("📱 App revenue au premier plan");
+        
+        // Vérifier si le contexte WebGL est toujours valide
+        if (rendererRef.current) {
+          const gl = rendererRef.current.getContext();
+          if (gl.isContextLost()) {
+            console.error("❌ Contexte WebGL perdu");
+            setIsContextLost(true);
+            // Forcer un reload
+            window.location.reload();
+          } else {
+            // Reprendre les animations
+            console.log("✅ Contexte WebGL OK - Reprise");
+            
+            // Reprendre les sons si nécessaire
+            if (!muted && currentPOI) {
+              const ambient = ambientAudioRefs.current[currentPOI];
+              if (ambient) {
+                ambient.play().catch(() => {});
+              }
+            }
+          }
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [muted, currentPOI]);
+
+  // ✅ Gérer la perte/restauration du contexte WebGL
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const canvas = containerRef.current.querySelector('canvas');
+    if (!canvas) return;
+
+    const handleContextLost = (event: Event) => {
+      event.preventDefault();
+      console.error("❌ WebGL context lost");
+      setIsContextLost(true);
+      
+      if (animationFrameRef.current !== undefined) { // ✅ CORRECTION
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+
+    const handleContextRestored = () => {
+      console.log("✅ WebGL context restored");
+      window.location.reload();
+    };
+
+    canvas.addEventListener('webglcontextlost', handleContextLost);
+    canvas.addEventListener('webglcontextrestored', handleContextRestored);
+
+    return () => {
+      canvas.removeEventListener('webglcontextlost', handleContextLost);
+      canvas.removeEventListener('webglcontextrestored', handleContextRestored);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!sceneRef.current) return;
+
+      sceneRef.current.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material) {
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          materials.forEach((mat) => {
+            if (mat.map && mat.map instanceof THREE.VideoTexture) {
+              const video = mat.map.image as HTMLVideoElement;
+              if (document.hidden) {
+                video.pause();
+              } else {
+                video.play().catch(() => {});
+              }
+            }
+          });
+        }
+      });
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, []);
 
   useEffect(() => {
       if (isPlaying && !isEnded) {
