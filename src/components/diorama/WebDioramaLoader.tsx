@@ -352,198 +352,170 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     const loader = new GLTFLoader();
 
     // ✅ Vider le cache avant de charger
-    clearGLBCache(config.glb).then(() => {
-      // Ajouter un timestamp pour forcer le bypass du cache
-      const cacheBustedUrl = `${config.glb}?t=${Date.now()}`;
+    // clearGLBCache(config.glb).then(() => {
+    //   // Ajouter un timestamp pour forcer le bypass du cache
+    //   const cacheBustedUrl = `${config.glb}?t=${Date.now()}`;
       
-      loader.load(
-        cacheBustedUrl,
-        (gltf: GLTF) => {
-          scene.add(gltf.scene);
-          sceneRef.current = scene;
-          scene.userData.gltfAnimations = gltf.animations;
+    //   loader.load(
+    //     cacheBustedUrl,
+    //     (gltf: GLTF) => {
+    //       scene.add(gltf.scene);
+    //       sceneRef.current = scene;
+    //       scene.userData.gltfAnimations = gltf.animations;
 
-          gltf.scene.traverse((child: any) => {
-            if (child.isMesh) {
-              child.frustumCulled = false;
-              if (child.geometry && !child.geometry.boundingBox) {
-                child.geometry.computeBoundingBox();
-                child.geometry.computeBoundingSphere();
-              }
-            }
-          });
-
-          gltf.scene.traverse((child) => {
-            if (!child.name) return;
-            emptyRefs.current[child.name] = child;
-
-            if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
-              const skinned = child as THREE.SkinnedMesh;
-              const armature = skinned.skeleton?.bones?.[0]?.parent;
-              if (armature && !mixerRef.current[armature.name]) {
-                mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
-              } else if (!mixerRef.current[skinned.name]) {
-                mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
-              }
-            } else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
-              mixerRef.current[child.name] = new THREE.AnimationMixer(child);
-            } else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
-              if (!mixerRef.current[child.name]) {
-                mixerRef.current[child.name] = new THREE.AnimationMixer(child);
-              }
-            }
-          });
-
-          initMixers(gltf.scene);
-          applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
-          applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
-          applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
-
-          // ✅ AJOUT : Configurer les objets émissifs pour le bloom
-          if (configWithPP.emissiveObjects) {
-            setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
-          }
-
-          const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
-          if (startPOI) {
-            const startObj = emptyRefs.current[startPOI.emptyName];
-            if (startObj) moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
-            playPOIAnimations(startPOI, gltf.animations);
-          }
-
-          setIsLoaded(true);
-        },
-        (xhr) => {
-          if (xhr.lengthComputable) {
-            const progress = (xhr.loaded / xhr.total) * 100;
-            setLoadingProgress(progress);
-          } else {
-            setLoadingProgress((prev) => Math.min(prev + 1, 95));
-          }
-        },
-        (error) => {
-          console.error("Erreur chargement GLB:", error);
-        }
-      );
-    });
-
-    // loader.load(
-    //   config.glb,
-    //   (gltf: GLTF) => {
-    //     scene.add(gltf.scene);
-    //     sceneRef.current = scene;
-    //     scene.userData.gltfAnimations = gltf.animations;
-
-    //     gltf.scene.traverse((child: any) => {
-    //       if (child.isMesh) {
-    //         child.frustumCulled = false;
-    //         if (child.geometry && !child.geometry.boundingBox) {
-    //           child.geometry.computeBoundingBox();
-    //           child.geometry.computeBoundingSphere();
+    //       gltf.scene.traverse((child: any) => {
+    //         if (child.isMesh) {
+    //           child.frustumCulled = false;
+    //           if (child.geometry && !child.geometry.boundingBox) {
+    //             child.geometry.computeBoundingBox();
+    //             child.geometry.computeBoundingSphere();
+    //           }
     //         }
-    //       }
-    //     });
+    //       });
 
-    //     gltf.scene.traverse((child) => {
-    //       if (!child.name) return;
-    //       emptyRefs.current[child.name] = child;
+    //       gltf.scene.traverse((child) => {
+    //         if (!child.name) return;
+    //         emptyRefs.current[child.name] = child;
 
-    //       if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
-    //         const skinned = child as THREE.SkinnedMesh;
-    //         const armature = skinned.skeleton?.bones?.[0]?.parent;
-    //         if (armature && !mixerRef.current[armature.name]) {
-    //           mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
-    //         } else if (!mixerRef.current[skinned.name]) {
-    //           mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
-    //         }
-    //       } else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
-    //         mixerRef.current[child.name] = new THREE.AnimationMixer(child);
-    //       } else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
-    //         if (!mixerRef.current[child.name]) {
+    //         if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
+    //           const skinned = child as THREE.SkinnedMesh;
+    //           const armature = skinned.skeleton?.bones?.[0]?.parent;
+    //           if (armature && !mixerRef.current[armature.name]) {
+    //             mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
+    //           } else if (!mixerRef.current[skinned.name]) {
+    //             mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
+    //           }
+    //         } else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
     //           mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+    //         } else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
+    //           if (!mixerRef.current[child.name]) {
+    //             mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+    //           }
     //         }
+    //       });
+
+    //       initMixers(gltf.scene);
+    //       applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
+    //       applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
+    //       applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
+
+    //       // ✅ AJOUT : Configurer les objets émissifs pour le bloom
+    //       if (configWithPP.emissiveObjects) {
+    //         setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
     //       }
-    //     });
 
-    //     initMixers(gltf.scene);
-    //     applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
-    //     applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
-    //     applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
+    //       const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
+    //       if (startPOI) {
+    //         const startObj = emptyRefs.current[startPOI.emptyName];
+    //         if (startObj) moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
+    //         playPOIAnimations(startPOI, gltf.animations);
+    //       }
 
-    //     // ✅ AJOUT : Configurer les objets émissifs pour le bloom
-    //     if (configWithPP.emissiveObjects) {
-    //       setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
+    //       setIsLoaded(true);
+    //     },
+    //     (xhr) => {
+    //       if (xhr.lengthComputable) {
+    //         const progress = (xhr.loaded / xhr.total) * 100;
+    //         setLoadingProgress(progress);
+    //       } else {
+    //         setLoadingProgress((prev) => Math.min(prev + 1, 95));
+    //       }
+    //     },
+    //     (error) => {
+    //       console.error("Erreur chargement GLB:", error);
     //     }
+    //   );
+    // });
 
-    //     const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
-    //     if (startPOI) {
-    //       const startObj = emptyRefs.current[startPOI.emptyName];
-    //       if (startObj) moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
-    //       playPOIAnimations(startPOI, gltf.animations);
-    //     }
+    loader.load(
+      config.glb,
+      (gltf: GLTF) => {
+        scene.add(gltf.scene);
+        sceneRef.current = scene;
+        scene.userData.gltfAnimations = gltf.animations;
 
-    //     setIsLoaded(true);
-    //   },
-    //   (xhr) => {
-    //     if (xhr.lengthComputable) {
-    //       const progress = (xhr.loaded / xhr.total) * 100;
-    //       setLoadingProgress(progress);
-    //     } else {
-    //       setLoadingProgress((prev) => Math.min(prev + 1, 95));
-    //     }
-    //   },
-    //   (error) => {
-    //     console.error("Erreur lors du chargement du GLB :", error);
-    //   }
-    // );
+        gltf.scene.traverse((child: any) => {
+          if (child.isMesh) {
+            child.frustumCulled = false;
+            if (child.geometry && !child.geometry.boundingBox) {
+              child.geometry.computeBoundingBox();
+              child.geometry.computeBoundingSphere();
+            }
+          }
+        });
+
+        gltf.scene.traverse((child) => {
+          if (!child.name) return;
+          emptyRefs.current[child.name] = child;
+
+          if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
+            const skinned = child as THREE.SkinnedMesh;
+            const armature = skinned.skeleton?.bones?.[0]?.parent;
+            if (armature && !mixerRef.current[armature.name]) {
+              mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
+            } else if (!mixerRef.current[skinned.name]) {
+              mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
+            }
+          } else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
+            mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+          } else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
+            if (!mixerRef.current[child.name]) {
+              mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+            }
+          }
+        });
+
+        initMixers(gltf.scene);
+        applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
+        applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
+        applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
+
+        // ✅ AJOUT : Configurer les objets émissifs pour le bloom
+        if (configWithPP.emissiveObjects) {
+          setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
+        }
+
+        const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
+        if (startPOI) {
+          const startObj = emptyRefs.current[startPOI.emptyName];
+          if (startObj) moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
+          playPOIAnimations(startPOI, gltf.animations);
+        }
+
+        setIsLoaded(true);
+      },
+      (xhr) => {
+        if (xhr.lengthComputable) {
+          const progress = (xhr.loaded / xhr.total) * 100;
+          setLoadingProgress(progress);
+        } else {
+          setLoadingProgress((prev) => Math.min(prev + 1, 95));
+        }
+      },
+      (error) => {
+        console.error("Erreur lors du chargement du GLB :", error);
+      }
+    );
 
     // ✅ MODIFICATION de la boucle d'animation
-    const animate = () => {
-      // Vérifier que le contexte n'est pas perdu
-      if (rendererRef.current) {
-        const gl = rendererRef.current.getContext();
-        if (gl.isContextLost()) {
-          console.error("❌ Contexte perdu pendant l'animation");
-          setIsContextLost(true);
-          return; // Arrêter l'animation
-        }
-      }
-
-      // Vérifier que la page est visible
-      if (document.hidden) {
-        // Ne pas render si la page est cachée
-        animationFrameRef.current = requestAnimationFrame(animate);
-        return;
-      }
-
-      const delta = clock.current.getDelta();
-      updateMixers(delta);
-      controlsRef.current?.update();
-      
-      // Utiliser le composer si disponible, sinon le renderer normal
-      if (composerRef.current) {
-        composerRef.current.composer.render();
-      } else if (rendererRef.current) {
-        rendererRef.current.render(scene, camera);
-      }
-
-      animationFrameRef.current = requestAnimationFrame(animate);
-    };
-    
-    animationFrameRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (animationFrameRef.current !== undefined) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-      renderer.dispose();
-      controls.dispose();
-      scene.clear();
-    };
-
-    // ✅ MODIFICATION : Boucle d'animation avec post-processing
     // const animate = () => {
-    //   requestAnimationFrame(animate);
+    //   // Vérifier que le contexte n'est pas perdu
+    //   if (rendererRef.current) {
+    //     const gl = rendererRef.current.getContext();
+    //     if (gl.isContextLost()) {
+    //       console.error("❌ Contexte perdu pendant l'animation");
+    //       setIsContextLost(true);
+    //       return; // Arrêter l'animation
+    //     }
+    //   }
+
+    //   // Vérifier que la page est visible
+    //   if (document.hidden) {
+    //     // Ne pas render si la page est cachée
+    //     animationFrameRef.current = requestAnimationFrame(animate);
+    //     return;
+    //   }
+
     //   const delta = clock.current.getDelta();
     //   updateMixers(delta);
     //   controlsRef.current?.update();
@@ -551,17 +523,45 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     //   // Utiliser le composer si disponible, sinon le renderer normal
     //   if (composerRef.current) {
     //     composerRef.current.composer.render();
-    //   } else {
-    //     renderer.render(scene, camera);
+    //   } else if (rendererRef.current) {
+    //     rendererRef.current.render(scene, camera);
     //   }
+
+    //   animationFrameRef.current = requestAnimationFrame(animate);
     // };
-    // animate();
+    
+    // animationFrameRef.current = requestAnimationFrame(animate);
 
     // return () => {
+    //   if (animationFrameRef.current !== undefined) {
+    //     cancelAnimationFrame(animationFrameRef.current);
+    //   }
     //   renderer.dispose();
     //   controls.dispose();
     //   scene.clear();
     // };
+
+    // ✅ MODIFICATION : Boucle d'animation avec post-processing
+    const animate = () => {
+      requestAnimationFrame(animate);
+      const delta = clock.current.getDelta();
+      updateMixers(delta);
+      controlsRef.current?.update();
+      
+      // Utiliser le composer si disponible, sinon le renderer normal
+      if (composerRef.current) {
+        composerRef.current.composer.render();
+      } else {
+        renderer.render(scene, camera);
+      }
+    };
+    animate();
+
+    return () => {
+      renderer.dispose();
+      controls.dispose();
+      scene.clear();
+    };
   }, [config.glb]);
 
   // ✅ AJOUT : useEffect pour mettre à jour le DOF selon le POI
