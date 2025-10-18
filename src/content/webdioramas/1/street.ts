@@ -33,7 +33,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
       type: "Linear",
     },
   },
-  emissiveObjects: [
+  emissiveObjects: [ // fait partie du postprocessing
     // { name: "bulb_01", color: 0xfff2cc, intensity: 2.5 },
     // { name: "bulb_02", color: 0xfff2cc, intensity: 2.0 },
     // { name: "TVScreen", color: 0x4488ff, intensity: 0.1 },
@@ -56,7 +56,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
       minAzimuthAngle: -3.14,
       maxAzimuthAngle: 3.14,
       enableZoom: true,
-      elements: [
+      elements: [ // elements posssedant une animation dans le glb
         {
           name: "Armature",
           type: "armature",
@@ -79,7 +79,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
           loop: false
         }
       ],
-      dialogue: {
+      dialogue: { // icones des personnages apparaissant dans les sous-titres et dialogues (type SRT : textes + time)
         characters: [
           { id: "hero", name: "Alex", image: `${BASE_URL}/images/dioramas/test_street/characters/icone-elf.png` },
           { id: "guide", name: "Luna", image: `${BASE_URL}/images/dioramas/test_street/characters/icone-goblin.png` }
@@ -106,7 +106,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
           }
         ]
       },
-      cameraPath: [
+      cameraPath: [ // pour le déplacement automatisé de la caméra durant l'animation
         { point: "start_01", target: "start_01_track", time: 3.0, duration: 3.0, zoom: 0.3 },
         { point: "start_02", target: "start_02_track", time: 8.0, duration: 4.0, zoom: 0.8 }
       ],
