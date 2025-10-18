@@ -437,6 +437,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
             fontClassName={BullstandRegular.className}
             onStart={() => {
               if (muted) toggleMute();
+              if (!isFullscreen) toggleFullscreen();
               setShowLoaderOverlay(false);
             }}
           />
