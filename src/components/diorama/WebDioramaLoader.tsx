@@ -34,6 +34,7 @@ import PostProcessingControls from "./rendering/PostProcessingControls";
 // ✅ AJOUT : Import de la fonction de setup
 import { setupPostProcessing, setupEmissiveMaterials } from "./rendering/setupPostProcessing"; 
 import { usePOIEffects } from "./hooks/usePOIEffects";
+import RotateHint from "./ui/RotateHint";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -489,6 +490,12 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         )}
       </AnimatePresence>
       
+      {showRotateHint &&
+        <RotateHint
+          show={true}
+        />
+      }
+
       <div className="absolute top-2 right-2 z-50 flex flex-row gap-2 items-end">
         <InfoButton onClick={() => setShowInfoModal(true)} />
       </div>
