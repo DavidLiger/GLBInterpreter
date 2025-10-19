@@ -75,6 +75,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
   const [isContextLost, setIsContextLost] = useState(false);
+  const [shouldAutoReload, setShouldAutoReload] = useState(false);
 
   usePOIEffects(sceneRef.current!, currentPoi, textureLoader);
 
@@ -127,6 +128,51 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
     return active.icon;
   }, [currentPOI, findPOIRecursively, findParentPOI]);
+
+  // ✅ Au début du composant, vérifier si on revient d'un reload
+  useEffect(() => {
+    if (isLoaded) {
+      sessionStorage.removeItem('webgl_context_lost');
+    }
+  }, [isLoaded]);
+
+  // ✅ Gestion du reload automatique (EN DEHORS du render conditionnel)
+  useEffect(() => {
+    if (!isContextLost) return;
+
+    const wasContextLost = sessionStorage.getItem('webgl_context_lost') === 'true';
+    
+    if (wasContextLost) {
+      // Erreur persistante, ne pas recharger automatiquement
+      console.error("❌ Erreur WebGL persistante après reload");
+      sessionStorage.removeItem('webgl_context_lost');
+      setShouldAutoReload(false);
+      return;
+    }
+
+    // Premier échec : activer le reload automatique
+    setShouldAutoReload(true);
+    
+    const handleReload = async () => {
+      sessionStorage.setItem('webgl_context_lost', 'true');
+      console.log("🔄 Rechargement automatique...");
+      
+      try {
+        if ('caches' in window) {
+          const names = await caches.keys();
+          await Promise.all(names.map(name => caches.delete(name)));
+        }
+      } catch (error) {
+        console.error("Erreur cache:", error);
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      window.location.reload();
+    };
+
+    const timer = setTimeout(handleReload, 2000);
+    return () => clearTimeout(timer);
+  }, [isContextLost]);
 
   useEffect(() => {
     const checkIsMobile = () => setIsMobile(window.innerWidth < 768);
@@ -626,82 +672,54 @@ useEffect(() => {
 
 // ✅ Écran d'erreur WebGL
 if (isContextLost) {
-  useEffect(() => {
-    const handleReload = async () => {
-      // Marquer qu'on a eu une perte de contexte
-      sessionStorage.setItem('webgl_context_lost', 'true');
-      
-      console.log("🔄 Rechargement automatique...");
-      
-      try {
-        if ('caches' in window) {
-          const names = await caches.keys();
-          await Promise.all(names.map(name => caches.delete(name)));
-        }
-      } catch (error) {
-        console.error("Erreur cache:", error);
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      window.location.reload();
-    };
-
-    // ✅ Vérifier si on vient de recharger à cause d'une erreur
     const wasContextLost = sessionStorage.getItem('webgl_context_lost') === 'true';
-    
-    if (wasContextLost) {
-      // Si on retombe sur l'erreur après un reload, c'est un problème persistant
-      console.error("❌ Erreur WebGL persistante après reload");
-      sessionStorage.removeItem('webgl_context_lost');
-      return; // Ne pas recharger automatiquement
-    }
 
-    // Premier échec : reload automatique
-    const timer = setTimeout(handleReload, 2000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const wasContextLost = sessionStorage.getItem('webgl_context_lost') === 'true';
-
-  return (
-    <div 
-      ref={containerRef}
-      style={{ height: viewportHeight }}
-      className="w-screen flex items-center justify-center bg-black text-white"
-    >
-      <div className="text-center p-8 max-w-md">
-        {wasContextLost ? (
-          <>
-            <p className="mb-2 text-lg">❌ Impossible de charger WebGL</p>
-            <p className="mb-4 text-sm text-gray-400">
-              Votre navigateur ne peut pas créer le contexte 3D.
-              Fermez complètement le navigateur et réessayez.
-            </p>
-            <button
-              onClick={() => {
-                sessionStorage.removeItem('webgl_context_lost');
-                window.location.reload();
-              }}
-              className="px-6 py-3 bg-green-500 text-black font-semibold rounded-full"
-            >
-              Réessayer
-            </button>
-          </>
-        ) : (
-          <>
-            <p className="mb-2 text-lg">⚠️ Contexte WebGL perdu</p>
-            <p className="mb-4 text-sm text-gray-400">
-              Rechargement automatique dans 2 secondes...
-            </p>
-            <div className="flex justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-            </div>
-          </>
-        )}
+    return (
+      <div 
+        ref={containerRef}
+        style={{ height: viewportHeight }}
+        className="w-screen flex items-center justify-center bg-black text-white"
+      >
+        <div className="text-center p-8 max-w-md">
+          {wasContextLost ? (
+            <>
+              <p className="mb-2 text-lg">❌ Impossible de charger WebGL</p>
+              <p className="mb-4 text-sm text-gray-400">
+                Votre navigateur ne peut pas créer le contexte 3D.
+                Fermez complètement le navigateur et réessayez.
+              </p>
+              <button
+                onClick={() => {
+                  sessionStorage.removeItem('webgl_context_lost');
+                  window.location.reload();
+                }}
+                className="px-6 py-3 bg-green-500 text-black font-semibold rounded-full"
+              >
+                Réessayer
+              </button>
+            </>
+          ) : shouldAutoReload ? (
+            <>
+              <p className="mb-2 text-lg">⚠️ Contexte WebGL perdu</p>
+              <p className="mb-4 text-sm text-gray-400">
+                Rechargement automatique dans 2 secondes...
+              </p>
+              <div className="flex justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="mb-2 text-lg">⚠️ Contexte WebGL perdu</p>
+              <p className="mb-4 text-sm text-gray-400">
+                Préparation du rechargement...
+              </p>
+            </>
+          )}
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   return (
     <div
