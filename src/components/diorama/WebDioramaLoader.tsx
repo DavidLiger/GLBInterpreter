@@ -632,19 +632,22 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     };
 
     return (
-      <div className="w-screen h-screen flex items-center justify-center bg-black text-white">
+      <div 
+        ref={containerRef}
+        style={{ height: viewportHeight }}
+        className="relative w-screen bg-black">
         <div className="text-center p-8 max-w-md">
-          <h2 className="text-2xl font-bold mb-4">⚠️ Erreur WebGL</h2>
-          <p className="mb-2">Le contexte WebGL a été perdu.</p>
+          {/* <h2 className="text-2xl font-bold mb-4">⚠️ Erreur WebGL</h2> */}
+          <p className="mb-2">⚠️ Le contexte WebGL a été perdu ⚠️</p>
           <p className="mb-4 text-sm text-gray-400">
-            Rechargez la page pour continuer.
+            Rechargement automatique de la page.
           </p>
-          <button
+          {/* <button
             onClick={handleReload}
             className="px-6 py-3 bg-green-500 text-black font-semibold rounded-full"
           >
             Recharger
-          </button>
+          </button> */}
         </div>
       </div>
     );
