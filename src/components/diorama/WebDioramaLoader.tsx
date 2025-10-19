@@ -616,9 +616,23 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [isEnded, scenePlaying, muted, toggleMute]);
 
-  // ✅ Écran d'erreur WebGL
-  if (isContextLost) {
+  // ✅ Au début du composant, vérifier si on revient d'un reload
+useEffect(() => {
+  // Si la scène charge avec succès, supprimer le flag d'erreur
+  if (isLoaded) {
+    sessionStorage.removeItem('webgl_context_lost');
+  }
+}, [isLoaded]);
+
+// ✅ Écran d'erreur WebGL
+if (isContextLost) {
+  useEffect(() => {
     const handleReload = async () => {
+      // Marquer qu'on a eu une perte de contexte
+      sessionStorage.setItem('webgl_context_lost', 'true');
+      
+      console.log("🔄 Rechargement automatique...");
+      
       try {
         if ('caches' in window) {
           const names = await caches.keys();
@@ -626,32 +640,105 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         }
       } catch (error) {
         console.error("Erreur cache:", error);
-      } finally {
-        window.location.reload();
       }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      window.location.reload();
     };
 
-    return (
-      <div 
-        ref={containerRef}
-        style={{ height: viewportHeight }}
-        className="relative w-screen bg-black">
-        <div className="text-center p-8 max-w-md">
-          {/* <h2 className="text-2xl font-bold mb-4">⚠️ Erreur WebGL</h2> */}
-          <p className="mb-2">⚠️ Le contexte WebGL a été perdu ⚠️</p>
-          <p className="mb-4 text-sm text-gray-400">
-            Rechargement automatique de la page.
-          </p>
-          <button
-            onClick={handleReload}
-            className="px-6 py-3 bg-green-500 text-black font-semibold rounded-full"
-          >
-            Recharger
-          </button>
-        </div>
+    // ✅ Vérifier si on vient de recharger à cause d'une erreur
+    const wasContextLost = sessionStorage.getItem('webgl_context_lost') === 'true';
+    
+    if (wasContextLost) {
+      // Si on retombe sur l'erreur après un reload, c'est un problème persistant
+      console.error("❌ Erreur WebGL persistante après reload");
+      sessionStorage.removeItem('webgl_context_lost');
+      return; // Ne pas recharger automatiquement
+    }
+
+    // Premier échec : reload automatique
+    const timer = setTimeout(handleReload, 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const wasContextLost = sessionStorage.getItem('webgl_context_lost') === 'true';
+
+  return (
+    <div 
+      ref={containerRef}
+      style={{ height: viewportHeight }}
+      className="w-screen flex items-center justify-center bg-black text-white"
+    >
+      <div className="text-center p-8 max-w-md">
+        {wasContextLost ? (
+          <>
+            <p className="mb-2 text-lg">❌ Impossible de charger WebGL</p>
+            <p className="mb-4 text-sm text-gray-400">
+              Votre navigateur ne peut pas créer le contexte 3D.
+              Fermez complètement le navigateur et réessayez.
+            </p>
+            <button
+              onClick={() => {
+                sessionStorage.removeItem('webgl_context_lost');
+                window.location.reload();
+              }}
+              className="px-6 py-3 bg-green-500 text-black font-semibold rounded-full"
+            >
+              Réessayer
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="mb-2 text-lg">⚠️ Contexte WebGL perdu</p>
+            <p className="mb-4 text-sm text-gray-400">
+              Rechargement automatique dans 2 secondes...
+            </p>
+            <div className="flex justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+            </div>
+          </>
+        )}
       </div>
-    );
-  }
+    </div>
+  );
+}
+
+  // ✅ Écran d'erreur WebGL
+  // if (isContextLost) {
+  //   const handleReload = async () => {
+  //     try {
+  //       if ('caches' in window) {
+  //         const names = await caches.keys();
+  //         await Promise.all(names.map(name => caches.delete(name)));
+  //       }
+  //     } catch (error) {
+  //       console.error("Erreur cache:", error);
+  //     } finally {
+  //       window.location.reload();
+  //     }
+  //   };
+
+  //   return (
+  //     <div 
+  //       ref={containerRef}
+  //       style={{ height: viewportHeight }}
+  //       className="relative w-screen bg-black">
+  //       <div className="text-center p-8 max-w-md">
+  //         {/* <h2 className="text-2xl font-bold mb-4">⚠️ Erreur WebGL</h2> */}
+  //         <p className="mb-2">⚠️ Le contexte WebGL a été perdu ⚠️</p>
+  //         <p className="mb-4 text-sm text-gray-400">
+  //           Rechargement automatique de la page.
+  //         </p>
+  //         <button
+  //           onClick={handleReload}
+  //           className="px-6 py-3 bg-green-500 text-black font-semibold rounded-full"
+  //         >
+  //           Recharger
+  //         </button>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   // ✅ Écran d'erreur WebGL avec rechargement automatique
   // if (isContextLost) {
