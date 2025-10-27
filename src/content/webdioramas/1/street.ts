@@ -77,6 +77,13 @@ export const street: DioramaConfig3DWithPostProcessing = {
           clipName: "Action_001",
           autoplay: false,
           loop: false
+        },
+        {
+          name: "DuckArmature_001",
+          type: "armature",
+          clipName: "Duck_Walk",
+          autoplay: false,
+          loop: false
         }
       ],
       dialogue: { // icones des personnages apparaissant dans les sous-titres et dialogues (type SRT : textes + time)
