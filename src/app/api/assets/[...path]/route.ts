@@ -1,15 +1,13 @@
-// app/api/assets/[...path]/route.ts - VERSION COMPLÈTE avec préfixe R2
+// app/api/assets/[...path]/route.ts - COMPATIBLE Next.js 15+
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac } from 'crypto';
 
 const R2_WORKER_URL = process.env.R2_WORKER_URL!;
 const SECRET_KEY = process.env.ASSET_SECRET_KEY!;
-const ALLOWED_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://votre-app.vercel.app';
+const ALLOWED_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://faerium-site.vercel.app';
 const isDevelopment = process.env.NODE_ENV === 'development';
-
-// ✅ AJOUT : Préfixe R2 (à adapter selon votre structure)
-const R2_PREFIX = process.env.R2_ASSET_PREFIX || 'assets';
+const R2_PREFIX = process.env.R2_ASSET_PREFIX || 'webdioramas/assets';
 
 function generateToken(path: string, expiresAt: number): string {
   const payload = `${path}:${expiresAt}`;
@@ -45,10 +43,14 @@ function verifyToken(token: string): { path: string; expiresAt: number } | null 
   }
 }
 
+// ✅ Next.js 15+ : params est maintenant une Promise
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
+  // ✅ Await params
+  const { path } = await params;
+  
   const origin = request.headers.get('origin') || '';
   
   // Vérification origin
@@ -98,7 +100,7 @@ export async function GET(
     );
   }
   
-  const objectKey = params.path.join('/');
+  const objectKey = path.join('/');
   
   if (verified.path !== objectKey) {
     return NextResponse.json(
@@ -112,8 +114,8 @@ export async function GET(
   }
   
   try {
-    // ✅ Construire le chemin complet R2
-    const fullR2Path = `${R2_PREFIX}/${objectKey}`;
+    // Construire le chemin complet R2
+    const fullR2Path = R2_PREFIX ? `${R2_PREFIX}/${objectKey}` : objectKey;
     
     console.log('🔍 Fetching from R2:', fullR2Path);
     

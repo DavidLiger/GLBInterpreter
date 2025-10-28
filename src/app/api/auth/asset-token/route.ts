@@ -1,9 +1,10 @@
-// app/api/auth/asset-token/route.ts - VERSION CORRIGÉE pour origin vide
+// app/api/auth/asset-token/route.ts - COMPATIBLE Next.js 15+
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac } from 'crypto';
 
 const SECRET_KEY = process.env.ASSET_SECRET_KEY!;
-const ALLOWED_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://votre-app.vercel.app';
+const ALLOWED_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || 'https://faerium-site.vercel.app';
 const TOKEN_VALIDITY_MS = 5 * 60 * 1000; // 5 minutes
 const isDevelopment = process.env.NODE_ENV === 'development';
 
@@ -18,23 +19,19 @@ function generateToken(path: string, expiresAt: number): string {
 export async function POST(request: NextRequest) {
   const origin = request.headers.get('origin') || '';
   
-  // ✅ FIX : Gérer les requêtes sans origin (same-origin ou server-side)
+  // Gérer les requêtes sans origin (same-origin ou server-side)
   let isAllowedOrigin = false;
   
   if (origin) {
-    // Origin présent : vérifier normalement
     isAllowedOrigin = isDevelopment 
       ? origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')
       : origin === ALLOWED_ORIGIN;
   } else {
-    // Origin absent : vérifier le referer ou accepter en dev
     const referer = request.headers.get('referer') || '';
     
     if (isDevelopment) {
-      // En dev, accepter les requêtes sans origin
       isAllowedOrigin = true;
     } else {
-      // En prod, vérifier que le referer commence par l'URL autorisée
       isAllowedOrigin = referer.startsWith(ALLOWED_ORIGIN);
     }
   }
