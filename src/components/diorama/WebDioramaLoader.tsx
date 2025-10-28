@@ -35,6 +35,9 @@ import { setupPostProcessing, setupEmissiveMaterials } from "./rendering/setupPo
 import { usePOIEffects } from "./hooks/usePOIEffects";
 import RotateHint from "./ui/RotateHint";
 
+// ✅ AJOUT : Import du hook de sécurité
+import { useSecureAsset } from "./hooks/useSecureAsset"; 
+
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
   variable: "--font-Bullstand-Regular",
@@ -56,6 +59,9 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const hasAutoUnmutedRef = useRef(false);
   const composerRef = useRef<ReturnType<typeof setupPostProcessing> | null>(null);
   const textureLoader = useMemo(() => new THREE.TextureLoader(), []);
+
+  // ✅ AJOUT : Initialisation du hook de sécurité
+  const { fetchAsset, getToken } = useSecureAsset();
 
   const { currentPOI, goToPOI, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively } = usePOINavigation(
     config,
@@ -279,6 +285,78 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [currentPOI]);
 
+  const loadSecureVideos = async (
+    model: THREE.Object3D,
+    videosConfig: { name: string; src: string }[]
+  ) => {
+    for (const videoConfig of videosConfig) {
+      try {
+        console.log(`🔐 Chargement sécurisé de la vidéo: ${videoConfig.name}`);
+        
+        // Obtenir le token pour cette vidéo
+        const token = await getToken(videoConfig.src);
+        
+        // Fetcher la vidéo avec le token
+        const response = await fetch(`/api/assets/${videoConfig.src}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (!response.ok) {
+          console.error(`❌ Erreur lors du chargement de ${videoConfig.name}: ${response.status}`);
+          continue;
+        }
+        
+        // Créer un blob URL
+        const blob = await response.blob();
+        const videoUrl = URL.createObjectURL(blob);
+        
+        // Créer l'élément vidéo
+        const video = document.createElement('video');
+        video.src = videoUrl;
+        video.loop = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.crossOrigin = 'anonymous';
+        
+        // Créer la texture vidéo
+        const texture = new THREE.VideoTexture(video);
+        texture.minFilter = THREE.LinearFilter;
+        texture.magFilter = THREE.LinearFilter;
+        texture.format = THREE.RGBAFormat;
+        texture.colorSpace = THREE.SRGBColorSpace;
+        
+        // Appliquer la texture au mesh
+        model.traverse((child) => {
+          if (
+            child instanceof THREE.Mesh &&
+            child.name === videoConfig.name
+          ) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach((mat) => {
+                mat.map = texture;
+                mat.needsUpdate = true;
+              });
+            } else {
+              child.material.map = texture;
+              child.material.needsUpdate = true;
+            }
+          }
+        });
+        
+        // Démarrer la lecture
+        video.play().catch((err) => {
+          console.warn(`⚠️ Autoplay bloqué pour ${videoConfig.name}:`, err);
+        });
+        
+        console.log(`✅ Vidéo ${videoConfig.name} chargée avec succès`);
+      } catch (error) {
+        console.error(`❌ Erreur lors du chargement de la vidéo ${videoConfig.name}:`, error);
+      }
+    }
+  };
+
   // ✅ useEffect principal - Initialisation de la scène
   useEffect(() => {
     if (!containerRef.current || hasInitializedRef.current) {
@@ -386,74 +464,212 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     controlsRef.current = controls;
 
     // Chargement GLB
-    const loader = new GLTFLoader();
-    loader.load(
-      config.glb,
-      (gltf: GLTF) => {
-        scene.add(gltf.scene);
-        scene.userData.gltfAnimations = gltf.animations;
+    // const loader = new GLTFLoader();
+    // loader.load(
+    //   config.glb,
+    //   (gltf: GLTF) => {
+    //     scene.add(gltf.scene);
+    //     scene.userData.gltfAnimations = gltf.animations;
 
-        gltf.scene.traverse((child: any) => {
-          if (child.isMesh) {
-            child.frustumCulled = false;
-            if (child.geometry && !child.geometry.boundingBox) {
-              child.geometry.computeBoundingBox();
-              child.geometry.computeBoundingSphere();
+    //     gltf.scene.traverse((child: any) => {
+    //       if (child.isMesh) {
+    //         child.frustumCulled = false;
+    //         if (child.geometry && !child.geometry.boundingBox) {
+    //           child.geometry.computeBoundingBox();
+    //           child.geometry.computeBoundingSphere();
+    //         }
+    //       }
+    //     });
+
+    //     gltf.scene.traverse((child) => {
+    //       if (!child.name) return;
+    //       emptyRefs.current[child.name] = child;
+
+    //       if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
+    //         const skinned = child as THREE.SkinnedMesh;
+    //         const armature = skinned.skeleton?.bones?.[0]?.parent;
+    //         if (armature && !mixerRef.current[armature.name]) {
+    //           mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
+    //         } else if (!mixerRef.current[skinned.name]) {
+    //           mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
+    //         }
+    //       } else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
+    //         mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+    //       } else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
+    //         if (!mixerRef.current[child.name]) {
+    //           mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+    //         }
+    //       }
+    //     });
+
+    //     initMixers(gltf.scene);
+    //     applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
+    //     applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
+    //     applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
+
+    //     if (configWithPP.emissiveObjects) {
+    //       setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
+    //     }
+
+    //     const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
+    //     if (startPOI) {
+    //       const startObj = emptyRefs.current[startPOI.emptyName];
+    //       if (startObj) moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
+    //       playPOIAnimations(startPOI, gltf.animations);
+    //     }
+
+    //     setIsLoaded(true);
+    //   },
+    //   (xhr) => {
+    //     if (xhr.lengthComputable) {
+    //       const progress = (xhr.loaded / xhr.total) * 100;
+    //       setLoadingProgress(progress);
+    //     } else {
+    //       setLoadingProgress((prev) => Math.min(prev + 1, 95));
+    //     }
+    //   },
+    //   (error) => {
+    //     console.error("Erreur chargement GLB:", error);
+    //   }
+    // );
+
+    // ✅ MODIFICATION : Chargement GLB sécurisé
+    // ✅ VERSION CORRIGÉE de loadGLBSecure avec gestion du progress
+
+    // ✅ VERSION FINALE RECOMMANDÉE - À copier-coller dans votre useEffect
+
+    // ✅ VERSION FINALE CORRIGÉE - TypeScript strict
+
+    const loadGLBSecure = async () => {
+      try {
+        console.log(`🔐 Chargement sécurisé du GLB: ${config.glb}`);
+        
+        // Obtenir le token
+        const token = await getToken(config.glb);
+        
+        // Fetch le GLB avec authentification
+        const response = await fetch(`/api/assets/${config.glb}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (!response.ok) {
+          throw new Error(`Échec du chargement du GLB: ${response.status}`);
+        }
+        
+        // ✅ Gérer le progress avec ReadableStream
+        const contentLength = response.headers.get('content-length');
+        const total = contentLength ? parseInt(contentLength, 10) : 0;
+        
+        let loaded = 0;
+        const reader = response.body?.getReader();
+        const chunks: Uint8Array[] = [];
+        
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) break;
+            
+            chunks.push(value);
+            loaded += value.length;
+            
+            // ✅ Mettre à jour le progress
+            if (total > 0) {
+              const progress = (loaded / total) * 100;
+              setLoadingProgress(progress);
+            } else {
+              setLoadingProgress((prev) => Math.min(prev + 1, 95));
             }
           }
-        });
+        }
+        
+        // ✅ CORRECTION TypeScript : Cast explicite en BlobPart[]
+        const blob = new Blob(chunks as BlobPart[], { type: 'model/gltf-binary' });
+        const blobUrl = URL.createObjectURL(blob);
+        
+        // Parser avec GLTFLoader en utilisant loader.load
+        const loader = new GLTFLoader();
+        
+        loader.load(
+          blobUrl,
+          (gltf: GLTF) => {
+            // Nettoyer le Blob URL
+            URL.revokeObjectURL(blobUrl);
+            
+            // ✅ TOUTE LA LOGIQUE D'ORIGINE (CONSERVÉE)
+            scene.add(gltf.scene);
+            scene.userData.gltfAnimations = gltf.animations;
 
-        gltf.scene.traverse((child) => {
-          if (!child.name) return;
-          emptyRefs.current[child.name] = child;
+            gltf.scene.traverse((child: any) => {
+              if (child.isMesh) {
+                child.frustumCulled = false;
+                if (child.geometry && !child.geometry.boundingBox) {
+                  child.geometry.computeBoundingBox();
+                  child.geometry.computeBoundingSphere();
+                }
+              }
+            });
 
-          if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
-            const skinned = child as THREE.SkinnedMesh;
-            const armature = skinned.skeleton?.bones?.[0]?.parent;
-            if (armature && !mixerRef.current[armature.name]) {
-              mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
-            } else if (!mixerRef.current[skinned.name]) {
-              mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
+            gltf.scene.traverse((child) => {
+              if (!child.name) return;
+              emptyRefs.current[child.name] = child;
+
+              if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
+                const skinned = child as THREE.SkinnedMesh;
+                const armature = skinned.skeleton?.bones?.[0]?.parent;
+                if (armature && !mixerRef.current[armature.name]) {
+                  mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
+                } else if (!mixerRef.current[skinned.name]) {
+                  mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
+                }
+              } else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
+                mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+              } else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
+                if (!mixerRef.current[child.name]) {
+                  mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+                }
+              }
+            });
+
+            initMixers(gltf.scene);
+            applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
+            applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
+            applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
+
+            if (configWithPP.emissiveObjects) {
+              setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
             }
-          } else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
-            mixerRef.current[child.name] = new THREE.AnimationMixer(child);
-          } else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
-            if (!mixerRef.current[child.name]) {
-              mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+
+            const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
+            if (startPOI) {
+              const startObj = emptyRefs.current[startPOI.emptyName];
+              if (startObj) moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
+              playPOIAnimations(startPOI, gltf.animations);
             }
+
+            setIsLoaded(true);
+            console.log("✅ GLB chargé avec succès");
+          },
+          undefined, // onProgress déjà géré par le fetch ci-dessus
+          (event: ErrorEvent) => {
+            // ✅ CORRECTION TypeScript : event est ErrorEvent, pas Error
+            // Nettoyer le Blob URL en cas d'erreur
+            URL.revokeObjectURL(blobUrl);
+            console.error("❌ Erreur lors du chargement du GLB:", event);
+            setIsContextLost(true);
           }
-        });
-
-        initMixers(gltf.scene);
-        applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
-        applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
-        applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
-
-        if (configWithPP.emissiveObjects) {
-          setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
-        }
-
-        const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
-        if (startPOI) {
-          const startObj = emptyRefs.current[startPOI.emptyName];
-          if (startObj) moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
-          playPOIAnimations(startPOI, gltf.animations);
-        }
-
-        setIsLoaded(true);
-      },
-      (xhr) => {
-        if (xhr.lengthComputable) {
-          const progress = (xhr.loaded / xhr.total) * 100;
-          setLoadingProgress(progress);
-        } else {
-          setLoadingProgress((prev) => Math.min(prev + 1, 95));
-        }
-      },
-      (error) => {
-        console.error("Erreur chargement GLB:", error);
+        );
+          
+      } catch (error) {
+        console.error("❌ Erreur lors du fetch du GLB:", error);
+        setIsContextLost(true);
       }
-    );
+    };
+
+    // Lancer le chargement sécurisé
+    loadGLBSecure();
 
     // ✅ Boucle d'animation
     const animate = () => {

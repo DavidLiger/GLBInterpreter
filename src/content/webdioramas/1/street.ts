@@ -3,8 +3,8 @@ import type { DioramaConfig3DWithPostProcessing } from "@/types/diorama";
 const BASE_URL = process.env.NEXT_PUBLIC_ASSET_BASE_URL || "";
 
 export const street: DioramaConfig3DWithPostProcessing = {
-  glb: `${BASE_URL}/models/street.glb`,
-  loaderImage: `${BASE_URL}/icons/dioramas/test_street/street-preview.png`,
+  glb: `1/models/street.glb`,
+  loaderImage: `1/images/dioramas/test_street/street-preview.png`,
   autoplay: true, // ← Mode tutoriel automatique ou pas
   name: "La place du village",
   navigationType: "fps",
