@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import WebDioramaLoader from "@/components/diorama/WebDioramaLoader";
 import type { DioramaConfig3DWithVideos } from "@/types/diorama";
+import { applyCacheBustersToConfig } from "@/components/diorama/lib/cacheUtils"; 
 
 type Props = {
   params: {
@@ -38,7 +39,7 @@ export default async function DioramaPage({ params, searchParams }: Props) {
       // 🔹 Prod → charger index depuis R2
       const baseUrl = process.env.NEXT_PUBLIC_ASSETS_URL;
 
-      // 1️⃣ Charger l’index JSON (avec token + path)
+      // 1️⃣ Charger l'index JSON (avec token + path)
       const indexRes = await fetch(`${baseUrl}/assets/${bookId}/index.json`);
       if (!indexRes.ok) throw new Error("Index non trouvé");
 
@@ -65,9 +66,12 @@ export default async function DioramaPage({ params, searchParams }: Props) {
       return notFound();
     }
 
-    return <WebDioramaLoader config={config} />;
+    // ✅ APPLIQUER LES CACHE BUSTERS ICI
+    const processedConfig = applyCacheBustersToConfig(config);
+
+    return <WebDioramaLoader config={processedConfig} />;
   } catch (err) {
     console.error("Erreur lors du chargement du diorama:", err);
-    notFound();
+    return notFound(); // ✅ Ajout du return
   }
 }
