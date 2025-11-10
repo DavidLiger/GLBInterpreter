@@ -1,0 +1,73 @@
+"use client";
+
+import React, { useState, useRef } from "react";
+import { X } from "lucide-react";
+import { QRCodeCanvas } from "qrcode.react";
+
+export default function QRModal() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [url, setUrl] = useState("https://faerium-site.vercel.app/webdiorama/1/street?t=abcd1234");
+  const qrRef = useRef<HTMLCanvasElement>(null);
+
+  const downloadQRCode = () => {
+    if (!qrRef.current) return;
+    const canvas = qrRef.current;
+    const link = document.createElement("a");
+    link.href = canvas.toDataURL("image/png");
+    link.download = "qrcode.png";
+    link.click();
+  };
+
+  if (process.env.NODE_ENV !== "development") return null;
+
+  if (!isOpen) {
+    return (
+      <button
+        onClick={() => setIsOpen(true)}
+        className="fixed bottom-60 right-4 z-[500] bg-green-600 text-white p-3 rounded-full shadow-lg hover:bg-purple-700 transition"
+        title="QR Code Generator (Dev Tool)"
+      >
+        QR
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-gray-900 rounded-lg shadow-2xl w-full max-w-md flex flex-col p-4">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-white">QR Code Generator</h2>
+          <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-white transition">
+            <X size={24} />
+          </button>
+        </div>
+
+        {/* URL Input */}
+        <div className="mb-4">
+          <label className="block text-sm text-gray-300 mb-1">URL</label>
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            className="w-full px-3 py-2 bg-gray-800 text-white border border-gray-600 rounded focus:border-purple-500 focus:outline-none text-sm"
+          />
+        </div>
+
+        {/* QR Code */}
+        <div className="flex justify-center mb-4 p-2 bg-white rounded">
+            <QRCodeCanvas ref={qrRef} value={url} size={200} />
+        </div>
+
+
+        {/* Download Button */}
+        <button
+          onClick={downloadQRCode}
+          className="w-full py-2 bg-green-600 text-white rounded hover:bg-green-700 transition"
+        >
+          Télécharger QR Code
+        </button>
+      </div>
+    </div>
+  );
+}

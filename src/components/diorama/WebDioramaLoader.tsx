@@ -35,6 +35,7 @@ import { setupPostProcessing, setupEmissiveMaterials } from "./rendering/setupPo
 import { usePOIEffects } from "./hooks/usePOIEffects";
 import RotateHint from "./ui/RotateHint";
 import ConfigConverterTool from "./tools/ConfigConverterTool";
+import QRCodeModal from "./tools/QRCodeModal";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -854,6 +855,11 @@ if (isContextLost) {
           defaultSceneId="street"
         />
       )}
+
+      {process.env.NODE_ENV === "development" && (
+        <QRCodeModal/>
+      )}
+
 
       {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
         <POIPlayer
