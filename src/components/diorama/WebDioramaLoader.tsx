@@ -327,6 +327,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     const testContext = testCanvas.getContext('webgl2') || testCanvas.getContext('webgl');
     if (!testContext) {
       console.error("❌ WebGL déjà bloqué par le navigateur");
+      window.__WEBGL_BLOCKED__ = true; // 🔴 AJOUTER CETTE LIGNE
       setIsContextLost(true);
       testCanvas.remove();
       return;
