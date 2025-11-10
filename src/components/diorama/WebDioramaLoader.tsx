@@ -34,6 +34,7 @@ import PostProcessingControls from "./rendering/PostProcessingControls";
 import { setupPostProcessing, setupEmissiveMaterials } from "./rendering/setupPostProcessing"; 
 import { usePOIEffects } from "./hooks/usePOIEffects";
 import RotateHint from "./ui/RotateHint";
+import ConfigConverterTool from "./tools/ConfigConverterTool";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -799,6 +800,13 @@ if (isContextLost) {
             }
             if (type === 'toneMapping') composerRef.current?.updateToneMapping(values.type, values.exposure);
           }}
+        />
+      )}
+
+      {process.env.NODE_ENV === 'development' && (
+        <ConfigConverterTool
+          defaultProxyUrl="https://webdiorama-proxy.david-liger-pro.workers.dev/assets/1"
+          defaultSceneId="street"
         />
       )}
 
