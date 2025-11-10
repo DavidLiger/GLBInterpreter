@@ -139,27 +139,31 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [isLoaded]);
 
-  // ✅ Gestion du reload automatique (EN DEHORS du render conditionnel)
+  // ✅ Gestion du reload automatique - VERSION AMÉLIORÉE
   useEffect(() => {
     if (!isContextLost) return;
 
     const wasContextLost = sessionStorage.getItem('webgl_context_lost') === 'true';
+    const attemptCount = parseInt(sessionStorage.getItem('webgl_reload_attempts') || '0');
     
-    if (wasContextLost) {
-      // Erreur persistante, ne pas recharger automatiquement
-      console.error("❌ Erreur WebGL persistante après reload");
+    if (wasContextLost && attemptCount >= 2) {
+      // Trop de tentatives, arrêter
+      console.error("❌ Erreur WebGL persistante après plusieurs tentatives");
       sessionStorage.removeItem('webgl_context_lost');
+      sessionStorage.removeItem('webgl_reload_attempts');
       setShouldAutoReload(false);
       return;
     }
 
-    // Premier échec : activer le reload automatique
+    // Incrémenter le compteur
+    sessionStorage.setItem('webgl_reload_attempts', String(attemptCount + 1));
     setShouldAutoReload(true);
     
     const handleReload = async () => {
       sessionStorage.setItem('webgl_context_lost', 'true');
-      console.log("🔄 Rechargement automatique...");
+      console.log(`🔄 Rechargement automatique (tentative ${attemptCount + 1})...`);
       
+      // Nettoyer le cache
       try {
         if ('caches' in window) {
           const names = await caches.keys();
@@ -284,7 +288,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
   // ✅ useEffect principal - Initialisation de la scène
   useEffect(() => {
-    if (!containerRef.current || hasInitializedRef.current) {
+    if (!containerRef.current || hasInitializedRef.current || isContextLost) {
       return;
     }
 
@@ -469,28 +473,31 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       }
     );
 
-    // ✅ Boucle d'animation
+    // ✅ Boucle d'animation - CORRECTION
     const animate = () => {
+      // 🔴 Vérifier AVANT de continuer
+      if (document.hidden) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+        return; // Ne rien faire, juste maintenir la boucle
+      }
+
       if (rendererRef.current) {
         const gl = rendererRef.current.getContext();
         if (gl.isContextLost()) {
-          console.error("❌ Contexte perdu");
+          console.error("❌ Contexte perdu dans animate()");
           setIsContextLost(true);
-          return;
+          return; // Arrêter la boucle
         }
       }
 
-      // ✅ IMPORTANT : Continuer à render même si caché (pour que ça reprenne)
-      if (!document.hidden) {
-        const delta = clock.current.getDelta();
-        updateMixers(delta);
-        controlsRef.current?.update();
-        
-        if (composerRef.current) {
-          composerRef.current.composer.render();
-        } else if (rendererRef.current && cameraRef.current) {
-          rendererRef.current.render(scene, camera);
-        }
+      const delta = clock.current.getDelta();
+      updateMixers(delta);
+      controlsRef.current?.update();
+      
+      if (composerRef.current) {
+        composerRef.current.composer.render();
+      } else if (rendererRef.current && cameraRef.current) {
+        rendererRef.current.render(scene, camera);
       }
 
       animationFrameRef.current = requestAnimationFrame(animate);
@@ -537,7 +544,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       
       hasInitializedRef.current = false;
     };
-  }, [config.glb]);
+  }, [config.glb, isContextLost]);
 
   // ✅ DOF selon POI
   useEffect(() => {
@@ -559,42 +566,67 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [currentPOI, config.pois]);
 
-  // ✅ Gestion visibilité page (CORRECTION : Ne PAS annuler requestAnimationFrame)
+  // ✅ Gestion visibilité page - VERSION CORRIGÉE
   useEffect(() => {
+    let checkTimer: NodeJS.Timeout;
+
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        console.log("📱 App en arrière-plan");
+        console.log("📱 App en arrière-plan - PAUSE COMPLÈTE");
         
-        // ⚠️ NE PAS annuler requestAnimationFrame !
-        // Juste pause les sons
+        // Pause tous les sons
         Object.values(ambientAudioRefs.current).forEach(audio => {
           if (!audio.paused) audio.pause();
         });
         
-      } else {
-        console.log("📱 App au premier plan");
+        // 🔴 Ne PAS annuler requestAnimationFrame ici
+        // La fonction animate() va juste return early
         
-        if (rendererRef.current) {
+      } else {
+        console.log("📱 App au premier plan - VÉRIFICATION");
+        
+        // Attendre un peu que le navigateur restaure les ressources
+        checkTimer = setTimeout(() => {
+          if (!rendererRef.current) {
+            console.error("❌ Renderer absent après retour");
+            setIsContextLost(true);
+            return;
+          }
+
           const gl = rendererRef.current.getContext();
           if (gl.isContextLost()) {
-            console.error("❌ Contexte WebGL perdu");
+            console.error("❌ Contexte WebGL perdu détecté");
             setIsContextLost(true);
-            window.location.reload();
+            
+            // Reload uniquement si c'est la première fois
+            const wasContextLost = sessionStorage.getItem('webgl_context_lost') === 'true';
+            if (!wasContextLost) {
+              sessionStorage.setItem('webgl_context_lost', 'true');
+              setTimeout(() => window.location.reload(), 1000);
+            }
           } else {
-            console.log("✅ Contexte WebGL OK");
+            console.log("✅ Contexte WebGL OK - Reprise");
             
             // Reprendre les sons
             if (!muted && currentPOI) {
               const ambient = ambientAudioRefs.current[currentPOI];
-              if (ambient) ambient.play().catch(() => {});
+              if (ambient) {
+                ambient.play().catch((e) => {
+                  console.warn("Impossible de reprendre l'audio:", e);
+                });
+              }
             }
           }
-        }
+        }, 500); // 🔴 Délai pour laisser le navigateur restaurer les ressources
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+    
+    return () => {
+      clearTimeout(checkTimer);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [muted, currentPOI]);
 
   // ✅ Context loss handler
@@ -677,56 +709,62 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   }, [isEnded, scenePlaying, muted, toggleMute]);
 
   // ✅ Au début du composant, vérifier si on revient d'un reload
-useEffect(() => {
-  // Si la scène charge avec succès, supprimer le flag d'erreur
-  if (isLoaded) {
-    sessionStorage.removeItem('webgl_context_lost');
-  }
-}, [isLoaded]);
+  useEffect(() => {
+    if (isLoaded) {
+      sessionStorage.removeItem('webgl_context_lost');
+      sessionStorage.removeItem('webgl_reload_attempts'); // 🔴 Ajouter ceci
+    }
+  }, [isLoaded]);
 
-useEffect(() => {
-  if (showLoaderOverlay) {
-    document.body.style.overflow = 'hidden';
-    document.body.style.position = 'fixed';
-    document.body.style.width = '100%';
-    document.body.style.height = '100%';
-    window.scrollTo(0, 0);
-  } else {
-    document.body.style.overflow = '';
-    document.body.style.position = '';
-    document.body.style.width = '';
-    document.body.style.height = '';
-  }
-  
-  return () => {
-    document.body.style.overflow = '';
-    document.body.style.position = '';
-    document.body.style.width = '';
-    document.body.style.height = '';
-  };
-}, [showLoaderOverlay]);
+  useEffect(() => {
+    if (showLoaderOverlay) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
+      document.body.style.height = '100%';
+      window.scrollTo(0, 0);
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+    }
+    
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+    };
+  }, [showLoaderOverlay]);
 
-// ✅ Écran d'erreur WebGL
-if (isContextLost) {
+  // ✅ Écran d'erreur WebGL - VERSION AMÉLIORÉE
+  if (isContextLost) {
     const wasContextLost = sessionStorage.getItem('webgl_context_lost') === 'true';
+    const attemptCount = parseInt(sessionStorage.getItem('webgl_reload_attempts') || '0');
 
     return (
       <div 
         ref={containerRef}
-        style={{ height: viewportHeight }}
+        style={{ height: viewportHeight || '100vh' }}
         className="w-screen flex items-center justify-center bg-black text-white"
       >
         <div className="text-center p-8 max-w-md">
-          {wasContextLost ? (
+          {wasContextLost && attemptCount >= 2 ? (
             <>
               <p className="mb-2 text-lg">❌ Impossible de charger WebGL</p>
               <p className="mb-4 text-sm text-gray-400">
                 Votre navigateur ne peut pas créer le contexte 3D.
-                Fermez complètement le navigateur et réessayez.
+              </p>
+              <p className="mb-6 text-xs text-gray-500">
+                Solutions possibles :<br/>
+                • Fermez complètement le navigateur et les autres onglets<br/>
+                • Redémarrez votre appareil<br/>
+                • Essayez un autre navigateur (Chrome/Safari)
               </p>
               <button
                 onClick={() => {
-                  sessionStorage.removeItem('webgl_context_lost');
+                  sessionStorage.clear();
                   window.location.reload();
                 }}
                 className="px-6 py-3 bg-green-500 text-black font-semibold rounded-full"
@@ -738,7 +776,7 @@ if (isContextLost) {
             <>
               <p className="mb-2 text-lg">⚠️ Contexte WebGL perdu</p>
               <p className="mb-4 text-sm text-gray-400">
-                Rechargement automatique dans 2 secondes...
+                Rechargement automatique... (tentative {attemptCount + 1})
               </p>
               <div className="flex justify-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
