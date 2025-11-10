@@ -258,7 +258,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
         <div className="p-4 bg-gray-800 border-b border-gray-700 space-y-3">
           <div className="flex items-center gap-2 text-sm text-blue-300 bg-blue-500/10 border border-blue-500/30 rounded p-2">
             <Settings2 size={16} />
-            <span>💡 Collez soit le fichier complet, soit juste <code>export const ...</code>, soit juste l'objet <code>{`{...}`}</code></span>
+            <span>💡 Collez juste l'objet <code>{`{...}`}</code></span>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -310,7 +310,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
               value={tsInput}
               onChange={(e) => setTsInput(e.target.value)}
               className="flex-1 p-3 bg-gray-800 text-gray-100 border border-gray-600 rounded font-mono text-xs resize-none focus:border-purple-500 focus:outline-none"
-              placeholder="Colle ton fichier .ts ici..."
+              placeholder="Colle ton objet {glb:...} ici..."
             />
           </div>
 
