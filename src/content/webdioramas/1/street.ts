@@ -7,7 +7,6 @@ export const street: DioramaConfig3DWithPostProcessing = {
   loaderImage: `${BASE_URL}/icons/dioramas/test_street/street-preview.png`,
   autoplay: true, // ← Mode tutoriel automatique ou pas
   name: "La place du village",
-  navigationType: "fps",
   postProcessing: {
     bloom: {
       enabled: false,
@@ -47,7 +46,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
       icon: `${BASE_URL}/icons/dioramas/test_street/start.png`,
       ambientSound: `${BASE_URL}/sounds/aquatic_ambience.mp3`,
       sceneSound: "/sounds/goofy_Ahh_trap_short.mp3",
-      zoom: 0.5,
+      zoom: 0.5, // règlages de la cmera sur ce POI (jusqu'à enableZoom)
       lookAxis: "x",
       minDistance: 0.1,
       maxDistance: 20,
@@ -145,7 +144,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
         { point: "start_01", target: "start_01_track", time: 3.0, duration: 3.0, zoom: 0.3 },
         { point: "start_02", target: "start_02_track", time: 8.0, duration: 4.0, zoom: 0.8 }
       ],
-      dofConfig: {
+      dofConfig: { // focus et blur autour (à utiliser sur des cènes fixes)
         focus: 8.0,
         aperture: 0.015,
         maxblur: 0.01,
@@ -201,7 +200,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
           loop: false
         }
       ],
-      children: [
+      children: [ // POIs enfant
         {
           id: "apartment",
           label: "Appartement",
@@ -302,7 +301,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
       ]
     },
   ],
-  videos: [
+  videos: [ // pour les videostextures
     {
       name: "TVScreen",
       src: `${BASE_URL}/videos/test_street/Cab_Calloway_1933.mp4`,
@@ -316,7 +315,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
       autoplay: true,
     },
   ],
-  lights: [
+  lights: [ // règlages des lumières
     {
       type: "ambient",
       color: 0xffe0cc,
@@ -341,11 +340,11 @@ export const street: DioramaConfig3DWithPostProcessing = {
       penumbra: 0.5,
     },
   ],
-  bulbs: [
+  bulbs: [ // couleur et emit des ampoules
     { emptyName: "bulb_01", color: 0xfff2cc, intensity: 2, emissiveIntensity: 1.5, distance: 10 },
     { emptyName: "bulb_02", color: 0xfff2cc, intensity: 1.8, emissiveIntensity: 1.2, distance: 8 },
   ],
-  toonOutline: {
+  toonOutline: { // ligne de contour
     defaultThickness: 0.001,
     defaultColor: [0, 0, 0],
     defaultAlpha: 0.9,

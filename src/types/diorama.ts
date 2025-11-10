@@ -165,7 +165,7 @@ export type DioramaConfig3D = {
   glb: string;
   name: string;
   pois: POI[];
-  navigationType: string, 
+  // navigationType: string, 
   videos?: DioramaVideo[];
   loaderImage?: string;
   lights?: DioramaLight[];

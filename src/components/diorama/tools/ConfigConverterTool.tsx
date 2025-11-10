@@ -24,71 +24,119 @@ export default function ConfigConverterTool({
 
   const convert = () => {
     if (!tsInput.trim()) {
-      showStatus('Veuillez coller votre code TypeScript', 'error');
-      return;
+        showStatus('Veuillez coller votre code TypeScript', 'error');
+        return;
     }
 
     try {
-      let configStr = tsInput;
+        let source = tsInput.trim();
 
-      // Supprimer les imports et exports
-      configStr = configStr.replace(/^import\s+.*?;?\s*$/gm, '');
-      configStr = configStr.replace(/^export\s+/gm, '');
+        // 1️⃣ Supprime les imports/exports superflus
+        source = source
+        .replace(/^import\s.+?;$/gm, '')
+        .replace(/^export\s+(const|let|var)\s+\w+\s*=?/gm, '');
 
-      // Extraire le contenu entre les accolades
-      const match = configStr.match(/=\s*({[\s\S]*});?\s*$/);
-      if (!match) {
-        throw new Error('Impossible de trouver l\'objet de configuration');
-      }
+        // 2️⃣ Extrait l’objet principal
+        if (!source.trim().startsWith('{')) {
+        const match = source.match(/=\s*({[\s\S]*});?\s*$/);
+        if (match) source = match[1];
+        }
 
-      configStr = match[1];
+        // 3️⃣ Nettoie l’URL proxy (supprime le slash final)
+        const PROXY = proxyUrl.replace(/\/$/, '');
 
-      // Remplacer BASE_URL
-      const cleanProxyUrl = proxyUrl.replace(/\/$/, '');
-      configStr = configStr.replace(/\$\{BASE_URL\}/g, cleanProxyUrl);
+        // 4️⃣ Évalue le code TS dans un contexte sécurisé
+        const sandboxCode = `
+        const BASE_URL = ${JSON.stringify(PROXY)};
+        return (${source});
+        `;
+        const configObj = new Function(sandboxCode)();
 
-      // Remplacer les template literals
-      configStr = configStr.replace(/`([^`]*)`/g, '"$1"');
+        // -----------------------------
+        // 🔧 Utilitaires internes
+        // -----------------------------
 
-      // Évaluer Math.PI
-      configStr = configStr.replace(/Math\.PI\s*\/\s*([0-9.]+)/g, (match, divisor) => {
-        return (Math.PI / parseFloat(divisor)).toString();
-      });
-      configStr = configStr.replace(/Math\.PI/g, Math.PI.toString());
+        // ✅ Fonction typée pour normaliser les couleurs
+        const normalizeColor = (value: unknown): number | null => {
+        if (typeof value === 'string' && value.startsWith('#')) {
+            return parseInt(value.slice(1), 16);
+        }
+        if (typeof value === 'number') {
+            return value;
+        }
+        return null;
+        };
 
-      // Convertir les hex colors
-      configStr = configStr.replace(/0x([0-9a-fA-F]+)/g, (match, hex) => {
-        return parseInt(hex, 16).toString();
-      });
+        // ✅ Fonction récursive pour traiter les URLs, couleurs, etc.
+        const transform = (obj: unknown): unknown => {
+        if (typeof obj === 'string') {
+            let val = obj;
 
-      // Supprimer commentaires
-      configStr = configStr.replace(/\/\/.*$/gm, '');
-      configStr = configStr.replace(/\/\*[\s\S]*?\*\//g, '');
+            // Remplace BASE_URL par le proxy Cloudflare
+            if (val.includes('${BASE_URL}')) {
+            val = val.replace(/\$\{BASE_URL\}/g, PROXY);
+            }
 
-      // Ajouter guillemets autour des clés
-      configStr = configStr.replace(/(\w+):/g, '"$1":');
+            // Évite les doublons /assets/X/assets/X
+            val = val.replace(/(\/assets\/\d+)\/assets\/\d+/g, '$1');
 
-      // Supprimer virgules orphelines
-      configStr = configStr.replace(/,(\s*[}\]])/g, '$1');
+            // Ajoute cache-buster sur les .glb
+            if (val.endsWith('.glb')) {
+            val += '?v=${Date.now()}';
+            }
 
-      // Ajouter cache busters
-      configStr = configStr.replace(/\.glb"/g, `.glb?v=\${Date.now()}"`);
+            return val;
+        }
 
-      // Parser et reformater
-      const configObj = eval('(' + configStr + ')');
-      const jsonOutput = JSON.stringify(configObj, null, 2);
+        if (Array.isArray(obj)) {
+            return obj.map(transform);
+        }
 
-      // Remplacer timestamp
-      const finalJson = jsonOutput.replace(/\$\{Date\.now\(\)\}/g, Date.now().toString());
+        if (typeof obj === 'object' && obj !== null) {
+            const result: Record<string, unknown> = {};
 
-      setJsonOutput(finalJson);
-      showStatus('✅ Conversion réussie !', 'success');
+            for (const [key, value] of Object.entries(obj)) {
+                // 🎯 minDistance : ne jamais toucher
+                if (key === 'minDistance') {
+                    result[key] = value;
+                    continue;
+                }
 
-    } catch (error: any) {
-      console.error(error);
-      showStatus('❌ Erreur: ' + error.message, 'error');
+                let newValue = value;
+
+                // 🎨 Couleurs
+                if (['color', 'tint'].includes(key)) {
+                    const normalized = normalizeColor(value);
+                    if (normalized !== null) {
+                        newValue = normalized;
+                    }
+                }
+
+                result[key] = transform(newValue);
+            }
+
+            return result;
+        }
+
+        return obj;
+        };
+
+        // -----------------------------
+        // ⚙️ Transformation principale
+        // -----------------------------
+        const finalObj = transform(configObj);
+
+        // -----------------------------
+        // 📝 Conversion en JSON lisible
+        // -----------------------------
+        const jsonOutput = JSON.stringify(finalObj, null, 2);
+        setJsonOutput(jsonOutput);
+        showStatus('✅ Conversion réussie !', 'success');
+    } catch (err: any) {
+        console.error('Erreur de conversion :', err);
+        showStatus('❌ ' + err.message, 'error');
     }
-  };
+    };
 
   const copyToClipboard = () => {
     if (!jsonOutput) {
@@ -210,7 +258,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
         <div className="p-4 bg-gray-800 border-b border-gray-700 space-y-3">
           <div className="flex items-center gap-2 text-sm text-blue-300 bg-blue-500/10 border border-blue-500/30 rounded p-2">
             <Settings2 size={16} />
-            <span>Configuration de conversion</span>
+            <span>💡 Collez soit le fichier complet, soit juste <code>export const ...</code>, soit juste l'objet <code>{`{...}`}</code></span>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -243,7 +291,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
         </div>
 
         {/* Workspace */}
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 overflow-hidden">
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 p-4 overflow-hidden min-h-[500px]">
           {/* Input Panel */}
           <div className="flex flex-col min-h-0">
             <div className="flex items-center justify-between mb-2">
