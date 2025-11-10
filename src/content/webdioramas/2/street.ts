@@ -6,7 +6,6 @@ export const street: DioramaConfig3DWithVideos = {
   glb: `${BASE_URL}/models/street.glb`,
   loaderImage: `${BASE_URL}/icons/dioramas/test_street/street-preview.png`,
   name: "La place du village",
-  navigationType: "fps",
   pois: [
     {
       id: "start",
