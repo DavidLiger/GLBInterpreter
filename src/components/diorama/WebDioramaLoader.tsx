@@ -57,6 +57,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const hasAutoUnmutedRef = useRef(false);
   const composerRef = useRef<ReturnType<typeof setupPostProcessing> | null>(null);
   const textureLoader = useMemo(() => new THREE.TextureLoader(), []);
+  const lastProgressUpdateRef = useRef(0);
 
   const { currentPOI, goToPOI, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively } = usePOINavigation(
     config,
@@ -444,11 +445,22 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         setIsLoaded(true);
       },
       (xhr) => {
+        // 🆕 Throttler les updates (max 1 update par 100ms)
+        const now = Date.now();
+        if (now - lastProgressUpdateRef.current < 100) {
+          return; // Skip cet update
+        }
+        lastProgressUpdateRef.current = now;
+
         if (xhr.lengthComputable) {
           const progress = (xhr.loaded / xhr.total) * 100;
-          setLoadingProgress(progress);
+          setLoadingProgress(Math.floor(progress)); // 🆕 Arrondir pour éviter micro-updates
         } else {
-          setLoadingProgress((prev) => Math.min(prev + 1, 95));
+          // 🆕 Incrémenter seulement si changement significatif
+          setLoadingProgress((prev) => {
+            const next = prev + 2; // Incrément plus grand
+            return Math.min(next, 95);
+          });
         }
       },
       (error) => {
@@ -671,6 +683,28 @@ useEffect(() => {
   }
 }, [isLoaded]);
 
+useEffect(() => {
+  if (showLoaderOverlay) {
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100%';
+    window.scrollTo(0, 0);
+  } else {
+    document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.width = '';
+    document.body.style.height = '';
+  }
+  
+  return () => {
+    document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.width = '';
+    document.body.style.height = '';
+  };
+}, [showLoaderOverlay]);
+
 // ✅ Écran d'erreur WebGL
 if (isContextLost) {
     const wasContextLost = sessionStorage.getItem('webgl_context_lost') === 'true';
@@ -725,8 +759,17 @@ if (isContextLost) {
   return (
     <div
       ref={containerRef}
-      style={{ height: viewportHeight }}
-      className="relative w-screen bg-black"
+        style={{ 
+        // height: '100vh',
+        height: '100dvh', // 🆕 Dynamic viewport height (mobile)
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        overflow: 'hidden'
+      }}
+      className="bg-black"
+      // className="relative w-screen bg-black"
     >
       <AnimatePresence>
         {showLoaderOverlay && (
@@ -740,6 +783,8 @@ if (isContextLost) {
             fontClassName={BullstandRegular.className}
             autoplay={autoplay}
             onStart={() => {
+            // Reset scroll au cas où
+            window.scrollTo(0, 0);
               if (autoplay) {
                 if (!isFullscreen) toggleFullscreen();
                 if (sceneMuted) toggleSceneMute();
