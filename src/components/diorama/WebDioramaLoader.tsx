@@ -286,20 +286,48 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [currentPOI]);
 
-  // ✅ useEffect principal - Initialisation de la scène
+  // ✅ useEffect principal - VERSION SÉCURISÉE ANTI-BOUCLE
   useEffect(() => {
-    if (!containerRef.current || hasInitializedRef.current || isContextLost) {
+    // 🔴 GUARDS CRITIQUES - ARRÊTER IMMÉDIATEMENT SI :
+    if (!containerRef.current) {
+      console.log("⏸️ Pas de container");
+      return;
+    }
+    
+    if (hasInitializedRef.current) {
+      console.log("⏸️ Déjà initialisé");
+      return;
+    }
+    
+    if (isContextLost) {
+      console.log("⏸️ Contexte perdu, pas de réinitialisation");
       return;
     }
 
+    // 🔴 VÉRIFIER SI LE NAVIGATEUR A DÉJÀ BLOQUÉ WEBGL
+    const testCanvas = document.createElement('canvas');
+    const testContext = testCanvas.getContext('webgl2') || testCanvas.getContext('webgl');
+    if (!testContext) {
+      console.error("❌ WebGL déjà bloqué par le navigateur");
+      setIsContextLost(true);
+      testCanvas.remove();
+      return;
+    }
+    testCanvas.remove();
+
+    // 🔴 MARQUER COMME INITIALISÉ **IMMÉDIATEMENT**
     hasInitializedRef.current = true;
     console.log("✅ Initialisation de la scène WebGL");
 
     // Cleanup préventif
     const existingCanvas = containerRef.current.querySelector('canvas');
-    if (existingCanvas) existingCanvas.remove();
+    if (existingCanvas) {
+      console.log("🧹 Suppression canvas existant");
+      existingCanvas.remove();
+    }
 
     if (rendererRef.current) {
+      console.log("🧹 Dispose renderer existant");
       rendererRef.current.dispose();
       rendererRef.current.forceContextLoss();
       rendererRef.current = null;
@@ -347,6 +375,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
     } catch (error) {
       console.error("❌ Erreur création WebGL:", error);
+      // hasInitializedRef.current = false; // 🔴 Permettre retry si erreur pendant la création
       setIsContextLost(true);
       return;
     }
@@ -542,7 +571,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       const canvas = containerRef.current?.querySelector('canvas');
       if (canvas) canvas.remove();
       
-      hasInitializedRef.current = false;
+      // hasInitializedRef.current = false;
     };
   }, [config.glb, isContextLost]);
 
@@ -566,7 +595,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [currentPOI, config.pois]);
 
-  // ✅ Gestion visibilité page - VERSION CORRIGÉE
+  // ✅ Gestion visibilité page - VERSION ULTRA-SÉCURISÉE
   useEffect(() => {
     let checkTimer: NodeJS.Timeout;
 
@@ -579,16 +608,20 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
           if (!audio.paused) audio.pause();
         });
         
-        // 🔴 Ne PAS annuler requestAnimationFrame ici
-        // La fonction animate() va juste return early
-        
       } else {
         console.log("📱 App au premier plan - VÉRIFICATION");
         
+        // 🔴 SI PAS DE RENDERER, NE RIEN FAIRE
+        if (!rendererRef.current) {
+          console.error("❌ Renderer absent après retour");
+          setIsContextLost(true);
+          return; // 🔴 Arrêter ici, ne pas reloader
+        }
+
         // Attendre un peu que le navigateur restaure les ressources
         checkTimer = setTimeout(() => {
           if (!rendererRef.current) {
-            console.error("❌ Renderer absent après retour");
+            console.error("❌ Renderer toujours absent");
             setIsContextLost(true);
             return;
           }
@@ -598,11 +631,16 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
             console.error("❌ Contexte WebGL perdu détecté");
             setIsContextLost(true);
             
-            // Reload uniquement si c'est la première fois
+            // 🔴 Reload seulement si première fois ET si on n'est pas déjà en train de reload
             const wasContextLost = sessionStorage.getItem('webgl_context_lost') === 'true';
-            if (!wasContextLost) {
+            const isReloading = sessionStorage.getItem('webgl_reloading') === 'true';
+            
+            if (!wasContextLost && !isReloading) {
               sessionStorage.setItem('webgl_context_lost', 'true');
-              setTimeout(() => window.location.reload(), 1000);
+              sessionStorage.setItem('webgl_reloading', 'true');
+              setTimeout(() => {
+                window.location.reload();
+              }, 1000);
             }
           } else {
             console.log("✅ Contexte WebGL OK - Reprise");
@@ -617,7 +655,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
               }
             }
           }
-        }, 500); // 🔴 Délai pour laisser le navigateur restaurer les ressources
+        }, 500);
       }
     };
 
@@ -708,11 +746,13 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [isEnded, scenePlaying, muted, toggleMute]);
 
-  // ✅ Au début du composant, vérifier si on revient d'un reload
+  // ✅ Nettoyer tous les flags quand ça marche
   useEffect(() => {
     if (isLoaded) {
       sessionStorage.removeItem('webgl_context_lost');
-      sessionStorage.removeItem('webgl_reload_attempts'); // 🔴 Ajouter ceci
+      sessionStorage.removeItem('webgl_reload_attempts');
+      sessionStorage.removeItem('webgl_reloading'); // 🔴 Nouveau flag
+      console.log("✅ Scène chargée avec succès - Flags nettoyés");
     }
   }, [isLoaded]);
 
