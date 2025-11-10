@@ -78,7 +78,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
           loop: false
         },
         {
-          name: "DuckArmature_001",
+          name: "DuckArmature_001", // les noms d'armature et d'actions (clipName) doivent tous avoir des _ et non des .
           type: "armature",
           clipName: "Duck_Walk",
           autoplay: false,

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileJson, Copy, Download, X, Code2, Settings2 } from 'lucide-react';
+import { FileJson, Copy, Download, X, Code2, Settings2, Info } from 'lucide-react';
 
 interface ConfigConverterToolProps {
   defaultProxyUrl?: string;
@@ -16,6 +16,25 @@ export default function ConfigConverterTool({
   const [proxyUrl, setProxyUrl] = useState(defaultProxyUrl);
   const [sceneId, setSceneId] = useState(defaultSceneId);
   const [status, setStatus] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
+
+  // Ta fiche d’instructions (mémo humain)
+const instructions = [
+  "💡 La structure JSON correspond au TS d'origine (exemple : street.ts)",
+  "🗂️ POIs : chaque point d'intérêt doit définir id, label, icon, zoom, angles, enableZoom",
+  "⚠️ Les noms d'armature et clipName doivent tous utiliser '_' et non '.'",
+  "🎬 Elements : type peut être 'armature' ou 'mesh', autoplay et loop définissent l'animation",
+  "🔊 Dialogue : characters contient id, name et image ; lines contient time, text, characterId",
+  "🎥 cameraPath : permet un déplacement automatique de la caméra avec point, target, duration et zoom",
+  "🎨 postProcessing : bloom, ssao, dof, toneMapping avec enabled, strength, radius, threshold, etc.",
+  "💡 emissiveObjects : objets émissifs pour la lumière (optionnel)",
+  "🎬 videos : textures vidéo appliquées aux objets",
+  "💡 lights : types 'ambient' ou 'spot', couleur, intensité, distance, angle, penumbra",
+  "💡 bulbs : couleur et intensité émissive pour les ampoules",
+  "✏️ toonOutline : ligne de contour, épaisseur, couleur, alpha, keepAlive",
+  "📝 credits : description, musique, sons, licences, projet, année",
+  "💡 minDistance dans les POIs ne doit jamais être modifié dynamiquement"
+];
 
   const showStatus = (message: string, type: 'success' | 'error') => {
     setStatus({ message, type });
@@ -299,12 +318,24 @@ export const street: DioramaConfig3DWithPostProcessing = {
                 <Code2 size={18} />
                 TypeScript Source
               </h3>
-              <button
-                onClick={loadExample}
-                className="px-3 py-1 text-xs bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition"
-              >
-                📋 Charger exemple
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Bouton info */}
+                <button
+                  onClick={() => setIsInstructionsOpen(true)}
+                  className="flex items-center justify-center w-10 h-10 bg-yellow-500 text-black rounded-full shadow hover:bg-yellow-600 transition"
+                  title="Voir les instructions"
+                >
+                  <Info size={20} />
+                </button>
+                
+                {/* Bouton charger exemple */}
+                <button
+                  onClick={loadExample}
+                  className="flex items-center gap-1 px-3 py-2 bg-gray-700 text-gray-200 rounded shadow hover:bg-gray-600 transition text-sm"
+                >
+                  📋 Charger exemple
+                </button>
+              </div>
             </div>
             <textarea
               value={tsInput}
@@ -369,6 +400,27 @@ export const street: DioramaConfig3DWithPostProcessing = {
           )}
         </div>
       </div>
+      {isInstructionsOpen && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-gray-900 rounded-lg shadow-2xl w-full max-w-3xl max-h-[80vh] overflow-auto flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <h2 className="text-xl font-bold text-white">📝 Instructions pour le JSON Diorama</h2>
+              <button
+                onClick={() => setIsInstructionsOpen(false)}
+                className="text-gray-400 hover:text-white transition"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-4 space-y-2 text-sm text-gray-200">
+              {instructions.map((inst, i) => (
+                <p key={i}>{inst}</p>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+    
   );
 }
