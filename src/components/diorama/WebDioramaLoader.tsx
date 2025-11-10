@@ -42,6 +42,13 @@ const BullstandRegular = localFont({
   variable: "--font-Bullstand-Regular",
 });
 
+declare global {
+  interface Window {
+    __WEBGL_BLOCKED__?: boolean;
+    __WEBGL_INITIALIZED__?: boolean;
+  }
+}
+
 export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -288,7 +295,18 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
   // ✅ useEffect principal - VERSION SÉCURISÉE ANTI-BOUCLE
   useEffect(() => {
-    // 🔴 GUARDS CRITIQUES - ARRÊTER IMMÉDIATEMENT SI :
+    // 🔴 GUARD ULTIME : Si WebGL est bloqué globalement, NE RIEN FAIRE
+    if (window.__WEBGL_BLOCKED__) {
+      console.log("🛑 WebGL bloqué globalement - Arrêt total");
+      setIsContextLost(true);
+      return;
+    }
+
+    // 🔴 Si déjà initialisé globalement, NE RIEN FAIRE
+    if (window.__WEBGL_INITIALIZED__) {
+      console.log("⏸️ Déjà initialisé globalement");
+      return;
+    }
     if (!containerRef.current) {
       console.log("⏸️ Pas de container");
       return;
@@ -315,8 +333,9 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
     testCanvas.remove();
 
-    // 🔴 MARQUER COMME INITIALISÉ **IMMÉDIATEMENT**
+    // 🔴 MARQUER COMME INITIALISÉ **IMMÉDIATEMENT** (local ET global)
     hasInitializedRef.current = true;
+    window.__WEBGL_INITIALIZED__ = true;
     console.log("✅ Initialisation de la scène WebGL");
 
     // Cleanup préventif
@@ -328,8 +347,12 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
     if (rendererRef.current) {
       console.log("🧹 Dispose renderer existant");
-      rendererRef.current.dispose();
-      rendererRef.current.forceContextLoss();
+      try {
+        rendererRef.current.dispose();
+        rendererRef.current.forceContextLoss();
+      } catch (e) {
+        console.warn("Erreur dispose renderer:", e);
+      }
       rendererRef.current = null;
     }
 
@@ -375,7 +398,9 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
     } catch (error) {
       console.error("❌ Erreur création WebGL:", error);
-      // hasInitializedRef.current = false; // 🔴 Permettre retry si erreur pendant la création
+      window.__WEBGL_BLOCKED__ = true; // 🔴 Bloquer GLOBALEMENT
+      window.__WEBGL_INITIALIZED__ = false;
+      hasInitializedRef.current = false;
       setIsContextLost(true);
       return;
     }
@@ -502,20 +527,26 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       }
     );
 
-    // ✅ Boucle d'animation - CORRECTION
+    // ✅ Boucle d'animation
     const animate = () => {
-      // 🔴 Vérifier AVANT de continuer
+      // 🔴 Si bloqué globalement, arrêter complètement
+      if (window.__WEBGL_BLOCKED__) {
+        return;
+      }
+
+      // 🔴 Ne rien faire si caché
       if (document.hidden) {
         animationFrameRef.current = requestAnimationFrame(animate);
-        return; // Ne rien faire, juste maintenir la boucle
+        return;
       }
 
       if (rendererRef.current) {
         const gl = rendererRef.current.getContext();
         if (gl.isContextLost()) {
           console.error("❌ Contexte perdu dans animate()");
+          window.__WEBGL_BLOCKED__ = true; // 🔴 Bloquer GLOBALEMENT
           setIsContextLost(true);
-          return; // Arrêter la boucle
+          return;
         }
       }
 
@@ -540,11 +571,16 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       
       if (animationFrameRef.current !== undefined) {
         cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = undefined;
       }
 
       if (rendererRef.current) {
-        rendererRef.current.dispose();
-        rendererRef.current.forceContextLoss();
+        try {
+          rendererRef.current.dispose();
+          rendererRef.current.forceContextLoss();
+        } catch (e) {
+          console.warn("Erreur cleanup renderer:", e);
+        }
         rendererRef.current = null;
       }
 
@@ -571,9 +607,11 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       const canvas = containerRef.current?.querySelector('canvas');
       if (canvas) canvas.remove();
       
-      // hasInitializedRef.current = false;
+      // 🔴 NE JAMAIS réinitialiser les flags dans le cleanup
+      // window.__WEBGL_INITIALIZED__ = false; // ❌ NON
+      // hasInitializedRef.current = false; // ❌ NON
     };
-  }, [config.glb, isContextLost]);
+  }, [config.glb]);
 
   // ✅ DOF selon POI
   useEffect(() => {
@@ -595,15 +633,19 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [currentPOI, config.pois]);
 
-  // ✅ Gestion visibilité page - VERSION ULTRA-SÉCURISÉE
+  // ✅ Gestion visibilité - Respecter le flag global
   useEffect(() => {
     let checkTimer: NodeJS.Timeout;
 
     const handleVisibilityChange = () => {
+      // 🔴 Si bloqué globalement, ne rien faire
+      if (window.__WEBGL_BLOCKED__) {
+        return;
+      }
+
       if (document.hidden) {
-        console.log("📱 App en arrière-plan - PAUSE COMPLÈTE");
+        console.log("📱 App en arrière-plan - PAUSE");
         
-        // Pause tous les sons
         Object.values(ambientAudioRefs.current).forEach(audio => {
           if (!audio.paused) audio.pause();
         });
@@ -611,48 +653,41 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       } else {
         console.log("📱 App au premier plan - VÉRIFICATION");
         
-        // 🔴 SI PAS DE RENDERER, NE RIEN FAIRE
         if (!rendererRef.current) {
-          console.error("❌ Renderer absent après retour");
+          console.error("❌ Renderer absent");
+          window.__WEBGL_BLOCKED__ = true; // 🔴 Bloquer globalement
           setIsContextLost(true);
-          return; // 🔴 Arrêter ici, ne pas reloader
+          return;
         }
 
-        // Attendre un peu que le navigateur restaure les ressources
         checkTimer = setTimeout(() => {
           if (!rendererRef.current) {
             console.error("❌ Renderer toujours absent");
+            window.__WEBGL_BLOCKED__ = true;
             setIsContextLost(true);
             return;
           }
 
           const gl = rendererRef.current.getContext();
           if (gl.isContextLost()) {
-            console.error("❌ Contexte WebGL perdu détecté");
+            console.error("❌ Contexte WebGL perdu");
+            window.__WEBGL_BLOCKED__ = true; // 🔴 Bloquer globalement
             setIsContextLost(true);
             
-            // 🔴 Reload seulement si première fois ET si on n'est pas déjà en train de reload
             const wasContextLost = sessionStorage.getItem('webgl_context_lost') === 'true';
             const isReloading = sessionStorage.getItem('webgl_reloading') === 'true';
             
             if (!wasContextLost && !isReloading) {
               sessionStorage.setItem('webgl_context_lost', 'true');
               sessionStorage.setItem('webgl_reloading', 'true');
-              setTimeout(() => {
-                window.location.reload();
-              }, 1000);
+              setTimeout(() => window.location.reload(), 1000);
             }
           } else {
-            console.log("✅ Contexte WebGL OK - Reprise");
+            console.log("✅ Contexte OK");
             
-            // Reprendre les sons
             if (!muted && currentPOI) {
               const ambient = ambientAudioRefs.current[currentPOI];
-              if (ambient) {
-                ambient.play().catch((e) => {
-                  console.warn("Impossible de reprendre l'audio:", e);
-                });
-              }
+              if (ambient) ambient.play().catch(() => {});
             }
           }
         }, 500);
@@ -778,7 +813,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     };
   }, [showLoaderOverlay]);
 
-  // ✅ Écran d'erreur WebGL - VERSION AMÉLIORÉE
   if (isContextLost) {
     const wasContextLost = sessionStorage.getItem('webgl_context_lost') === 'true';
     const attemptCount = parseInt(sessionStorage.getItem('webgl_reload_attempts') || '0');
@@ -794,17 +828,21 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
             <>
               <p className="mb-2 text-lg">❌ Impossible de charger WebGL</p>
               <p className="mb-4 text-sm text-gray-400">
-                Votre navigateur ne peut pas créer le contexte 3D.
+                Votre navigateur a bloqué WebGL après plusieurs tentatives.
               </p>
               <p className="mb-6 text-xs text-gray-500">
-                Solutions possibles :<br/>
-                • Fermez complètement le navigateur et les autres onglets<br/>
+                Solutions :<br/>
+                • Fermez TOUS les onglets<br/>
+                • Redémarrez le navigateur complètement<br/>
                 • Redémarrez votre appareil<br/>
-                • Essayez un autre navigateur (Chrome/Safari)
+                • Essayez un autre navigateur
               </p>
               <button
                 onClick={() => {
+                  // 🔴 Nettoyer TOUS les flags
                   sessionStorage.clear();
+                  delete window.__WEBGL_BLOCKED__;
+                  delete window.__WEBGL_INITIALIZED__;
                   window.location.reload();
                 }}
                 className="px-6 py-3 bg-green-500 text-black font-semibold rounded-full"
@@ -812,22 +850,15 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
                 Réessayer
               </button>
             </>
-          ) : shouldAutoReload ? (
-            <>
-              <p className="mb-2 text-lg">⚠️ Contexte WebGL perdu</p>
-              <p className="mb-4 text-sm text-gray-400">
-                Rechargement automatique... (tentative {attemptCount + 1})
-              </p>
-              <div className="flex justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
-              </div>
-            </>
           ) : (
             <>
               <p className="mb-2 text-lg">⚠️ Contexte WebGL perdu</p>
               <p className="mb-4 text-sm text-gray-400">
-                Préparation du rechargement...
+                Rechargement automatique...
               </p>
+              <div className="flex justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500"></div>
+              </div>
             </>
           )}
         </div>
