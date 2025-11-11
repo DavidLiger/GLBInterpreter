@@ -47,7 +47,6 @@ export default function LoaderOverlay({
       const isRecommended = 
         /Chrome|CriOS|Brave/i.test(ua) && !/Edg/i.test(ua) || // Chrome/Brave (pas Edge)
         /Safari/i.test(ua) && /Apple/i.test(ua) && !/Chrome/i.test(ua); // Safari (pas Chrome-based)
-      
       setIsRecommendedBrowser(isRecommended);
     }
   }, []);
