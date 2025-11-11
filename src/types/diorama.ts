@@ -1,3 +1,5 @@
+export type TranslatedString = { fr: string; en: string; es: string };
+
 // 🔹 Type pour éléments animés attachés à un POI
 export type AnimatedElement = {
   name: string;      // Nom de l'objet ou armature dans la scène
@@ -9,13 +11,13 @@ export type AnimatedElement = {
 
 export type DialogueCharacter = {
   id: string;              // identifiant unique (ex: "hero", "guide")
-  name?: string;           // nom affiché (optionnel)
+  name?: TranslatedString;           // nom affiché (optionnel)
   image: string;           // image/avatar du personnage
 };
 
 export type DialogueLine = {
   time: number;            // moment d’apparition (en secondes)
-  text: string | string[];          // texte à afficher
+  text: TranslatedString | TranslatedString[];          // texte à afficher
   characterId: string;     // id du personnage qui parle
 };
 
@@ -40,7 +42,7 @@ export interface DOFConfig {
 
 export type POI = {
   id: string;
-  label: string;
+  label: TranslatedString;
   emptyName: string;
   icon?: string;
   ambientSound?: string;
@@ -163,7 +165,7 @@ export interface PostProcessingConfig {
 
 export type DioramaConfig3D = {
   glb: string;
-  name: string;
+  name: TranslatedString;
   pois: POI[];
   // navigationType: string, 
   videos?: DioramaVideo[];
@@ -176,7 +178,7 @@ export type DioramaConfig3D = {
 };
 
 export interface DioramaCredits {
-  description?: string; // Texte d'intro ou aide
+  description?: TranslatedString; // Texte d'intro ou aide
   music?: { title: string; author?: string; source?: string }[];
   sounds?: { title: string; source?: string }[];
   licenses?: string[]; // CC0, CC-BY, etc.

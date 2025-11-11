@@ -1,7 +1,7 @@
 // WebDioramaLoader.tsx - Version nettoyée et corrigée
 
 "use client";
-
+import { TranslationProvider, useTranslation } from "@/contexts/TranslationContext";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import * as THREE from "three";
@@ -50,6 +50,15 @@ declare global {
 }
 
 export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }) {
+  return (
+    <TranslationProvider>
+      <WebDioramaLoaderInner config={config} />
+    </TranslationProvider>
+  );
+}
+
+function WebDioramaLoaderInner({ config }: { config: DioramaConfig3D }) {
+  const { lang } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const { isPortrait, showRotateHint } = useOrientation(5000);
@@ -829,7 +838,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
             isMobile={isMobile}
             loadingProgress={loadingProgress}
             isLoaded={isLoaded}
-            sceneName={config.name}
+            sceneName={config.name[lang]}
             loaderImage={config.loaderImage}
             fontClassName={BullstandRegular.className}
             autoplay={autoplay}

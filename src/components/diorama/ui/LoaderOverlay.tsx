@@ -3,6 +3,8 @@
 
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "@/contexts/TranslationContext";
+import LanguageSelector from "./LanguageSelector";
 
 interface LoaderOverlayProps {
   isPortrait: boolean;
@@ -31,6 +33,7 @@ export default function LoaderOverlay({
   const [showOverlay, setShowOverlay] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const { t, lang } = useTranslation();
 
   
   // ⚡ Ne pas utiliser window ici directement
@@ -79,6 +82,9 @@ export default function LoaderOverlay({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.45 }}
         >
+          <div className="absolute top-4 right-4">
+            <LanguageSelector />
+          </div>
           {/* Image + titre */}
           <div className="flex flex-col items-center gap-4">
             <h1 className={`${fontClassName} text-white font-bold text-center`} style={{ fontSize: !isPortrait ? 'clamp(20px, 4.5vw, 28px)' : 'clamp(28px, 6vw, 48px)' }}>
@@ -96,7 +102,6 @@ export default function LoaderOverlay({
             />
           </div>
 
-          {/* Bouton START toujours visible en bas */}
           {isReady && (
             <motion.button
               onClick={handleStart}
@@ -104,10 +109,7 @@ export default function LoaderOverlay({
               whileTap={{ scale: 0.98 }}
               className="absolute bottom-4 px-6 py-3 bg-green-500 text-black font-semibold rounded-full shadow-lg text-sm uppercase tracking-wider"
             >
-              {autoplay 
-                ? (isMobile ? 'Toucher pour lancer le tutoriel' : 'Cliquer pour lancer le tutoriel')
-                : (isMobile ? 'Toucher pour commencer' : 'Cliquer pour commencer')
-              }
+              {isMobile ? t.loader.startMobile : t.loader.start}
             </motion.button>
           )}
 

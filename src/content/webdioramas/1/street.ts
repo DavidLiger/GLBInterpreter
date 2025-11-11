@@ -6,7 +6,11 @@ export const street: DioramaConfig3DWithPostProcessing = {
   glb: `${BASE_URL}/models/street.glb`,
   loaderImage: `${BASE_URL}/icons/dioramas/test_street/street-preview.png`,
   autoplay: true, // ← Mode tutoriel automatique ou pas
-  name: "La place du village",
+  name: {
+    fr: "La place du village",
+    en: "The Village Square",
+    es: "La plaza del pueblo"
+  },
   postProcessing: {
     bloom: {
       enabled: false,
@@ -41,7 +45,11 @@ export const street: DioramaConfig3DWithPostProcessing = {
   pois: [
     {
       id: "start",
-      label: "Vue initiale",
+      label: {
+        fr: "Vue initiale",
+        en: "Initial View",
+        es: "Vista inicial"
+      },
       emptyName: "start",
       icon: `${BASE_URL}/icons/dioramas/test_street/start.png`,
       ambientSound: `${BASE_URL}/sounds/aquatic_ambience.mp3`,
@@ -113,30 +121,40 @@ export const street: DioramaConfig3DWithPostProcessing = {
           loop: false
         }
       ],
-      dialogue: { // icones des personnages apparaissant dans les sous-titres et dialogues (type SRT : textes + time)
+      dialogue: {
         characters: [
-          { id: "hero", name: "Alex", image: `${BASE_URL}/images/dioramas/test_street/characters/icone-elf.png` },
-          { id: "guide", name: "Luna", image: `${BASE_URL}/images/dioramas/test_street/characters/icone-goblin.png` }
+          { 
+            id: "hero", 
+            name: { fr: "Alex", en: "Alex", es: "Alex" }, 
+            image: `${BASE_URL}/images/dioramas/test_street/characters/icone-elf.png` 
+          },
+          { 
+            id: "guide", 
+            name: { fr: "Luna", en: "Luna", es: "Luna" }, 
+            image: `${BASE_URL}/images/dioramas/test_street/characters/icone-goblin.png` 
+          }
         ],
         lines: [
           {
             time: 0.5,
-            text: "Salut ! Bienvenue dans le diorama.",
+            text: {
+              fr: "Salut ! Bienvenue dans le diorama.",
+              en: "Hi! Welcome to the diorama.",
+              es: "¡Hola! Bienvenido al diorama."
+            },
             characterId: "hero"
           },
           {
             time: 3.0,
             text: [
-              "Ici, tu peux explorer la scène en 3D.",
-              "Tu peux zoomer, tourner la caméra, et cliquer sur les points d'intérêt.",
-              "Amuse-toi bien !"
+              {
+                fr: "Ici, tu peux explorer la scène en 3D.",
+                en: "Here, you can explore the 3D scene.",
+                es: "Aquí puedes explorar la escena 3D."
+              },
+              // ...
             ],
             characterId: "guide"
-          },
-          {
-            time: 12.5,
-            text: "Allons voir ce qu’il se passe plus loin !",
-            characterId: "hero"
           }
         ]
       },
@@ -171,7 +189,11 @@ export const street: DioramaConfig3DWithPostProcessing = {
     },
     {
       id: "window",
-      label: "Fenêtre appartement",
+      label: {
+        fr: "Fenêtre appartement",
+        en: "Apartment window",
+        es: "Ventana de apartamento"
+      },
       emptyName: "window",
       icon: `${BASE_URL}/icons/dioramas/test_street/window.png`,
       ambientSound: `${BASE_URL}/sounds/kids_playing.mp3`,
@@ -203,7 +225,11 @@ export const street: DioramaConfig3DWithPostProcessing = {
       children: [ // POIs enfant
         {
           id: "apartment",
-          label: "Appartement",
+          label: {
+            fr: "Appartement",
+            en: "Apartment",
+            es: "Apartamento"
+          },
           emptyName: "apartment",
           icon: `${BASE_URL}/icons/dioramas/test_street/apartment.png`,
           ambientSound: `${BASE_URL}/sounds/tv_background.mp3`,
@@ -228,7 +254,11 @@ export const street: DioramaConfig3DWithPostProcessing = {
           children: [
             {
               id: "coffre",
-              label: "Coffre",
+              label: {
+                fr: "Coffre",
+                en: "Chest",
+                es: "Cofre"
+              },
               emptyName: "coffre",
               icon: `${BASE_URL}/icons/dioramas/test_street/coffre.png`,
               ambientSound: `${BASE_URL}/sounds/snoring_guy.mp3`,
@@ -246,7 +276,11 @@ export const street: DioramaConfig3DWithPostProcessing = {
         },
         {
           id: "door",
-          label: "Door",
+          label: {
+                fr: "Porte",
+                en: "Door",
+                es: "Puerta"
+              },
           emptyName: "door",
           icon: `${BASE_URL}/icons/dioramas/test_street/apartment.png`,
           ambientSound: `${BASE_URL}/sounds/tv_background.mp3`,
@@ -269,7 +303,11 @@ export const street: DioramaConfig3DWithPostProcessing = {
     },
     {
       id: "window2",
-      label: "Fenêtre appartement 2",
+      label: {
+        fr: "Fenêtre appartement 2",
+        en: "Apartment window 2",
+        es: "Ventana de apartamento 2"
+      },
       emptyName: "window2",
       icon: `${BASE_URL}/icons/dioramas/test_street/window.png`,
       ambientSound: `${BASE_URL}/sounds/kids_playing.mp3`,
@@ -351,7 +389,11 @@ export const street: DioramaConfig3DWithPostProcessing = {
     defaultKeepAlive: true,
   },
   credits: {
-    description: "Scène 3D immersive du village. Explore les différents points d’intérêt et découvre la vie du quartier.",
+    description: {
+      fr: "Scène 3D immersive du village...",
+      en: "Immersive 3D village scene...",
+      es: "Escena 3D inmersiva del pueblo..."
+    },
     music: [
       { title: "Aquatic Ambience", author: "David Wise", source: "No royalties - remix version" },
       { title: "Cab Calloway 1933", source: "Domaine public" },

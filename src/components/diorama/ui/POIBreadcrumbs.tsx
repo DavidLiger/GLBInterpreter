@@ -2,6 +2,7 @@
 import React, { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { POI } from "@/types/diorama";
+import { useTranslation } from "@/contexts/TranslationContext";
 
 interface POIBreadcrumbsProps {
   currentPOI: string | null;
@@ -22,6 +23,7 @@ export default function POIBreadcrumbs({
   isPortrait,
   viewportHeight,
 }: POIBreadcrumbsProps) {
+  const { lang } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const activeRef = useRef<HTMLButtonElement | null>(null);
 
@@ -135,14 +137,14 @@ export default function POIBreadcrumbs({
                 {item.poi.icon && (
                   <img
                     src={item.poi.icon}
-                    alt={item.poi.label}
+                    alt={item.poi.label[lang]}
                     className={`w-6 h-6 object-contain ${
                       item.type === "active" ? "opacity-100" : "opacity-80"
                     }`}
                   />
                 )}
                 <span className="text-xs mt-1 truncate max-w-[60px]">
-                  {item.poi.label}
+                  {item.poi.label[lang]}
                 </span>
               </motion.button>
             </React.Fragment>

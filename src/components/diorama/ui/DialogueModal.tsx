@@ -1,18 +1,20 @@
 "use client";
 
+import { useTranslation } from "@/contexts/TranslationContext";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import type { TranslatedString } from "@/types/diorama";
 
 type DialogueCharacter = {
   id: string;
-  name?: string;
+  name?: TranslatedString;
   image: string;
 };
 
 type DialogueLine = {
   time: number;
-  text: string | string[];
+  text: TranslatedString | TranslatedString[];
   characterId: string;
 };
 
@@ -32,8 +34,10 @@ export default function DialogueModal({
   isPlaying,
   isPortrait,
 }: DialogueModalProps) {
+  const { lang } = useTranslation();
   const [currentLine, setCurrentLine] = useState<DialogueLine | null>(null);
   const [currentCharacter, setCurrentCharacter] = useState<DialogueCharacter | null>(null);
+  
 
   // 🔹 Trouve la ligne actuelle selon le temps
   useEffect(() => {
@@ -87,38 +91,38 @@ export default function DialogueModal({
       `;
 
   return (
-    <AnimatePresence>
-      <motion.div
-        key={`${currentLine.time}-${currentText}`}
-        className={containerClass}
-        initial={{ opacity: 0, y: isPortrait ? 20 : -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: isPortrait ? 20 : -20 }}
-        transition={{ duration: 0.3 }}
-      >
-        {currentCharacter && (
-          <div className="flex flex-col items-center justify-center flex-shrink-0 text-center">
-            <div className="w-8 h-8 rounded-full overflow-hidden border border-white/40">
-              <Image
-                src={currentCharacter.image}
-                alt={currentCharacter.name || "speaker"}
-                width={40}
-                height={40}
-                className="object-cover"
-              />
-            </div>
+  <AnimatePresence>
+    <motion.div
+      key={`${currentLine.time}-${currentText}`}
+      className={containerClass}
+      initial={{ opacity: 0, y: isPortrait ? 20 : -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: isPortrait ? 20 : -20 }}
+      transition={{ duration: 0.3 }}
+    >
+      {currentCharacter && (
+        <div className="flex flex-col items-center justify-center flex-shrink-0 text-center">
+          <div className="w-8 h-8 rounded-full overflow-hidden border border-white/40">
+            <Image
+              src={currentCharacter.image}
+              alt={currentCharacter.name?.[lang] || "speaker"} // ✅ Optional chaining
+              width={40}
+              height={40}
+              className="object-cover"
+            />
           </div>
-        )}
+        </div>
+      )}
 
-        <p className="flex-1 text-sm leading-snug break-words">
-          {currentCharacter?.name && (
-            <span className="font-semibold text-gray-200">
-              {currentCharacter.name} :
-            </span>
-          )}{" "}
-          {currentText}
-        </p>
-      </motion.div>
-    </AnimatePresence>
-  );
+      <p className="flex-1 text-sm leading-snug break-words">
+        {currentCharacter?.name?.[lang] && ( // ✅ Optional chaining
+          <span className="font-semibold text-gray-200">
+            {currentCharacter.name[lang]} :
+          </span>
+        )}{" "}
+        {currentText[lang]} {/* ✅ Afficher la string traduite */}
+      </p>
+    </motion.div>
+  </AnimatePresence>
+);
 }

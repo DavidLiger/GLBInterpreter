@@ -4,6 +4,8 @@ import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Info, X } from "lucide-react";
 import type { DioramaCredits } from "@/types/diorama";
+import { useTranslation } from "@/contexts/TranslationContext";
+import LanguageSelector from "./LanguageSelector";
 
 interface InfoModalProps {
   show: boolean;
@@ -19,23 +21,27 @@ export default function InfoModal({ show, onClose, credits, isMobile, poiIcon }:
   const zoomIcon = isMobile ? "/icons/dioramas/UI/two-fingers.png" : "/icons/dioramas/UI/mouse-scroll.png";
   const soundIcon = "/icons/dioramas/UI/sound.png"
   const subtitlesIcon = "/icons/dioramas/UI/chat_on.png"
+  const { t, lang } = useTranslation();
 
   return (
     <AnimatePresence>
-      {show && (
+        {show && (
         <motion.div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
         >
-          <motion.div
+            <motion.div
             className="relative bg-zinc-900 text-white rounded-2xl shadow-xl w-[90%] max-w-md p-6 max-h-[80vh] flex flex-col"
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
             >
-            {/* Bouton fermer → fixé en haut à droite du conteneur modal */}
+            <div className="absolute top-3 right-10">
+                <LanguageSelector />
+            </div>
+            
             <button
                 onClick={onClose}
                 className="absolute top-3 right-3 z-[101] text-white/70 hover:text-white"
@@ -44,57 +50,59 @@ export default function InfoModal({ show, onClose, credits, isMobile, poiIcon }:
                 <X size={20} />
             </button>
 
-            {/* Wrapper scrollable pour le contenu */}
             <div className="overflow-y-auto pr-1">
-                <h2 className="text-xl font-semibold mb-4 flex flex-row gap-2"><Info size={24} /> Informations</h2>
+                <h2 className="text-xl font-semibold mb-4 flex flex-row gap-2">
+                <Info size={24} /> {t.info.title}
+                </h2>
 
                 {credits?.description && (
-                <p className="text-sm text-white/90 mb-4">{credits.description}</p>
+                <p className="text-sm text-white/90 mb-4">{credits.description[lang]}</p>
                 )}
 
-                {/* Instructions interactives */}
                 <div className="space-y-2 text-sm leading-relaxed">
                 <div className="flex items-center gap-2">
                     <img src={rotateIcon} alt="Rotation" className="w-7 h-7" />
-                    <span>Tourner la scène {isMobile ? "(glisser avec un doigt)" : "(cliquer-glisser souris)"}</span>
+                    <span>{t.info.rotate} {isMobile ? t.info.rotateMobile : t.info.rotateDesktop}</span>
                 </div>
+                
                 <div className="flex items-center gap-1">
                     <img src={zoomIcon} alt="Zoom" className="w-8 h-8" />
-                    <span>Zoomer {isMobile ? "(pincer deux doigts)" : "(molette souris)"}</span>
+                    <span>{t.info.zoom} {isMobile ? t.info.zoomMobile : t.info.zoomDesktop}</span>
                 </div>
+                
                 <div className="flex items-center gap-3">
                     {poiIcon ? (
-                        <motion.img
-                            src={poiIcon}
-                            alt="POI"
-                            className="w-6 h-6 object-contain"
-                            animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
-                            transition={{ duration: 2, repeat: Infinity }}
-                            />
+                    <motion.img
+                        src={poiIcon}
+                        alt="POI"
+                        className="w-6 h-6 object-contain"
+                        animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                    />
                     ) : (
-                        <span>📍</span>
+                    <span>📍</span>
                     )}
-                <span>Cliquer sur les icônes des lieux pour naviguer</span>
+                    <span>{t.info.poi}</span>
                 </div>
 
                 <div className="flex items-center gap-4">
-                    <img src={soundIcon} alt="Rotation" className="w-5 h-4" />
-                    <span>Activer / désactiver le son avec le bouton dédié</span>
+                    <img src={soundIcon} alt="Sound" className="w-5 h-4" />
+                    <span>{t.info.sound}</span>
                 </div>
+                
                 <div className="flex items-center gap-3">
-                    <img src={subtitlesIcon} alt="soustitres" className="w-6 h-6" />
-                    <span>Afficher / masquer les textes avec le bouton dédié</span>
+                    <img src={subtitlesIcon} alt="Subtitles" className="w-6 h-6" />
+                    <span>{t.info.subtitles}</span>
                 </div>
                 </div>
 
-                {/* Crédits dynamiques */}
                 {credits && (
                 <>
                     <hr className="border-white/20 my-4" />
                     <div className="text-sm space-y-2">
                     {credits.music && credits.music.length > 0 && (
                         <div>
-                        <p className="font-semibold">Musiques :</p>
+                        <p className="font-semibold">{t.info.music}</p>
                         <ul className="ml-3 list-disc">
                             {credits.music.map((m, i) => (
                             <li key={i}>
@@ -109,7 +117,7 @@ export default function InfoModal({ show, onClose, credits, isMobile, poiIcon }:
 
                     {credits.sounds && credits.sounds.length > 0 && (
                         <div>
-                        <p className="font-semibold mt-3">Bruitages :</p>
+                        <p className="font-semibold mt-3">{t.info.sounds}</p>
                         <ul className="ml-3 list-disc">
                             {credits.sounds.map((s, i) => (
                             <li key={i}>
@@ -124,7 +132,7 @@ export default function InfoModal({ show, onClose, credits, isMobile, poiIcon }:
                     <div className="flex flex-col gap-1 text-center mt-3">
                         {credits.licenses && (
                         <p className="text-xs text-white/60">
-                            Licences : {credits.licenses.join(", ")}
+                            {t.info.licenses} {credits.licenses.join(", ")}
                         </p>
                         )}
                         <p className="text-xs text-white/50">
@@ -137,7 +145,7 @@ export default function InfoModal({ show, onClose, credits, isMobile, poiIcon }:
             </div>
             </motion.div>
         </motion.div>
-      )}
+        )}
     </AnimatePresence>
-  );
+    );
 }
