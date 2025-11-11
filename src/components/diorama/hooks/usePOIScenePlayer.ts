@@ -191,8 +191,18 @@ export const usePOIScenePlayer = ({
     });
 
     // 🔹 Son de la scène
-    if (poi.sceneSound && sceneAudioRef.current) {
-      const audio = sceneAudioRef.current;
+    if (poi.sceneSound) {
+      let audio = sceneAudioRef.current;
+      
+      // ✅ Créer audio si pas encore chargé
+      if (!audio) {
+        audio = new Audio(poi.sceneSound);
+        audio.loop = false;
+        audio.muted = false;
+        audio.preload = "auto";
+        sceneAudioRef.current = audio;
+      }
+      
       audio.currentTime = forceReplay ? 0 : lastSeekTimeRef.current || 0;
       audio.play().catch(() => {});
 
