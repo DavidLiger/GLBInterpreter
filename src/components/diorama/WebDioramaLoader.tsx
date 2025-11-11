@@ -316,26 +316,53 @@ function WebDioramaLoaderInner({ config }: { config: DioramaConfig3D }) {
       return;
     }
 
-    // ✅ Handler de contexte perdu (SIMPLE)
+    // ✅ Handler de contexte perdu
     renderer.domElement.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
       console.error("❌ Contexte perdu");
       
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = undefined;
+      }
       
-      // ✅ Délai de grâce pour restauration automatique
+      // Délai de grâce pour restauration
       setTimeout(() => {
         const gl = renderer.getContext();
         if (gl.isContextLost()) {
-          setWebglError("lost"); // Vraiment perdu
+          setWebglError("lost");
         }
       }, 2000);
     });
 
-    // renderer.domElement.addEventListener('webglcontextrestored', () => {
-    //   console.log("✅ Contexte restauré");
-    //   setWebglError(null);
-    // });
+    // ✅ Relancer l'animation après restauration
+    renderer.domElement.addEventListener('webglcontextrestored', () => {
+      console.log("✅ Contexte restauré - Relance animation");
+      
+      // ✅ Relancer la boucle d'animation
+      if (!animationFrameRef.current && rendererRef.current && cameraRef.current && sceneRef.current) {
+        const animate = () => {
+          if (document.hidden) {
+            animationFrameRef.current = requestAnimationFrame(animate);
+            return;
+          }
+
+          const delta = clock.current.getDelta();
+          updateMixers(delta);
+          controlsRef.current?.update();
+          
+          if (composerRef.current) {
+            composerRef.current.composer.render();
+          } else if (rendererRef.current && cameraRef.current && sceneRef.current) {
+            rendererRef.current.render(sceneRef.current, cameraRef.current);
+          }
+
+          animationFrameRef.current = requestAnimationFrame(animate);
+        };
+        
+        animationFrameRef.current = requestAnimationFrame(animate);
+      }
+    });
 
     // Post-processing
     const configWithPP = config as any;
