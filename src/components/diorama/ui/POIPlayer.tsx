@@ -9,6 +9,7 @@ type Props = {
   duration: number;
   onTogglePlayPause: () => void;
   onSeek: (time: number) => void;
+  onStop: () => void; 
   isPortrait?: boolean; // <- nouveau
 };
 
@@ -20,6 +21,7 @@ export default function POIPlayer({
   duration,
   onTogglePlayPause,
   onSeek,
+  onStop,
   isPortrait = false,
 }: Props) {
   const progressBarRef = useRef<HTMLDivElement>(null);
@@ -106,8 +108,13 @@ export default function POIPlayer({
         left: isPortrait ? "35%" : "40%",
       }}
       >
-      <div className="flex items-center gap-3">{renderControlButton()}</div>
-
+      <div className="flex items-center gap-1">
+        {progress > 0 && !isEnded && (
+          <button onClick={onStop}>
+            <img src="/icons/dioramas/UI/stop_btn.png" alt="Stop" className="w-5 h-5" />
+          </button>
+        )}
+        {renderControlButton()}</div>
       <div
         ref={progressBarRef}
         className="relative flex-1 h-2 bg-gray-600 rounded-full cursor-pointer mx-3 touch-none"

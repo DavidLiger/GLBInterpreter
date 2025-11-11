@@ -114,6 +114,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     seekScene,
     sceneMuted,
     toggleSceneMute,
+    stopScene
   } = usePOIScenePlayer({
     poi: currentPoi,
     animations: sceneRef.current?.userData?.gltfAnimations || [],
@@ -919,6 +920,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
           duration={duration}
           onTogglePlayPause={togglePlayPause}
           onSeek={seekScene}
+          onStop={stopScene}
           isPortrait={isPortrait}
         />
       )}

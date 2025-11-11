@@ -224,6 +224,31 @@ export const usePOIScenePlayer = ({
     playScene(true);
   }, [playScene]);
 
+  const stopScene = useCallback(() => {
+    activeActionsRef.current.forEach(a => a.stop());
+    activeActionsRef.current = [];
+    
+    if (sceneAudioRef.current) {
+      sceneAudioRef.current.pause();
+      sceneAudioRef.current.currentTime = 0;
+    }
+    
+    // ✅ Forcer unmute (même logique que onended)
+    if (poi?.id) {
+      const ambientAudio = ambientAudioRefs[poi.id];
+      if (ambientAudio) {
+        ambientAudio.muted = false; // ✅ Force unmute
+        ambientAudio.play().catch(() => {});
+      }
+    }
+    
+    lastSeekTimeRef.current = 0;
+    setProgress(0);
+    setIsPlaying(false);
+    setIsPaused(false);
+    setIsEnded(false);
+  }, [poi, ambientAudioRefs]);
+
   // 🔹 Toggle play/pause
   const togglePlayPause = useCallback(() => {
   if (isPaused) {
@@ -437,5 +462,6 @@ useEffect(() => {
     replayScene,
     sceneMuted,
     toggleSceneMute,
+    stopScene,
   };
 };
