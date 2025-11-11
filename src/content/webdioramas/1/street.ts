@@ -53,7 +53,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
       emptyName: "start",
       icon: `${BASE_URL}/icons/dioramas/test_street/start.png`,
       ambientSound: `${BASE_URL}/sounds/aquatic_ambience.mp3`,
-      sceneSound: "/sounds/goofy_Ahh_trap_short.mp3",
+      sceneSound: `${BASE_URL}/sounds/goofy_Ahh_trap_short.mp3`,
       zoom: 0.5, // règlages de la cmera sur ce POI (jusqu'à enableZoom)
       lookAxis: "x",
       minDistance: 1,
