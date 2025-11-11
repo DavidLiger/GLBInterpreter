@@ -295,6 +295,14 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
   // ✅ useEffect principal - VERSION SÉCURISÉE ANTI-BOUCLE
   useEffect(() => {
+    // 🟢 NETTOYER les flags au premier montage
+    if (!hasInitializedRef.current) {
+      delete window.__WEBGL_BLOCKED__;
+      delete window.__WEBGL_INITIALIZED__;
+      sessionStorage.removeItem('webgl_context_lost');
+      sessionStorage.removeItem('webgl_reload_attempts');
+      sessionStorage.removeItem('webgl_reloading');
+    }
     // 🔴 GUARD ULTIME : Si WebGL est bloqué globalement, NE RIEN FAIRE
     if (window.__WEBGL_BLOCKED__) {
       console.log("🛑 WebGL bloqué globalement - Arrêt total");
@@ -323,16 +331,16 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
 
     // 🔴 VÉRIFIER SI LE NAVIGATEUR A DÉJÀ BLOQUÉ WEBGL
-    const testCanvas = document.createElement('canvas');
-    const testContext = testCanvas.getContext('webgl2') || testCanvas.getContext('webgl');
-    if (!testContext) {
-      console.error("❌ WebGL déjà bloqué par le navigateur");
-      window.__WEBGL_BLOCKED__ = true; // 🔴 AJOUTER CETTE LIGNE
-      setIsContextLost(true);
-      testCanvas.remove();
-      return;
-    }
-    testCanvas.remove();
+    // const testCanvas = document.createElement('canvas');
+    // const testContext = testCanvas.getContext('webgl2') || testCanvas.getContext('webgl');
+    // if (!testContext) {
+    //   console.error("❌ WebGL déjà bloqué par le navigateur");
+    //   window.__WEBGL_BLOCKED__ = true; // 🔴 AJOUTER CETTE LIGNE
+    //   setIsContextLost(true);
+    //   testCanvas.remove();
+    //   return;
+    // }
+    // testCanvas.remove();
 
     // 🔴 MARQUER COMME INITIALISÉ **IMMÉDIATEMENT** (local ET global)
     hasInitializedRef.current = true;
