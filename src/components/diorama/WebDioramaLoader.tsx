@@ -1,6 +1,5 @@
-// WebDioramaLoader.tsx - Version nettoyée et corrigée
-
 "use client";
+
 import { TranslationProvider, useTranslation } from "@/contexts/TranslationContext";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
@@ -87,7 +86,6 @@ function WebDioramaLoaderInner({ config }: { config: DioramaConfig3D }) {
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
   const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  const isRecommendedBrowser = /Chrome|CriOS|Brave/i.test(navigator.userAgent) && !/Edg/i.test(navigator.userAgent);
 
   usePOIEffects(sceneRef.current!, currentPoi, textureLoader);
 
@@ -696,11 +694,6 @@ function WebDioramaLoaderInner({ config }: { config: DioramaConfig3D }) {
               }
             }}
           />
-        )}
-        {!isRecommendedBrowser && !showLoaderOverlay && (
-          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-yellow-500/90 text-black px-4 py-2 rounded-full text-xs font-semibold animate-pulse">
-            ⚠️ Pour une expérience optimale, utilisez Chrome ou Brave
-          </div>
         )}
       </AnimatePresence>
       

@@ -5,7 +5,7 @@ type Lang = "fr" | "en" | "es";
 
 const translations = {
   fr: {
-    loader: { start: "Cliquer pour commencer", startMobile: "Toucher pour commencer" },
+    loader: { start: "Cliquer pour commencer", startMobile: "Toucher pour commencer", browserWarning: "⚠️ Pour une expérience optimale, utilisez Chrome ou Brave" },
     info: {
       title: "Informations",
       rotate: "Tourner la scène",
@@ -20,10 +20,11 @@ const translations = {
       rotateDesktop: "(cliquer-glisser souris)",
       zoomMobile: "(pincer deux doigts)",
       zoomDesktop: "(molette souris)",
+      recommendedBrowsers: "Navigateurs recommandés : Chrome, Brave, Safari (iOS)"
     }
   },
   en: {
-    loader: { start: "Click to start", startMobile: "Tap to start" },
+    loader: { start: "Click to start", startMobile: "Tap to start", browserWarning: "⚠️ For optimal experience, use Chrome or Brave" },
     info: {
       title: "Information",
       rotate: "Rotate scene",
@@ -38,10 +39,11 @@ const translations = {
       rotateDesktop: "(click and drag with the mouse)",
       zoomMobile: "(pinch with two fingers)",
       zoomDesktop: "(mouse wheel)",
+      recommendedBrowsers: "Recommended browsers: Chrome, Brave, Safari (iOS)"
     }
   },
   es: {
-    loader: { start: "Clic para comenzar", startMobile: "Toca para comenzar" },
+    loader: { start: "Clic para comenzar", startMobile: "Toca para comenzar", browserWarning: "⚠️ Para una experiencia óptima, use Chrome o Brave" },
     info: {
       title: "Información",
       rotate: "Girar escena",
@@ -56,6 +58,7 @@ const translations = {
       rotateDesktop: "(hacer clic y arrastrar con el ratón)",
       zoomMobile: "(pellizcar con dos dedos)",
       zoomDesktop: "(rueda del ratón)",
+      recommendedBrowsers: "Navegadores recomendados: Chrome, Brave, Safari (iOS)"
     }
   }
 };

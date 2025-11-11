@@ -55,9 +55,9 @@ export default function InfoModal({ show, onClose, credits, isMobile, poiIcon }:
                 <Info size={24} /> {t.info.title}
                 </h2>
 
-                {credits?.warning && (
-                <p className="text-sm text-white/90 mb-4">{credits.warning[lang]}</p>
-                )}
+                <p className="text-xs text-gray-500 mt-4">
+                    {t.info.recommendedBrowsers}
+                </p>
 
                 {credits?.description && (
                 <p className="text-sm text-white/90 mb-4">{credits.description[lang]}</p>

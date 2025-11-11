@@ -35,6 +35,16 @@ export default function LoaderOverlay({
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const { t, lang } = useTranslation();
 
+    // ✅ Détection navigateur UNIQUEMENT côté client
+  const [isRecommendedBrowser, setIsRecommendedBrowser] = useState(true); // Par défaut true pour SSR
+
+  useEffect(() => {
+    // Détecter seulement côté client
+    if (typeof window !== 'undefined') {
+      const isRecommended = /Chrome|CriOS|Brave/i.test(navigator.userAgent) && !/Edg/i.test(navigator.userAgent);
+      setIsRecommendedBrowser(isRecommended);
+    }
+  }, []);
   
   // ⚡ Ne pas utiliser window ici directement
   useEffect(() => {
@@ -85,6 +95,17 @@ export default function LoaderOverlay({
           <div className="absolute top-4 right-4">
             <LanguageSelector />
           </div>
+          {/* ✅ Warning navigateur (en haut) */}
+          {!isRecommendedBrowser && (
+            <motion.div 
+              className="absolute top-16 left-1/2 -translate-x-1/2 bg-yellow-500/90 text-black px-4 py-2 rounded-full text-xs font-semibold text-center max-w-[90vw]"
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              {t.loader.browserWarning}
+            </motion.div>
+          )}
           {/* Image + titre */}
           <div className="flex flex-col items-center gap-4">
             <h1 className={`${fontClassName} text-white font-bold text-center`} style={{ fontSize: !isPortrait ? 'clamp(20px, 4.5vw, 28px)' : 'clamp(28px, 6vw, 48px)' }}>

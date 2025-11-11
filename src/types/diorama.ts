@@ -178,7 +178,6 @@ export type DioramaConfig3D = {
 };
 
 export interface DioramaCredits {
-  warning?: TranslatedString;
   description?: TranslatedString; // Texte d'intro ou aide
   music?: { title: string; author?: string; source?: string }[];
   sounds?: { title: string; source?: string }[];
