@@ -342,6 +342,15 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     // }
     // testCanvas.remove();
 
+    // 🟢 DÉLAI DE GRÂCE - Laisser le navigateur respirer
+    const initTimer = setTimeout(() => {
+      hasInitializedRef.current = true;
+      window.__WEBGL_INITIALIZED__ = true;
+      
+      // ... reste du code (création renderer, etc.)
+      
+    }, 500);
+
     // 🔴 MARQUER COMME INITIALISÉ **IMMÉDIATEMENT** (local ET global)
     hasInitializedRef.current = true;
     window.__WEBGL_INITIALIZED__ = true;
@@ -576,6 +585,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
     // Cleanup
     return () => {
+      clearTimeout(initTimer);
       console.log("🧹 Cleanup");
       
       if (animationFrameRef.current !== undefined) {
@@ -747,30 +757,49 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   }, [isLoaded]);
 
   // ✅ Vidéos pause/play
+  // useEffect(() => {
+  //   const handleVisibilityChange = () => {
+  //     if (!sceneRef.current) return;
+
+  //     sceneRef.current.traverse((child) => {
+  //       if (child instanceof THREE.Mesh && child.material) {
+  //         const materials = Array.isArray(child.material) ? child.material : [child.material];
+  //         materials.forEach((mat) => {
+  //           if (mat.map && mat.map instanceof THREE.VideoTexture) {
+  //             const video = mat.map.image as HTMLVideoElement;
+  //             if (document.hidden) {
+  //               video.pause();
+  //             } else {
+  //               video.play().catch(() => {});
+  //             }
+  //           }
+  //         });
+  //       }
+  //     });
+  //   };
+
+  //   document.addEventListener("visibilitychange", handleVisibilityChange);
+  //   return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  // }, []);
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (!sceneRef.current) return;
-
-      sceneRef.current.traverse((child) => {
-        if (child instanceof THREE.Mesh && child.material) {
-          const materials = Array.isArray(child.material) ? child.material : [child.material];
-          materials.forEach((mat) => {
-            if (mat.map && mat.map instanceof THREE.VideoTexture) {
-              const video = mat.map.image as HTMLVideoElement;
-              if (document.hidden) {
-                video.pause();
-              } else {
-                video.play().catch(() => {});
-              }
-            }
-          });
+      if (document.hidden) {
+        // Pause audios
+        Object.values(ambientAudioRefs.current).forEach(audio => {
+          if (!audio.paused) audio.pause();
+        });
+      } else {
+        // Juste relancer l'audio, PAS de vérification WebGL agressive
+        if (!muted && currentPOI) {
+          const ambient = ambientAudioRefs.current[currentPOI];
+          if (ambient) ambient.play().catch(() => {});
         }
-      });
+      }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, []);
+  }, [muted, currentPOI]);
 
   // ✅ Auto-unmute reset
   useEffect(() => {
