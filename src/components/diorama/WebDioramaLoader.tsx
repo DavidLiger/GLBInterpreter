@@ -324,10 +324,10 @@ function WebDioramaLoaderInner({ config }: { config: DioramaConfig3D }) {
       setWebglError("lost");
     });
 
-    renderer.domElement.addEventListener('webglcontextrestored', () => {
-      console.log("✅ Contexte restauré");
-      setWebglError(null);
-    });
+    // renderer.domElement.addEventListener('webglcontextrestored', () => {
+    //   console.log("✅ Contexte restauré");
+    //   setWebglError(null);
+    // });
 
     // Post-processing
     const configWithPP = config as any;
