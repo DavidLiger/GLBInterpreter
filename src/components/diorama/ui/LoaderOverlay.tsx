@@ -36,17 +36,20 @@ export default function LoaderOverlay({
   const { t, lang } = useTranslation();
 
     // ✅ Détection navigateur UNIQUEMENT côté client
-  const [isRecommendedBrowser, setIsRecommendedBrowser] = useState(true); // Par défaut true pour SSR
+  const [isRecommendedBrowser, setIsRecommendedBrowser] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Détecter seulement côté client
     if (typeof window !== 'undefined') {
       const ua = navigator.userAgent;
       
-      // ✅ Détecter Chrome, Brave, Safari (iOS/Mac)
+      // Détecter Chrome, Brave, Safari (whitelist)
       const isRecommended = 
-        /Chrome|CriOS|Brave/i.test(ua) && !/Edg/i.test(ua) || // Chrome/Brave (pas Edge)
-        /Safari/i.test(ua) && /Apple/i.test(ua) && !/Chrome/i.test(ua); // Safari (pas Chrome-based)
+        (/Chrome|CriOS|Brave/i.test(ua) && !/Edg/i.test(ua)) || // Chrome/Brave
+        (/Safari/i.test(ua) && /Apple/i.test(ua) && !/Chrome/i.test(ua)); // Safari
+      
+      console.log('🔍 User Agent:', ua);
+      console.log('✅ Navigateur recommandé:', isRecommended);
+      
       setIsRecommendedBrowser(isRecommended);
     }
   }, []);
@@ -100,13 +103,13 @@ export default function LoaderOverlay({
           <div className="absolute top-4 right-4">
             <LanguageSelector />
           </div>
-          {/* ✅ Warning navigateur (en haut) */}
-          {!isRecommendedBrowser && (
+          {/* ✅ Afficher seulement si détecté ET non recommandé */}
+          {isRecommendedBrowser === false && (
             <motion.div 
               className="absolute top-16 left-1/2 -translate-x-1/2 bg-yellow-500/90 text-black px-4 py-2 rounded-full text-xs font-semibold text-center max-w-[90vw]"
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
+              transition={{ delay: 0.3 }}
             >
               {t.loader.browserWarning}
             </motion.div>
