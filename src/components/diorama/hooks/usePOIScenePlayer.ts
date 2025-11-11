@@ -247,10 +247,21 @@ export const usePOIScenePlayer = ({
       if (isPlaying && !isPaused) a.play();
     });
 
-    if (sceneAudioRef.current && !isNaN(sceneAudioRef.current.duration)) {
-      sceneAudioRef.current.currentTime = Math.min(clampedTime, sceneAudioRef.current.duration);
-      if (isPlaying && !isPaused) sceneAudioRef.current.play().catch(() => {});
-      else sceneAudioRef.current.pause();
+    if (sceneAudioRef.current) {
+      const audio = sceneAudioRef.current;
+      
+      const applySeek = () => {
+        audio.currentTime = Math.min(clampedTime, audio.duration);
+        if (isPlaying && !isPaused) audio.play().catch(() => {});
+        else audio.pause();
+      };
+
+      // ✅ Si prêt, seek direct. Sinon, attendre.
+      if (audio.readyState >= 1 && !isNaN(audio.duration)) {
+        applySeek();
+      } else {
+        audio.addEventListener('loadedmetadata', applySeek, { once: true });
+      }
     }
 
     setProgress(clampedTime);
