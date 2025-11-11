@@ -86,6 +86,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   const autoplay = config.autoplay ?? false;
   const [isContextLost, setIsContextLost] = useState(false);
   const [shouldAutoReload, setShouldAutoReload] = useState(false);
+  const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
   usePOIEffects(sceneRef.current!, currentPoi, textureLoader);
 
@@ -405,7 +406,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         alpha: false,
       });
 
-      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       const pixelRatio = isMobileDevice ? 1 : Math.min(window.devicePixelRatio, 2);
       renderer.setPixelRatio(pixelRatio);
       renderer.setSize(width, height);
@@ -442,7 +442,7 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       } : undefined,
     } : undefined;
 
-    composerRef.current = setupPostProcessing(renderer, scene, camera, ppConfig);
+    composerRef.current = isMobileDevice ? null : setupPostProcessing(renderer, scene, camera, ppConfig);
 
     // OutlineEffect
     if (config.toonOutline) {
@@ -544,6 +544,8 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
         console.error("Erreur chargement GLB:", error);
       }
     );
+    
+    let lastFrameTime = 0;
 
     // ✅ Boucle d'animation
     const animate = () => {
@@ -551,6 +553,12 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       if (window.__WEBGL_BLOCKED__) {
         return;
       }
+      // Throttle à 30fps sur mobile
+      if (isMobileDevice && Date.now() - lastFrameTime < 33) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+        return;
+      }
+      lastFrameTime = Date.now();
 
       // 🔴 Ne rien faire si caché
       if (document.hidden) {
