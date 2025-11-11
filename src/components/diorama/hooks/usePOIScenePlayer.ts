@@ -169,18 +169,16 @@ export const usePOIScenePlayer = ({
       setSceneMuted(false);
       sceneAudioRef.current = audio;
 
-      // ✅ Attendre métadonnées avant seek
       audio.addEventListener('loadedmetadata', () => {
-        if (!forceReplay && lastSeekTimeRef.current > 0) {
-          audio.currentTime = Math.min(lastSeekTimeRef.current, audio.duration);
-        }
-        audio.play().catch(() => {});
+        // ✅ Débloquer l'audio (requis mobile)
+        audio.play().then(() => {
+          if (!forceReplay && lastSeekTimeRef.current > 0) {
+            audio.currentTime = Math.min(lastSeekTimeRef.current, audio.duration);
+          }
+        }).catch(() => {});
       }, { once: true });
 
-      // Fallback si déjà chargé
-      if (audio.readyState >= 1) {
-        audio.dispatchEvent(new Event('loadedmetadata'));
-      }
+      audio.load();
 
       audio.onended = () => {
         const ambientAudio = poi.id ? ambientAudioRefs[poi.id] : undefined;
