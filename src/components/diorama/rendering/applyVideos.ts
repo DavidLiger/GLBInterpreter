@@ -52,6 +52,13 @@ export function applyVideoTextures(
       }
     });
 
+    video.addEventListener('error', () => {
+      console.warn(`Retry vidéo: ${src}`);
+      // Force HTTP/2 en rechargeant sans cache
+      video.src = src.split('?')[0] + '?v=' + Date.now();
+      video.load();
+    }, { once: true });
+
     video.load();
   });
 }
