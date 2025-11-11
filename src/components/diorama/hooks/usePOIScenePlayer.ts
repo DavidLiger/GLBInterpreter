@@ -167,10 +167,9 @@ export const usePOIScenePlayer = ({
       audio.loop = false;
       audio.muted = false;
       setSceneMuted(false);
-
       sceneAudioRef.current = audio;
 
-      // ✅ Attendre les métadonnées AVANT de seek
+      // ✅ Attendre métadonnées avant seek
       audio.addEventListener('loadedmetadata', () => {
         if (!forceReplay && lastSeekTimeRef.current > 0) {
           audio.currentTime = Math.min(lastSeekTimeRef.current, audio.duration);
@@ -178,11 +177,9 @@ export const usePOIScenePlayer = ({
         audio.play().catch(() => {});
       }, { once: true });
 
-      // Fallback si loadedmetadata ne se déclenche pas
-      if (!forceReplay && lastSeekTimeRef.current > 0) {
-        audio.load();
-      } else {
-        audio.play().catch(() => {});
+      // Fallback si déjà chargé
+      if (audio.readyState >= 1) {
+        audio.dispatchEvent(new Event('loadedmetadata'));
       }
 
       audio.onended = () => {

@@ -331,18 +331,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
       return;
     }
 
-    // 🔴 VÉRIFIER SI LE NAVIGATEUR A DÉJÀ BLOQUÉ WEBGL
-    // const testCanvas = document.createElement('canvas');
-    // const testContext = testCanvas.getContext('webgl2') || testCanvas.getContext('webgl');
-    // if (!testContext) {
-    //   console.error("❌ WebGL déjà bloqué par le navigateur");
-    //   window.__WEBGL_BLOCKED__ = true; // 🔴 AJOUTER CETTE LIGNE
-    //   setIsContextLost(true);
-    //   testCanvas.remove();
-    //   return;
-    // }
-    // testCanvas.remove();
-
     // 🟢 DÉLAI DE GRÂCE - Laisser le navigateur respirer
     const initTimer = setTimeout(() => {
       hasInitializedRef.current = true;
@@ -660,75 +648,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
     }
   }, [currentPOI, config.pois]);
 
-  // ✅ Gestion visibilité - Respecter le flag global
-  // useEffect(() => {
-  //   let checkTimer: NodeJS.Timeout;
-
-  //   const handleVisibilityChange = () => {
-  //     // 🔴 Si bloqué globalement, ne rien faire
-  //     if (window.__WEBGL_BLOCKED__) {
-  //       return;
-  //     }
-
-  //     if (document.hidden) {
-  //       console.log("📱 App en arrière-plan - PAUSE");
-        
-  //       Object.values(ambientAudioRefs.current).forEach(audio => {
-  //         if (!audio.paused) audio.pause();
-  //       });
-        
-  //     } else {
-  //       console.log("📱 App au premier plan - VÉRIFICATION");
-        
-  //       if (!rendererRef.current) {
-  //         console.error("❌ Renderer absent");
-  //         window.__WEBGL_BLOCKED__ = true; // 🔴 Bloquer globalement
-  //         setIsContextLost(true);
-  //         return;
-  //       }
-
-  //       checkTimer = setTimeout(() => {
-  //         if (!rendererRef.current) {
-  //           console.error("❌ Renderer toujours absent");
-  //           window.__WEBGL_BLOCKED__ = true;
-  //           setIsContextLost(true);
-  //           return;
-  //         }
-
-  //         const gl = rendererRef.current.getContext();
-  //         if (gl.isContextLost()) {
-  //           console.error("❌ Contexte WebGL perdu");
-  //           window.__WEBGL_BLOCKED__ = true; // 🔴 Bloquer globalement
-  //           setIsContextLost(true);
-            
-  //           const wasContextLost = sessionStorage.getItem('webgl_context_lost') === 'true';
-  //           const isReloading = sessionStorage.getItem('webgl_reloading') === 'true';
-            
-  //           if (!wasContextLost && !isReloading) {
-  //             sessionStorage.setItem('webgl_context_lost', 'true');
-  //             sessionStorage.setItem('webgl_reloading', 'true');
-  //             setTimeout(() => window.location.reload(), 1000);
-  //           }
-  //         } else {
-  //           console.log("✅ Contexte OK");
-            
-  //           if (!muted && currentPOI) {
-  //             const ambient = ambientAudioRefs.current[currentPOI];
-  //             if (ambient) ambient.play().catch(() => {});
-  //           }
-  //         }
-  //       }, 500);
-  //     }
-  //   };
-
-  //   document.addEventListener("visibilitychange", handleVisibilityChange);
-    
-  //   return () => {
-  //     clearTimeout(checkTimer);
-  //     document.removeEventListener("visibilitychange", handleVisibilityChange);
-  //   };
-  // }, [muted, currentPOI]);
-
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden) {
@@ -783,52 +702,6 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
 
     return () => clearTimeout(timer);
   }, [isLoaded]);
-
-  // ✅ Vidéos pause/play
-  // useEffect(() => {
-  //   const handleVisibilityChange = () => {
-  //     if (!sceneRef.current) return;
-
-  //     sceneRef.current.traverse((child) => {
-  //       if (child instanceof THREE.Mesh && child.material) {
-  //         const materials = Array.isArray(child.material) ? child.material : [child.material];
-  //         materials.forEach((mat) => {
-  //           if (mat.map && mat.map instanceof THREE.VideoTexture) {
-  //             const video = mat.map.image as HTMLVideoElement;
-  //             if (document.hidden) {
-  //               video.pause();
-  //             } else {
-  //               video.play().catch(() => {});
-  //             }
-  //           }
-  //         });
-  //       }
-  //     });
-  //   };
-
-  //   document.addEventListener("visibilitychange", handleVisibilityChange);
-  //   return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  // }, []);
-
-  // useEffect(() => {
-  //   const handleVisibilityChange = () => {
-  //     if (document.hidden) {
-  //       // Pause audios
-  //       Object.values(ambientAudioRefs.current).forEach(audio => {
-  //         if (!audio.paused) audio.pause();
-  //       });
-  //     } else {
-  //       // Juste relancer l'audio, PAS de vérification WebGL agressive
-  //       if (!muted && currentPOI) {
-  //         const ambient = ambientAudioRefs.current[currentPOI];
-  //         if (ambient) ambient.play().catch(() => {});
-  //       }
-  //     }
-  //   };
-
-  //   document.addEventListener("visibilitychange", handleVisibilityChange);
-  //   return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  // }, [muted, currentPOI]);
 
   // ✅ Auto-unmute reset
   useEffect(() => {
