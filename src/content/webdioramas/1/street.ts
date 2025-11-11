@@ -389,6 +389,11 @@ export const street: DioramaConfig3DWithPostProcessing = {
     defaultKeepAlive: true,
   },
   credits: {
+    warning: {
+      fr: "Navigateurs recommandés : Chrome, Brave, Safari (iOS)",
+      en: "Recommended browsers: Chrome, Brave, Safari (iOS)",
+      es: "Navegadores recomendados: Chrome, Brave, Safari (iOS)"
+    },
     description: {
       fr: "Scène 3D immersive du village...",
       en: "Immersive 3D village scene...",

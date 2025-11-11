@@ -55,6 +55,10 @@ export default function InfoModal({ show, onClose, credits, isMobile, poiIcon }:
                 <Info size={24} /> {t.info.title}
                 </h2>
 
+                {credits?.warning && (
+                <p className="text-sm text-white/90 mb-4">{credits.warning[lang]}</p>
+                )}
+
                 {credits?.description && (
                 <p className="text-sm text-white/90 mb-4">{credits.description[lang]}</p>
                 )}
@@ -128,7 +132,6 @@ export default function InfoModal({ show, onClose, credits, isMobile, poiIcon }:
                         </ul>
                         </div>
                     )}
-
                     <div className="flex flex-col gap-1 text-center mt-3">
                         {credits.licenses && (
                         <p className="text-xs text-white/60">
