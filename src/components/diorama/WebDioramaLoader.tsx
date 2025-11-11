@@ -785,30 +785,30 @@ export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }
   }, [isLoaded]);
 
   // ✅ Vidéos pause/play
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!sceneRef.current) return;
+  // useEffect(() => {
+  //   const handleVisibilityChange = () => {
+  //     if (!sceneRef.current) return;
 
-      sceneRef.current.traverse((child) => {
-        if (child instanceof THREE.Mesh && child.material) {
-          const materials = Array.isArray(child.material) ? child.material : [child.material];
-          materials.forEach((mat) => {
-            if (mat.map && mat.map instanceof THREE.VideoTexture) {
-              const video = mat.map.image as HTMLVideoElement;
-              if (document.hidden) {
-                video.pause();
-              } else {
-                video.play().catch(() => {});
-              }
-            }
-          });
-        }
-      });
-    };
+  //     sceneRef.current.traverse((child) => {
+  //       if (child instanceof THREE.Mesh && child.material) {
+  //         const materials = Array.isArray(child.material) ? child.material : [child.material];
+  //         materials.forEach((mat) => {
+  //           if (mat.map && mat.map instanceof THREE.VideoTexture) {
+  //             const video = mat.map.image as HTMLVideoElement;
+  //             if (document.hidden) {
+  //               video.pause();
+  //             } else {
+  //               video.play().catch(() => {});
+  //             }
+  //           }
+  //         });
+  //       }
+  //     });
+  //   };
 
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, []);
+  //   document.addEventListener("visibilitychange", handleVisibilityChange);
+  //   return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  // }, []);
 
   // useEffect(() => {
   //   const handleVisibilityChange = () => {
