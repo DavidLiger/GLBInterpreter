@@ -87,7 +87,7 @@ export default function LoaderOverlay({
     if (onStart) onStart();
 
     // On cache l'overlay (si tu veux que le parent fasse ça, supprime cette ligne)
-    setShowOverlay(false);
+    // setShowOverlay(false);
   };
 
   return (
