@@ -320,8 +320,16 @@ function WebDioramaLoaderInner({ config }: { config: DioramaConfig3D }) {
     renderer.domElement.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
       console.error("❌ Contexte perdu");
+      
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      setWebglError("lost");
+      
+      // ✅ Délai de grâce pour restauration automatique
+      setTimeout(() => {
+        const gl = renderer.getContext();
+        if (gl.isContextLost()) {
+          setWebglError("lost"); // Vraiment perdu
+        }
+      }, 2000);
     });
 
     // renderer.domElement.addEventListener('webglcontextrestored', () => {
@@ -348,7 +356,7 @@ function WebDioramaLoaderInner({ config }: { config: DioramaConfig3D }) {
       } : undefined,
     } : undefined;
 
-    composerRef.current = isMobileDevice ? null : setupPostProcessing(renderer, scene, camera, ppConfig);
+    // composerRef.current = isMobileDevice ? null : setupPostProcessing(renderer, scene, camera, ppConfig);
 
     // OutlineEffect
     if (config.toonOutline) {
@@ -410,9 +418,22 @@ function WebDioramaLoaderInner({ config }: { config: DioramaConfig3D }) {
         });
 
         initMixers(gltf.scene);
-        applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
         applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
-        applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
+        applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);// 2. Ensuite post-processing (après un micro-délai)
+        setTimeout(() => {
+          if (!isMobileDevice) {
+            composerRef.current = setupPostProcessing(renderer, scene, camera, ppConfig);
+          }
+          
+          if (configWithPP.emissiveObjects) {
+            setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
+          }
+        }, 100);
+        
+        // 3. Vidéos en dernier (lourd)
+        setTimeout(() => {
+          applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
+        }, 200);
 
         if (configWithPP.emissiveObjects) {
           setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
