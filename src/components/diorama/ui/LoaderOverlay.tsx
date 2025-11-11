@@ -41,11 +41,17 @@ export default function LoaderOverlay({
   useEffect(() => {
     // Détecter seulement côté client
     if (typeof window !== 'undefined') {
-      const isRecommended = /Chrome|CriOS|Brave/i.test(navigator.userAgent) && !/Edg/i.test(navigator.userAgent);
+      const ua = navigator.userAgent;
+      
+      // ✅ Détecter Chrome, Brave, Safari (iOS/Mac)
+      const isRecommended = 
+        /Chrome|CriOS|Brave/i.test(ua) && !/Edg/i.test(ua) || // Chrome/Brave (pas Edge)
+        /Safari/i.test(ua) && /Apple/i.test(ua) && !/Chrome/i.test(ua); // Safari (pas Chrome-based)
+      
       setIsRecommendedBrowser(isRecommended);
     }
   }, []);
-  
+
   // ⚡ Ne pas utiliser window ici directement
   useEffect(() => {
     const updateVH = () => {
