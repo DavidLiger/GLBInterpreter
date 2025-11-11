@@ -248,7 +248,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-40 right-4 z-[500] bg-purple-600 text-white p-3 rounded-full shadow-lg hover:bg-purple-700 transition"
+        className="fixed bottom-38 right-4 z-[500] bg-purple-600 text-white p-3 rounded-full shadow-lg hover:bg-purple-700 transition"
         title="Config Converter (Dev Tool)"
       >
         <FileJson size={24} />

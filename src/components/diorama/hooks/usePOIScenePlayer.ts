@@ -165,16 +165,24 @@ export const usePOIScenePlayer = ({
     if (poi.sceneSound) {
       const audio = new Audio(poi.sceneSound);
       audio.loop = false;
-      
-      // ⚡ Forcer à unmute au lancement de la scène
       audio.muted = false;
       setSceneMuted(false);
 
-      audio.play().catch(() => {});
       sceneAudioRef.current = audio;
 
+      // ✅ Attendre les métadonnées AVANT de seek
+      audio.addEventListener('loadedmetadata', () => {
+        if (!forceReplay && lastSeekTimeRef.current > 0) {
+          audio.currentTime = Math.min(lastSeekTimeRef.current, audio.duration);
+        }
+        audio.play().catch(() => {});
+      }, { once: true });
+
+      // Fallback si loadedmetadata ne se déclenche pas
       if (!forceReplay && lastSeekTimeRef.current > 0) {
-        audio.currentTime = Math.min(lastSeekTimeRef.current, audio.duration || maxDuration);
+        audio.load();
+      } else {
+        audio.play().catch(() => {});
       }
 
       audio.onended = () => {
@@ -242,7 +250,7 @@ export const usePOIScenePlayer = ({
       if (isPlaying && !isPaused) a.play();
     });
 
-    if (sceneAudioRef.current) {
+    if (sceneAudioRef.current && !isNaN(sceneAudioRef.current.duration)) {
       sceneAudioRef.current.currentTime = Math.min(clampedTime, sceneAudioRef.current.duration);
       if (isPlaying && !isPaused) sceneAudioRef.current.play().catch(() => {});
       else sceneAudioRef.current.pause();

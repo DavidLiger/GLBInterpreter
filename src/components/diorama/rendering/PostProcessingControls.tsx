@@ -18,7 +18,7 @@ export default function PostProcessingControls({ composer, onUpdate }: PostProce
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-24 right-4 z-500 bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition"
+        className="fixed bottom-16 right-4 z-500 bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition"
         title="Post-Processing Controls"
       >
         <Settings size={24} />
