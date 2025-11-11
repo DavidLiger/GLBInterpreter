@@ -96,6 +96,35 @@ export const usePOIScenePlayer = ({
     }
   }, [poi, animations]);
 
+  // ✅ Précharger l'audio dès le montage du POI
+  useEffect(() => {
+    if (!poi?.sceneSound) return;
+    
+    const audio = new Audio(poi.sceneSound);
+    audio.loop = false;
+    audio.muted = false;
+    audio.preload = "auto";
+    
+    audio.addEventListener('loadedmetadata', () => {
+      // Forcer un micro-play pour débloquer (mobile)
+      audio.play().then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+        sceneAudioRef.current = audio;
+      }).catch(() => {
+        sceneAudioRef.current = audio;
+      });
+    }, { once: true });
+    
+    audio.load();
+    
+    return () => {
+      if (sceneAudioRef.current === audio) {
+        sceneAudioRef.current = null;
+      }
+    };
+  }, [poi?.sceneSound]);
+
   // Toggle du mute local scène
   const toggleSceneMute = useCallback(() => {
     setSceneMuted(prev => {
@@ -162,23 +191,10 @@ export const usePOIScenePlayer = ({
     });
 
     // 🔹 Son de la scène
-    if (poi.sceneSound) {
-      const audio = new Audio(poi.sceneSound);
-      audio.loop = false;
-      audio.muted = false;
-      setSceneMuted(false);
-      sceneAudioRef.current = audio;
-
-      audio.addEventListener('loadedmetadata', () => {
-        // ✅ Débloquer l'audio (requis mobile)
-        audio.play().then(() => {
-          if (!forceReplay && lastSeekTimeRef.current > 0) {
-            audio.currentTime = Math.min(lastSeekTimeRef.current, audio.duration);
-          }
-        }).catch(() => {});
-      }, { once: true });
-
-      audio.load();
+    if (poi.sceneSound && sceneAudioRef.current) {
+      const audio = sceneAudioRef.current;
+      audio.currentTime = forceReplay ? 0 : lastSeekTimeRef.current || 0;
+      audio.play().catch(() => {});
 
       audio.onended = () => {
         const ambientAudio = poi.id ? ambientAudioRefs[poi.id] : undefined;
