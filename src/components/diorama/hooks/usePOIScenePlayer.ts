@@ -246,7 +246,7 @@ export const usePOIScenePlayer = ({
     setProgress(0);
     setIsPlaying(false);
     setIsPaused(false);
-    setIsEnded(false);
+    setIsEnded(true);
   }, [poi, ambientAudioRefs]);
 
   // 🔹 Toggle play/pause

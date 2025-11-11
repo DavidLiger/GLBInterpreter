@@ -48,7 +48,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
       sceneSound: "/sounds/goofy_Ahh_trap_short.mp3",
       zoom: 0.5, // règlages de la cmera sur ce POI (jusqu'à enableZoom)
       lookAxis: "x",
-      minDistance: 0.1,
+      minDistance: 1,
       maxDistance: 20,
       minPolarAngle: 0,
       maxPolarAngle: 1.57,
