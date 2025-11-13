@@ -35,21 +35,35 @@ import { usePOIEffects } from "./hooks/usePOIEffects";
 import RotateHint from "./ui/RotateHint";
 import ConfigConverterTool from "./tools/ConfigConverterTool";
 import QRCodeModal from "./tools/QRCodeModal";
+import BookCacheManager from "./BookCacheManager";
+import DownloadTooltip from "./ui/DownloadTooltip";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
   variable: "--font-Bullstand-Regular",
 });
 
-export default function WebDioramaLoader({ config }: { config: DioramaConfig3D }) {
+export default function WebDioramaLoader({ 
+  config,
+  bookId // ✅ Nouveau prop
+}: { 
+  config: DioramaConfig3D;
+  bookId: string; // ✅ Ajouté
+}) {
   return (
     <TranslationProvider>
-      <WebDioramaLoaderInner config={config} />
+      <WebDioramaLoaderInner config={config} bookId={bookId} />
     </TranslationProvider>
   );
 }
 
-function WebDioramaLoaderInner({ config }: { config: DioramaConfig3D }) {
+function WebDioramaLoaderInner({ 
+  config,
+  bookId // ✅ Nouveau prop
+}: { 
+  config: DioramaConfig3D;
+  bookId: string; // ✅ Ajouté
+}) {
   const { lang } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -86,6 +100,12 @@ function WebDioramaLoaderInner({ config }: { config: DioramaConfig3D }) {
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
   const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const bookCacheManagerRef = useRef<{ openModal: () => void } | null>(null);
+    // Extraire bookId depuis config.glb
+  // const bookId = useMemo(() => {
+  //   const match = config.glb?.match(/\/assets\/(\d+)\//);
+  //   return match?.[1] || "1";
+  // }, [config.glb]);
 
   usePOIEffects(sceneRef.current!, currentPoi, textureLoader);
 
@@ -476,6 +496,12 @@ function WebDioramaLoaderInner({ config }: { config: DioramaConfig3D }) {
         setIsLoaded(true);
       },
       (xhr) => {
+        // ✅ Détecter si chargement depuis cache (instantané)
+        if (xhr.total === 0 || !xhr.lengthComputable) {
+          // Pas de progress bar si pas de total (= cache)
+          setLoadingProgress(100);
+          return;
+        }
         if (xhr.lengthComputable) {
           const progress = (xhr.loaded / xhr.total) * 100;
           setLoadingProgress(Math.floor(progress)); // 🆕 Arrondir pour éviter micro-updates
@@ -710,6 +736,7 @@ function WebDioramaLoaderInner({ config }: { config: DioramaConfig3D }) {
             loaderImage={config.loaderImage}
             fontClassName={BullstandRegular.className}
             autoplay={autoplay}
+            bookId={bookId}
             onStart={() => {
             // Reset scroll au cas où
             window.scrollTo(0, 0);
@@ -746,7 +773,20 @@ function WebDioramaLoaderInner({ config }: { config: DioramaConfig3D }) {
       </AnimatePresence>
       
       {showRotateHint && <RotateHint show={true} />}
+      {/* Bouton téléchargement livre */}
+      <BookCacheManager 
+        bookId={bookId} 
+        isPortrait={isPortrait} 
+        variant="scene" 
+      />
 
+      {/* Tooltip discret */}
+      <DownloadTooltip
+        bookId={bookId}
+        isPortrait={isPortrait}
+        variant="scene" // ✅ Ajouter
+      />
+      {/* Bouton Info (existant) */}
       <div className="absolute top-2 right-2 z-50 flex flex-row gap-2 items-end">
         <InfoButton onClick={() => setShowInfoModal(true)} />
       </div>

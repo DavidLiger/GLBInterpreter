@@ -5,17 +5,20 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "@/contexts/TranslationContext";
 import LanguageSelector from "./LanguageSelector";
+import BookCacheManager from "../BookCacheManager";
+import ClientBookCacheManager from "../ClientBookCacheManager";
+import DownloadTooltip from "./DownloadTooltip";
 
 interface LoaderOverlayProps {
   isPortrait: boolean;
   isMobile: boolean;
   loadingProgress: number;
-  isLoaded: boolean; // <-- nouveau
+  isLoaded: boolean;
   sceneName?: string;
   loaderImage?: string;
   fontClassName?: string;
-  autoplay?: boolean; // ← NOUVEAU
-  /** callback appelé quand l'utilisateur appuie sur le bouton pour activer le son */
+  autoplay?: boolean;
+  bookId?: string; // ✅ Optionnel
   onStart?: () => void;
 }
 
@@ -28,15 +31,16 @@ export default function LoaderOverlay({
   loaderImage,
   fontClassName,
   autoplay = false,
+  bookId,
   onStart,
-}: LoaderOverlayProps) {
+}: LoaderOverlayProps & { bookId: string }) {
   const [showOverlay, setShowOverlay] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
   const { t, lang } = useTranslation();
 
     // ✅ Détection navigateur UNIQUEMENT côté client
-  const [isRecommendedBrowser, setIsRecommendedBrowser] = useState<boolean | null>(null);
+  const [isRecommendedBrowser, setIsRecommendedBrowser] = useState<boolean>(true);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -103,6 +107,17 @@ export default function LoaderOverlay({
           <div className="absolute top-4 right-4">
             <LanguageSelector />
           </div>
+          {/* Bouton téléchargement livre */}
+            {bookId && 
+            <>
+              <ClientBookCacheManager bookId={bookId} />
+              <DownloadTooltip
+                bookId={bookId}
+                isPortrait={isPortrait}
+                variant="loader" // ✅ Ajouter
+              />
+            </>
+            }
           {/* ✅ Afficher seulement si détecté ET non recommandé */}
           {isRecommendedBrowser === false && (
             <motion.div 

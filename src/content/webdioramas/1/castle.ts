@@ -3,7 +3,7 @@ import type { DioramaConfig3DWithPostProcessing } from "@/types/diorama";
 const BASE_URL = process.env.NEXT_PUBLIC_ASSET_BASE_URL || "";
 
 export const castle: DioramaConfig3DWithPostProcessing = {
-  glb: `${BASE_URL}/models/street.glb`,
+  glb: `${BASE_URL}/models/castle.glb`,
   loaderImage: `${BASE_URL}/icons/dioramas/test_street/street-preview.png`,
   autoplay: true, // ← Mode tutoriel automatique ou pas
   name: {

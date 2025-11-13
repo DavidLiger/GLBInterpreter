@@ -32,6 +32,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# .gitignore
+.env*.local
 
 # vercel
 .vercel
@@ -56,6 +58,11 @@ public/icons/dioramas/*
 !public/icons/dioramas/UI/**
 
 # src/content/webdioramas
+
+# Service Worker généré
+public/sw.js
+public/sw.js.map
+public/swe-worker-*.js
 
 
 

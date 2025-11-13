@@ -2,15 +2,16 @@ import { notFound } from "next/navigation";
 import WebDioramaLoader from "@/components/diorama/WebDioramaLoader";
 import type { DioramaConfig3DWithVideos } from "@/types/diorama";
 import { applyCacheBustersToConfig } from "@/components/diorama/lib/cacheUtils"; 
+import BookCacheManager from "@/components/diorama/BookCacheManager";
 
 type Props = {
-  params: {
+  params: Promise<{  // ✅ Changé : Promise<>
     bookId: string;
     dioramaId: string;
-  };
-  searchParams: {
+  }>;
+  searchParams: Promise<{  // ✅ Changé : Promise<>
     t?: string;
-  };
+  }>;
 };
 
 export default async function DioramaPage({ params, searchParams }: Props) {
@@ -67,9 +68,9 @@ export default async function DioramaPage({ params, searchParams }: Props) {
     }
 
     // ✅ APPLIQUER LES CACHE BUSTERS ICI
-    const processedConfig = applyCacheBustersToConfig(config);
+    // const processedConfig = applyCacheBustersToConfig(config);
 
-    return <WebDioramaLoader config={processedConfig} />;
+      return <WebDioramaLoader config={config} bookId={bookId} />
   } catch (err) {
     console.error("Erreur lors du chargement du diorama:", err);
     return notFound(); // ✅ Ajout du return

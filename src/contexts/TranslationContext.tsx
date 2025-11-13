@@ -21,6 +21,11 @@ const translations = {
       zoomMobile: "(pincer deux doigts)",
       zoomDesktop: "(molette souris)",
       recommendedBrowsers: "Navigateurs recommandés : Chrome, Brave, Safari (iOS)"
+    },
+    downloadSuggestion: {
+      title: "Gagnez du temps !",
+      message: "Téléchargez tous les dioramas pour en profiter plus facilement 😊",
+      action: "Télécharger"
     }
   },
   en: {
@@ -40,6 +45,11 @@ const translations = {
       zoomMobile: "(pinch with two fingers)",
       zoomDesktop: "(mouse wheel)",
       recommendedBrowsers: "Recommended browsers: Chrome, Brave, Safari (iOS)"
+    },
+    downloadSuggestion: {
+      title: "Save time!",
+      message: "Download all dioramas to enjoy them more easily 😊",
+      action: "Download"
     }
   },
   es: {
@@ -59,6 +69,11 @@ const translations = {
       zoomMobile: "(pellizcar con dos dedos)",
       zoomDesktop: "(rueda del ratón)",
       recommendedBrowsers: "Navegadores recomendados: Chrome, Brave, Safari (iOS)"
+    },
+    downloadSuggestion: {
+      title: "¡Ahorra tiempo!",
+      message: "Descarga todos los dioramas para disfrutarlos más fácilmente 😊",
+      action: "Descargar"
     }
   }
 };
