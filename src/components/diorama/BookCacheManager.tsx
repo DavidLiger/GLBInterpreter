@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "@/contexts/TranslationContext";
 
 interface IndexEntry {
   path: string;
@@ -28,42 +29,72 @@ export default function BookCacheManager({
   const [totalSize, setTotalSize] = useState(0);
   const [downloadedSize, setDownloadedSize] = useState(0);
   const [showModal, setShowModal] = useState(false);
-  const [cacheCheckTrigger, setCacheCheckTrigger] = useState(0);
-
-  // ✅ Vérifier localStorage + écouter les changements
-  // const isCached = useMemo(() => {
-  //   if (typeof window === 'undefined') return false;
-  //   return localStorage.getItem(`book-${bookId}-cached`) === 'true';
-  // }, [bookId, cacheCheckTrigger]);
   const [isCached, setIsCached] = useState(false);
+  const { t } = useTranslation();
 
+  // ✅ Clé localStorage pour l'état du téléchargement
+  const downloadingKey = `book-${bookId}-downloading`;
+
+  // ✅ Initialisation : vérifier cache + restaurer téléchargement en cours
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    
     const cached = localStorage.getItem(`book-${bookId}-cached`) === 'true';
     setIsCached(cached);
-  }, [bookId, cacheCheckTrigger]); 
+    
+    // Restaurer l'état du téléchargement si interrompu
+    const isDownloading = localStorage.getItem(downloadingKey) === 'true';
+    if (isDownloading && !cached) {
+      setDownloading(true);
+      const savedProgress = localStorage.getItem(`${downloadingKey}-progress`);
+      if (savedProgress) {
+        const { progress: p, downloaded, total } = JSON.parse(savedProgress);
+        setProgress(p);
+        setDownloadedSize(downloaded);
+        setTotalSize(total);
+      }
+    }
+  }, [bookId, downloadingKey]);
 
-  // ✅ Écouter les changements de localStorage (entre onglets/composants)
+  // ✅ Écouter les changements
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (e.key === `book-${bookId}-cached`) {
-        setCacheCheckTrigger(prev => prev + 1);
+        setIsCached(e.newValue === 'true');
+      }
+      if (e.key === downloadingKey) {
+        setDownloading(e.newValue === 'true');
       }
     };
 
-    // ✅ Custom event pour les changements dans le même onglet
-    const handleCustomEvent = () => {
-      setCacheCheckTrigger(prev => prev + 1);
+    const handleCacheUpdate = () => {
+      setIsCached(localStorage.getItem(`book-${bookId}-cached`) === 'true');
+      setDownloading(false);
     };
 
+    const handleDownloadStarted = () => {
+      setDownloading(true);
+    };
+
+    const handleProgressUpdate = ((e: CustomEvent) => {
+      const { progress: p, downloaded, total } = e.detail;
+      setProgress(p);
+      setDownloadedSize(downloaded);
+      setTotalSize(total);
+    }) as EventListener;
+
     window.addEventListener('storage', handleStorageChange);
-    window.addEventListener('book-cache-updated', handleCustomEvent);
+    window.addEventListener('book-cache-updated', handleCacheUpdate);
+    window.addEventListener('book-download-started', handleDownloadStarted);
+    window.addEventListener('book-download-progress', handleProgressUpdate);
 
     return () => {
       window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('book-cache-updated', handleCustomEvent);
+      window.removeEventListener('book-cache-updated', handleCacheUpdate);
+      window.removeEventListener('book-download-started', handleDownloadStarted);
+      window.removeEventListener('book-download-progress', handleProgressUpdate);
     };
-  }, [bookId]);
+  }, [bookId, downloadingKey]);
 
   const cleanUrl = (url: string): string => {
     return url.replace(/\?v=.*$/, '').replace(/\?v=\$\{Date\.now\(\)\}$/, '');
@@ -81,8 +112,10 @@ export default function BookCacheManager({
   const downloadBook = async () => {
     setShowModal(false);
     setDownloading(true);
-    // ✅ Notifier que le téléchargement commence
+    
+    localStorage.setItem(downloadingKey, 'true');
     window.dispatchEvent(new Event('book-download-started'));
+    
     const baseUrl = process.env.NEXT_PUBLIC_ASSETS_URL;
 
     try {
@@ -134,23 +167,35 @@ export default function BookCacheManager({
             await cache.put(cleanedUrl, response.clone());
           }
           
-          setDownloadedSize(i + 1);
-          setProgress(Math.round(((i + 1) / total) * 100));
+          const downloaded = i + 1;
+          const prog = Math.round((downloaded / total) * 100);
+          
+          setDownloadedSize(downloaded);
+          setProgress(prog);
+          
+          // ✅ Sauvegarder progression + dispatcher event
+          const progressData = { progress: prog, downloaded, total };
+          localStorage.setItem(`${downloadingKey}-progress`, JSON.stringify(progressData));
+          window.dispatchEvent(new CustomEvent('book-download-progress', { detail: progressData }));
+          
         } catch (err) {
           console.warn(`❌ Échec: ${uniqueUrls[i]}`);
         }
       }
 
+      // ✅ Nettoyer + marquer comme caché
+      localStorage.removeItem(downloadingKey);
+      localStorage.removeItem(`${downloadingKey}-progress`);
       localStorage.setItem(`book-${bookId}-cached`, 'true');
       
-      // ✅ Dispatcher custom event pour notifier les autres composants
       window.dispatchEvent(new Event('book-cache-updated'));
-      
-      setCacheCheckTrigger(prev => prev + 1);
+      setIsCached(true);
       setDownloading(false);
       
     } catch (err) {
       console.error("❌ Erreur:", err);
+      localStorage.removeItem(downloadingKey);
+      localStorage.removeItem(`${downloadingKey}-progress`);
       setDownloading(false);
     }
   };
@@ -171,7 +216,7 @@ export default function BookCacheManager({
           className={`${buttonPosition} bg-black/60 border-2 border-white border-solid rounded-full flex items-center justify-center shadow-lg`}
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
-          title="Télécharger le livre complet"
+          title={t.bookDownload.modalTitle}
         >
           <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -180,14 +225,18 @@ export default function BookCacheManager({
       )}
 
       <AnimatePresence>
-        {downloading && (
+        {downloading && variant === "scene" && (
           <motion.div
-            className={`${buttonPosition} bg-black/90 text-white p-3 rounded-2xl shadow-2xl min-w-[200px]`}
+            className={`${
+              isPortrait
+                ? "absolute bottom-28 right-2 z-[9900]"
+                : "absolute top-14 right-2 z-[9900]"
+            } bg-black/60 text-white p-3 rounded-2xl shadow-2xl min-w-[200px]`}
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
           >
-            <p className="text-xs font-semibold mb-2">📥 Téléchargement...</p>
+            <p className="text-xs font-semibold mb-2">📥 {t.bookDownload.downloading}</p>
             <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden mb-1">
               <div
                 className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all"
@@ -195,7 +244,7 @@ export default function BookCacheManager({
               />
             </div>
             <p className="text-xs text-gray-400">
-              {downloadedSize} / {totalSize} ({progress}%)
+              {downloadedSize} / {totalSize} {t.bookDownload.filesProgress} ({progress}%)
             </p>
           </motion.div>
         )}
@@ -219,27 +268,26 @@ export default function BookCacheManager({
               exit={{ opacity: 0, scale: 0.9 }}
             >
               <h3 className="text-white font-bold text-lg mb-3">
-                📚 Télécharger le livre {bookId}
+                📚 {t.bookDownload.modalTitle} {bookId}
               </h3>
-              <p className="text-gray-300 text-sm mb-5">
-                Télécharger toutes les scènes pour une utilisation offline.
-                <br />
-                <span className="text-yellow-400 font-semibold">
-                  Taille estimée : ~500 MB
-                </span>
+              <p className="text-gray-300 text-sm mb-2">
+                {t.bookDownload.modalMessage}
+              </p>
+              <p className="text-yellow-400 font-semibold text-sm mb-5">
+                {t.bookDownload.modalSize}
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowModal(false)}
                   className="flex-1 px-4 py-2 bg-gray-700 text-white rounded-full font-semibold"
                 >
-                  Annuler
+                  {t.bookDownload.cancel}
                 </button>
                 <button
                   onClick={downloadBook}
                   className="flex-1 px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-full font-semibold"
                 >
-                  Télécharger
+                  {t.bookDownload.download}
                 </button>
               </div>
             </motion.div>

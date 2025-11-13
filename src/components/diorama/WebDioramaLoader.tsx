@@ -487,86 +487,104 @@ function WebDioramaLoaderInner({
           setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
         }
 
+        setLoadingProgress(70);
+
         const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
-            
-            if (startPOI) {
-              console.log("📦 Preload assets du POI start...");
-              
-              const assetsToPreload: Promise<any>[] = [];
+        
+        if (startPOI) {
+          console.log("📦 Chargement assets POI start...");
+          
+          // ✅ Compter les assets à charger
+          const assetsToLoad: { type: string; url: string }[] = [];
+          
+          if (startPOI.ambientSound) {
+            assetsToLoad.push({ type: 'audio', url: startPOI.ambientSound });
+          }
+          if (startPOI.sceneSound) {
+            assetsToLoad.push({ type: 'audio', url: startPOI.sceneSound });
+          }
+          
+          const videosToPreload = (config as DioramaConfig3DWithVideos).videos || [];
+          videosToPreload.forEach((videoConfig) => {
+            assetsToLoad.push({ type: 'video', url: videoConfig.src });
+          });
 
-              // Preload sons
-              if (startPOI.ambientSound) {
-                assetsToPreload.push(
-                  new Promise((resolve) => {
-                    const audio = new Audio(startPOI.ambientSound);
-                    audio.addEventListener('canplaythrough', resolve, { once: true });
-                    audio.load();
-                  })
-                );
+          const totalAssets = assetsToLoad.length;
+          let loadedAssets = 0;
+
+          // ✅ Fonction pour mettre à jour la progress (70% → 100%)
+          const updateAssetProgress = () => {
+            loadedAssets++;
+            const assetProgress = (loadedAssets / totalAssets) * 30; // 30% pour les assets
+            setLoadingProgress(70 + Math.floor(assetProgress));
+            console.log(`📦 Asset ${loadedAssets}/${totalAssets} chargé`);
+          };
+
+          // ✅ Charger chaque asset avec feedback
+          const assetPromises = assetsToLoad.map((asset) => {
+            return new Promise((resolve) => {
+              if (asset.type === 'audio') {
+                const audio = new Audio(asset.url);
+                audio.addEventListener('canplaythrough', () => {
+                  updateAssetProgress();
+                  resolve(null);
+                }, { once: true });
+                audio.addEventListener('error', (err) => {
+                  console.warn(`⚠️ Erreur audio: ${asset.url}`, err);
+                  updateAssetProgress(); // ✅ Compter quand même
+                  resolve(null);
+                }, { once: true });
+                audio.load();
+              } else if (asset.type === 'video') {
+                const video = document.createElement('video');
+                video.src = asset.url;
+                video.addEventListener('canplaythrough', () => {
+                  updateAssetProgress();
+                  resolve(null);
+                }, { once: true });
+                video.addEventListener('error', (err) => {
+                  console.warn(`⚠️ Erreur vidéo: ${asset.url}`, err);
+                  updateAssetProgress(); // ✅ Compter quand même
+                  resolve(null);
+                }, { once: true });
+                video.load();
               }
-              
-              if (startPOI.sceneSound) {
-                assetsToPreload.push(
-                  new Promise((resolve) => {
-                    const audio = new Audio(startPOI.sceneSound!);
-                    audio.addEventListener('canplaythrough', resolve, { once: true });
-                    audio.load();
-                  })
-                );
-              }
+            });
+          });
 
-              // Preload vidéos (si tu en as dans start)
-              const videosToPreload = (config as DioramaConfig3DWithVideos).videos || [];
-              videosToPreload.forEach((videoConfig) => {
-                assetsToPreload.push(
-                  new Promise((resolve) => {
-                    const video = document.createElement('video');
-                    video.src = videoConfig.src;
-                    video.addEventListener('canplaythrough', resolve, { once: true });
-                    video.load();
-                  })
-                );
-              });
+          // ✅ Attendre tous les assets
+          await Promise.all(assetPromises);
+          console.log("✅ Tous les assets chargés");
+        }
 
-              // Attendre tous les assets
-              try {
-                await Promise.all(assetsToPreload);
-                console.log("✅ Tous les assets preload terminés");
-              } catch (err) {
-                console.warn("⚠️ Erreur preload assets:", err);
-              }
-            }
+        // ✅ 100% → Bouton START apparaît
+        setLoadingProgress(100);
 
-            // ✅ Positionner caméra et marquer comme chargé
-            const startObj = emptyRefs.current[startPOI?.emptyName || ""];
-            if (startObj && startPOI) {
-              moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
-              playPOIAnimations(startPOI, gltf.animations);
-            }
+        const startObj = emptyRefs.current[startPOI?.emptyName || ""];
+        if (startObj && startPOI) {
+          moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
+          playPOIAnimations(startPOI, gltf.animations);
+        }
 
-            setIsLoaded(true);
-            setAssetsLoaded(true); // ✅ Nouveau flag
+        console.log("✅ setIsLoaded(true)");
+        setIsLoaded(true);
       },
       (xhr) => {
-        // ✅ Détecter si chargement depuis cache (instantané)
+        // ✅ GLB = 0% → 70%
         if (xhr.total === 0 || !xhr.lengthComputable) {
-          // Pas de progress bar si pas de total (= cache)
-          setLoadingProgress(100);
+          setLoadingProgress(70);
           return;
         }
         if (xhr.lengthComputable) {
-          const progress = (xhr.loaded / xhr.total) * 100;
-          setLoadingProgress(Math.floor(progress)); // 🆕 Arrondir pour éviter micro-updates
+          const progress = (xhr.loaded / xhr.total) * 70; // Max 70%
+          setLoadingProgress(Math.floor(progress));
         } else {
-          // 🆕 Incrémenter seulement si changement significatif
-          setLoadingProgress((prev) => {
-            const next = prev + 2; // Incrément plus grand
-            return Math.min(next, 95);
-          });
+          setLoadingProgress((prev) => Math.min(prev + 2, 70));
         }
       },
       (error) => {
         console.error("Erreur chargement GLB:", error);
+        setIsLoaded(true); // Permettre START en cas d'erreur critique
       }
     );
     

@@ -5,11 +5,20 @@ import { useEffect, useState } from "react";
 export function useOrientation(timeout = 5000) {
   const [isPortrait, setIsPortrait] = useState(false);
   const [showRotateHint, setShowRotateHint] = useState(false);
+  const [hasChecked, setHasChecked] = useState(false);
 
   useEffect(() => {
     const checkOrientation = () => {
-      setIsPortrait(window.matchMedia("(orientation: portrait)").matches);
+      const portrait = window.matchMedia("(orientation: portrait)").matches;
+      setIsPortrait(portrait);
+      
+      // ✅ Au premier check, si portrait → montrer le hint
+      if (!hasChecked && portrait) {
+        setShowRotateHint(true);
+        setHasChecked(true);
+      }
     };
+    
     checkOrientation();
 
     window.addEventListener("resize", checkOrientation);
@@ -19,17 +28,17 @@ export function useOrientation(timeout = 5000) {
       window.removeEventListener("resize", checkOrientation);
       window.removeEventListener("orientationchange", checkOrientation);
     };
-  }, []);
+  }, [hasChecked]);
 
   useEffect(() => {
-    if (isPortrait) {
+    if (isPortrait && hasChecked) {
       setShowRotateHint(true);
       const timer = setTimeout(() => setShowRotateHint(false), timeout);
       return () => clearTimeout(timer);
     } else {
       setShowRotateHint(false);
     }
-  }, [isPortrait, timeout]);
+  }, [isPortrait, timeout, hasChecked]);
 
   return { isPortrait, showRotateHint };
 }

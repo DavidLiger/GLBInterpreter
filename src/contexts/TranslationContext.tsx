@@ -26,6 +26,15 @@ const translations = {
       title: "Gagnez du temps !",
       message: "Téléchargez tous les dioramas pour en profiter plus facilement 😊",
       action: "Télécharger"
+    },
+    bookDownload: {
+      modalTitle: "Télécharger le livre",
+      modalMessage: "Télécharger toutes les scènes pour une utilisation offline.",
+      modalSize: "Taille estimée : ~500 MB",
+      cancel: "Annuler",
+      download: "Télécharger",
+      downloading: "Téléchargement...",
+      filesProgress: "fichiers" // "{downloaded} / {total} fichiers"
     }
   },
   en: {
@@ -50,6 +59,15 @@ const translations = {
       title: "Save time!",
       message: "Download all dioramas to enjoy them more easily 😊",
       action: "Download"
+    },
+    bookDownload: {
+      modalTitle: "Download book",
+      modalMessage: "Download all scenes for offline use.",
+      modalSize: "Estimated size: ~500 MB",
+      cancel: "Cancel",
+      download: "Download",
+      downloading: "Downloading...",
+      filesProgress: "files"
     }
   },
   es: {
@@ -74,6 +92,15 @@ const translations = {
       title: "¡Ahorra tiempo!",
       message: "Descarga todos los dioramas para disfrutarlos más fácilmente 😊",
       action: "Descargar"
+    },
+    bookDownload: {
+      modalTitle: "Descargar libro",
+      modalMessage: "Descarga todas las escenas para uso sin conexión.",
+      modalSize: "Tamaño estimado: ~500 MB",
+      cancel: "Cancelar",
+      download: "Descargar",
+      downloading: "Descargando...",
+      filesProgress: "archivos"
     }
   }
 };
