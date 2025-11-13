@@ -101,6 +101,7 @@ function WebDioramaLoaderInner({
   const autoplay = config.autoplay ?? false;
   const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   const bookCacheManagerRef = useRef<{ openModal: () => void } | null>(null);
+  const [assetsLoaded, setAssetsLoaded] = useState(false);
     // Extraire bookId depuis config.glb
   // const bookId = useMemo(() => {
   //   const match = config.glb?.match(/\/assets\/(\d+)\//);
@@ -429,7 +430,7 @@ function WebDioramaLoaderInner({
     const loader = new GLTFLoader();
     loader.load(
       config.glb,
-      (gltf: GLTF) => {
+      async (gltf: GLTF) => {
         scene.add(gltf.scene);
         scene.userData.gltfAnimations = gltf.animations;
 
@@ -487,13 +488,64 @@ function WebDioramaLoaderInner({
         }
 
         const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
-        if (startPOI) {
-          const startObj = emptyRefs.current[startPOI.emptyName];
-          if (startObj) moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
-          playPOIAnimations(startPOI, gltf.animations);
-        }
+            
+            if (startPOI) {
+              console.log("📦 Preload assets du POI start...");
+              
+              const assetsToPreload: Promise<any>[] = [];
 
-        setIsLoaded(true);
+              // Preload sons
+              if (startPOI.ambientSound) {
+                assetsToPreload.push(
+                  new Promise((resolve) => {
+                    const audio = new Audio(startPOI.ambientSound);
+                    audio.addEventListener('canplaythrough', resolve, { once: true });
+                    audio.load();
+                  })
+                );
+              }
+              
+              if (startPOI.sceneSound) {
+                assetsToPreload.push(
+                  new Promise((resolve) => {
+                    const audio = new Audio(startPOI.sceneSound!);
+                    audio.addEventListener('canplaythrough', resolve, { once: true });
+                    audio.load();
+                  })
+                );
+              }
+
+              // Preload vidéos (si tu en as dans start)
+              const videosToPreload = (config as DioramaConfig3DWithVideos).videos || [];
+              videosToPreload.forEach((videoConfig) => {
+                assetsToPreload.push(
+                  new Promise((resolve) => {
+                    const video = document.createElement('video');
+                    video.src = videoConfig.src;
+                    video.addEventListener('canplaythrough', resolve, { once: true });
+                    video.load();
+                  })
+                );
+              });
+
+              // Attendre tous les assets
+              try {
+                await Promise.all(assetsToPreload);
+                console.log("✅ Tous les assets preload terminés");
+              } catch (err) {
+                console.warn("⚠️ Erreur preload assets:", err);
+              }
+            }
+
+            // ✅ Positionner caméra et marquer comme chargé
+            const startObj = emptyRefs.current[startPOI?.emptyName || ""];
+            if (startObj && startPOI) {
+              moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
+              playPOIAnimations(startPOI, gltf.animations);
+            }
+
+            setIsLoaded(true);
+            setAssetsLoaded(true); // ✅ Nouveau flag
       },
       (xhr) => {
         // ✅ Détecter si chargement depuis cache (instantané)
