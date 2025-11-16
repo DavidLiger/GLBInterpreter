@@ -23,7 +23,7 @@ interface WebGLContextReturn {
  * - Cleanup propre
  */
 export function useWebGLContext(
-  containerRef: React.RefObject<HTMLDivElement>,
+  containerRef: React.RefObject<HTMLDivElement | null>,
   options: UseWebGLContextOptions = {}
 ): WebGLContextReturn {
   const {
