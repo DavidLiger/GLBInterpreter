@@ -152,9 +152,27 @@ export const street: DioramaConfig3DWithPostProcessing = {
                 en: "Here, you can explore the 3D scene.",
                 es: "Aquí puedes explorar la escena 3D."
               },
-              // ...
+              {
+                fr: "Tu peux zoomer, tourner la caméra, et cliquer sur les points d'intérêt.",
+                en: "You can zoom in, rotate the camera, and click on points of interest.",
+                es: "Puedes ampliar la imagen, girar la cámara y hacer clic en los puntos de interés."
+              },
+              {
+                fr: "Amuse-toi bien !",
+                en: "Have fun!",
+                es: "¡Que te diviertas!"
+              }
             ],
             characterId: "guide"
+          },
+          {
+            time: 12.5,
+            text: {
+                fr: "Allons voir ce qu’il se passe plus loin !",
+                en: "Let's go and see what's happening further on!",
+                es: "¡Vamos a ver qué pasa más allá!"
+              },
+            characterId: "hero"
           }
         ]
       },
