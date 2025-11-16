@@ -59,7 +59,15 @@ export default function DialogueModal({
   const currentText = useMemo(() => {
     if (!currentLine) return null;
 
+    // Si c'est un objet TranslatedString simple
+    if (typeof currentLine.text === "object" && !Array.isArray(currentLine.text)) {
+      return currentLine.text;
+    }
+
+    // Si c'est une string (cas legacy)
     if (typeof currentLine.text === "string") return currentLine.text;
+    
+    // Si c'est un tableau de TranslatedStrings
     if (Array.isArray(currentLine.text)) {
       const nextLine = dialogue?.lines.find((l) => l.time > currentLine.time);
       const nextTime = nextLine ? nextLine.time : currentLine.time + 5; // durée par défaut
@@ -73,7 +81,7 @@ export default function DialogueModal({
     return null;
   }, [progress, currentLine, dialogue]);
 
-  if (!currentLine || !isPlaying || !currentText) return null;
+ if (!currentLine || !isPlaying || !currentText) return null;
 
   // 🧱 Layout selon orientation
   const containerClass = isPortrait
@@ -93,7 +101,7 @@ export default function DialogueModal({
   return (
   <AnimatePresence>
     <motion.div
-      key={`${currentLine.time}-${currentText}`}
+      key={`${currentLine.time}-${currentText[lang]}`}
       className={containerClass}
       initial={{ opacity: 0, y: isPortrait ? 20 : -20 }}
       animate={{ opacity: 1, y: 0 }}
@@ -105,7 +113,7 @@ export default function DialogueModal({
           <div className="w-8 h-8 rounded-full overflow-hidden border border-white/40">
             <Image
               src={currentCharacter.image}
-              alt={currentCharacter.name?.[lang] || "speaker"} // ✅ Optional chaining
+              alt={currentCharacter.name?.[lang] || "speaker"}
               width={40}
               height={40}
               className="object-cover"
@@ -115,12 +123,12 @@ export default function DialogueModal({
       )}
 
       <p className="flex-1 text-sm leading-snug break-words">
-        {currentCharacter?.name?.[lang] && ( // ✅ Optional chaining
+        {currentCharacter?.name?.[lang] && (
           <span className="font-semibold text-gray-200">
             {currentCharacter.name[lang]} :
           </span>
         )}{" "}
-        {currentText[lang]} {/* ✅ Afficher la string traduite */}
+        {currentText[lang]}
       </p>
     </motion.div>
   </AnimatePresence>

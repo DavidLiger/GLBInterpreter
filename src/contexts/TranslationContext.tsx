@@ -24,7 +24,7 @@ const translations = {
     },
     downloadSuggestion: {
       title: "Gagnez du temps !",
-      message: "Téléchargez tous les dioramas pour en profiter plus facilement 😊",
+      message: "Téléchargez tous les dioramas pour en profiter plus facilement",
       action: "Télécharger"
     },
     bookDownload: {
@@ -57,7 +57,7 @@ const translations = {
     },
     downloadSuggestion: {
       title: "Save time!",
-      message: "Download all dioramas to enjoy them more easily 😊",
+      message: "Download all dioramas to enjoy them more easily",
       action: "Download"
     },
     bookDownload: {
@@ -90,7 +90,7 @@ const translations = {
     },
     downloadSuggestion: {
       title: "¡Ahorra tiempo!",
-      message: "Descarga todos los dioramas para disfrutarlos más fácilmente 😊",
+      message: "Descarga todos los dioramas para disfrutarlos más fácilmente",
       action: "Descargar"
     },
     bookDownload: {
