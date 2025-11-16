@@ -68,7 +68,7 @@ function WebDioramaLoaderInner({
   bookId: string;
 }) {
   const { lang } = useTranslation();
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const { isPortrait, showRotateHint } = useOrientation(5000);
   const [loadingProgress, setLoadingProgress] = useState(0);
