@@ -8,20 +8,20 @@ import { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import localFont from "next/font/local";
-import type { DioramaConfig3D, DioramaConfig3DWithVideos } from "@/types/diorama"; 
+import type { DioramaConfig3D, DioramaConfig3DWithVideos } from "@/types/diorama";
 import usePOIAudio from "./audio/usePOIAudio";
 import SoundButton from "./audio/SoundButton";
-import { usePOINavigation } from "./hooks/usePOINavigation"; 
+import { usePOINavigation } from "./hooks/usePOINavigation";
 import LoaderOverlay from "./ui/LoaderOverlay";
 import FullscreenButton from "./ui/FullscreenButton";
 import { applyVideoTextures } from "./rendering/applyVideos";
-import { applyLights } from "./rendering/applyLights"; 
+import { applyLights } from "./rendering/applyLights";
 import { applyBulbs } from "./rendering/applyBulbs";
 import { useOrientation } from "./hooks/useOrientation";
 import { useFullscreen } from "./hooks/useFullscreen";
 import { useResize } from "./hooks/useResize";
 import { usePOIAnimations } from "./hooks/usePOIAnimations";
-import { POIWithElements } from "@/types/diorama"; 
+import { POIWithElements } from "@/types/diorama";
 import POIPlayer from "@/components/diorama/ui/POIPlayer";
 import { usePOIScenePlayer } from "@/components/diorama/hooks/usePOIScenePlayer";
 import DialogueModal from "./ui/DialogueModal";
@@ -30,25 +30,28 @@ import InfoButton from "./ui/InfoButton";
 import InfoModal from "./ui/InfoModal";
 import POIBreadcrumbs from "./ui/POIBreadcrumbs";
 import PostProcessingControls from "./rendering/PostProcessingControls";
-import { setupPostProcessing, setupEmissiveMaterials } from "./rendering/setupPostProcessing"; 
+import { setupPostProcessing, setupEmissiveMaterials } from "./rendering/setupPostProcessing";
 import { usePOIEffects } from "./hooks/usePOIEffects";
 import RotateHint from "./ui/RotateHint";
 import ConfigConverterTool from "./tools/ConfigConverterTool";
 import QRCodeModal from "./tools/QRCodeModal";
 import BookCacheManager from "./BookCacheManager";
 import DownloadTooltip from "./ui/DownloadTooltip";
+import { useWebGLContext } from "./hooks/useWebGLContext";
+import { useAssetPreloader } from "./hooks/useAssetPreloader";
+import { disposeScene, logSceneStats } from "./utils/webglHelpers";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
   variable: "--font-Bullstand-Regular",
 });
 
-export default function WebDioramaLoader({ 
+export default function WebDioramaLoader({
   config,
-  bookId // ✅ Nouveau prop
-}: { 
+  bookId,
+}: {
   config: DioramaConfig3D;
-  bookId: string; // ✅ Ajouté
+  bookId: string;
 }) {
   return (
     <TranslationProvider>
@@ -57,12 +60,12 @@ export default function WebDioramaLoader({
   );
 }
 
-function WebDioramaLoaderInner({ 
+function WebDioramaLoaderInner({
   config,
-  bookId // ✅ Nouveau prop
-}: { 
+  bookId,
+}: {
   config: DioramaConfig3D;
-  bookId: string; // ✅ Ajouté
+  bookId: string;
 }) {
   const { lang } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -70,24 +73,36 @@ function WebDioramaLoaderInner({
   const { isPortrait, showRotateHint } = useOrientation(5000);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const emptyRefs = useRef<Record<string, THREE.Object3D>>({});
   const animationFrameRef = useRef<number | undefined>(undefined);
-  const hasInitializedRef = useRef(false);
-  const { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers } = usePOIAnimations(emptyRefs);
+  const { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers } =
+    usePOIAnimations(emptyRefs);
   const clock = useRef(new THREE.Clock());
   const hasAutoUnmutedRef = useRef(false);
   const composerRef = useRef<ReturnType<typeof setupPostProcessing> | null>(null);
   const textureLoader = useMemo(() => new THREE.TextureLoader(), []);
-  const [webglError, setWebglError] = useState<string | null>(null);
-
-  const { currentPOI, goToPOI, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively } = usePOINavigation(
-    config,
-    cameraRef,
-    controlsRef,
-    emptyRefs
+  const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
   );
+
+  // ✅ Hook WebGL simplifié
+  const { renderer, error: webglError, isReady: webglReady } = useWebGLContext(containerRef, {
+    isMobile: isMobileDevice,
+    onContextLost: () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = undefined;
+      }
+    },
+  });
+
+  // ✅ Hook préchargement assets
+  const { loadAssets, progress: assetProgress } = useAssetPreloader();
+
+  const { currentPOI, goToPOI, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively } =
+    usePOINavigation(config, cameraRef, controlsRef, emptyRefs);
+
   const currentPoi = currentPOI ? findPOIRecursively(currentPOI) ?? undefined : undefined;
   const [isLoaded, setIsLoaded] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -99,14 +114,6 @@ function WebDioramaLoaderInner({
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
-  const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  const bookCacheManagerRef = useRef<{ openModal: () => void } | null>(null);
-  const [assetsLoaded, setAssetsLoaded] = useState(false);
-    // Extraire bookId depuis config.glb
-  // const bookId = useMemo(() => {
-  //   const match = config.glb?.match(/\/assets\/(\d+)\//);
-  //   return match?.[1] || "1";
-  // }, [config.glb]);
 
   usePOIEffects(sceneRef.current!, currentPoi, textureLoader);
 
@@ -121,34 +128,24 @@ function WebDioramaLoaderInner({
   } = usePOIAudio({
     pois: config.pois,
     currentPOI,
-    onScenePlayingChange: (playing) => {},
+    onScenePlayingChange: () => {},
   });
 
-  const {
-    isPlaying,
-    isPaused,
-    isEnded,
-    progress,
-    duration,
-    togglePlayPause,
-    seekScene,
-    sceneMuted,
-    toggleSceneMute,
-    stopScene
-  } = usePOIScenePlayer({
-    poi: currentPoi,
-    animations: sceneRef.current?.userData?.gltfAnimations || [],
-    mixerRef: mixerRef.current,
-    ambientAudioRefs: ambientAudioRefs.current,
-    muted,
-    onSceneStart: handleSceneStart,
-    onSceneEnd: handleSceneEnd,
-    emptyRefs,
-    controlsRef,
-    moveCameraToPOI,
-    moveCameraDuringAnimation,
-    goToPOI
-  });
+  const { isPlaying, isPaused, isEnded, progress, duration, togglePlayPause, seekScene, sceneMuted, toggleSceneMute, stopScene } =
+    usePOIScenePlayer({
+      poi: currentPoi,
+      animations: sceneRef.current?.userData?.gltfAnimations || [],
+      mixerRef: mixerRef.current,
+      ambientAudioRefs: ambientAudioRefs.current,
+      muted,
+      onSceneStart: handleSceneStart,
+      onSceneEnd: handleSceneEnd,
+      emptyRefs,
+      controlsRef,
+      moveCameraToPOI,
+      moveCameraDuringAnimation,
+      goToPOI,
+    });
 
   const activePOIIcon = React.useMemo(() => {
     if (!currentPOI) return undefined;
@@ -161,6 +158,7 @@ function WebDioramaLoaderInner({
     return active.icon;
   }, [currentPOI, findPOIRecursively, findParentPOI]);
 
+  // Detect mobile/touch
   useEffect(() => {
     const checkIsMobile = () => setIsMobile(window.innerWidth < 768);
     checkIsMobile();
@@ -212,18 +210,21 @@ function WebDioramaLoaderInner({
   const updateRendererSize = () => {
     const w = containerRef.current?.clientWidth;
     const h = containerRef.current?.clientHeight;
-    if (!w || !h || !cameraRef.current || !rendererRef.current) return;
-    
+    if (!w || !h || !cameraRef.current || !renderer) return;
+
     cameraRef.current.aspect = w / h;
     cameraRef.current.updateProjectionMatrix();
-    rendererRef.current.setSize(w, h);
-    
+    renderer.setSize(w, h);
+
     if (composerRef.current) {
       composerRef.current.updateSize(w, h);
     }
   };
 
-  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(containerRef, () => setTimeout(updateRendererSize, 50));
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(
+    containerRef,
+    () => setTimeout(updateRendererSize, 50)
+  );
   useResize(updateRendererSize);
 
   useEffect(() => {
@@ -266,41 +267,9 @@ function WebDioramaLoaderInner({
     }
   }, [currentPOI]);
 
-  // ✅ useEffect principal - VERSION SÉCURISÉE ANTI-BOUCLE
+  // ✅ Chargement de la scène
   useEffect(() => {
-    // ✅ Guard obligatoire
-    if (!containerRef.current || hasInitializedRef.current) return;
-    
-    hasInitializedRef.current = true;
-    console.log("🎬 Init WebGL");
-
-    // Cleanup préventif
-    const existingCanvas = containerRef.current.querySelector('canvas');
-    if (existingCanvas) {
-      console.log("🧹 Suppression canvas existant");
-      existingCanvas.remove();
-    }
-
-    if (rendererRef.current) {
-      console.log("🧹 Dispose renderer existant");
-      try {
-        rendererRef.current.dispose();
-        rendererRef.current.forceContextLoss();
-      } catch (e) {
-        console.warn("Erreur dispose renderer:", e);
-      }
-      rendererRef.current = null;
-    }
-
-    if (controlsRef.current) {
-      controlsRef.current.dispose();
-      controlsRef.current = null;
-    }
-
-    if (animationFrameRef.current !== undefined) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = undefined;
-    }
+    if (!renderer || !webglReady || !containerRef.current) return;
 
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -313,98 +282,28 @@ function WebDioramaLoaderInner({
     camera.position.set(0, 2, 5);
     cameraRef.current = camera;
 
-    let renderer: THREE.WebGLRenderer;
-    try {
-      renderer = new THREE.WebGLRenderer({ 
-        antialias: true,
-        powerPreference: "high-performance",
-        failIfMajorPerformanceCaveat: false,
-        preserveDrawingBuffer: false,
-        alpha: false,
-      });
-
-      const pixelRatio = isMobileDevice ? 1 : Math.min(window.devicePixelRatio, 2);
-      renderer.setPixelRatio(pixelRatio);
-      renderer.setSize(width, height);
-      
-      containerRef.current.appendChild(renderer.domElement);
-      rendererRef.current = renderer;
-      console.log("✅ WebGL context créé");
-
-    } catch (error) {
-      console.error("❌ Erreur WebGL:", error);
-      setWebglError("init");
-      return;
-    }
-
-    // ✅ Handler de contexte perdu
-    renderer.domElement.addEventListener('webglcontextlost', (e) => {
-      e.preventDefault();
-      console.error("❌ Contexte perdu");
-      
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = undefined;
-      }
-      
-      // Délai de grâce pour restauration
-      setTimeout(() => {
-        const gl = renderer.getContext();
-        if (gl.isContextLost()) {
-          setWebglError("lost");
-        }
-      }, 2000);
-    });
-
-    // ✅ Relancer l'animation après restauration
-    renderer.domElement.addEventListener('webglcontextrestored', () => {
-      console.log("✅ Contexte restauré - Relance animation");
-      
-      // ✅ Relancer la boucle d'animation
-      if (!animationFrameRef.current && rendererRef.current && cameraRef.current && sceneRef.current) {
-        const animate = () => {
-          if (document.hidden) {
-            animationFrameRef.current = requestAnimationFrame(animate);
-            return;
-          }
-
-          const delta = clock.current.getDelta();
-          updateMixers(delta);
-          controlsRef.current?.update();
-          
-          if (composerRef.current) {
-            composerRef.current.composer.render();
-          } else if (rendererRef.current && cameraRef.current && sceneRef.current) {
-            rendererRef.current.render(sceneRef.current, cameraRef.current);
-          }
-
-          animationFrameRef.current = requestAnimationFrame(animate);
-        };
-        
-        animationFrameRef.current = requestAnimationFrame(animate);
-      }
-    });
-
-    // Post-processing
+    // Post-processing config
     const configWithPP = config as any;
     const toneMappingMap: Record<string, THREE.ToneMapping> = {
-      "ACESFilmic": THREE.ACESFilmicToneMapping,
-      "Linear": THREE.LinearToneMapping,
-      "Reinhard": THREE.ReinhardToneMapping,
-      "Cineon": THREE.CineonToneMapping,
+      ACESFilmic: THREE.ACESFilmicToneMapping,
+      Linear: THREE.LinearToneMapping,
+      Reinhard: THREE.ReinhardToneMapping,
+      Cineon: THREE.CineonToneMapping,
     };
 
-    const ppConfig = configWithPP.postProcessing ? {
-      ...configWithPP.postProcessing,
-      toneMapping: configWithPP.postProcessing.toneMapping ? {
-        ...configWithPP.postProcessing.toneMapping,
-        type: configWithPP.postProcessing.toneMapping.type 
-          ? toneMappingMap[configWithPP.postProcessing.toneMapping.type] 
-          : THREE.ACESFilmicToneMapping,
-      } : undefined,
-    } : undefined;
-
-    // composerRef.current = isMobileDevice ? null : setupPostProcessing(renderer, scene, camera, ppConfig);
+    const ppConfig = configWithPP.postProcessing
+      ? {
+          ...configWithPP.postProcessing,
+          toneMapping: configWithPP.postProcessing.toneMapping
+            ? {
+                ...configWithPP.postProcessing.toneMapping,
+                type: configWithPP.postProcessing.toneMapping.type
+                  ? toneMappingMap[configWithPP.postProcessing.toneMapping.type]
+                  : THREE.ACESFilmicToneMapping,
+              }
+            : undefined,
+        }
+      : undefined;
 
     // OutlineEffect
     if (config.toonOutline) {
@@ -434,6 +333,7 @@ function WebDioramaLoaderInner({
         scene.add(gltf.scene);
         scene.userData.gltfAnimations = gltf.animations;
 
+        // Frustum culling + bounding boxes
         gltf.scene.traverse((child: any) => {
           if (child.isMesh) {
             child.frustumCulled = false;
@@ -444,6 +344,7 @@ function WebDioramaLoaderInner({
           }
         });
 
+        // Populate empty refs + mixers
         gltf.scene.traverse((child) => {
           if (!child.name) return;
           emptyRefs.current[child.name] = child;
@@ -467,132 +368,80 @@ function WebDioramaLoaderInner({
 
         initMixers(gltf.scene);
         applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
-        applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);// 2. Ensuite post-processing (après un micro-délai)
+        applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
+
+        // Post-processing (délai pour stabilité)
         setTimeout(() => {
           if (!isMobileDevice) {
             composerRef.current = setupPostProcessing(renderer, scene, camera, ppConfig);
           }
-          
+
           if (configWithPP.emissiveObjects) {
             setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
           }
         }, 100);
-        
-        // 3. Vidéos en dernier (lourd)
+
+        // Vidéos (dernier car lourd)
         setTimeout(() => {
           applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
         }, 200);
 
-        if (configWithPP.emissiveObjects) {
-          setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
-        }
-
         setLoadingProgress(70);
 
+        // ✅ Précharger les assets du POI start
         const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
-        
+
         if (startPOI) {
-          console.log("📦 Chargement assets POI start...");
-          
-          // ✅ Compter les assets à charger
-          const assetsToLoad: { type: string; url: string }[] = [];
-          
-          if (startPOI.ambientSound) {
-            assetsToLoad.push({ type: 'audio', url: startPOI.ambientSound });
-          }
-          if (startPOI.sceneSound) {
-            assetsToLoad.push({ type: 'audio', url: startPOI.sceneSound });
-          }
-          
+          console.log("📦 Préchargement assets POI start...");
+
+          const assetsToLoad: { type: 'audio' | 'video' | 'image'; url: string }[] = [];
+
+          if (startPOI.ambientSound) assetsToLoad.push({ type: 'audio', url: startPOI.ambientSound });
+          if (startPOI.sceneSound) assetsToLoad.push({ type: 'audio', url: startPOI.sceneSound });
+
           const videosToPreload = (config as DioramaConfig3DWithVideos).videos || [];
           videosToPreload.forEach((videoConfig) => {
             assetsToLoad.push({ type: 'video', url: videoConfig.src });
           });
 
-          const totalAssets = assetsToLoad.length;
-          let loadedAssets = 0;
-
-          // ✅ Fonction pour mettre à jour la progress (70% → 100%)
-          const updateAssetProgress = () => {
-            loadedAssets++;
-            const assetProgress = (loadedAssets / totalAssets) * 30; // 30% pour les assets
-            setLoadingProgress(70 + Math.floor(assetProgress));
-            console.log(`📦 Asset ${loadedAssets}/${totalAssets} chargé`);
-          };
-
-          // ✅ Charger chaque asset avec feedback
-          const assetPromises = assetsToLoad.map((asset) => {
-            return new Promise((resolve) => {
-              if (asset.type === 'audio') {
-                const audio = new Audio(asset.url);
-                audio.addEventListener('canplaythrough', () => {
-                  updateAssetProgress();
-                  resolve(null);
-                }, { once: true });
-                audio.addEventListener('error', (err) => {
-                  console.warn(`⚠️ Erreur audio: ${asset.url}`, err);
-                  updateAssetProgress(); // ✅ Compter quand même
-                  resolve(null);
-                }, { once: true });
-                audio.load();
-              } else if (asset.type === 'video') {
-                const video = document.createElement('video');
-                video.src = asset.url;
-                video.addEventListener('canplaythrough', () => {
-                  updateAssetProgress();
-                  resolve(null);
-                }, { once: true });
-                video.addEventListener('error', (err) => {
-                  console.warn(`⚠️ Erreur vidéo: ${asset.url}`, err);
-                  updateAssetProgress(); // ✅ Compter quand même
-                  resolve(null);
-                }, { once: true });
-                video.load();
-              }
-            });
-          });
-
-          // ✅ Attendre tous les assets
-          await Promise.all(assetPromises);
-          console.log("✅ Tous les assets chargés");
+          try {
+            await loadAssets(assetsToLoad);
+            console.log("✅ Assets POI start chargés");
+          } catch (err) {
+            console.warn("⚠️ Erreur chargement assets:", err);
+          }
         }
 
-        // ✅ 100% → Bouton START apparaît
         setLoadingProgress(100);
 
+        // Position caméra sur start POI
         const startObj = emptyRefs.current[startPOI?.emptyName || ""];
         if (startObj && startPOI) {
           moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
           playPOIAnimations(startPOI, gltf.animations);
         }
 
-        console.log("✅ setIsLoaded(true)");
+        // Log stats (dev)
+        logSceneStats(scene, renderer);
+
         setIsLoaded(true);
       },
       (xhr) => {
-        // ✅ GLB = 0% → 70%
         if (xhr.total === 0 || !xhr.lengthComputable) {
           setLoadingProgress(70);
           return;
         }
-        if (xhr.lengthComputable) {
-          const progress = (xhr.loaded / xhr.total) * 70; // Max 70%
-          setLoadingProgress(Math.floor(progress));
-        } else {
-          setLoadingProgress((prev) => Math.min(prev + 2, 70));
-        }
+        const progress = (xhr.loaded / xhr.total) * 70;
+        setLoadingProgress(Math.floor(progress));
       },
       (error) => {
         console.error("Erreur chargement GLB:", error);
-        setIsLoaded(true); // Permettre START en cas d'erreur critique
+        setIsLoaded(true);
       }
     );
-    
-    let lastFrameTime = 0;
 
     // ✅ Boucle d'animation
     const animate = () => {
-      // 🔴 Ne rien faire si caché
       if (document.hidden) {
         animationFrameRef.current = requestAnimationFrame(animate);
         return;
@@ -601,16 +450,16 @@ function WebDioramaLoaderInner({
       const delta = clock.current.getDelta();
       updateMixers(delta);
       controlsRef.current?.update();
-      
+
       if (composerRef.current) {
         composerRef.current.composer.render();
-      } else if (rendererRef.current && cameraRef.current && sceneRef.current) {
-        rendererRef.current.render(sceneRef.current, cameraRef.current);
+      } else if (renderer && cameraRef.current && sceneRef.current) {
+        renderer.render(sceneRef.current, cameraRef.current);
       }
 
       animationFrameRef.current = requestAnimationFrame(animate);
     };
-    
+
     animationFrameRef.current = requestAnimationFrame(animate);
 
     // Cleanup
@@ -620,42 +469,17 @@ function WebDioramaLoaderInner({
         animationFrameRef.current = undefined;
       }
 
-      if (rendererRef.current) {
-        try {
-          rendererRef.current.dispose();
-          rendererRef.current.forceContextLoss();
-        } catch (e) {
-          console.warn("Erreur cleanup renderer:", e);
-        }
-        rendererRef.current = null;
-      }
-
       if (controlsRef.current) {
         controlsRef.current.dispose();
         controlsRef.current = null;
       }
 
-      if (sceneRef.current) {
-        sceneRef.current.traverse((object) => {
-          if (object instanceof THREE.Mesh) {
-            object.geometry?.dispose();
-            if (Array.isArray(object.material)) {
-              object.material.forEach(mat => mat.dispose());
-            } else {
-              object.material?.dispose();
-            }
-          }
-        });
-        sceneRef.current.clear();
-        sceneRef.current = null;
-      }
-
-      const canvas = containerRef.current?.querySelector('canvas');
-      if (canvas) canvas.remove();
+      disposeScene(sceneRef.current);
+      sceneRef.current = null;
     };
-  }, [config.glb]);
+  }, [renderer, webglReady, config.glb]);
 
-  // ✅ DOF selon POI
+  // DOF selon POI
   useEffect(() => {
     if (!composerRef.current || !currentPOI) return;
 
@@ -675,19 +499,17 @@ function WebDioramaLoaderInner({
     }
   }, [currentPOI, config.pois]);
 
-  // ✅ Gestion simple de la visibilité
+  // Gestion visibilité (pause/resume)
   useEffect(() => {
     const handleVisibility = () => {
       if (document.hidden) {
-        // Pause tout
         if (animationFrameRef.current) {
           cancelAnimationFrame(animationFrameRef.current);
           animationFrameRef.current = undefined;
         }
-        Object.values(ambientAudioRefs.current).forEach(audio => audio.pause());
+        Object.values(ambientAudioRefs.current).forEach((audio) => audio.pause());
       } else {
-        // Resume
-        if (!animationFrameRef.current && rendererRef.current && cameraRef.current && sceneRef.current) {
+        if (!animationFrameRef.current && renderer && cameraRef.current && sceneRef.current) {
           const animate = () => {
             if (document.hidden) {
               animationFrameRef.current = requestAnimationFrame(animate);
@@ -697,11 +519,11 @@ function WebDioramaLoaderInner({
             const delta = clock.current.getDelta();
             updateMixers(delta);
             controlsRef.current?.update();
-            
+
             if (composerRef.current) {
               composerRef.current.composer.render();
-            } else if (rendererRef.current && cameraRef.current && sceneRef.current) {
-              rendererRef.current.render(sceneRef.current, cameraRef.current);
+            } else if (renderer && cameraRef.current && sceneRef.current) {
+              renderer.render(sceneRef.current, cameraRef.current);
             }
 
             animationFrameRef.current = requestAnimationFrame(animate);
@@ -716,16 +538,16 @@ function WebDioramaLoaderInner({
 
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [muted, currentPOI]);
+  }, [muted, currentPOI, renderer]);
 
-  // ✅ Auto-unmute reset
+  // Auto-unmute reset
   useEffect(() => {
     if (isPlaying && !isEnded) {
       hasAutoUnmutedRef.current = false;
     }
   }, [isPlaying, isEnded]);
 
-  // ✅ Auto-unmute ambiance
+  // Auto-unmute ambiance
   useEffect(() => {
     if (isEnded && !scenePlaying && muted && !hasAutoUnmutedRef.current) {
       const timeout = setTimeout(() => {
@@ -738,42 +560,42 @@ function WebDioramaLoaderInner({
 
   useEffect(() => {
     if (showLoaderOverlay) {
-      document.body.style.overflow = 'hidden';
-      document.body.style.position = 'fixed';
-      document.body.style.width = '100%';
-      document.body.style.height = '100%';
+      document.body.style.overflow = "hidden";
+      document.body.style.position = "fixed";
+      document.body.style.width = "100%";
+      document.body.style.height = "100%";
       window.scrollTo(0, 0);
     } else {
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
-      document.body.style.height = '';
+      document.body.style.overflow = "";
+      document.body.style.position = "";
+      document.body.style.width = "";
+      document.body.style.height = "";
     }
-    
+
     return () => {
-      document.body.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.width = '';
-      document.body.style.height = '';
+      document.body.style.overflow = "";
+      document.body.style.position = "";
+      document.body.style.width = "";
+      document.body.style.height = "";
     };
   }, [showLoaderOverlay]);
 
-  // ✅ UI d'erreur simple
+  // ✅ UI d'erreur WebGL simple
   if (webglError) {
     return (
       <div className="w-screen h-screen flex items-center justify-center bg-black text-white">
         <div className="text-center p-8 max-w-md">
           <p className="text-xl mb-4">⚠️ Erreur WebGL</p>
           <p className="text-sm text-gray-400 mb-6">
-            {webglError === "lost" 
-              ? "Le contexte 3D a été perdu (mémoire insuffisante ou arrière-plan)"
-              : "Impossible d'initialiser WebGL"}
+            {webglError === "lost"
+              ? "Le contexte 3D a été perdu (mémoire GPU insuffisante)"
+              : "Impossible d'initialiser WebGL (navigateur non compatible)"}
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="px-6 py-3 bg-blue-500 rounded-full font-semibold"
+            className="px-6 py-3 bg-blue-500 rounded-full font-semibold hover:bg-blue-600"
           >
-            Recharger
+            Recharger la page
           </button>
         </div>
       </div>
@@ -783,17 +605,15 @@ function WebDioramaLoaderInner({
   return (
     <div
       ref={containerRef}
-        style={{ 
-        // height: '100vh',
-        height: '100dvh', // 🆕 Dynamic viewport height (mobile)
-        position: 'fixed',
+      style={{
+        height: "100dvh",
+        position: "fixed",
         top: 0,
         left: 0,
-        width: '100vw',
-        overflow: 'hidden'
+        width: "100vw",
+        overflow: "hidden",
       }}
       className="bg-black"
-      // className="relative w-screen bg-black"
     >
       <AnimatePresence>
         {showLoaderOverlay && (
@@ -808,9 +628,8 @@ function WebDioramaLoaderInner({
             autoplay={autoplay}
             bookId={bookId}
             onStart={() => {
-            // Reset scroll au cas où
-            window.scrollTo(0, 0);
-              // ✅ Attendre que le son soit prêt (surtout Firefox)
+              window.scrollTo(0, 0);
+
               if (!startSoundReady) {
                 console.warn("⏳ Son pas encore prêt, attente...");
                 const checkSound = setInterval(() => {
@@ -821,9 +640,9 @@ function WebDioramaLoaderInner({
                 }, 100);
                 return;
               }
-              
+
               proceedWithStart();
-              
+
               function proceedWithStart() {
                 if (autoplay) {
                   if (!isFullscreen) toggleFullscreen();
@@ -841,26 +660,16 @@ function WebDioramaLoaderInner({
           />
         )}
       </AnimatePresence>
-      
-      {showRotateHint && <RotateHint show={true} />}
-      {/* Bouton téléchargement livre */}
-      <BookCacheManager 
-        bookId={bookId} 
-        isPortrait={isPortrait} 
-        variant="scene" 
-      />
 
-      {/* Tooltip discret */}
-      <DownloadTooltip
-        bookId={bookId}
-        isPortrait={isPortrait}
-        variant="scene" // ✅ Ajouter
-      />
-      {/* Bouton Info (existant) */}
+      {showRotateHint && <RotateHint show={true} />}
+
+      <BookCacheManager bookId={bookId} isPortrait={isPortrait} variant="scene" />
+      <DownloadTooltip bookId={bookId} isPortrait={isPortrait} variant="scene" />
+
       <div className="absolute top-2 right-2 z-50 flex flex-row gap-2 items-end">
         <InfoButton onClick={() => setShowInfoModal(true)} />
       </div>
-      
+
       <div className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end">
         {currentPoi && currentPoi.dialogue && (
           <DialogueButton visible={showDialogue} onToggle={() => setShowDialogue((v) => !v)} />
@@ -869,13 +678,13 @@ function WebDioramaLoaderInner({
           {(isPlaying || (!isPlaying && !isEnded && isPaused)) && (
             <SoundButton muted={sceneMuted} onToggle={toggleSceneMute} />
           )}
-          {!scenePlaying && (startSoundReady && (isEnded || (!isPlaying && !isPaused))) && (
+          {!scenePlaying && startSoundReady && (isEnded || (!isPlaying && !isPaused)) && (
             <SoundButton muted={muted} onToggle={toggleMute} />
           )}
         </AnimatePresence>
         <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
       </div>
-      
+
       <POIBreadcrumbs
         currentPOI={currentPOI}
         goToPOI={goToPOI}
@@ -885,34 +694,34 @@ function WebDioramaLoaderInner({
         isPortrait={isPortrait}
         viewportHeight={viewportHeight}
       />
-      
-      {process.env.NODE_ENV === 'development' && composerRef.current && (
+
+      {process.env.NODE_ENV === "development" && composerRef.current && (
         <PostProcessingControls
           composer={composerRef.current}
           onUpdate={(type, values) => {
             if (!composerRef.current) return;
-            if (type === 'bloom') composerRef.current.updateBloom(values.strength, values.radius, values.threshold);
-            if (type === 'ssao') composerRef.current.updateSSAO(values.kernelRadius, values.minDistance);
-            if (type === 'dof') {
-              if ('enabled' in values) composerRef.current.enableDOF(values.enabled);
+            if (type === "bloom")
+              composerRef.current.updateBloom(values.strength, values.radius, values.threshold);
+            if (type === "ssao")
+              composerRef.current.updateSSAO(values.kernelRadius, values.minDistance);
+            if (type === "dof") {
+              if ("enabled" in values) composerRef.current.enableDOF(values.enabled);
               else composerRef.current.updateDOF(values.focus, values.aperture, values.maxblur);
             }
-            if (type === 'toneMapping') composerRef.current?.updateToneMapping(values.type, values.exposure);
+            if (type === "toneMapping")
+              composerRef.current?.updateToneMapping(values.type, values.exposure);
           }}
         />
       )}
 
-      {process.env.NODE_ENV === 'development' && (
+      {process.env.NODE_ENV === "development" && (
         <ConfigConverterTool
           defaultProxyUrl="https://webdiorama-proxy.david-liger-pro.workers.dev/assets/1"
           defaultSceneId="street"
         />
       )}
 
-      {process.env.NODE_ENV === "development" && (
-        <QRCodeModal/>
-      )}
-
+      {process.env.NODE_ENV === "development" && <QRCodeModal />}
 
       {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
         <POIPlayer
@@ -927,16 +736,11 @@ function WebDioramaLoaderInner({
           isPortrait={isPortrait}
         />
       )}
-      
+
       {currentPoi && currentPoi.dialogue && showDialogue && (
-        <DialogueModal
-          dialogue={currentPoi.dialogue}
-          progress={progress}
-          isPlaying={isPlaying}
-          isPortrait={isPortrait}
-        />
+        <DialogueModal dialogue={currentPoi.dialogue} progress={progress} isPlaying={isPlaying} isPortrait={isPortrait} />
       )}
-      
+
       <InfoModal
         show={showInfoModal}
         onClose={() => setShowInfoModal(false)}
