@@ -12,6 +12,7 @@ interface UseAssetPreloaderReturn {
   totalCount: number;
   isLoading: boolean;
   error: string | null;
+  currentAsset: { type: string; name: string } | null; // ✅ NOUVEAU
 }
 
 /**
@@ -23,21 +24,38 @@ export function useAssetPreloader(): UseAssetPreloaderReturn {
   const [totalCount, setTotalCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentAsset, setCurrentAsset] = useState<{ type: string; name: string } | null>(null); // ✅ NOUVEAU
+
+  /**
+   * Extraire le nom du fichier depuis l'URL
+   */
+  const getFileName = (url: string): string => {
+    try {
+      const urlObj = new URL(url);
+      const pathname = urlObj.pathname;
+      const parts = pathname.split('/');
+      return parts[parts.length - 1] || 'fichier';
+    } catch {
+      return 'fichier';
+    }
+  };
 
   /**
    * Charger un asset avec retry et timeout
    */
   const loadAssetWithRetry = async (
     asset: AssetToLoad,
-    maxRetries = 3,
-    timeoutMs = 30000
+    maxRetries = 3
   ): Promise<void> => {
+    // ✅ Timeout adapté au type d'asset
+    const timeout = asset.type === 'video' ? 60000 : 30000; // 60s pour vidéos, 30s pour le reste
+    
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
         await Promise.race([
           loadSingleAsset(asset),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Timeout')), timeoutMs)
+            setTimeout(() => reject(new Error('Timeout')), timeout)
           ),
         ]);
         return; // ✅ Succès
@@ -101,15 +119,25 @@ export function useAssetPreloader(): UseAssetPreloaderReturn {
     setLoadedCount(0);
     setProgress(0);
 
-    const CONCURRENT_LIMIT = 5; // Max 5 assets en parallèle
+    const CONCURRENT_LIMIT = 3; // ✅ Réduit à 3 pour mobile (au lieu de 5)
     let loaded = 0;
     let failed = 0;
 
-    const updateProgress = () => {
+    // ✅ Grouper par type pour affichage
+    const videoAssets = assets.filter(a => a.type === 'video');
+    const audioAssets = assets.filter(a => a.type === 'audio');
+    const imageAssets = assets.filter(a => a.type === 'image');
+
+    const updateProgress = (asset: AssetToLoad) => {
       loaded++;
       setLoadedCount(loaded);
       const prog = Math.floor((loaded / assets.length) * 100);
       setProgress(prog);
+      
+      // ✅ Calculer les compteurs par type
+      const videosDone = videoAssets.filter((_, i) => i < loaded).length;
+      const audiosDone = audioAssets.filter((_, i) => i < loaded - videosDone).length;
+      
       console.log(`📦 Asset ${loaded}/${assets.length} chargé (${prog}%)`);
     };
 
@@ -120,16 +148,23 @@ export function useAssetPreloader(): UseAssetPreloaderReturn {
       await Promise.allSettled(
         batch.map(async (asset) => {
           try {
+            // ✅ Afficher l'asset en cours
+            const fileName = getFileName(asset.url);
+            const typeLabel = asset.type === 'video' ? '🎬 Vidéo' : asset.type === 'audio' ? '🔊 Audio' : '🖼️ Image';
+            setCurrentAsset({ type: typeLabel, name: fileName });
+            
             await loadAssetWithRetry(asset);
-            updateProgress();
+            updateProgress(asset);
           } catch (err) {
             failed++;
             console.error(`❌ Échec définitif: ${asset.url}`);
-            updateProgress(); // ✅ Compter quand même
+            updateProgress(asset); // ✅ Compter quand même
           }
         })
       );
     }
+
+    setCurrentAsset(null); // ✅ Réinitialiser
 
     if (failed > 0) {
       console.warn(`⚠️ ${failed}/${assets.length} assets n'ont pas pu être chargés`);
@@ -148,5 +183,6 @@ export function useAssetPreloader(): UseAssetPreloaderReturn {
     totalCount,
     isLoading,
     error,
+    currentAsset, // ✅ NOUVEAU
   };
 }

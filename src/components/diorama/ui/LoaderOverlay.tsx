@@ -20,6 +20,7 @@ interface LoaderOverlayProps {
   autoplay?: boolean;
   bookId?: string; // ✅ Optionnel
   onStart?: () => void;
+  assetLoadingStatus?: string;
 }
 
 export default function LoaderOverlay({
@@ -33,6 +34,7 @@ export default function LoaderOverlay({
   autoplay = false,
   bookId,
   onStart,
+  assetLoadingStatus,
 }: LoaderOverlayProps & { bookId: string }) {
   const [showOverlay, setShowOverlay] = useState(true);
   const [isReady, setIsReady] = useState(false);
@@ -159,16 +161,25 @@ export default function LoaderOverlay({
 
           {/* Loader progress bar */}
           {!isReady && (
-            <div className="absolute bottom-4 flex flex-col items-center gap-2">
-              <div className="w-64 h-3 bg-gray-700 rounded-full overflow-hidden">
+            <div className="w-full max-w-md px-4">
+              <div className="relative h-2 bg-gray-700 rounded-full overflow-hidden">
                 <motion.div
-                  className="h-full bg-green-500"
+                  className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-purple-600"
                   initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(100, loadingProgress)}%` }}
-                  transition={{ ease: 'easeOut', duration: 0.2 }}
+                  animate={{ width: `${loadingProgress}%` }}
+                  transition={{ duration: 0.3 }}
                 />
               </div>
-              <span className="text-white mt-2 text-sm">{Math.round(Math.min(100, loadingProgress))}%</span>
+              <p className="text-center text-sm text-gray-400 mt-2">
+                {loadingProgress}%
+              </p>
+              
+              {/* ✅ NOUVEAU : Afficher le statut détaillé */}
+              {assetLoadingStatus && (
+                <p className="text-center text-xs text-gray-500 mt-2 animate-pulse">
+                  {assetLoadingStatus}
+                </p>
+              )}
             </div>
           )}
         </motion.div>

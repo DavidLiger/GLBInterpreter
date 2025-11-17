@@ -98,7 +98,7 @@ function WebDioramaLoaderInner({
   });
 
   // ✅ Hook préchargement assets
-  const { loadAssets, progress: assetProgress } = useAssetPreloader();
+  const { loadAssets, progress: assetProgress, loadedCount, totalCount, currentAsset } = useAssetPreloader();
 
   const { currentPOI, goToPOI, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively } =
     usePOINavigation(config, cameraRef, controlsRef, emptyRefs);
@@ -113,6 +113,7 @@ function WebDioramaLoaderInner({
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   const [reloading, setReloading] = useState(false);
+  const [assetLoadingStatus, setAssetLoadingStatus] = useState<string>("");
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
 
@@ -581,8 +582,16 @@ function WebDioramaLoaderInner({
     };
   }, [showLoaderOverlay]);
 
-// ✅ UI d'erreur WebGL simple et bien positionnée
+  // ✅ UI d'erreur WebGL - VERSION CORRIGÉE
   if (webglError) {
+    // ❌ Supprimer le canvas pour éviter le décalage visuel
+    useEffect(() => {
+      const canvas = containerRef.current?.querySelector('canvas');
+      if (canvas) {
+        canvas.style.display = 'none'; // Cacher au lieu de supprimer
+      }
+    }, []);
+
     return (
       <div 
         className="fixed inset-0 bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center z-[9999]"
@@ -613,21 +622,15 @@ function WebDioramaLoaderInner({
           </p>
           
           {/* Bouton principal */}
-          {reloading ? (
-            <div className="px-8 py-4 bg-gray-700 text-white rounded-full">
-              ⏳ Réveil en cours...
-            </div>
-          ) : (
-            <button
-              onClick={() => {
-                setReloading(true);
-                setTimeout(() => window.location.reload(), 300);
-              }}
-              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 mb-4"
-            >
-              🚀 Allez, debout là-dedans !
-            </button>
-          )}
+          <button
+            onClick={() => {
+              console.log("🔄 Rechargement complet de la page...");
+              window.location.reload();
+            }}
+            className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 mb-4"
+          >
+            🚀 Allez, debout là-dedans !
+          </button>
           
           {/* Sous-titre */}
           <p className="text-xs text-gray-500 mt-4">
@@ -668,6 +671,15 @@ function WebDioramaLoaderInner({
             fontClassName={BullstandRegular.className}
             autoplay={autoplay}
             bookId={bookId}
+            assetLoadingStatus={
+              currentAsset 
+                ? `${currentAsset.type} : ${currentAsset.name}` 
+                : loadingProgress < 70 
+                  ? "Chargement de la scène 3D..." 
+                  : loadingProgress < 100 
+                    ? `Chargement des assets (${loadedCount}/${totalCount})...`
+                    : ""
+            }
             onStart={() => {
               window.scrollTo(0, 0);
 
