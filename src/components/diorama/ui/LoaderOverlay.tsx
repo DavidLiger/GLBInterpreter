@@ -161,22 +161,22 @@ export default function LoaderOverlay({
 
           {/* Loader progress bar */}
           {!isReady && (
-            <div className="absolute bottom-4 flex flex-col items-center gap-2">
+            <div className="absolute bottom-4 flex flex-col items-center gap-1">
+              <p className="text-center text-sm font-bold text-gray-400 mt-1">
+                {loadingProgress}%
+              </p>
               <div className="w-64 h-3 bg-gray-700 rounded-full overflow-hidden">
                 <motion.div
-                  className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-purple-600"
+                  className="h-full bg-gradient-to-r from-purple-600 to-green-500"
                   initial={{ width: 0 }}
                   animate={{ width: `${loadingProgress}%` }}
                   transition={{ duration: 0.3 }}
                 />
               </div>
-              <p className="text-center text-sm text-gray-400 mt-2">
-                {loadingProgress}%
-              </p>
               
               {/* ✅ NOUVEAU : Afficher le statut détaillé */}
               {assetLoadingStatus && (
-                <p className="text-center text-xs text-gray-500 mt-2 animate-pulse">
+                <p className="text-center text-xs text-gray-300 animate-pulse">
                   {assetLoadingStatus}
                 </p>
               )}
