@@ -162,21 +162,32 @@ export default function LoaderOverlay({
           {/* Loader progress bar */}
           {!isReady && (
             <div className="absolute bottom-4 flex flex-col items-center gap-1">
-              <p className="text-center text-sm font-bold text-gray-400 mt-1">
-                {loadingProgress}%
-              </p>
-              <div className="w-64 h-3 bg-gray-700 rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${loadingProgress}%` }}
+              <div className="relative w-64 mt-8">
+                {/* Pourcentage qui suit la barre - EN DEHORS */}
+                <motion.p
+                  className="absolute -top-7 text-sm font-bold text-gray-400 whitespace-nowrap"
+                  initial={{ left: 0 }}
+                  animate={{ left: `${loadingProgress}%` }}
                   transition={{ duration: 0.3 }}
-                />
+                  style={{ transform: 'translateX(-50%)' }}
+                >
+                  {loadingProgress}%
+                </motion.p>
+                
+                {/* Conteneur de la barre avec overflow-hidden pour l'arrondi */}
+                <div className="w-full h-3 bg-gray-700 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${loadingProgress}%` }}
+                    transition={{ duration: 0.3 }}
+                  />
+                </div>
               </div>
               
-              {/* ✅ NOUVEAU : Afficher le statut détaillé */}
+              {/* ✅ Afficher le statut détaillé */}
               {assetLoadingStatus && (
-                <p className="text-center text-xs text-gray-300 animate-pulse">
+                <p className="text-center text-xs text-gray-300 mt-2 animate-pulse">
                   {assetLoadingStatus}
                 </p>
               )}

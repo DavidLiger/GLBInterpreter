@@ -605,7 +605,7 @@ function WebDioramaLoaderInner({
         >
           <div className="text-center p-8 max-w-md mx-4">
             {/* Emoji/Icon */}
-            <div className="text-6xl mb-6 animate-bounce">
+            <div className="text-4xl mb-6 animate-bounce">
               😴💤
             </div>
             
@@ -638,7 +638,7 @@ function WebDioramaLoaderInner({
             </p>
             
             {/* Note technique (très petit) */}
-            <p className="text-xs text-gray-600 mt-6 max-w-xs mx-auto">
+            <p className="text-sm text-gray-300 mt-6 max-w-xs mx-auto animate-pulse">
               💡 Si le problème persiste, fermez complètement l'onglet et rouvrez le lien
             </p>
           </div>
