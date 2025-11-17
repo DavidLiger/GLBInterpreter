@@ -35,10 +35,9 @@ import { usePOIEffects } from "./hooks/usePOIEffects";
 import RotateHint from "./ui/RotateHint";
 import ConfigConverterTool from "./tools/ConfigConverterTool";
 import QRCodeModal from "./tools/QRCodeModal";
-import BookCacheManager from "./BookCacheManager";
 import DownloadTooltip from "./ui/DownloadTooltip";
 import { useWebGLContext } from "./hooks/useWebGLContext";
-import { useAssetPreloader } from "./hooks/useAssetPreloader";
+// import { useAssetPreloader } from "./hooks/useAssetPreloader";
 import { disposeScene, logSceneStats } from "./utils/webglHelpers";
 import BookDownloadModal from "./ui/BookDownloadModal";
 
@@ -114,7 +113,7 @@ export default function WebDioramaLoader({ config, bookId }: { config: DioramaCo
       {showDownloadModal && !assetsReady && (
         <BookDownloadModal
           bookId={bookId}
-          assets={assetsToDownload}
+          // assets={assetsToDownload}
           onComplete={() => {
             setAssetsReady(true);
             setShowDownloadModal(false);
@@ -191,7 +190,7 @@ function WebDioramaLoaderInner({
   });
 
   // ✅ Hook préchargement assets
-  const { loadAssets, progress: assetProgress, loadedCount, totalCount, currentAsset } = useAssetPreloader();
+  // const { loadAssets, progress: assetProgress, loadedCount, totalCount, currentAsset } = useAssetPreloader();
 
   const { currentPOI, goToPOI, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively } =
     usePOINavigation(config, cameraRef, controlsRef, emptyRefs);
@@ -486,26 +485,26 @@ function WebDioramaLoaderInner({
         // ✅ Précharger les assets du POI start
         const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
 
-        if (startPOI) {
-          console.log("📦 Préchargement assets POI start...");
+        // if (startPOI) {
+        //   console.log("📦 Préchargement assets POI start...");
 
-          const assetsToLoad: { type: 'audio' | 'video' | 'image'; url: string }[] = [];
+        //   const assetsToLoad: { type: 'audio' | 'video' | 'image'; url: string }[] = [];
 
-          if (startPOI.ambientSound) assetsToLoad.push({ type: 'audio', url: startPOI.ambientSound });
-          if (startPOI.sceneSound) assetsToLoad.push({ type: 'audio', url: startPOI.sceneSound });
+        //   if (startPOI.ambientSound) assetsToLoad.push({ type: 'audio', url: startPOI.ambientSound });
+        //   if (startPOI.sceneSound) assetsToLoad.push({ type: 'audio', url: startPOI.sceneSound });
 
-          const videosToPreload = (config as DioramaConfig3DWithVideos).videos || [];
-          videosToPreload.forEach((videoConfig) => {
-            assetsToLoad.push({ type: 'video', url: videoConfig.src });
-          });
+        //   const videosToPreload = (config as DioramaConfig3DWithVideos).videos || [];
+        //   videosToPreload.forEach((videoConfig) => {
+        //     assetsToLoad.push({ type: 'video', url: videoConfig.src });
+        //   });
 
-          try {
-            await loadAssets(assetsToLoad);
-            console.log("✅ Assets POI start chargés");
-          } catch (err) {
-            console.warn("⚠️ Erreur chargement assets:", err);
-          }
-        }
+        //   try {
+        //     await loadAssets(assetsToLoad);
+        //     console.log("✅ Assets POI start chargés");
+        //   } catch (err) {
+        //     console.warn("⚠️ Erreur chargement assets:", err);
+        //   }
+        // }
 
         setLoadingProgress(100);
 
@@ -765,15 +764,15 @@ function WebDioramaLoaderInner({
             fontClassName={BullstandRegular.className}
             autoplay={autoplay}
             bookId={bookId}
-            assetLoadingStatus={
-              currentAsset 
-                ? `${currentAsset.type} : ${currentAsset.name}` 
-                : loadingProgress < 70 
-                  ? "Chargement de la scène 3D..." 
-                  : loadingProgress < 100 
-                    ? `Chargement des assets (${loadedCount}/${totalCount})...`
-                    : ""
-            }
+            // assetLoadingStatus={
+            //   currentAsset 
+            //     ? `${currentAsset.type} : ${currentAsset.name}` 
+            //     : loadingProgress < 70 
+            //       ? "Chargement de la scène 3D..." 
+            //       : loadingProgress < 100 
+            //         ? `Chargement des assets (${loadedCount}/${totalCount})...`
+            //         : ""
+            // }
             onStart={() => {
               window.scrollTo(0, 0);
 
@@ -810,7 +809,6 @@ function WebDioramaLoaderInner({
 
       {showRotateHint && <RotateHint show={true} />}
 
-      <BookCacheManager bookId={bookId} isPortrait={isPortrait} variant="scene" />
       <DownloadTooltip bookId={bookId} isPortrait={isPortrait} variant="scene" />
 
       <div className="absolute top-2 right-2 z-50 flex flex-row gap-2 items-end">

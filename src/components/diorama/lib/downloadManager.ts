@@ -7,15 +7,30 @@ interface DownloadTask {
   size: number;
   downloaded: number;
   status: 'pending' | 'downloading' | 'completed' | 'failed' | 'cancelled';
-  chunks: Uint8Array[]; // ✅ Fix type
+  chunks: Uint8Array[];
   checksum?: string;
 }
 
 interface DownloadProgress {
   taskId: string;
-  progress: number; // 0-100
-  speed: number; // bytes/sec
-  eta: number; // seconds
+  progress: number;
+  speed: number;
+  eta: number;
+}
+
+interface IndexEntry {
+  path: string;
+  token: string;
+}
+
+interface BookIndex {
+  [key: string]: IndexEntry;
+}
+
+interface BookAsset {
+  url: string;
+  type: 'glb' | 'video' | 'audio' | 'image';
+  taskId: string;
 }
 
 class DownloadManager {
@@ -36,9 +51,6 @@ class DownloadManager {
     });
   }
 
-  /**
-   * Vérifier l'espace disque disponible
-   */
   async checkStorageQuota(): Promise<{ available: number; used: number; quota: number }> {
     if ('storage' in navigator && 'estimate' in navigator.storage) {
       const estimate = await navigator.storage.estimate();
@@ -48,18 +60,14 @@ class DownloadManager {
         quota: estimate.quota || 0,
       };
     }
-    // Fallback : assumer 50MB disponibles
     return { available: 50 * 1024 * 1024, used: 0, quota: 100 * 1024 * 1024 };
   }
 
-  /**
-   * Télécharger un asset avec reprise et chunks
-   */
   async downloadAsset(
     taskId: string,
     url: string,
     type: DownloadTask['type'],
-    onProgress?: (progress: DownloadProgress) => void // ✅ Fix type
+    onProgress?: (progress: DownloadProgress) => void
   ): Promise<Blob> {
     const abortController = new AbortController();
     this.activeTasks.set(taskId, abortController);
@@ -68,15 +76,13 @@ class DownloadManager {
       this.progressCallbacks.set(taskId, onProgress);
     }
 
-    // 1. Vérifier si déjà en cours ou terminé
     const existingTask = await this.db.get('tasks', taskId);
     if (existingTask?.status === 'completed') {
       console.log(`✅ Asset ${taskId} déjà téléchargé`);
       const chunks = await this.db.get('chunks', taskId);
-      return new Blob(chunks.data as BlobPart[]); // ✅ Fix cast
+      return new Blob(chunks.data as BlobPart[]);
     }
 
-    // 2. Créer ou reprendre la tâche
     const task: DownloadTask = existingTask || {
       id: taskId,
       url,
@@ -91,7 +97,6 @@ class DownloadManager {
       task.status = 'downloading';
       await this.db.put('tasks', task);
 
-      // 3. Télécharger avec retry (max 3 tentatives)
       let attempt = 0;
       const maxRetries = 3;
 
@@ -110,7 +115,7 @@ class DownloadManager {
           task.size = contentLength || task.size;
 
           const reader = response.body!.getReader();
-          const chunks: Uint8Array[] = [...task.chunks]; // ✅ Fix type
+          const chunks: Uint8Array[] = [...task.chunks];
           let receivedLength = task.downloaded;
           const startTime = Date.now();
 
@@ -122,13 +127,11 @@ class DownloadManager {
             receivedLength += value.length;
             task.downloaded = receivedLength;
 
-            // Calculer vitesse et ETA
             const elapsedTime = (Date.now() - startTime) / 1000;
             const speed = receivedLength / elapsedTime;
             const remaining = task.size - receivedLength;
             const eta = remaining / speed;
 
-            // Callback progress
             if (onProgress) {
               onProgress({
                 taskId,
@@ -138,14 +141,12 @@ class DownloadManager {
               });
             }
 
-            // Sauvegarder tous les 1MB
             if (receivedLength % (1024 * 1024) < value.length) {
               await this.db.put('chunks', { taskId, data: chunks });
               await this.db.put('tasks', task);
             }
           }
 
-          // 4. Terminé avec succès
           task.status = 'completed';
           task.chunks = chunks;
           await this.db.put('chunks', { taskId, data: chunks });
@@ -153,12 +154,12 @@ class DownloadManager {
 
           console.log(`✅ ${taskId} téléchargé (${(task.size / 1024 / 1024).toFixed(2)} MB)`);
 
-          return new Blob(chunks as BlobPart[]); // ✅ Fix cast
+          return new Blob(chunks as BlobPart[]);
         } catch (err: any) {
           if (err.name === 'AbortError') {
             task.status = 'cancelled';
             await this.db.put('tasks', task);
-            throw new Error('Téléchargement annulé');
+            // throw new Error('Téléchargement annulé');
           }
 
           attempt++;
@@ -170,7 +171,6 @@ class DownloadManager {
             throw err;
           }
 
-          // Backoff exponentiel : 2s, 4s, 8s
           const delay = Math.min(2000 * Math.pow(2, attempt - 1), 8000);
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
@@ -183,9 +183,6 @@ class DownloadManager {
     }
   }
 
-  /**
-   * Annuler un téléchargement
-   */
   async cancelDownload(taskId: string) {
     const controller = this.activeTasks.get(taskId);
     if (controller) {
@@ -199,32 +196,160 @@ class DownloadManager {
     }
   }
 
-  /**
-   * Nettoyer les téléchargements annulés/échoués
-   */
   async cleanup(taskId: string) {
     await this.db.delete('tasks', taskId);
     await this.db.delete('chunks', taskId);
   }
 
-  /**
-   * Vérifier si un asset est déjà téléchargé
-   */
   async isAssetCached(taskId: string): Promise<boolean> {
     const task = await this.db.get('tasks', taskId);
     return task?.status === 'completed';
   }
 
-  /**
-   * Récupérer un asset depuis le cache
-   */
   async getAssetFromCache(taskId: string): Promise<Blob | null> {
     const task = await this.db.get('tasks', taskId);
     if (task?.status !== 'completed') return null;
 
     const chunks = await this.db.get('chunks', taskId);
-    return new Blob(chunks.data as BlobPart[]); // ✅ Fix cast
+    return new Blob(chunks.data as BlobPart[]);
   }
+}
+
+/**
+ * Récupérer TOUS les assets du livre (toutes scènes)
+ */
+export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
+  const baseUrl = process.env.NEXT_PUBLIC_ASSETS_URL;
+  const allAssets: BookAsset[] = [];
+
+  try {
+    const indexRes = await fetch(`${baseUrl}/assets/${bookId}/index.json`);
+    if (!indexRes.ok) throw new Error(`Index HTTP ${indexRes.status}`);
+    
+    const index = await indexRes.json() as BookIndex; // ✅ Cast explicite
+
+    for (const [sceneId, entry] of Object.entries(index)) {
+      const configRes = await fetch(`${baseUrl}/assets/${bookId}/${entry.path}`);
+      if (!configRes.ok) {
+        console.warn(`⚠️ Impossible de charger ${sceneId}`);
+        continue;
+      }
+      
+      const config = await configRes.json();
+
+      if (config.glb) {
+        allAssets.push({
+          url: config.glb,
+          type: 'glb',
+          taskId: `${bookId}-${sceneId}-glb`,
+        });
+      }
+
+      if (config.loaderImage) {
+        allAssets.push({
+          url: config.loaderImage,
+          type: 'image',
+          taskId: `${bookId}-${sceneId}-loader`,
+        });
+      }
+
+      const extractFromPOI = (poi: any, poiPath: string) => {
+        if (poi.icon) {
+          allAssets.push({
+            url: poi.icon,
+            type: 'image',
+            taskId: `${bookId}-${sceneId}-${poiPath}-icon`,
+          });
+        }
+
+        if (poi.ambientSound) {
+          allAssets.push({
+            url: poi.ambientSound,
+            type: 'audio',
+            taskId: `${bookId}-${sceneId}-${poiPath}-ambient`,
+          });
+        }
+
+        if (poi.sceneSound) {
+          allAssets.push({
+            url: poi.sceneSound,
+            type: 'audio',
+            taskId: `${bookId}-${sceneId}-${poiPath}-scene`,
+          });
+        }
+
+        poi.dialogue?.characters?.forEach((char: any, i: number) => {
+          if (char.image) {
+            allAssets.push({
+              url: char.image,
+              type: 'image',
+              taskId: `${bookId}-${sceneId}-${poiPath}-char-${i}`,
+            });
+          }
+        });
+
+        if (poi.effects?.particles?.texture) {
+          allAssets.push({
+            url: poi.effects.particles.texture,
+            type: 'image',
+            taskId: `${bookId}-${sceneId}-${poiPath}-particle`,
+          });
+        }
+
+        if (poi.effects?.skybox?.texture) {
+          allAssets.push({
+            url: poi.effects.skybox.texture,
+            type: 'image',
+            taskId: `${bookId}-${sceneId}-${poiPath}-skybox`,
+          });
+        }
+
+        if (poi.children) {
+          poi.children.forEach((child: any, i: number) => {
+            extractFromPOI(child, `${poiPath}-child${i}`);
+          });
+        }
+      };
+
+      config.pois?.forEach((poi: any, i: number) => {
+        extractFromPOI(poi, `poi${i}`);
+      });
+
+      config.videos?.forEach((video: any, i: number) => {
+        if (video.src) {
+          allAssets.push({
+            url: video.src,
+            type: 'video',
+            taskId: `${bookId}-${sceneId}-video-${i}`,
+          });
+        }
+      });
+    }
+
+    console.log(`📦 Manifest du livre ${bookId}: ${allAssets.length} assets`);
+    return allAssets;
+
+  } catch (err) {
+    console.error(`❌ Erreur récupération manifest livre ${bookId}:`, err);
+    return [];
+  }
+}
+
+/**
+ * Vérifier si TOUT le livre est en cache
+ */
+export async function isBookFullyCached(bookId: string): Promise<boolean> {
+  await downloadManager.init();
+  
+  const manifest = await getBookManifest(bookId);
+  if (manifest.length === 0) return false;
+
+  for (const asset of manifest) {
+    const cached = await downloadManager.isAssetCached(asset.taskId);
+    if (!cached) return false;
+  }
+
+  return true;
 }
 
 export const downloadManager = new DownloadManager();

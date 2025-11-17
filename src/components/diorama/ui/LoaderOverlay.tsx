@@ -5,8 +5,6 @@ import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "@/contexts/TranslationContext";
 import LanguageSelector from "./LanguageSelector";
-import BookCacheManager from "../BookCacheManager";
-import ClientBookCacheManager from "../ClientBookCacheManager";
 import DownloadTooltip from "./DownloadTooltip";
 
 interface LoaderOverlayProps {
@@ -109,17 +107,6 @@ export default function LoaderOverlay({
           <div className="absolute top-4 right-4">
             <LanguageSelector />
           </div>
-          {/* Bouton téléchargement livre */}
-            {bookId && 
-            <>
-              <ClientBookCacheManager bookId={bookId} />
-              <DownloadTooltip
-                bookId={bookId}
-                isPortrait={isPortrait}
-                variant="loader" // ✅ Ajouter
-              />
-            </>
-            }
           {/* ✅ Afficher seulement si détecté ET non recommandé */}
           {isRecommendedBrowser === false && (
             <motion.div 

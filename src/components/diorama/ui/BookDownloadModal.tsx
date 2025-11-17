@@ -2,70 +2,54 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { downloadManager } from '../lib/downloadManager';
+import { downloadManager, getBookManifest, isBookFullyCached } from '../lib/downloadManager';
 
 interface BookDownloadModalProps {
   bookId: string;
-  assets: Array<{ id: string; url: string; type: 'glb' | 'video' | 'audio'; size: number }>;
   onComplete: () => void;
-  onCancel?: () => void; // ✅ NOUVEAU
+  onCancel?: () => void;
 }
 
-export default function BookDownloadModal({ bookId, assets, onComplete, onCancel }: BookDownloadModalProps) {
-  const [mounted, setMounted] = useState(false); // ✅ NOUVEAU : fix hydration
+export default function BookDownloadModal({ bookId, onComplete, onCancel }: BookDownloadModalProps) {
+  const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const [checking, setChecking] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentAsset, setCurrentAsset] = useState('');
+  const [loadedCount, setLoadedCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
   const [speed, setSpeed] = useState(0);
-  const [eta, setEta] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [storageInfo, setStorageInfo] = useState<{available: number; quota: number} | null>(null);
-  
-  // ✅ FIX : Attendre que le composant soit monté côté client
+
   useEffect(() => {
     setMounted(true);
   }, []);
 
   useEffect(() => {
-    checkAssets();
-  }, []);
+    if (mounted) {
+      checkCache();
+    }
+  }, [mounted, bookId]);
 
-  const checkAssets = async () => {
+  const checkCache = async () => {
     setChecking(true);
     await downloadManager.init();
 
-    // Vérifier l'espace disque
     const storage = await downloadManager.checkStorageQuota();
     setStorageInfo(storage);
 
-    const totalSize = assets.reduce((sum, a) => sum + a.size, 0);
+    const cached = await isBookFullyCached(bookId);
     
-    if (storage.available < totalSize) {
-      setError(`Espace insuffisant : ${(totalSize / 1024 / 1024).toFixed(0)} MB requis, ${(storage.available / 1024 / 1024).toFixed(0)} MB disponibles`);
-      setIsOpen(true);
-      setChecking(false);
-      return;
-    }
-
-    // Vérifier quels assets sont déjà en cache
-    const missingAssets = [];
-    for (const asset of assets) {
-      const cached = await downloadManager.isAssetCached(asset.id);
-      if (!cached) {
-        missingAssets.push(asset);
-      }
-    }
-
-    if (missingAssets.length === 0) {
-      console.log('✅ Tous les assets sont déjà en cache');
+    if (cached) {
+      console.log('✅ Livre déjà en cache complet');
       onComplete();
       setChecking(false);
       return;
     }
 
-    // Afficher la modale de téléchargement
+    // Assets manquants → afficher modale
     setIsOpen(true);
     setChecking(false);
   };
@@ -75,37 +59,49 @@ export default function BookDownloadModal({ bookId, assets, onComplete, onCancel
     setError(null);
 
     try {
-      let completed = 0;
-      const total = assets.length;
+      const manifest = await getBookManifest(bookId);
+      setTotalCount(manifest.length);
 
-      for (const asset of assets) {
-        const cached = await downloadManager.isAssetCached(asset.id);
+      let completed = 0;
+
+      for (const asset of manifest) {
+        // Vérifier si déjà en cache
+        const cached = await downloadManager.isAssetCached(asset.taskId);
         if (cached) {
           completed++;
-          setProgress((completed / total) * 100);
+          setLoadedCount(completed);
+          setProgress((completed / manifest.length) * 100);
           continue;
         }
 
-        setCurrentAsset(asset.url.split('/').pop() || asset.id);
+        // Extraire nom du fichier
+        const fileName = asset.url.split('/').pop() || asset.taskId;
+        setCurrentAsset(fileName);
 
+        // Télécharger avec downloadManager
         await downloadManager.downloadAsset(
-          asset.id,
+          asset.taskId,
           asset.url,
           asset.type,
           (prog) => {
             setSpeed(prog.speed);
-            setEta(prog.eta);
-            const assetProgress = (completed + prog.progress / 100) / total;
+            const assetProgress = (completed + prog.progress / 100) / manifest.length;
             setProgress(assetProgress * 100);
           }
         );
 
         completed++;
+        setLoadedCount(completed);
       }
 
-      console.log('✅ Téléchargement terminé');
+      console.log(`✅ Livre ${bookId} téléchargé (${manifest.length} assets)`);
+      
+      // Marquer dans localStorage (compatibilité avec ancien système)
+      localStorage.setItem(`book-${bookId}-cached`, 'true');
+      
       setIsOpen(false);
       onComplete();
+
     } catch (err: any) {
       console.error('❌ Erreur téléchargement:', err);
       setError(err.message || 'Erreur de téléchargement');
@@ -113,33 +109,27 @@ export default function BookDownloadModal({ bookId, assets, onComplete, onCancel
     }
   };
 
-    const cancelDownload = async () => {
-    // Annuler tous les téléchargements en cours
-    for (const asset of assets) {
-        await downloadManager.cancelDownload(asset.id);
+  const cancelDownload = async () => {
+    const manifest = await getBookManifest(bookId);
+    for (const asset of manifest) {
+      await downloadManager.cancelDownload(asset.taskId);
     }
     
-    // ✅ Réinitialiser les états mais garder la modale ouverte
     setDownloading(false);
     setProgress(0);
     setCurrentAsset('');
     setSpeed(0);
-    setEta(0);
     setError(null);
-    // setIsOpen reste true → revient à l'écran de proposition de téléchargement
-    };
+  };
 
-    // ✅ FIX : Ne rien afficher avant le mount client
-  if (!mounted) {
-    return null;
-  }
+  if (!mounted) return null;
 
   if (checking) {
     return (
       <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999]">
         <div className="text-white text-center">
           <div className="animate-spin text-4xl mb-4">⚙️</div>
-          <p>Vérification des assets...</p>
+          <p>Vérification du cache...</p>
         </div>
       </div>
     );
@@ -161,20 +151,18 @@ export default function BookDownloadModal({ bookId, assets, onComplete, onCancel
             exit={{ scale: 0.9, y: 20 }}
           >
             <h2 className="text-2xl font-bold text-white mb-4">
-              📦 Téléchargement requis
+              📦 Téléchargement du livre
             </h2>
 
             {!downloading && !error && (
               <>
                 <p className="text-gray-300 mb-6">
-                  Cette scène nécessite le téléchargement de{' '}
-                  <strong>{(assets.reduce((s, a) => s + a.size, 0) / 1024 / 1024).toFixed(0)} MB</strong> d'assets.
+                  Télécharger toutes les scènes du livre pour une utilisation hors ligne
                 </p>
 
                 {storageInfo && (
                   <div className="bg-gray-800 rounded-lg p-3 mb-6 text-sm text-gray-400">
                     <p>Espace disponible : {(storageInfo.available / 1024 / 1024).toFixed(0)} MB</p>
-                    <p>Espace total : {(storageInfo.quota / 1024 / 1024).toFixed(0)} MB</p>
                   </div>
                 )}
 
@@ -188,7 +176,7 @@ export default function BookDownloadModal({ bookId, assets, onComplete, onCancel
                   <button
                     onClick={() => {
                       setIsOpen(false);
-                      onCancel?.(); // ✅ Appeler le callback
+                      onCancel?.();
                     }}
                     className="px-6 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-full transition"
                   >
@@ -202,7 +190,7 @@ export default function BookDownloadModal({ bookId, assets, onComplete, onCancel
               <>
                 <div className="mb-6">
                   <div className="flex justify-between text-sm text-gray-400 mb-2">
-                    <span>{currentAsset}</span>
+                    <span className="truncate max-w-[200px]">{currentAsset}</span>
                     <span>{progress.toFixed(0)}%</span>
                   </div>
 
@@ -216,8 +204,8 @@ export default function BookDownloadModal({ bookId, assets, onComplete, onCancel
                   </div>
 
                   <div className="flex justify-between text-xs text-gray-500 mt-2">
+                    <span>{loadedCount} / {totalCount} fichiers</span>
                     <span>{(speed / 1024 / 1024).toFixed(2)} MB/s</span>
-                    <span>ETA : {Math.ceil(eta)}s</span>
                   </div>
                 </div>
 
@@ -235,7 +223,6 @@ export default function BookDownloadModal({ bookId, assets, onComplete, onCancel
                 <div className="bg-red-900/30 border border-red-500 rounded-lg p-4 mb-6">
                   <p className="text-red-300 text-sm">{error}</p>
                 </div>
-
                 <div className="flex gap-3">
                   <button
                     onClick={startDownload}
