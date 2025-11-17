@@ -11,6 +11,7 @@ interface BookDownloadModalProps {
 }
 
 export default function BookDownloadModal({ bookId, assets, onComplete }: BookDownloadModalProps) {
+  const [mounted, setMounted] = useState(false); // ✅ NOUVEAU : fix hydration
   const [isOpen, setIsOpen] = useState(false);
   const [checking, setChecking] = useState(true);
   const [downloading, setDownloading] = useState(false);
@@ -20,6 +21,11 @@ export default function BookDownloadModal({ bookId, assets, onComplete }: BookDo
   const [eta, setEta] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [storageInfo, setStorageInfo] = useState<{available: number; quota: number} | null>(null);
+  
+  // ✅ FIX : Attendre que le composant soit monté côté client
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     checkAssets();
@@ -106,14 +112,26 @@ export default function BookDownloadModal({ bookId, assets, onComplete }: BookDo
     }
   };
 
-  const cancelDownload = async () => {
+    const cancelDownload = async () => {
     // Annuler tous les téléchargements en cours
     for (const asset of assets) {
-      await downloadManager.cancelDownload(asset.id);
+        await downloadManager.cancelDownload(asset.id);
     }
-    setIsOpen(false);
+    
+    // ✅ Réinitialiser les états mais garder la modale ouverte
     setDownloading(false);
-  };
+    setProgress(0);
+    setCurrentAsset('');
+    setSpeed(0);
+    setEta(0);
+    setError(null);
+    // setIsOpen reste true → revient à l'écran de proposition de téléchargement
+    };
+
+    // ✅ FIX : Ne rien afficher avant le mount client
+  if (!mounted) {
+    return null;
+  }
 
   if (checking) {
     return (

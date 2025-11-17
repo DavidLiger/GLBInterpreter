@@ -48,7 +48,13 @@ const BullstandRegular = localFont({
 });
 
 export default function WebDioramaLoader({ config, bookId }: { config: DioramaConfig3D; bookId: string }) {
+  const [mounted, setMounted] = useState(false); // ✅ NOUVEAU
   const [assetsReady, setAssetsReady] = useState(false);
+
+  // ✅ Attendre le mount côté client
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // ✅ Liste des assets à télécharger
   const assetsToDownload = useMemo(() => {
@@ -94,6 +100,11 @@ export default function WebDioramaLoader({ config, bookId }: { config: DioramaCo
 
     return list;
   }, [config, bookId]);
+
+  // ✅ Ne rien afficher avant le mount
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <>

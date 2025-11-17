@@ -42,6 +42,15 @@ export function useWebGLContext(
   const initRenderer = () => {
     if (!containerRef.current || hasInitializedRef.current) return;
 
+    // ✅ AJOUT : Vérifier que le container a des dimensions valides
+    const width = containerRef.current.clientWidth;
+    const height = containerRef.current.clientHeight;
+    
+    if (width === 0 || height === 0) {
+      console.warn('⚠️ Container pas encore dimensionné, attente...');
+      return;
+    }
+
     console.log('🎬 Init WebGL');
 
     // Cleanup préventif
@@ -104,9 +113,14 @@ export function useWebGLContext(
   };
 
   useEffect(() => {
-    initRenderer();
+    // ✅ Petit délai pour s'assurer que le DOM est prêt
+    const timer = setTimeout(() => {
+      initRenderer();
+    }, 50);
 
     return () => {
+      clearTimeout(timer);
+      
       if (rendererRef.current) {
         try {
           rendererRef.current.dispose();
