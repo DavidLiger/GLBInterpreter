@@ -627,9 +627,9 @@ function WebDioramaLoaderInner({
                 console.log("🔄 Rechargement complet de la page...");
                 window.location.reload();
               }}
-              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 mb-4"
+              className="px-4 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 mb-4"
             >
-              🚀 Allez, debout là-dedans !
+              Allez, debout là-dedans !
             </button>
             
             {/* Sous-titre */}
