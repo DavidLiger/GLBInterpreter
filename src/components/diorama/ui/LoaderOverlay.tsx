@@ -161,8 +161,8 @@ export default function LoaderOverlay({
 
           {/* Loader progress bar */}
           {!isReady && (
-            <div className="w-full max-w-md px-4">
-              <div className="relative h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div className="absolute bottom-4 flex flex-col items-center gap-2">
+              <div className="w-64 h-3 bg-gray-700 rounded-full overflow-hidden">
                 <motion.div
                   className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-purple-600"
                   initial={{ width: 0 }}
