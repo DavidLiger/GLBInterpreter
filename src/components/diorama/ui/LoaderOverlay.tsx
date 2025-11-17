@@ -167,7 +167,7 @@ export default function LoaderOverlay({
               </p>
               <div className="w-64 h-3 bg-gray-700 rounded-full overflow-hidden">
                 <motion.div
-                  className="h-full bg-gradient-to-r from-purple-600 to-green-500"
+                  className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
                   initial={{ width: 0 }}
                   animate={{ width: `${loadingProgress}%` }}
                   transition={{ duration: 0.3 }}
