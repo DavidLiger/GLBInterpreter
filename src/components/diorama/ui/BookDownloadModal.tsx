@@ -8,9 +8,10 @@ interface BookDownloadModalProps {
   bookId: string;
   assets: Array<{ id: string; url: string; type: 'glb' | 'video' | 'audio'; size: number }>;
   onComplete: () => void;
+  onCancel?: () => void; // ✅ NOUVEAU
 }
 
-export default function BookDownloadModal({ bookId, assets, onComplete }: BookDownloadModalProps) {
+export default function BookDownloadModal({ bookId, assets, onComplete, onCancel }: BookDownloadModalProps) {
   const [mounted, setMounted] = useState(false); // ✅ NOUVEAU : fix hydration
   const [isOpen, setIsOpen] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -185,7 +186,10 @@ export default function BookDownloadModal({ bookId, assets, onComplete }: BookDo
                     Télécharger
                   </button>
                   <button
-                    onClick={() => setIsOpen(false)}
+                    onClick={() => {
+                      setIsOpen(false);
+                      onCancel?.(); // ✅ Appeler le callback
+                    }}
                     className="px-6 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-full transition"
                   >
                     Annuler

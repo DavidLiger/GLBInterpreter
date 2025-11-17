@@ -50,10 +50,12 @@ const BullstandRegular = localFont({
 export default function WebDioramaLoader({ config, bookId }: { config: DioramaConfig3D; bookId: string }) {
   const [mounted, setMounted] = useState(false); // ✅ NOUVEAU
   const [assetsReady, setAssetsReady] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false); // ✅ NOUVEAU
 
   // ✅ Attendre le mount côté client
   useEffect(() => {
     setMounted(true);
+    setShowDownloadModal(true); 
   }, []);
 
   // ✅ Liste des assets à télécharger
@@ -109,12 +111,36 @@ export default function WebDioramaLoader({ config, bookId }: { config: DioramaCo
   return (
     <>
       {/* ✅ Modale de téléchargement OBLIGATOIRE */}
-      {!assetsReady && (
+      {showDownloadModal && !assetsReady && (
         <BookDownloadModal
           bookId={bookId}
           assets={assetsToDownload}
-          onComplete={() => setAssetsReady(true)}
+          onComplete={() => {
+            setAssetsReady(true);
+            setShowDownloadModal(false);
+          }}
+          onCancel={() => {
+            setShowDownloadModal(false); // ✅ Fermer la modale
+          }}
         />
+      )}
+
+      {/* ✅ Bouton flottant pour réouvrir la modale */}
+      {!assetsReady && !showDownloadModal && (
+        <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+          <div className="text-center">
+            <div className="text-6xl mb-6">📦</div>
+            <h2 className="text-white text-xl mb-6">
+              Téléchargement requis pour accéder à la scène
+            </h2>
+            <button
+              onClick={() => setShowDownloadModal(true)}
+              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transition"
+            >
+              📥 Télécharger les assets
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ✅ Scène chargée UNIQUEMENT si assets prêts */}
