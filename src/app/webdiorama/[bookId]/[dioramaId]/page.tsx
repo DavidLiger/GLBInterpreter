@@ -1,8 +1,6 @@
 import { notFound } from "next/navigation";
 import WebDioramaLoader from "@/components/diorama/WebDioramaLoader";
 import type { DioramaConfig3DWithVideos } from "@/types/diorama";
-import { applyCacheBustersToConfig } from "@/components/diorama/lib/cacheUtils"; 
-import BookCacheManager from "@/components/diorama/BookCacheManager";
 
 type Props = {
   params: Promise<{  // ✅ Changé : Promise<>
