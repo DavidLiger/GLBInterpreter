@@ -52,11 +52,9 @@ export function applyVideoTextures(
       }
     });
 
-    video.addEventListener('error', () => {
-      console.warn(`Retry vidéo: ${src}`);
-      // Force HTTP/2 en rechargeant sans cache
-      video.src = src.split('?')[0] + '?v=' + Date.now();
-      video.load();
+    // ✅ Simplifié : juste logger l'erreur, pas de retry
+    video.addEventListener('error', (err) => {
+      console.warn(`❌ Erreur chargement vidéo ${name} (${src}):`, err);
     }, { once: true });
 
     video.load();

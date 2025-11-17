@@ -93,18 +93,6 @@ export function useWebGLContext(
         { once: true }
       );
 
-      // ✅ Handler de restauration - LOG UNIQUEMENT
-      renderer.domElement.addEventListener(
-        'webglcontextrestored',
-        () => {
-          console.log('✅ Contexte WebGL restauré');
-          // ❌ PAS de tentative de relance automatique
-          // L'utilisateur doit cliquer sur "Recharger"
-          onContextRestored?.();
-        },
-        { once: true }
-      );
-
       setError(null);
       setIsReady(true);
       hasInitializedRef.current = true;
