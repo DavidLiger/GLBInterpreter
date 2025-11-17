@@ -40,23 +40,79 @@ import DownloadTooltip from "./ui/DownloadTooltip";
 import { useWebGLContext } from "./hooks/useWebGLContext";
 import { useAssetPreloader } from "./hooks/useAssetPreloader";
 import { disposeScene, logSceneStats } from "./utils/webglHelpers";
+import BookDownloadModal from "./ui/BookDownloadModal";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
   variable: "--font-Bullstand-Regular",
 });
 
-export default function WebDioramaLoader({
-  config,
-  bookId,
-}: {
-  config: DioramaConfig3D;
-  bookId: string;
-}) {
+export default function WebDioramaLoader({ config, bookId }: { config: DioramaConfig3D; bookId: string }) {
+  const [assetsReady, setAssetsReady] = useState(false);
+
+  // ✅ Liste des assets à télécharger
+  const assetsToDownload = useMemo(() => {
+    const list = [];
+    
+    // GLB
+    list.push({
+      id: `${bookId}-glb`,
+      url: config.glb,
+      type: 'glb' as const,
+      size: 10 * 1024 * 1024, // Estimer ou récupérer depuis config
+    });
+
+    // Vidéos
+    (config as DioramaConfig3DWithVideos).videos?.forEach((video, i) => {
+      list.push({
+        id: `${bookId}-video-${i}`,
+        url: video.src,
+        type: 'video' as const,
+        size: 20 * 1024 * 1024, // Estimer
+      });
+    });
+
+    // Sons
+    config.pois.forEach((poi) => {
+      if (poi.ambientSound) {
+        list.push({
+          id: `${bookId}-audio-${poi.id}-ambient`,
+          url: poi.ambientSound,
+          type: 'audio' as const,
+          size: 2 * 1024 * 1024,
+        });
+      }
+      if (poi.sceneSound) {
+        list.push({
+          id: `${bookId}-audio-${poi.id}-scene`,
+          url: poi.sceneSound,
+          type: 'audio' as const,
+          size: 3 * 1024 * 1024,
+        });
+      }
+    });
+
+    return list;
+  }, [config, bookId]);
+
   return (
-    <TranslationProvider>
-      <WebDioramaLoaderInner config={config} bookId={bookId} />
-    </TranslationProvider>
+    <>
+      {/* ✅ Modale de téléchargement OBLIGATOIRE */}
+      {!assetsReady && (
+        <BookDownloadModal
+          bookId={bookId}
+          assets={assetsToDownload}
+          onComplete={() => setAssetsReady(true)}
+        />
+      )}
+
+      {/* ✅ Scène chargée UNIQUEMENT si assets prêts */}
+      {assetsReady && (
+        <TranslationProvider>
+          <WebDioramaLoaderInner config={config} bookId={bookId} />
+        </TranslationProvider>
+      )}
+    </>
   );
 }
 
