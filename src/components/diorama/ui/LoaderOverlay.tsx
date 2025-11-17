@@ -140,7 +140,7 @@ export default function LoaderOverlay({
               onClick={handleStart}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.98 }}
-              className="absolute bottom-4 px-6 py-3 bg-green-500 text-black font-semibold rounded-full shadow-lg text-sm uppercase tracking-wider"
+              className="absolute bottom-8 px-6 py-3 bg-green-500 text-black font-semibold rounded-full shadow-lg text-sm uppercase tracking-wider"
             >
               {isMobile ? t.loader.startMobile : t.loader.start}
             </motion.button>
@@ -148,7 +148,7 @@ export default function LoaderOverlay({
 
           {/* Loader progress bar */}
           {!isReady && (
-            <div className="absolute bottom-4 flex flex-col items-center gap-1">
+            <div className="absolute bottom-12 flex flex-col items-center gap-1">
               <div className="relative w-64 mt-8">
                 {/* Pourcentage qui suit la barre - EN DEHORS */}
                 <motion.p

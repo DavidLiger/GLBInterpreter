@@ -725,13 +725,13 @@ function WebDioramaLoaderInner({
             </button>
             
             {/* Sous-titre */}
-            <p className="text-xs text-gray-500 mt-4">
+            <p className="text-xs text-gray-500 mt-2">
               Relancer l'application
             </p>
             
             {/* Note technique (très petit) */}
-            <p className="text-sm text-gray-300 mt-6 max-w-xs mx-auto animate-pulse">
-              💡 Si le problème persiste, fermez complètement l'onglet et rouvrez le lien
+            <p className="text-sm font-bold text-gray-300 mt-4 max-w-xs mx-auto animate-pulse">
+              💡 Si le problème persiste, fermez complètement l'onglet puis fermer le navigateur et rouvrez le lien
             </p>
           </div>
         </div>
