@@ -1,9 +1,56 @@
 "use client";
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
 type Lang = "fr" | "en" | "es";
 
-const translations = {
+interface TranslationContextType {
+  lang: Lang;
+  setLang: (lang: Lang) => void;
+  t: any; // Vos traductions
+}
+
+const TranslationContext = createContext<TranslationContextType | null>(null);
+
+export function TranslationProvider({ children }: { children: ReactNode }) {
+  // ✅ Fonction pour détecter la langue
+  const detectLanguage = (): Lang => {
+    // 1. D'abord vérifier localStorage
+    const saved = localStorage.getItem("webdiorama-lang");
+    if (saved && ["fr", "en", "es"].includes(saved)) {
+      return saved as Lang;
+    }
+    
+    // 2. Sinon détecter depuis le navigateur
+    const browserLang = navigator.language.split("-")[0]; // "fr-FR" → "fr"
+    
+    if (["fr", "en", "es"].includes(browserLang)) {
+      return browserLang as Lang;
+    }
+    
+    // 3. Par défaut : français
+    return "fr";
+  };
+  
+  const [lang, setLangState] = useState<Lang>("fr"); // Valeur par défaut temporaire
+  const [mounted, setMounted] = useState(false);
+  
+  // ✅ Détecter la langue au mount (côté client uniquement)
+  useEffect(() => {
+    const detected = detectLanguage();
+    setLangState(detected);
+    setMounted(true);
+    console.log("🌍 Langue détectée:", detected);
+  }, []);
+  
+  // ✅ Fonction pour changer la langue + sauvegarder
+  const setLang = (newLang: Lang) => {
+    setLangState(newLang);
+    localStorage.setItem("webdiorama-lang", newLang);
+    console.log("💾 Langue sauvegardée:", newLang);
+  };
+  
+  // ✅ Vos traductions (exemple minimal)
+  const t = {
   fr: {
     loader: { start: "Cliquer pour commencer", startMobile: "Toucher pour commencer", browserWarning: "⚠️ Pour une expérience optimale, utilisez Chrome ou Brave" },
     info: {
@@ -140,26 +187,21 @@ const translations = {
     }
   }
 };
-
-const TranslationContext = createContext<{
-  lang: Lang;
-  setLang: (l: Lang) => void;
-  t: typeof translations.fr;
-}>({ lang: "fr", setLang: () => {}, t: translations.fr });
-
-export const TranslationProvider = ({ children }: { children: React.ReactNode }) => {
-  const [lang, setLang] = useState<Lang>("fr");
-
-  useEffect(() => {
-    const detected = navigator.language.split("-")[0] as Lang;
-    if (["fr", "en", "es"].includes(detected)) setLang(detected);
-  }, []);
-
+  
+  // ✅ Ne pas render avant le mount (évite hydration mismatch)
+  if (!mounted) {
+    return null;
+  }
+  
   return (
-    <TranslationContext.Provider value={{ lang, setLang, t: translations[lang] }}>
+    <TranslationContext.Provider value={{ lang, setLang, t }}>
       {children}
     </TranslationContext.Provider>
   );
-};
+}
 
-export const useTranslation = () => useContext(TranslationContext);
+export function useTranslation() {
+  const context = useContext(TranslationContext);
+  if (!context) throw new Error("useTranslation doit être dans TranslationProvider");
+  return context;
+}
