@@ -3,54 +3,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 
 type Lang = "fr" | "en" | "es";
 
-interface TranslationContextType {
-  lang: Lang;
-  setLang: (lang: Lang) => void;
-  t: any; // Vos traductions
-}
-
-const TranslationContext = createContext<TranslationContextType | null>(null);
-
-export function TranslationProvider({ children }: { children: ReactNode }) {
-  // ✅ Fonction pour détecter la langue
-  const detectLanguage = (): Lang => {
-    // 1. D'abord vérifier localStorage
-    const saved = localStorage.getItem("webdiorama-lang");
-    if (saved && ["fr", "en", "es"].includes(saved)) {
-      return saved as Lang;
-    }
-    
-    // 2. Sinon détecter depuis le navigateur
-    const browserLang = navigator.language.split("-")[0]; // "fr-FR" → "fr"
-    
-    if (["fr", "en", "es"].includes(browserLang)) {
-      return browserLang as Lang;
-    }
-    
-    // 3. Par défaut : français
-    return "fr";
-  };
-  
-  const [lang, setLangState] = useState<Lang>("fr"); // Valeur par défaut temporaire
-  const [mounted, setMounted] = useState(false);
-  
-  // ✅ Détecter la langue au mount (côté client uniquement)
-  useEffect(() => {
-    const detected = detectLanguage();
-    setLangState(detected);
-    setMounted(true);
-    console.log("🌍 Langue détectée:", detected);
-  }, []);
-  
-  // ✅ Fonction pour changer la langue + sauvegarder
-  const setLang = (newLang: Lang) => {
-    setLangState(newLang);
-    localStorage.setItem("webdiorama-lang", newLang);
-    console.log("💾 Langue sauvegardée:", newLang);
-  };
-  
-  // ✅ Vos traductions (exemple minimal)
-  const t = {
+const translations = {
   fr: {
     loader: { start: "Cliquer pour commencer", startMobile: "Toucher pour commencer", browserWarning: "⚠️ Pour une expérience optimale, utilisez Chrome ou Brave" },
     info: {
@@ -75,6 +28,7 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
       action: "Télécharger"
     },
     bookDownload: {
+      required: "Téléchargement requis pour accéder à la scène",
       cacheChecking: "Vérification du cache...",
       modalTitle: "📦 Téléchargement du livre",
       modalMessage: "Télécharger toutes les scènes du livre pour une utilisation hors ligne",
@@ -82,8 +36,9 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
       modalSize: "Taille estimée : ~500 MB",
       cancel: "Annuler",
       download: "Télécharger",
+      downloadAssets: "📥 Télécharger les assets",
       downloading: "Téléchargement...",
-      filesProgress: "fichiers", // "{downloaded} / {total} fichiers"
+      filesProgress: "fichiers",
       retry: "Réessayer",
       close: "Fermer"
     },
@@ -120,6 +75,7 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
       action: "Download"
     },
     bookDownload: {
+      required: "Download required to access the scene",
       cacheChecking: "Checking cache...",
       modalTitle: "📦 Download book",
       modalMessage: "Download all scenes for offline use.",
@@ -127,6 +83,7 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
       modalSize: "Estimated size: ~500 MB",
       cancel: "Cancel",
       download: "Download",
+      downloadAssets: "📥 Download assets",
       downloading: "Downloading...",
       filesProgress: "files",
       retry: "Try again",
@@ -165,6 +122,7 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
       action: "Descargar"
     },
     bookDownload: {
+      required: "Descarga necesaria para acceder a la escena",
       cacheChecking: "Comprobando la caché...",
       modalTitle: "📦 Descargar libro",
       modalMessage: "Descarga todas las escenas para uso sin conexión.",
@@ -172,6 +130,7 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
       modalSize: "Tamaño estimado: ~500 MB",
       cancel: "Cancelar",
       download: "Descargar",
+      downloadAssets: "📥 Descargar los recursos",
       downloading: "Descargando...",
       filesProgress: "archivos",
       retry: "Reintentar",
@@ -187,14 +146,60 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
     }
   }
 };
+
+interface TranslationContextType {
+  lang: Lang;
+  setLang: (lang: Lang) => void;
+  t: typeof translations.fr;
+}
+
+const TranslationContext = createContext<TranslationContextType | null>(null);
+
+export function TranslationProvider({ children }: { children: ReactNode }) {
+  // ✅ Fonction pour détecter la langue
+  const detectLanguage = (): Lang => {
+    if (typeof window === "undefined") return "fr"; // SSR fallback
+    
+    // 1. D'abord vérifier localStorage
+    const saved = localStorage.getItem("webdiorama-lang");
+    if (saved && ["fr", "en", "es"].includes(saved)) {
+      return saved as Lang;
+    }
+    
+    // 2. Sinon détecter depuis le navigateur
+    const browserLang = navigator.language.split("-")[0];
+    
+    if (["fr", "en", "es"].includes(browserLang)) {
+      return browserLang as Lang;
+    }
+    
+    // 3. Par défaut : français
+    return "fr";
+  };
   
-  // ✅ Ne pas render avant le mount (évite hydration mismatch)
-  if (!mounted) {
-    return null;
-  }
+  const [lang, setLangState] = useState<Lang>(() => detectLanguage()); // ✅ Initialiser avec la fonction
   
+  // ✅ Détecter la langue au mount (côté client uniquement)
+  useEffect(() => {
+    const detected = detectLanguage();
+    if (detected !== lang) {
+      setLangState(detected);
+    }
+    console.log("🌍 Langue détectée:", detected);
+  }, []);
+  
+  // ✅ Fonction pour changer la langue + sauvegarder
+  const setLang = (newLang: Lang) => {
+    setLangState(newLang);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("webdiorama-lang", newLang);
+      console.log("💾 Langue sauvegardée:", newLang);
+    }
+  };
+  
+  // ✅ TOUJOURS render le provider (pas de return null)
   return (
-    <TranslationContext.Provider value={{ lang, setLang, t }}>
+    <TranslationContext.Provider value={{ lang, setLang, t: translations[lang] }}>
       {children}
     </TranslationContext.Provider>
   );
@@ -202,6 +207,6 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
 
 export function useTranslation() {
   const context = useContext(TranslationContext);
-  if (!context) throw new Error("useTranslation doit être dans TranslationProvider");
+  if (!context) throw new Error("useTranslation must be used within TranslationProvider");
   return context;
 }
