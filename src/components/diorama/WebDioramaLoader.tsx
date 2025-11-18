@@ -597,46 +597,104 @@ function WebDioramaLoaderInner({
     }
   }, [currentPOI, config.pois]);
 
-  // Gestion visibilité (pause/resume)
+  // ✅ NOUVEAU : Cleanup complet sur onglet caché
   useEffect(() => {
-    const handleVisibility = () => {
+    let wasHidden = false;
+    
+    const performCleanup = () => {
+      if (wasHidden) return; // Éviter de cleanup plusieurs fois
+      
+      console.log("🛑 Cleanup WebGL immédiat");
+      wasHidden = true;
+      
+      // 1. Annuler RAF
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = undefined;
+      }
+      
+      // 2. ✅ STOP TOUS LES AUDIOS
+      document.querySelectorAll('audio').forEach(audio => {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.src = '';
+      });
+      
+      // 3. ✅ STOP TOUS LES VIDEOS
+      document.querySelectorAll('video').forEach(video => {
+        video.pause();
+        video.currentTime = 0;
+        video.src = '';
+      });
+      
+      // 4. Stop animations
+      stopAllAnimations();
+      Object.values(mixerRef.current).forEach(mixer => mixer.stopAllAction());
+      
+      // 5. Dispose scene
+      if (sceneRef.current) {
+        disposeScene(sceneRef.current);
+        sceneRef.current = null;
+      }
+      
+      // 6. Dispose renderer
+      if (renderer) {
+        renderer.dispose();
+        renderer.domElement?.remove();
+      }
+      
+      // 7. Dispose composer
+      if (composerRef.current) {
+        composerRef.current.composer?.dispose();
+        composerRef.current = null;
+      }
+      
+      // 8. Dispose controls
+      if (controlsRef.current) {
+        controlsRef.current.dispose();
+        controlsRef.current = null;
+      }
+      
+      // 9. Reset refs
+      cameraRef.current = null;
+      emptyRefs.current = {};
+      mixerRef.current = {};
+      
+      console.log("✅ Cleanup complet (audio + vidéo + 3D)");
+    };
+    
+    // ✅ MULTIPLE EVENTS pour capturer tous les cas
+    const handleVisibilityChange = () => {
+      console.log("👁️ visibilitychange:", document.hidden);
       if (document.hidden) {
-        if (animationFrameRef.current) {
-          cancelAnimationFrame(animationFrameRef.current);
-          animationFrameRef.current = undefined;
-        }
-        Object.values(ambientAudioRefs.current).forEach((audio) => audio.pause());
-      } else {
-        if (!animationFrameRef.current && renderer && cameraRef.current && sceneRef.current) {
-          const animate = () => {
-            if (document.hidden) {
-              animationFrameRef.current = requestAnimationFrame(animate);
-              return;
-            }
-
-            const delta = clock.current.getDelta();
-            updateMixers(delta);
-            controlsRef.current?.update();
-
-            if (composerRef.current) {
-              composerRef.current.composer.render();
-            } else if (renderer && cameraRef.current && sceneRef.current) {
-              renderer.render(sceneRef.current, cameraRef.current);
-            }
-
-            animationFrameRef.current = requestAnimationFrame(animate);
-          };
-          animationFrameRef.current = requestAnimationFrame(animate);
-        }
-        if (!muted && currentPOI) {
-          ambientAudioRefs.current[currentPOI]?.play().catch(() => {});
-        }
+        performCleanup();
+      } else if (wasHidden) {
+        console.log("🔄 Retour → Reload auto");
+        setTimeout(() => window.location.reload(), 100);
       }
     };
-
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [muted, currentPOI, renderer]);
+    
+    const handleBlur = () => {
+      console.log("🔵 window blur");
+      performCleanup();
+    };
+    
+    const handlePageHide = () => {
+      console.log("👋 pagehide");
+      performCleanup();
+    };
+    
+    // ✅ Écouter TOUS les events
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("pagehide", handlePageHide);
+    
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("pagehide", handlePageHide);
+    };
+  }, [renderer, stopAllAnimations]);
 
   // Auto-unmute reset
   useEffect(() => {
@@ -679,7 +737,7 @@ function WebDioramaLoaderInner({
   }, [showLoaderOverlay]);
 
   // ✅ UI d'erreur WebGL - VERSION CORRIGÉE SANS useEffect
-  if (webglError) {
+  if (webglError && !showLoaderOverlay) {
     return (
       <>
         {/* ❌ Cacher le conteneur principal avec le canvas */}
@@ -723,15 +781,16 @@ function WebDioramaLoaderInner({
                 console.log("🔄 Rechargement complet de la page...");
                 window.location.reload();
               }}
-              className="px-4 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 mb-4"
+              className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 mb-4"
             >
               {t.webglErrorScreen?.boutonTitle}
+                          {/* Sous-titre */}
+              <p className="text-xs text-gray-100">
+                ( {t.webglErrorScreen?.boutonSubTitle} )
+              </p>
             </button>
             
-            {/* Sous-titre */}
-            <p className="text-xs text-gray-500 mt-2">
-              {t.webglErrorScreen?.boutonSubTitle}
-            </p>
+
             
             {/* Note technique (très petit) */}
             <p className="text-sm font-bold text-gray-300 mt-4 max-w-xs mx-auto animate-pulse">
