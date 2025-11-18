@@ -116,6 +116,11 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   const { t } = useTranslation(); // ✅ Maintenant c'est OK !
   const [assetsReady, setAssetsReady] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(true);
+  const [configWithCache, setConfigWithCache] = useState<DioramaConfig3D | null>(null); // ✅ NOUVEAU
+
+  // ✅ RÉCUPÉRER dioramaId depuis l'URL
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  const dioramaId = pathname.split('/')[3] || 'street';
 
   const assetsToDownload = useMemo(() => {
     // ... votre code
@@ -177,6 +182,8 @@ function WebDioramaLoaderInner({
   const clock = useRef(new THREE.Clock());
   const hasAutoUnmutedRef = useRef(false);
   const composerRef = useRef<ReturnType<typeof setupPostProcessing> | null>(null);
+  const voluntaryCleanupRef = useRef(false);
+  const wasHiddenRef = useRef(false);
   const textureLoader = useMemo(() => new THREE.TextureLoader(), []);
   const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
@@ -210,6 +217,7 @@ function WebDioramaLoaderInner({
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   const [reloading, setReloading] = useState(false);
   const [assetLoadingStatus, setAssetLoadingStatus] = useState<string>("");
+  const [isHidden, setIsHidden] = useState(false);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
 
@@ -223,13 +231,14 @@ function WebDioramaLoaderInner({
     ambientAudioRefs,
     handleSceneStart,
     handleSceneEnd,
+    cleanup: cleanupAudio,
   } = usePOIAudio({
     pois: config.pois,
     currentPOI,
     onScenePlayingChange: () => {},
   });
 
-  const { isPlaying, isPaused, isEnded, progress, duration, togglePlayPause, seekScene, sceneMuted, toggleSceneMute, stopScene } =
+  const { isPlaying, isPaused, isEnded, progress, duration, togglePlayPause, seekScene, sceneMuted, toggleSceneMute, stopScene, cleanup: cleanupScenePlayer } =
     usePOIScenePlayer({
       poi: currentPoi,
       animations: sceneRef.current?.userData?.gltfAnimations || [],
@@ -597,15 +606,13 @@ function WebDioramaLoaderInner({
     }
   }, [currentPOI, config.pois]);
 
-  // ✅ NOUVEAU : Cleanup complet sur onglet caché
+  // ✅ Puis modifiez le useEffect de cleanup :
   useEffect(() => {
-    let wasHidden = false;
-    
     const performCleanup = () => {
-      if (wasHidden) return; // Éviter de cleanup plusieurs fois
-      
       console.log("🛑 Cleanup WebGL immédiat");
-      wasHidden = true;
+      
+      // 0. Masquer l'UI immédiatement
+      setIsHidden(true);
       
       // 1. Annuler RAF
       if (animationFrameRef.current) {
@@ -613,18 +620,17 @@ function WebDioramaLoaderInner({
         animationFrameRef.current = undefined;
       }
       
-      // 2. ✅ STOP TOUS LES AUDIOS
-      document.querySelectorAll('audio').forEach(audio => {
-        audio.pause();
-        audio.currentTime = 0;
-        audio.src = '';
-      });
+      // 2. ✅ STOP TOUS LES AUDIOS via le hook
+      cleanupAudio();
+      cleanupScenePlayer();
       
-      // 3. ✅ STOP TOUS LES VIDEOS
-      document.querySelectorAll('video').forEach(video => {
-        video.pause();
-        video.currentTime = 0;
-        video.src = '';
+      // 3. ✅ STOP VIDEOS (avec bon typage)
+      document.querySelectorAll('video').forEach((video) => {
+        const videoEl = video as HTMLVideoElement;
+        videoEl.pause();
+        videoEl.currentTime = 0;
+        videoEl.src = '';
+        videoEl.load();
       });
       
       // 4. Stop animations
@@ -637,9 +643,10 @@ function WebDioramaLoaderInner({
         sceneRef.current = null;
       }
       
-      // 6. Dispose renderer
+      // 6. Dispose renderer + FORCE CONTEXT LOSS
       if (renderer) {
         renderer.dispose();
+        renderer.forceContextLoss();
         renderer.domElement?.remove();
       }
       
@@ -660,41 +667,69 @@ function WebDioramaLoaderInner({
       emptyRefs.current = {};
       mixerRef.current = {};
       
-      console.log("✅ Cleanup complet (audio + vidéo + 3D)");
+      console.log("✅ Cleanup complet terminé");
     };
     
-    // ✅ MULTIPLE EVENTS pour capturer tous les cas
     const handleVisibilityChange = () => {
-      console.log("👁️ visibilitychange:", document.hidden);
-      if (document.hidden) {
+      console.log("👁️ Visibility changed:", document.hidden ? "HIDDEN" : "VISIBLE");
+      
+      if (document.hidden && !wasHiddenRef.current) {
+        console.log("🚨 Détection: onglet caché → cleanup");
+        wasHiddenRef.current = true;
+        voluntaryCleanupRef.current = true;
         performCleanup();
-      } else if (wasHidden) {
-        console.log("🔄 Retour → Reload auto");
-        setTimeout(() => window.location.reload(), 100);
+      } else if (!document.hidden && wasHiddenRef.current) {
+        console.log("🔄 Détection: retour onglet → reload");
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
+      }
+    };
+
+    const handleFocus = () => {
+      console.log("👁️ Window focus");
+      if (wasHiddenRef.current) {
+        // ✅ Retour après blur → reload
+        console.log("🔄 Détection: retour focus → reload");
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
       }
     };
     
     const handleBlur = () => {
-      console.log("🔵 window blur");
-      performCleanup();
+      console.log("👁️ Window blur");
+      if (!wasHiddenRef.current) {
+        wasHiddenRef.current = true;
+        voluntaryCleanupRef.current = true;
+        performCleanup();
+      }
     };
     
     const handlePageHide = () => {
-      console.log("👋 pagehide");
-      performCleanup();
+      console.log("👁️ Page hide");
+      if (!wasHiddenRef.current) {
+        wasHiddenRef.current = true;
+        voluntaryCleanupRef.current = true;
+        performCleanup();
+      }
     };
     
-    // ✅ Écouter TOUS les events
+    // console.log("🎬 Setup listeners - document.hidden:", document.hidden);
+    
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", handleFocus);
     window.addEventListener("pagehide", handlePageHide);
     
     return () => {
+      // console.log("🧹 Cleanup listeners");
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
       window.removeEventListener("pagehide", handlePageHide);
     };
-  }, [renderer, stopAllAnimations]);
+  }, [renderer, stopAllAnimations, ambientAudioRefs, cleanupAudio, cleanupScenePlayer]);
 
   // Auto-unmute reset
   useEffect(() => {
@@ -737,7 +772,7 @@ function WebDioramaLoaderInner({
   }, [showLoaderOverlay]);
 
   // ✅ UI d'erreur WebGL - VERSION CORRIGÉE SANS useEffect
-  if (webglError && !showLoaderOverlay) {
+  if (webglError && !voluntaryCleanupRef.current) {
     return (
       <>
         {/* ❌ Cacher le conteneur principal avec le canvas */}
@@ -815,6 +850,15 @@ function WebDioramaLoaderInner({
       }}
       className="bg-black"
     >
+      {/* ✅ Overlay de masquage quand en arrière-plan */}
+      {isHidden && (
+        <div className="fixed inset-0 bg-black z-[10000] flex items-center justify-center">
+          <div className="text-white text-center">
+            <div className="text-6xl mb-4 animate-pulse">💤</div>
+            <p className="text-xl">Mise en veille...</p>
+          </div>
+        </div>
+      )}
       <AnimatePresence>
         {showLoaderOverlay && (
           <LoaderOverlay

@@ -446,7 +446,37 @@ useEffect(() => {
   return () => cancelAnimationFrame(rafRef.current!);
 }, [poi, duration, emptyRefs, controlsRef, moveCameraDuringAnimation, moveCameraToPOI]);
 
-
+const cleanup = useCallback(() => {
+  console.log("🔇 Cleanup POI Scene Player");
+  
+  // Stop animations
+  activeActionsRef.current.forEach(a => a.stop());
+  activeActionsRef.current = [];
+  
+  // ✅ STOP SCENE AUDIO
+  if (sceneAudioRef.current) {
+    console.log("🔇 Stop sceneAudioRef (POI Scene Player):", sceneAudioRef.current.src);
+    sceneAudioRef.current.pause();
+    sceneAudioRef.current.currentTime = 0;
+    sceneAudioRef.current.src = '';
+    sceneAudioRef.current.load();
+    sceneAudioRef.current = null;
+  }
+  
+  // Cancel RAF
+  if (rafRef.current) {
+    cancelAnimationFrame(rafRef.current);
+    rafRef.current = undefined;
+  }
+  
+  // Reset state
+  setIsPlaying(false);
+  setIsPaused(false);
+  setProgress(0);
+  setIsEnded(false);
+  
+  console.log("✅ POI Scene Player cleanup terminé");
+}, []);
 
 
 
@@ -463,5 +493,6 @@ useEffect(() => {
     sceneMuted,
     toggleSceneMute,
     stopScene,
+    cleanup,
   };
 };

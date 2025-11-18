@@ -10,6 +10,7 @@ type UsePOIAudioProps = {
 export default function usePOIAudio({ pois, currentPOI, onScenePlayingChange }: UsePOIAudioProps) {
   const ambientAudioRefs = useRef<Record<string, HTMLAudioElement>>({});
   const sceneAudioRef = useRef<HTMLAudioElement | null>(null);
+  const allAudiosRef = useRef<HTMLAudioElement[]>([]); 
   const [muted, setMuted] = useState(true);
   const [startSoundReady, setStartSoundReady] = useState(false);
   const [scenePlaying, setScenePlaying] = useState(false);
@@ -23,6 +24,7 @@ export default function usePOIAudio({ pois, currentPOI, onScenePlayingChange }: 
         audio.muted = true;
         audio.preload = "auto";
         ambientAudioRefs.current[poi.id] = audio;
+        allAudiosRef.current.push(audio);
       }
       if (poi.children?.length) preloadAmbientSounds(poi.children);
     });
@@ -85,8 +87,10 @@ export default function usePOIAudio({ pois, currentPOI, onScenePlayingChange }: 
       const audio = new Audio(sceneSound);
       audio.loop = false;
       audio.muted = muted;
+      console.log("🎵 Scene audio créé:", sceneSound, audio);
       audio.play().catch(() => {});
       sceneAudioRef.current = audio;
+      allAudiosRef.current.push(audio);
 
       audio.onended = () => {
         setScenePlaying(false);
@@ -118,6 +122,38 @@ export default function usePOIAudio({ pois, currentPOI, onScenePlayingChange }: 
     }
   };
 
+  // Dans usePOIAudio.ts, modifiez cleanup :
+
+  const cleanup = () => {
+    console.log("🔇 Cleanup audio complet - Total audios:", allAudiosRef.current.length);
+    
+    // 1. ✅ STOP LE SCENE AUDIO EN PRIORITÉ (pas dans la liste)
+    if (sceneAudioRef.current) {
+      console.log("🔇 Stop sceneAudioRef:", sceneAudioRef.current.src);
+      sceneAudioRef.current.pause();
+      sceneAudioRef.current.currentTime = 0;
+      sceneAudioRef.current.src = '';
+      sceneAudioRef.current.load();
+      sceneAudioRef.current = null;
+    }
+    
+    // 2. Stop TOUS les audios trackés
+    allAudiosRef.current.forEach((audio, index) => {
+      console.log(`🔇 Stop audio ${index}:`, audio.src);
+      audio.pause();
+      audio.currentTime = 0;
+      audio.src = '';
+      audio.load();
+    });
+    
+    // 3. Vider les refs
+    ambientAudioRefs.current = {};
+    allAudiosRef.current = [];
+    setScenePlaying(false);
+    
+    console.log("✅ Audio cleanup terminé");
+  };
+
   return {
     startSoundReady,
     muted,
@@ -126,5 +162,6 @@ export default function usePOIAudio({ pois, currentPOI, onScenePlayingChange }: 
     ambientAudioRefs,
     handleSceneStart,
     handleSceneEnd,
+    cleanup,
   };
 }
