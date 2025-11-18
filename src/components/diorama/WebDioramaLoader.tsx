@@ -48,14 +48,10 @@ const BullstandRegular = localFont({
 
 export default function WebDioramaLoader({ config, bookId }: { config: DioramaConfig3D; bookId: string }) {
   const [mounted, setMounted] = useState(false); // ✅ NOUVEAU
-  const [assetsReady, setAssetsReady] = useState(false);
-  const [showDownloadModal, setShowDownloadModal] = useState(false); // ✅ NOUVEAU
-  const { t } = useTranslation();
 
   // ✅ Attendre le mount côté client
   useEffect(() => {
     setMounted(true);
-    setShowDownloadModal(true); 
   }, []);
 
   // ✅ Liste des assets à télécharger
@@ -109,45 +105,55 @@ export default function WebDioramaLoader({ config, bookId }: { config: DioramaCo
   }
 
   return (
-      <TranslationProvider> {/* ✅ WRAPPER TOUT ICI */}
-        {/* ✅ BookDownloadModal DANS le Provider */}
-        {showDownloadModal && !assetsReady && (
-          <BookDownloadModal
-            bookId={bookId}
-            onComplete={() => {
-              setAssetsReady(true);
-              setShowDownloadModal(false);
-            }}
-            onCancel={() => {
-              setShowDownloadModal(false);
-            }}
-          />
-        )}
+    <TranslationProvider>
+      <WebDioramaLoaderWithTranslation config={config} bookId={bookId} />
+    </TranslationProvider>
+  );
+}
 
-        {/* ✅ Bouton flottant DANS le Provider */}
-        {!assetsReady && !showDownloadModal && (
-          <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-            <div className="text-center">
-              <div className="text-6xl mb-6">📦</div>
-              <h2 className="text-white text-xl mb-6">
-                {t.bookDownload?.required}
-              </h2>
-              <button
-                onClick={() => setShowDownloadModal(true)}
-                className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transition"
-              >
-                {t.bookDownload?.downloadAssets}
-              </button>
-            </div>
+// ✅ Composant INTERNE avec useTranslation
+function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaConfig3D; bookId: string }) {
+  const { t } = useTranslation(); // ✅ Maintenant c'est OK !
+  const [assetsReady, setAssetsReady] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(true);
+
+  const assetsToDownload = useMemo(() => {
+    // ... votre code
+  }, [config, bookId]);
+
+  return (
+    <>
+      {showDownloadModal && !assetsReady && (
+        <BookDownloadModal
+          bookId={bookId}
+          onComplete={() => {
+            setAssetsReady(true);
+            setShowDownloadModal(false);
+          }}
+          onCancel={() => setShowDownloadModal(false)}
+        />
+      )}
+
+      {!assetsReady && !showDownloadModal && (
+        <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+          <div className="text-center">
+            <div className="text-6xl mb-6">📦</div>
+            <h2 className="text-white text-xl mb-6">
+              {t.bookDownload?.required || "Téléchargement requis"}
+            </h2>
+            <button
+              onClick={() => setShowDownloadModal(true)}
+              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transition"
+            >
+              📥 {t.bookDownload?.download || "Télécharger"}
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* ✅ Scène DANS le Provider */}
-        {assetsReady && (
-          <WebDioramaLoaderInner config={config} bookId={bookId} />
-        )}
-      </TranslationProvider>
-    );
+      {assetsReady && <WebDioramaLoaderInner config={config} bookId={bookId} />}
+    </>
+  );
 }
 
 function WebDioramaLoaderInner({
