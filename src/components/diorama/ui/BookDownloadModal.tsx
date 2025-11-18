@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { downloadManager, getBookManifest, isBookFullyCached } from '../lib/downloadManager';
+import { useTranslation } from '@/contexts/TranslationContext';
 
 interface BookDownloadModalProps {
   bookId: string;
@@ -22,6 +23,7 @@ export default function BookDownloadModal({ bookId, onComplete, onCancel }: Book
   const [speed, setSpeed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [storageInfo, setStorageInfo] = useState<{available: number; quota: number} | null>(null);
+  const { t } = useTranslation();
 
   useEffect(() => {
     setMounted(true);
@@ -129,7 +131,7 @@ export default function BookDownloadModal({ bookId, onComplete, onCancel }: Book
       <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999]">
         <div className="text-white text-center">
           <div className="animate-spin text-4xl mb-4">⚙️</div>
-          <p>Vérification du cache...</p>
+          <p>{t.bookDownload?.cacheChecking}</p>
         </div>
       </div>
     );
@@ -151,18 +153,18 @@ export default function BookDownloadModal({ bookId, onComplete, onCancel }: Book
             exit={{ scale: 0.9, y: 20 }}
           >
             <h2 className="text-2xl font-bold text-white mb-4">
-              📦 Téléchargement du livre
+              {t.bookDownload?.modalTitle}
             </h2>
 
             {!downloading && !error && (
               <>
                 <p className="text-gray-300 mb-6">
-                  Télécharger toutes les scènes du livre pour une utilisation hors ligne
+                  {t.bookDownload?.modalMessage}
                 </p>
 
                 {storageInfo && (
                   <div className="bg-gray-800 rounded-lg p-3 mb-6 text-sm text-gray-400">
-                    <p>Espace disponible : {(storageInfo.available / 1024 / 1024).toFixed(0)} MB</p>
+                    <p>{t.bookDownload?.storageInfo}{(storageInfo.available / 1024 / 1024).toFixed(0)} MB</p>
                   </div>
                 )}
 
@@ -171,7 +173,7 @@ export default function BookDownloadModal({ bookId, onComplete, onCancel }: Book
                     onClick={startDownload}
                     className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-3 rounded-full transition"
                   >
-                    Télécharger
+                    {t.bookDownload?.download}
                   </button>
                   <button
                     onClick={() => {
@@ -180,7 +182,7 @@ export default function BookDownloadModal({ bookId, onComplete, onCancel }: Book
                     }}
                     className="px-6 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-full transition"
                   >
-                    Annuler
+                    {t.bookDownload?.cancel}
                   </button>
                 </div>
               </>
@@ -204,7 +206,7 @@ export default function BookDownloadModal({ bookId, onComplete, onCancel }: Book
                   </div>
 
                   <div className="flex justify-between text-xs text-gray-500 mt-2">
-                    <span>{loadedCount} / {totalCount} fichiers</span>
+                    <span>{loadedCount} / {totalCount} {t.bookDownload?.filesProgress}</span>
                     <span>{(speed / 1024 / 1024).toFixed(2)} MB/s</span>
                   </div>
                 </div>
@@ -213,7 +215,7 @@ export default function BookDownloadModal({ bookId, onComplete, onCancel }: Book
                   onClick={cancelDownload}
                   className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-full transition"
                 >
-                  Annuler
+                  {t.bookDownload?.cancel}
                 </button>
               </>
             )}
@@ -228,13 +230,13 @@ export default function BookDownloadModal({ bookId, onComplete, onCancel }: Book
                     onClick={startDownload}
                     className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-full transition"
                   >
-                    Réessayer
+                    {t.bookDownload?.retry}
                   </button>
                   <button
                     onClick={() => setIsOpen(false)}
                     className="px-6 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-full transition"
                   >
-                    Fermer
+                    {t.bookDownload?.close}
                   </button>
                 </div>
               </>

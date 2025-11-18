@@ -159,7 +159,7 @@ function WebDioramaLoaderInner({
   config: DioramaConfig3D;
   bookId: string;
 }) {
-  const { lang } = useTranslation();
+  const { t, lang } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const { isPortrait, showRotateHint } = useOrientation(5000);
@@ -703,14 +703,14 @@ function WebDioramaLoaderInner({
             
             {/* Titre principal */}
             <h2 className="text-2xl font-bold text-white mb-3">
-              Oups, tout le monde s'est endormi !
+              {t.webglErrorScreen?.title}
             </h2>
             
             {/* Message d'erreur technique (petit) */}
             <p className="text-sm text-gray-400 mb-6 italic">
               {webglError === "lost"
-                ? "(Le contexte 3D a fait une sieste)"
-                : "(Le navigateur n'a pas voulu se réveiller)"}
+                ? `${t.webglErrorScreen?.technicalMessageWebglError}`
+                : `${t.webglErrorScreen?.technicalMessageWebglNotError}`}
             </p>
             
             {/* Bouton principal */}
@@ -721,17 +721,17 @@ function WebDioramaLoaderInner({
               }}
               className="px-4 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 mb-4"
             >
-              Allez, debout là-dedans !
+              {t.webglErrorScreen?.boutonTitle}
             </button>
             
             {/* Sous-titre */}
             <p className="text-xs text-gray-500 mt-2">
-              Relancer l'application
+              {t.webglErrorScreen?.boutonSubTitle}
             </p>
             
             {/* Note technique (très petit) */}
             <p className="text-sm font-bold text-gray-300 mt-4 max-w-xs mx-auto animate-pulse">
-              💡 Si le problème persiste, fermez complètement l'onglet puis fermer le navigateur et rouvrez le lien
+              {t.webglErrorScreen?.technicalNote}
             </p>
           </div>
         </div>

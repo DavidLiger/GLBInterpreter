@@ -28,13 +28,25 @@ const translations = {
       action: "Télécharger"
     },
     bookDownload: {
-      modalTitle: "Télécharger le livre",
-      modalMessage: "Télécharger toutes les scènes pour une utilisation offline.",
+      cacheChecking: "Vérification du cache...",
+      modalTitle: "📦 Téléchargement du livre",
+      modalMessage: "Télécharger toutes les scènes du livre pour une utilisation hors ligne",
+      storageInfo: "Espace disponible : ",
       modalSize: "Taille estimée : ~500 MB",
       cancel: "Annuler",
       download: "Télécharger",
       downloading: "Téléchargement...",
-      filesProgress: "fichiers" // "{downloaded} / {total} fichiers"
+      filesProgress: "fichiers", // "{downloaded} / {total} fichiers"
+      retry: "Réessayer",
+      close: "Fermer"
+    },
+    webglErrorScreen: {
+      title: "Oups, tout le monde s'est endormi !",
+      technicalMessageWebglError: "(Le contexte 3D a fait une sieste)",
+      technicalMessageWebglNotError: "(Le navigateur n'a pas voulu se réveiller)",
+      boutonTitle : "Allez, debout là-dedans !",
+      boutonSubTitle : "Relancer l'application",
+      technicalNote : "💡 Si le problème persiste, fermez complètement l'onglet puis fermer le navigateur et rouvrez le lien"
     }
   },
   en: {
@@ -61,13 +73,25 @@ const translations = {
       action: "Download"
     },
     bookDownload: {
-      modalTitle: "Download book",
+      cacheChecking: "Checking cache...",
+      modalTitle: "📦 Download book",
       modalMessage: "Download all scenes for offline use.",
+      storageInfo: "Available space : ",
       modalSize: "Estimated size: ~500 MB",
       cancel: "Cancel",
       download: "Download",
       downloading: "Downloading...",
-      filesProgress: "files"
+      filesProgress: "files",
+      retry: "Try again",
+      close: "Close"
+    },
+    webglErrorScreen: {
+      title: "Oops, everyone has fallen asleep!",
+      technicalMessageWebglError: "(The 3D context took a nap)",
+      technicalMessageWebglNotError: "(The browser did not want to wake up)",
+      boutonTitle : "Come on, get up in there!",
+      boutonSubTitle : "Restart the application",
+      technicalNote : "💡 If the problem persists, close the tab completely, then close the browser and reopen the link."
     }
   },
   es: {
@@ -94,13 +118,25 @@ const translations = {
       action: "Descargar"
     },
     bookDownload: {
-      modalTitle: "Descargar libro",
+      cacheChecking: "Comprobando la caché...",
+      modalTitle: "📦 Descargar libro",
       modalMessage: "Descarga todas las escenas para uso sin conexión.",
+      storageInfo: "Espacio disponible : ",
       modalSize: "Tamaño estimado: ~500 MB",
       cancel: "Cancelar",
       download: "Descargar",
       downloading: "Descargando...",
-      filesProgress: "archivos"
+      filesProgress: "archivos",
+      retry: "Reintentar",
+      close: "Cerrar"
+    },
+    webglErrorScreen: {
+      title: "¡Vaya, todo el mundo se ha quedado dormido!",
+      technicalMessageWebglError: "(El contexto 3D se ha tomado un descanso)",
+      technicalMessageWebglNotError: "(El navegador no se ha querido despertar)",
+      boutonTitle : "¡Vamos, levántate!",
+      boutonSubTitle : "Reiniciar la aplicación",
+      technicalNote : "💡 Si el problema persiste, cierre completamente la pestaña, cierre el navegador y vuelva a abrir el enlace."
     }
   }
 };
