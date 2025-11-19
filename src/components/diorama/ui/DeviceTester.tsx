@@ -348,7 +348,7 @@ export default function DeviceTester({ glbUrl, config, onComplete, onSkip }: Dev
         {/* Results */}
         {phase === 'results' && result && (
           <>
-            {console.log('🎯 Rendering results phase, result:', result)}
+            {/* {console.log('🎯 Rendering results phase, result:', result)} */}
             {result ? (
               <motion.div
                 key="results"
