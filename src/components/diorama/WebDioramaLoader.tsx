@@ -41,6 +41,7 @@ import { useWebGLContext } from "./hooks/useWebGLContext";
 import { disposeScene, logSceneStats } from "./utils/webglHelpers";
 import BookDownloadModal from "./ui/BookDownloadModal";
 import { isBookFullyCached } from "./lib/downloadManager";
+import useUnifiedAudio from "./hooks/useUnifiedAudio";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -279,36 +280,42 @@ function WebDioramaLoaderInner({
 
   usePOIEffects(sceneRef.current!, currentPoi, textureLoader);
 
-  const {
-    startSoundReady,
-    muted,
-    toggleMute,
-    scenePlaying,
-    ambientAudioRefs,
-    handleSceneStart,
-    handleSceneEnd,
-    cleanup: cleanupAudio,
-  } = usePOIAudio({
-    pois: config.pois,
-    currentPOI,
-    onScenePlayingChange: () => {},
+  const { 
+    isPlaying, isPaused, isEnded, progress, duration, 
+    togglePlayPause, seekScene, stopScene,
+    currentSceneSound, // ✅ NOUVEAU
+    cleanup: cleanupScenePlayer 
+  } = usePOIScenePlayer({
+    poi: currentPoi,
+    animations: sceneRef.current?.userData?.gltfAnimations || [],
+    mixerRef: mixerRef.current,
+    muted: false, // ✅ On gère mute dans useUnifiedAudio maintenant
+    emptyRefs,
+    controlsRef,
+    moveCameraToPOI,
+    moveCameraDuringAnimation,
+    goToPOI,
   });
 
-  const { isPlaying, isPaused, isEnded, progress, duration, togglePlayPause, seekScene, sceneMuted, toggleSceneMute, stopScene, cleanup: cleanupScenePlayer } =
-    usePOIScenePlayer({
-      poi: currentPoi,
-      animations: sceneRef.current?.userData?.gltfAnimations || [],
-      mixerRef: mixerRef.current,
-      ambientAudioRefs: ambientAudioRefs.current,
-      muted,
-      onSceneStart: handleSceneStart,
-      onSceneEnd: handleSceneEnd,
-      emptyRefs,
-      controlsRef,
-      moveCameraToPOI,
-      moveCameraDuringAnimation,
-      goToPOI,
-    });
+  // ✅ Hook audio unifié (remplace usePOIAudio)
+  const { 
+    muted, 
+    toggleMute, 
+    startSoundReady,  
+    enableAudio,
+    cleanup: cleanupAudio,
+    seekSceneAudio
+  } = useUnifiedAudio({
+    pois: config.pois,
+    currentPOI,
+    audioState: {
+      isPlaying,
+      isPaused,
+      isEnded,
+      currentSceneSound,
+      currentTime: progress,
+    }
+  });
 
   const activePOIIcon = React.useMemo(() => {
     if (!currentPOI) return undefined;
@@ -558,27 +565,6 @@ function WebDioramaLoaderInner({
         // ✅ Précharger les assets du POI start
         const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
 
-        // if (startPOI) {
-        //   console.log("📦 Préchargement assets POI start...");
-
-        //   const assetsToLoad: { type: 'audio' | 'video' | 'image'; url: string }[] = [];
-
-        //   if (startPOI.ambientSound) assetsToLoad.push({ type: 'audio', url: startPOI.ambientSound });
-        //   if (startPOI.sceneSound) assetsToLoad.push({ type: 'audio', url: startPOI.sceneSound });
-
-        //   const videosToPreload = (config as DioramaConfig3DWithVideos).videos || [];
-        //   videosToPreload.forEach((videoConfig) => {
-        //     assetsToLoad.push({ type: 'video', url: videoConfig.src });
-        //   });
-
-        //   try {
-        //     await loadAssets(assetsToLoad);
-        //     console.log("✅ Assets POI start chargés");
-        //   } catch (err) {
-        //     console.warn("⚠️ Erreur chargement assets:", err);
-        //   }
-        // }
-
         setLoadingProgress(100);
 
         // Position caméra sur start POI
@@ -670,8 +656,24 @@ function WebDioramaLoaderInner({
   useEffect(() => {
     const performCleanup = () => {
       console.log("🛑 Cleanup WebGL immédiat");
+
+      // ✅ 0. MUTER ET STOPPER via les hooks AVANT tout
+      console.log("🔇 Cleanup audio via hooks...");
+      cleanupAudio(); // Ceci va vider les refs
+      cleanupScenePlayer();
       
-      // 0. Masquer l'UI immédiatement
+      // ✅ 0.5. PUIS muter TOUS les audios DOM restants (sécurité)
+      console.log("🔇 Mute tous audios DOM restants...");
+      document.querySelectorAll('audio').forEach((audio) => {
+        const audioEl = audio as HTMLAudioElement;
+        console.log("🔇 Mute audio DOM:", audioEl.src);
+        audioEl.pause();
+        audioEl.muted = true;
+        audioEl.volume = 0;
+        audioEl.currentTime = 0;
+        audioEl.src = '';
+        audioEl.load();
+      });
       setIsHidden(true);
       
       // 1. Annuler RAF
@@ -681,6 +683,7 @@ function WebDioramaLoaderInner({
       }
       
       // 2. ✅ STOP TOUS LES AUDIOS via le hook
+      console.log("🔇 Appel cleanupAudio...");
       cleanupAudio();
       cleanupScenePlayer();
 
@@ -800,7 +803,7 @@ function WebDioramaLoaderInner({
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("pagehide", handlePageHide);
     };
-  }, [renderer, stopAllAnimations, ambientAudioRefs, cleanupAudio, cleanupScenePlayer]);
+  }, [renderer, stopAllAnimations, cleanupAudio, cleanupScenePlayer]);
 
   // Auto-unmute reset
   useEffect(() => {
@@ -808,17 +811,6 @@ function WebDioramaLoaderInner({
       hasAutoUnmutedRef.current = false;
     }
   }, [isPlaying, isEnded]);
-
-  // Auto-unmute ambiance
-  useEffect(() => {
-    if (isEnded && !scenePlaying && muted && !hasAutoUnmutedRef.current) {
-      const timeout = setTimeout(() => {
-        toggleMute();
-        hasAutoUnmutedRef.current = true;
-      }, 500);
-      return () => clearTimeout(timeout);
-    }
-  }, [isEnded, scenePlaying, muted, toggleMute]);
 
   useEffect(() => {
     if (showLoaderOverlay) {
@@ -954,30 +946,19 @@ function WebDioramaLoaderInner({
             onStart={() => {
               window.scrollTo(0, 0);
 
-              if (!startSoundReady) {
-                console.warn("⏳ Son pas encore prêt, attente...");
-                const checkSound = setInterval(() => {
-                  if (startSoundReady) {
-                    clearInterval(checkSound);
-                    proceedWithStart();
-                  }
-                }, 100);
-                return;
-              }
+              // ✅ Activer audio
+              enableAudio();
 
-              proceedWithStart();
-
-              function proceedWithStart() {
-                if (autoplay) {
-                  if (!isFullscreen) toggleFullscreen();
-                  if (sceneMuted) toggleSceneMute();
-                  if (!isPlaying) togglePlayPause();
-                  setShowLoaderOverlay(false);
-                  return;
-                }
-
+              // ✅ Procéder selon le mode
+              if (autoplay) {
+                console.log("🎬 Mode autoplay : lancement scène");
                 if (!isFullscreen) toggleFullscreen();
-                if (muted) toggleMute();
+                if (!isPlaying) togglePlayPause(); // Lance scène + sceneSound
+                setShowLoaderOverlay(false);
+              } else {
+                console.log("🎵 Mode normal : activation ambient");
+                if (!isFullscreen) toggleFullscreen();
+                if (muted) toggleMute(); // Active ambient
                 setShowLoaderOverlay(false);
               }
             }}
@@ -998,10 +979,7 @@ function WebDioramaLoaderInner({
           <DialogueButton visible={showDialogue} onToggle={() => setShowDialogue((v) => !v)} />
         )}
         <AnimatePresence>
-          {(isPlaying || (!isPlaying && !isEnded && isPaused)) && (
-            <SoundButton muted={sceneMuted} onToggle={toggleSceneMute} />
-          )}
-          {!scenePlaying && startSoundReady && (isEnded || (!isPlaying && !isPaused)) && (
+          {startSoundReady && (
             <SoundButton muted={muted} onToggle={toggleMute} />
           )}
         </AnimatePresence>
@@ -1046,6 +1024,7 @@ function WebDioramaLoaderInner({
 
       {process.env.NODE_ENV === "development" && <QRCodeModal />}
 
+
       {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
         <POIPlayer
           isPlaying={isPlaying}
@@ -1053,8 +1032,18 @@ function WebDioramaLoaderInner({
           isEnded={isEnded}
           progress={progress}
           duration={duration}
-          onTogglePlayPause={togglePlayPause}
-          onSeek={seekScene}
+          onTogglePlayPause={() => {
+            // ✅ Si on reprend après un seek, synchroniser l'audio
+            if (!isPlaying && !isPaused && isEnded) {
+              // Replay : sync audio au temps actuel (progress)
+              seekSceneAudio(progress);
+            }
+            togglePlayPause();
+          }}
+          onSeek={(time) => {
+            seekScene(time); // Sync animation
+            seekSceneAudio(time); // ✅ Sync audio
+          }}
           onStop={stopScene}
           isPortrait={isPortrait}
         />
