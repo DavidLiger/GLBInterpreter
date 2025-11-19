@@ -717,7 +717,7 @@ function WebDioramaLoaderInner({
       // 6. Dispose renderer + FORCE CONTEXT LOSS
       if (renderer) {
         renderer.dispose();
-        renderer.forceContextLoss();
+        // renderer.forceContextLoss();
         renderer.domElement?.remove();
       }
       
