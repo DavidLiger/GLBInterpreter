@@ -4,7 +4,8 @@ import type { DioramaVideo } from "@/types/diorama";
 export function applyVideoTextures(
   root: THREE.Object3D,
   emptyRefs: Record<string, THREE.Object3D>,
-  videos?: DioramaVideo[]
+  videos?: DioramaVideo[],
+  videoElementsRef?: { current: HTMLVideoElement[] }
 ) {
   if (!videos) return;
 
@@ -19,6 +20,10 @@ export function applyVideoTextures(
     video.loop = loop;
     video.muted = muted;
     video.playsInline = true;
+
+    if (videoElementsRef) {
+      videoElementsRef.current.push(video); // ✅ Tracker
+    }
 
     video.addEventListener("loadeddata", () => {
       const texture = new THREE.VideoTexture(video);

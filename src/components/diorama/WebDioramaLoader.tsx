@@ -177,6 +177,7 @@ function WebDioramaLoaderInner({
   const controlsRef = useRef<OrbitControls | null>(null);
   const emptyRefs = useRef<Record<string, THREE.Object3D>>({});
   const animationFrameRef = useRef<number | undefined>(undefined);
+  const videoElementsRef = useRef<HTMLVideoElement[]>([]);
   const { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers } =
     usePOIAnimations(emptyRefs);
   const clock = useRef(new THREE.Clock());
@@ -488,9 +489,13 @@ function WebDioramaLoaderInner({
           }
         }, 100);
 
-        // Vidéos (dernier car lourd)
         setTimeout(() => {
-          applyVideoTextures(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).videos);
+          applyVideoTextures(
+            gltf.scene, 
+            emptyRefs.current, 
+            (config as DioramaConfig3DWithVideos).videos,
+            videoElementsRef // ✅ Passer la ref
+          );
         }, 200);
 
         setLoadingProgress(70);
@@ -623,6 +628,17 @@ function WebDioramaLoaderInner({
       // 2. ✅ STOP TOUS LES AUDIOS via le hook
       cleanupAudio();
       cleanupScenePlayer();
+
+      // 2.5. ✅ Stop vidéos
+      videoElementsRef.current.forEach(video => {
+        console.log("🎬 Stop vidéo:", video.src);
+        video.pause();
+        video.currentTime = 0;
+        video.src = '';
+        video.load();
+        video.remove();
+      });
+      videoElementsRef.current = [];
       
       // 3. ✅ STOP VIDEOS (avec bon typage)
       document.querySelectorAll('video').forEach((video) => {
