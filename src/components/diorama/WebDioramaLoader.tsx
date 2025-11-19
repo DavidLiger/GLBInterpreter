@@ -194,7 +194,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
         </div>
       )}
 
-      {!assetsReady && !showDownloadModal && (
+      {!assetsReady && !showDownloadModal && !checkingCache && !isInitializing && (
         <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
           <div className="text-center">
             <div className="text-6xl mb-6">📦</div>
