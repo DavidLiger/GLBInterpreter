@@ -52,7 +52,8 @@ const translations = {
     },
     reload: {
       sleep: "Mise en veille...",
-      preparing: "Préparation de la scène..."
+      preparing: "Préparation de la scène...",
+      optimizing: "Optimisation mémoire GPU"
     }
   },
   en: {
@@ -103,7 +104,8 @@ const translations = {
     },
     reload: {
       sleep: "Standby mode...",
-      preparing: "Preparing the stage..."
+      preparing: "Preparing the stage...",
+      optimizing: "GPU memory optimisation"
     }
   },
   es: {
@@ -154,7 +156,8 @@ const translations = {
     },
     reload: {
       sleep: "Modo de espera...",
-      preparing: "Preparación del escenario..."
+      preparing: "Preparación del escenario...",
+      optimizing: "Optimización de la memoria GPU"
     }
   }
 };
