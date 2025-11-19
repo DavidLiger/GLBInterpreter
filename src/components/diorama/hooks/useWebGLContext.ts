@@ -22,76 +22,133 @@ interface WebGLContextReturn {
  * - État d'erreur clair
  * - Cleanup propre
  */
-// Dans hooks/useWebGLContext.ts
-
 export function useWebGLContext(
   containerRef: React.RefObject<HTMLDivElement | null>,
-  options: WebGLContextOptions = {}
-) {
-  const [renderer, setRenderer] = useState<THREE.WebGLRenderer | null>(null);
-  const [error, setError] = useState<"lost" | "unsupported" | null>(null);
-  const [isReady, setIsReady] = useState(false);
+  options: UseWebGLContextOptions = {}
+): WebGLContextReturn {
+  const {
+    antialias = true,
+    powerPreference = 'high-performance',
+    isMobile = false,
+    onContextLost,
+    onContextRestored,
+  } = options;
 
-  useEffect(() => {
-    if (!containerRef.current) return;
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const [error, setError] = useState<'init' | 'lost' | null>(null);
+  const [isReady, setIsReady] = useState(false);
+  const hasInitializedRef = useRef(false);
+
+  const initRenderer = () => {
+    if (!containerRef.current || hasInitializedRef.current) return;
+
+    // ✅ AJOUT : Vérifier que le container a des dimensions valides
+    const width = containerRef.current.clientWidth;
+    const height = containerRef.current.clientHeight;
+    
+    if (width === 0 || height === 0) {
+      console.warn('⚠️ Container pas encore dimensionné, attente...');
+      return;
+    }
+
+    console.log('🎬 Init WebGL');
+
+    // Cleanup préventif
+    const existingCanvas = containerRef.current.querySelector('canvas');
+    if (existingCanvas) {
+      console.log('🧹 Suppression canvas existant');
+      existingCanvas.remove();
+    }
+
+    if (rendererRef.current) {
+      console.log('🧹 Dispose renderer existant');
+      try {
+        rendererRef.current.dispose();
+        rendererRef.current.forceContextLoss();
+      } catch (e) {
+        console.warn('Erreur dispose renderer:', e);
+      }
+      rendererRef.current = null;
+    }
 
     try {
-      console.log("🎬 Init WebGL");
-      
-      const canvas = document.createElement("canvas");
-      const gl = canvas.getContext("webgl2") || canvas.getContext("webgl");
-
-      if (!gl) {
-        console.error("❌ WebGL non supporté");
-        setError("unsupported");
-        return;
-      }
-
-      const newRenderer = new THREE.WebGLRenderer({
-        canvas,
-        antialias: !options.isMobile,
+      const renderer = new THREE.WebGLRenderer({
+        antialias: antialias && !isMobile,
+        powerPreference,
+        failIfMajorPerformanceCaveat: false,
+        preserveDrawingBuffer: false,
         alpha: false,
-        powerPreference: options.isMobile ? "low-power" : "high-performance",
-        stencil: false,
-        depth: true,
       });
 
-      newRenderer.setPixelRatio(Math.min(window.devicePixelRatio, options.isMobile ? 2 : 2));
-      containerRef.current.appendChild(newRenderer.domElement);
+      const pixelRatio = isMobile ? 1 : Math.min(window.devicePixelRatio, 2);
+      renderer.setPixelRatio(pixelRatio);
+      renderer.setSize(containerRef.current.clientWidth, containerRef.current.clientHeight);
 
-      // ✅ Gestion perte de contexte (juste logging)
-      newRenderer.domElement.addEventListener(
-        "webglcontextlost",
-        (event) => {
-          event.preventDefault();
-          console.log("❌ Contexte WebGL perdu");
-          setError("lost");
-          options.onContextLost?.();
+      containerRef.current.appendChild(renderer.domElement);
+      rendererRef.current = renderer;
+
+      console.log('✅ WebGL context créé');
+
+      // ✅ Handler de contexte perdu - SIMPLE
+      renderer.domElement.addEventListener(
+        'webglcontextlost',
+        (e) => {
+          e.preventDefault();
+          console.error('❌ Contexte WebGL perdu');
+          setError('lost');
+          setIsReady(false);
+          onContextLost?.();
         },
         { once: true }
       );
 
-      setRenderer(newRenderer);
+      setError(null);
       setIsReady(true);
-      console.log("✅ WebGL context créé");
-
+      hasInitializedRef.current = true;
     } catch (err) {
-      console.error("❌ Erreur init WebGL:", err);
-      setError("unsupported");
+      console.error('❌ Erreur initialisation WebGL:', err);
+      setError('init');
+      setIsReady(false);
     }
+  };
+
+  useEffect(() => {
+    // ✅ Petit délai pour s'assurer que le DOM est prêt
+    const timer = setTimeout(() => {
+      initRenderer();
+    }, 50);
 
     return () => {
-      if (renderer) {
-        renderer.dispose();
-        renderer.domElement?.remove();
+      clearTimeout(timer);
+      
+      if (rendererRef.current) {
+        try {
+          rendererRef.current.dispose();
+          rendererRef.current.forceContextLoss();
+        } catch (e) {
+          console.warn('Erreur cleanup renderer:', e);
+        }
+        rendererRef.current = null;
       }
+
+      const canvas = containerRef.current?.querySelector('canvas');
+      if (canvas) canvas.remove();
+
+      hasInitializedRef.current = false;
     };
-  }, [containerRef.current]);
+  }, []);
 
-  return { renderer, error, isReady };
-}
+  const retryInit = () => {
+    hasInitializedRef.current = false;
+    setError(null);
+    setIsReady(false);
+    initRenderer();
+  };
 
-interface WebGLContextOptions {
-  isMobile?: boolean;
-  onContextLost?: () => void;
+  return {
+    renderer: rendererRef.current,
+    error,
+    isReady,
+    retryInit,
+  };
 }

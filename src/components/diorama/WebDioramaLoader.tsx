@@ -189,7 +189,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
           <div className="text-white text-center">
             <div className="text-6xl mb-4 animate-pulse">🎬</div>
             <p className="text-xl">{t.reload?.preparing || "Préparation de la scène..."}</p>
-            <p className="text-sm text-gray-400 mt-2">{t.reload?.optimizing || "Optimisation mémoire GPU"}</p>
+            <p className="text-sm text-gray-400 mt-2">Optimisation mémoire GPU</p>
           </div>
         </div>
       )}
@@ -240,15 +240,12 @@ function WebDioramaLoaderInner({
   const composerRef = useRef<ReturnType<typeof setupPostProcessing> | null>(null);
   const voluntaryCleanupRef = useRef(false);
   const wasHiddenRef = useRef(false);
-  const pauseStartTimeRef = useRef<number | null>(null);
-  const cleanupTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const MAX_PAUSE_BEFORE_FULL_CLEANUP = 3 * 60 * 1000; 
   const textureLoader = useMemo(() => new THREE.TextureLoader(), []);
   const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
   );
 
-  // ✅ Modifiez le hook WebGL pour ajouter la restauration
+  // ✅ Hook WebGL simplifié
   const { renderer, error: webglError, isReady: webglReady } = useWebGLContext(containerRef, {
     isMobile: isMobileDevice,
     onContextLost: () => {
@@ -669,22 +666,27 @@ function WebDioramaLoaderInner({
     }
   }, [currentPOI, config.pois]);
 
-  // ✅ REMPLACEZ TOUT le useEffect de cleanup par cette version SIMPLE :
+  // ✅ Puis modifiez le useEffect de cleanup :
   useEffect(() => {
-    const performFullCleanup = () => {
-      console.log("🛑 Cleanup complet");
+    const performCleanup = () => {
+      console.log("🛑 Cleanup WebGL immédiat");
+      
+      // 0. Masquer l'UI immédiatement
       setIsHidden(true);
       
-      // Stop tout
+      // 1. Annuler RAF
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = undefined;
       }
       
+      // 2. ✅ STOP TOUS LES AUDIOS via le hook
       cleanupAudio();
       cleanupScenePlayer();
-      
+
+      // 2.5. ✅ Stop vidéos
       videoElementsRef.current.forEach(video => {
+        console.log("🎬 Stop vidéo:", video.src);
         video.pause();
         video.currentTime = 0;
         video.src = '';
@@ -693,75 +695,112 @@ function WebDioramaLoaderInner({
       });
       videoElementsRef.current = [];
       
+      // 3. ✅ STOP VIDEOS (avec bon typage)
+      document.querySelectorAll('video').forEach((video) => {
+        const videoEl = video as HTMLVideoElement;
+        videoEl.pause();
+        videoEl.currentTime = 0;
+        videoEl.src = '';
+        videoEl.load();
+      });
+      
+      // 4. Stop animations
       stopAllAnimations();
       Object.values(mixerRef.current).forEach(mixer => mixer.stopAllAction());
       
+      // 5. Dispose scene
       if (sceneRef.current) {
         disposeScene(sceneRef.current);
         sceneRef.current = null;
       }
       
-      // ✅ Cleanup renderer SANS forceContextLoss
+      // 6. Dispose renderer + FORCE CONTEXT LOSS
       if (renderer) {
         renderer.dispose();
-        // ❌ NE PAS appeler forceContextLoss() - laissez le browser gérer
+        renderer.forceContextLoss();
         renderer.domElement?.remove();
       }
       
+      // 7. Dispose composer
       if (composerRef.current) {
         composerRef.current.composer?.dispose();
         composerRef.current = null;
       }
       
+      // 8. Dispose controls
       if (controlsRef.current) {
         controlsRef.current.dispose();
         controlsRef.current = null;
       }
       
+      // 9. Reset refs
       cameraRef.current = null;
       emptyRefs.current = {};
       mixerRef.current = {};
       
-      console.log("✅ Cleanup terminé");
+      console.log("✅ Cleanup complet terminé");
     };
     
     const handleVisibilityChange = () => {
+      console.log("👁️ Visibility changed:", document.hidden ? "HIDDEN" : "VISIBLE");
+      
       if (document.hidden && !wasHiddenRef.current) {
-        console.log("🚨 Onglet caché → cleanup + attente");
+        console.log("🚨 Détection: onglet caché → cleanup");
         wasHiddenRef.current = true;
-        performFullCleanup();
-        
+        voluntaryCleanupRef.current = true;
+        performCleanup();
       } else if (!document.hidden && wasHiddenRef.current) {
-        console.log("🔄 Retour → Reload dans 100ms");
-        setTimeout(() => window.location.reload(), 100);
+        console.log("🔄 Détection: retour onglet → reload");
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
+      }
+    };
+
+    const handleFocus = () => {
+      console.log("👁️ Window focus");
+      if (wasHiddenRef.current) {
+        // ✅ Retour après blur → reload
+        console.log("🔄 Détection: retour focus → reload");
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
       }
     };
     
     const handleBlur = () => {
-      if (!wasHiddenRef.current && !document.hidden) {
-        console.log("👁️ Window blur (mais onglet visible) → cleanup");
+      console.log("👁️ Window blur");
+      if (!wasHiddenRef.current) {
         wasHiddenRef.current = true;
-        performFullCleanup();
+        voluntaryCleanupRef.current = true;
+        performCleanup();
       }
     };
     
-    const handleFocus = () => {
-      if (wasHiddenRef.current) {
-        console.log("👁️ Window focus → Reload");
-        setTimeout(() => window.location.reload(), 100);
+    const handlePageHide = () => {
+      console.log("👁️ Page hide");
+      if (!wasHiddenRef.current) {
+        wasHiddenRef.current = true;
+        voluntaryCleanupRef.current = true;
+        performCleanup();
       }
     };
+    
+    // console.log("🎬 Setup listeners - document.hidden:", document.hidden);
     
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("blur", handleBlur);
     window.addEventListener("focus", handleFocus);
+    window.addEventListener("pagehide", handlePageHide);
     
     return () => {
+      // console.log("🧹 Cleanup listeners");
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleBlur);
       window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("pagehide", handlePageHide);
     };
-  }, [renderer, stopAllAnimations, cleanupAudio, cleanupScenePlayer]);
+  }, [renderer, stopAllAnimations, ambientAudioRefs, cleanupAudio, cleanupScenePlayer]);
 
   // Auto-unmute reset
   useEffect(() => {
