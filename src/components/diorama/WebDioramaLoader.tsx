@@ -676,59 +676,45 @@ function WebDioramaLoaderInner({
     }
   }, [currentPOI, config.pois]);
 
-  // ✅ Remplacez tout le useEffect de cleanup par celui-ci :
+  // ✅ REMPLACEZ TOUT le useEffect de cleanup par cette version SIMPLE :
   useEffect(() => {
-    const performLightCleanup = () => {
-      console.log("⏸️ Cleanup LÉGER (pause)");
+    const performFullCleanup = () => {
+      console.log("🛑 Cleanup complet");
       setIsHidden(true);
       
-      // 1. Stop RAF
+      // Stop tout
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = undefined;
       }
       
-      // 2. Stop audios
       cleanupAudio();
       cleanupScenePlayer();
       
-      // 3. Stop vidéos
       videoElementsRef.current.forEach(video => {
         video.pause();
         video.currentTime = 0;
+        video.src = '';
+        video.load();
+        video.remove();
       });
+      videoElementsRef.current = [];
       
-      // 4. Pause animations (ne pas destroy)
+      stopAllAnimations();
       Object.values(mixerRef.current).forEach(mixer => mixer.stopAllAction());
-
-      // ✅ 5. SUPPRIMER LE CANVAS DU DOM (mais garder le renderer en mémoire)
-      if (renderer?.domElement?.parentNode) {
-        renderer.domElement.parentNode.removeChild(renderer.domElement);
-        console.log("🗑️ Canvas retiré du DOM");
-      }
       
-      console.log("✅ Pause légère terminée (contexte WebGL préservé)");
-    };
-    
-    const performFullCleanup = () => {
-      console.log("🛑 Cleanup COMPLET (arrière-plan prolongé)");
-      
-      performLightCleanup();
-      
-      // 5. Dispose scene
       if (sceneRef.current) {
         disposeScene(sceneRef.current);
         sceneRef.current = null;
       }
       
-      // 6. ✅ SEULEMENT ICI : Force context loss
+      // ✅ Cleanup renderer SANS forceContextLoss
       if (renderer) {
         renderer.dispose();
-        renderer.forceContextLoss();
+        // ❌ NE PAS appeler forceContextLoss() - laissez le browser gérer
         renderer.domElement?.remove();
       }
       
-      // 7. Dispose composer + controls
       if (composerRef.current) {
         composerRef.current.composer?.dispose();
         composerRef.current = null;
@@ -739,111 +725,37 @@ function WebDioramaLoaderInner({
         controlsRef.current = null;
       }
       
-      // 8. Reset refs
       cameraRef.current = null;
       emptyRefs.current = {};
       mixerRef.current = {};
       
-      console.log("✅ Cleanup complet terminé");
-    };
-    
-    const performResume = () => {
-      console.log("▶️ Resume");
-      setIsHidden(false);
-
-      // ✅ Remettre le canvas dans le DOM
-      if (renderer && containerRef.current && !renderer.domElement.parentNode) {
-        containerRef.current.appendChild(renderer.domElement);
-        console.log("✅ Canvas remis dans le DOM");
-      }
-      
-      // Relancer RAF si le renderer existe encore
-      if (!animationFrameRef.current && renderer && cameraRef.current && sceneRef.current) {
-        const animate = () => {
-          if (document.hidden) {
-            animationFrameRef.current = requestAnimationFrame(animate);
-            return;
-          }
-          
-          const delta = clock.current.getDelta();
-          updateMixers(delta);
-          controlsRef.current?.update();
-          
-          if (composerRef.current) {
-            composerRef.current.composer.render();
-          } else {
-            renderer.render(sceneRef.current!, cameraRef.current!);
-          }
-          
-          animationFrameRef.current = requestAnimationFrame(animate);
-        };
-        
-        animationFrameRef.current = requestAnimationFrame(animate);
-        console.log("✅ RAF relancé");
-      }
+      console.log("✅ Cleanup terminé");
     };
     
     const handleVisibilityChange = () => {
       if (document.hidden && !wasHiddenRef.current) {
-        console.log("🚨 Onglet caché → pause légère");
+        console.log("🚨 Onglet caché → cleanup + attente");
         wasHiddenRef.current = true;
-        pauseStartTimeRef.current = Date.now();
-        
-        performLightCleanup();
-        
-        cleanupTimeoutRef.current = setTimeout(() => {
-          if (document.hidden) {
-            console.log("⚠️ Arrière-plan > 3min → cleanup complet");
-            voluntaryCleanupRef.current = true;
-            performFullCleanup();
-          }
-        }, MAX_PAUSE_BEFORE_FULL_CLEANUP);
+        performFullCleanup();
         
       } else if (!document.hidden && wasHiddenRef.current) {
-        // ✅ ENLEVER L'OVERLAY IMMÉDIATEMENT au retour
-        setIsHidden(false);
-        
-        const pauseDuration = Date.now() - (pauseStartTimeRef.current || 0);
-        
-        if (cleanupTimeoutRef.current) {
-          clearTimeout(cleanupTimeoutRef.current);
-          cleanupTimeoutRef.current = null;
-        }
-        
-        if (voluntaryCleanupRef.current || pauseDuration > MAX_PAUSE_BEFORE_FULL_CLEANUP) {
-          console.log("🔄 Retour après cleanup complet → Reload");
-          setTimeout(() => window.location.reload(), 100);
-        } else if (renderer?.getContext().isContextLost?.()) {
-          console.log("⚠️ Contexte perdu → Attente restauration ou reload...");
-          
-          setTimeout(() => {
-            if (contextRestoredRef.current) {
-              console.log("✅ Contexte restauré → Pas besoin de reload");
-            } else {
-              console.log("❌ Pas de restauration → Reload manuel");
-              window.location.reload();
-            }
-          }, 2000);
-        } else {
-          console.log("✅ Retour rapide → Resume simple");
-          wasHiddenRef.current = false;
-          pauseStartTimeRef.current = null;
-          performResume();
-        }
+        console.log("🔄 Retour → Reload dans 100ms");
+        setTimeout(() => window.location.reload(), 100);
       }
     };
     
     const handleBlur = () => {
-      if (!wasHiddenRef.current) {
-        console.log("👁️ Window blur → pause légère");
-        handleVisibilityChange(); // Réutiliser la logique
+      if (!wasHiddenRef.current && !document.hidden) {
+        console.log("👁️ Window blur (mais onglet visible) → cleanup");
+        wasHiddenRef.current = true;
+        performFullCleanup();
       }
     };
     
     const handleFocus = () => {
-      if (wasHiddenRef.current && !document.hidden) {
-        console.log("👁️ Window focus → vérification resume");
-        handleVisibilityChange(); // Réutiliser la logique
+      if (wasHiddenRef.current) {
+        console.log("👁️ Window focus → Reload");
+        setTimeout(() => window.location.reload(), 100);
       }
     };
     
@@ -852,9 +764,6 @@ function WebDioramaLoaderInner({
     window.addEventListener("focus", handleFocus);
     
     return () => {
-      if (cleanupTimeoutRef.current) {
-        clearTimeout(cleanupTimeoutRef.current);
-      }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleBlur);
       window.removeEventListener("focus", handleFocus);
