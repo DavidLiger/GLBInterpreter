@@ -126,12 +126,14 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
       
       if (cached) {
         console.log("✅ Assets en cache, lancement direct");
-        setIsInitializing(true);
+        setCheckingCache(false);
+        setIsInitializing(true); // ✅ Afficher "Préparation..."
         
+        console.log("⏳ Pause 2s pour libérer mémoire...");
         setTimeout(() => {
+          console.log("✅ Mémoire libérée, lancement scène...");
           setAssetsReady(true);
-          setIsInitializing(false);
-          setCheckingCache(false);
+          setIsInitializing(false); // ✅ Masquer APRÈS
         }, 2000);
       } else {
         console.log("📦 Assets manquants, afficher modal");
@@ -150,11 +152,11 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
         <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
           <div className="text-white text-center">
             <div className="animate-spin text-4xl mb-4">⚙️</div>
-            <p>Vérification du cache...</p>
+            <p>{t.bookDownload.cacheChecking}</p>
           </div>
         </div>
       )}
-      
+
       {showDownloadModal && !assetsReady && (
         <BookDownloadModal
           bookId={bookId}
@@ -173,7 +175,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
             setTimeout(() => {
               console.log("✅ Mémoire libérée, lancement scène...");
               setAssetsReady(true);
-              setIsInitializing(false);
+              // setIsInitializing(false);
             }, 2000);
           }}
           onCancel={() => setShowDownloadModal(false)}
