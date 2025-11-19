@@ -31,6 +31,7 @@ interface BookAsset {
   url: string;
   type: 'glb' | 'video' | 'audio' | 'image';
   taskId: string;
+  size: number;
 }
 
 class DownloadManager {
@@ -51,16 +52,28 @@ class DownloadManager {
     });
   }
 
-  async checkStorageQuota(): Promise<{ available: number; used: number; quota: number }> {
-    if ('storage' in navigator && 'estimate' in navigator.storage) {
-      const estimate = await navigator.storage.estimate();
-      return {
-        available: (estimate.quota || 0) - (estimate.usage || 0),
-        used: estimate.usage || 0,
-        quota: estimate.quota || 0,
-      };
+  /**
+   * Vérifier le quota de stockage disponible
+   */
+  async checkStorageQuota(): Promise<{ quota: number; usage: number; available: number } | null> {
+    if (!('storage' in navigator && 'estimate' in navigator.storage)) {
+      console.warn("⚠️ Storage API non supportée");
+      return null;
     }
-    return { available: 50 * 1024 * 1024, used: 0, quota: 100 * 1024 * 1024 };
+
+    try {
+      const estimate = await navigator.storage.estimate();
+      const quota = estimate.quota || 0;
+      const usage = estimate.usage || 0;
+      const available = quota - usage;
+
+      console.log(`💾 Stockage: ${(available / 1024 / 1024).toFixed(0)} MB disponibles sur ${(quota / 1024 / 1024).toFixed(0)} MB`);
+
+      return { quota, usage, available };
+    } catch (err) {
+      console.error("❌ Erreur vérification stockage:", err);
+      return null;
+    }
   }
 
   async downloadAsset(
@@ -242,6 +255,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
           url: config.glb,
           type: 'glb',
           taskId: `${bookId}-${sceneId}-glb`,
+          size: 50 * 1024 * 1024, // ✅ Estimer (15 MB par exemple)
         });
       }
 
@@ -250,6 +264,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
           url: config.loaderImage,
           type: 'image',
           taskId: `${bookId}-${sceneId}-loader`,
+          size: 200 * 1024, // ✅ 200 KB
         });
       }
 
@@ -259,6 +274,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
             url: poi.icon,
             type: 'image',
             taskId: `${bookId}-${sceneId}-${poiPath}-icon`,
+            size: 50 * 1024, // ✅ 50 KB
           });
         }
 
@@ -267,6 +283,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
             url: poi.ambientSound,
             type: 'audio',
             taskId: `${bookId}-${sceneId}-${poiPath}-ambient`,
+            size: 2 * 1024 * 1024, // ✅ 2 MB
           });
         }
 
@@ -275,6 +292,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
             url: poi.sceneSound,
             type: 'audio',
             taskId: `${bookId}-${sceneId}-${poiPath}-scene`,
+            size: 3 * 1024 * 1024, // ✅ 3 MB
           });
         }
 
@@ -284,6 +302,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
               url: char.image,
               type: 'image',
               taskId: `${bookId}-${sceneId}-${poiPath}-char-${i}`,
+              size: 100 * 1024, // ✅ 100 KB
             });
           }
         });
@@ -293,6 +312,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
             url: poi.effects.particles.texture,
             type: 'image',
             taskId: `${bookId}-${sceneId}-${poiPath}-particle`,
+            size: 500 * 1024, // ✅ 500 KB
           });
         }
 
@@ -301,6 +321,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
             url: poi.effects.skybox.texture,
             type: 'image',
             taskId: `${bookId}-${sceneId}-${poiPath}-skybox`,
+            size: 2 * 1024 * 1024, // ✅ 2 MB
           });
         }
 
@@ -321,6 +342,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
             url: video.src,
             type: 'video',
             taskId: `${bookId}-${sceneId}-video-${i}`,
+            size: 20 * 1024 * 1024, // ✅ 20 MB
           });
         }
       });

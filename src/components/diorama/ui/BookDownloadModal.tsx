@@ -23,6 +23,8 @@ export default function BookDownloadModal({ bookId, onComplete, onCancel }: Book
   const [speed, setSpeed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [storageInfo, setStorageInfo] = useState<{available: number; quota: number} | null>(null);
+  const [totalSize, setTotalSize] = useState(0); // ✅ NOUVEAU
+  const [storageWarning, setStorageWarning] = useState<'low' | 'critical' | null>(null); // ✅ NOUVEAU
   const { t } = useTranslation();
 
   useEffect(() => {
@@ -36,25 +38,51 @@ export default function BookDownloadModal({ bookId, onComplete, onCancel }: Book
   }, [mounted, bookId]);
 
   const checkCache = async () => {
-    setChecking(true);
-    await downloadManager.init();
+      setChecking(true);
+      await downloadManager.init();
 
-    const storage = await downloadManager.checkStorageQuota();
-    setStorageInfo(storage);
+      // ✅ Vérifier stockage
+      const storage = await downloadManager.checkStorageQuota();
+      setStorageInfo(storage);
 
-    const cached = await isBookFullyCached(bookId);
-    
-    if (cached) {
-      console.log('✅ Livre déjà en cache complet');
-      onComplete();
+      const cached = await isBookFullyCached(bookId);
+      
+      if (cached) {
+        console.log('✅ Livre déjà en cache complet');
+        onComplete();
+        setChecking(false);
+        return;
+      }
+
+      // ✅ Calculer taille totale des assets manquants
+      const manifest = await getBookManifest(bookId);
+      let totalSizeBytes = 0;
+      
+      for (const asset of manifest) {
+        const isCached = await downloadManager.isAssetCached(asset.taskId);
+        if (!isCached) {
+          totalSizeBytes += asset.size;
+        }
+      }
+      
+      setTotalSize(totalSizeBytes);
+
+      // ✅ Comparer avec espace disponible
+      if (storage && totalSizeBytes > 0) {
+        const safetyMargin = 50 * 1024 * 1024; // 50 MB de marge
+        
+        if (totalSizeBytes + safetyMargin > storage.available) {
+          setStorageWarning('critical');
+          console.warn(`❌ Espace insuffisant: ${(totalSizeBytes / 1024 / 1024).toFixed(0)} MB requis, ${(storage.available / 1024 / 1024).toFixed(0)} MB dispo`);
+        } else if (totalSizeBytes + safetyMargin > storage.available * 0.8) {
+          setStorageWarning('low');
+          console.warn(`⚠️ Espace limité: ${(totalSizeBytes / 1024 / 1024).toFixed(0)} MB requis`);
+        }
+      }
+
+      setIsOpen(true);
       setChecking(false);
-      return;
-    }
-
-    // Assets manquants → afficher modale
-    setIsOpen(true);
-    setChecking(false);
-  };
+    };
 
   const startDownload = async () => {
     setDownloading(true);
@@ -158,20 +186,62 @@ export default function BookDownloadModal({ bookId, onComplete, onCancel }: Book
 
             {!downloading && !error && (
               <>
-                <p className="text-gray-300 mb-6">
+                <p className="text-gray-300 mb-4">
                   {t.bookDownload?.modalMessage}
                 </p>
 
+                {/* ✅ Infos de stockage */}
                 {storageInfo && (
-                  <div className="bg-gray-800 rounded-lg p-3 mb-6 text-sm text-gray-400">
-                    <p>{t.bookDownload?.storageInfo}{(storageInfo.available / 1024 / 1024).toFixed(0)} MB</p>
+                  <div className={`rounded-lg p-3 mb-4 text-sm ${
+                    storageWarning === 'critical' 
+                      ? 'bg-red-900/30 border border-red-500' 
+                      : storageWarning === 'low'
+                        ? 'bg-yellow-900/30 border border-yellow-500'
+                        : 'bg-gray-800 border border-gray-700'
+                  }`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      {storageWarning === 'critical' && <span className="text-xl">⚠️</span>}
+                      {storageWarning === 'low' && <span className="text-xl">💾</span>}
+                      {!storageWarning && <span className="text-xl">💾</span>}
+                      <p className={
+                        storageWarning === 'critical' 
+                          ? 'text-red-300 font-semibold' 
+                          : storageWarning === 'low'
+                            ? 'text-yellow-300'
+                            : 'text-gray-400'
+                      }>
+                        {t.bookDownload?.storageInfo}{(storageInfo.available / 1024 / 1024).toFixed(0)} MB
+                      </p>
+                    </div>
+                    
+                    <p className="text-gray-400 text-xs">
+                      {t.bookDownload?.requiredSpace || "Requis:"} {(totalSize / 1024 / 1024).toFixed(0)} MB
+                    </p>
+
+                    {/* ✅ Avertissement espace critique */}
+                    {storageWarning === 'critical' && (
+                      <p className="text-red-300 text-xs mt-2 font-medium">
+                        {t.bookDownload?.criticalStorage || "⚠️ Espace insuffisant ! Libérez de l'espace avant de continuer."}
+                      </p>
+                    )}
+                    
+                    {storageWarning === 'low' && (
+                      <p className="text-yellow-300 text-xs mt-2">
+                        {t.bookDownload?.lowStorage || "⚠️ Espace limité. Le téléchargement pourrait échouer."}
+                      </p>
+                    )}
                   </div>
                 )}
 
                 <div className="flex gap-3">
                   <button
                     onClick={startDownload}
-                    className="flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-3 rounded-full transition"
+                    disabled={storageWarning === 'critical'} // ✅ Bloquer si critique
+                    className={`flex-1 font-bold py-3 rounded-full transition ${
+                      storageWarning === 'critical'
+                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white'
+                    }`}
                   >
                     {t.bookDownload?.download}
                   </button>

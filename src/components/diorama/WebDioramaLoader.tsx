@@ -189,7 +189,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
           <div className="text-white text-center">
             <div className="text-6xl mb-4 animate-pulse">🎬</div>
             <p className="text-xl">{t.reload?.preparing || "Préparation de la scène..."}</p>
-            <p className="text-sm text-gray-400 mt-2">Optimisation mémoire GPU</p>
+            <p className="text-sm text-gray-400 mt-2">{t.reload?.optimizing || "Optimisation mémoire GPU"}</p>
           </div>
         </div>
       )}

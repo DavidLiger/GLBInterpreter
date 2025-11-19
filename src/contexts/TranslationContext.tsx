@@ -40,7 +40,10 @@ const translations = {
       downloading: "Téléchargement...",
       filesProgress: "fichiers",
       retry: "Réessayer",
-      close: "Fermer"
+      close: "Fermer",
+      requiredSpace: "Requis:",
+      criticalStorage: "⚠️ Espace insuffisant ! Libérez de l'espace avant de continuer.",
+      lowStorage: "⚠️ Espace limité. Le téléchargement pourrait échouer."
     },
     webglErrorScreen: {
       title: "Oups, tout le monde s'est endormi !",
@@ -92,7 +95,10 @@ const translations = {
       downloading: "Downloading...",
       filesProgress: "files",
       retry: "Try again",
-      close: "Close"
+      close: "Close",
+      requiredSpace: "Required:",
+      criticalStorage: "⚠️ Insufficient space! Free up some space before continuing.",
+      lowStorage: "⚠️ Limited space. Download may fail."
     },
     webglErrorScreen: {
       title: "Oops, everyone has fallen asleep!",
@@ -144,7 +150,10 @@ const translations = {
       downloading: "Descargando...",
       filesProgress: "archivos",
       retry: "Reintentar",
-      close: "Cerrar"
+      close: "Cerrar",
+      requiredSpace: "Obligatorio:",
+      criticalStorage: "⚠️ ¡Espacio insuficiente! Libere espacio antes de continuar.",
+      lowStorage: "⚠️ Espacio limitado. La descarga podría fallar."
     },
     webglErrorScreen: {
       title: "¡Vaya, todo el mundo se ha quedado dormido!",
