@@ -127,6 +127,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
       if (cached) {
         console.log("✅ Assets en cache, lancement direct");
         setCheckingCache(false);
+        setShowDownloadModal(false);
         setIsInitializing(true); // ✅ Afficher "Préparation..."
         
         console.log("⏳ Pause 2s pour libérer mémoire...");
@@ -175,7 +176,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
             setTimeout(() => {
               console.log("✅ Mémoire libérée, lancement scène...");
               setAssetsReady(true);
-              // setIsInitializing(false);
+              setIsInitializing(false);
             }, 2000);
           }}
           onCancel={() => setShowDownloadModal(false)}
@@ -187,7 +188,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
         <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
           <div className="text-white text-center">
             <div className="text-6xl mb-4 animate-pulse">🎬</div>
-            <p className="text-xl">Préparation de la scène...</p>
+            <p className="text-xl">{t.reload?.preparing || "Préparation de la scène..."}</p>
             <p className="text-sm text-gray-400 mt-2">Optimisation mémoire GPU</p>
           </div>
         </div>

@@ -51,7 +51,8 @@ const translations = {
       technicalNote : "💡 Si le problème persiste, fermez complètement l'onglet puis fermer le navigateur et rouvrez le lien"
     },
     reload: {
-      sleep: "Mise en veille..."
+      sleep: "Mise en veille...",
+      preparing: "Préparation de la scène..."
     }
   },
   en: {
@@ -101,7 +102,8 @@ const translations = {
       technicalNote : "💡 If the problem persists, close the tab completely, then close the browser and reopen the link."
     },
     reload: {
-      sleep: "Standby mode..."
+      sleep: "Standby mode...",
+      preparing: "Preparing the stage..."
     }
   },
   es: {
@@ -151,7 +153,8 @@ const translations = {
       technicalNote : "💡 Si el problema persiste, cierre completamente la pestaña, cierre el navegador y vuelva a abrir el enlace."
     },
     reload: {
-      sleep: "Modo de espera..."
+      sleep: "Modo de espera...",
+      preparing: "Preparación del escenario..."
     }
   }
 };
