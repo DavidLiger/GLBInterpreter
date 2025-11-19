@@ -40,6 +40,7 @@ import { useWebGLContext } from "./hooks/useWebGLContext";
 // import { useAssetPreloader } from "./hooks/useAssetPreloader";
 import { disposeScene, logSceneStats } from "./utils/webglHelpers";
 import BookDownloadModal from "./ui/BookDownloadModal";
+import { isBookFullyCached } from "./lib/downloadManager";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -117,9 +118,43 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   const [assetsReady, setAssetsReady] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(true);
   const [isInitializing, setIsInitializing] = useState(false);  // ✅ NOUVEAU
+  const [checkingCache, setCheckingCache] = useState(true);
+
+  useEffect(() => {
+    const checkCacheStatus = async () => {
+      const cached = await isBookFullyCached(bookId);
+      
+      if (cached) {
+        console.log("✅ Assets en cache, lancement direct");
+        setIsInitializing(true);
+        
+        setTimeout(() => {
+          setAssetsReady(true);
+          setIsInitializing(false);
+          setCheckingCache(false);
+        }, 2000);
+      } else {
+        console.log("📦 Assets manquants, afficher modal");
+        setShowDownloadModal(true);
+        setCheckingCache(false);
+      }
+    };
+    
+    checkCacheStatus();
+  }, [bookId]);
 
   return (
     <>
+      {/* ✅ Écran de vérification cache */}
+      {checkingCache && (
+        <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+          <div className="text-white text-center">
+            <div className="animate-spin text-4xl mb-4">⚙️</div>
+            <p>Vérification du cache...</p>
+          </div>
+        </div>
+      )}
+      
       {showDownloadModal && !assetsReady && (
         <BookDownloadModal
           bookId={bookId}
