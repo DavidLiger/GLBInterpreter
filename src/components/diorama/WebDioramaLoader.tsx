@@ -184,7 +184,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
       )}
 
       {/* ✅ Écran de transition */}
-      {isInitializing && (
+      {isInitializing && !assetsReady && (
         <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
           <div className="text-white text-center">
             <div className="text-6xl mb-4 animate-pulse">🎬</div>
