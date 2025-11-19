@@ -176,7 +176,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
             setTimeout(() => {
               console.log("✅ Mémoire libérée, lancement scène...");
               setAssetsReady(true);
-              setIsInitializing(false);
+              // setIsInitializing(false);
             }, 2000);
           }}
           onCancel={() => setShowDownloadModal(false)}
