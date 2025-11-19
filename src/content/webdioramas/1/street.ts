@@ -11,7 +11,6 @@ export const street: DioramaConfig3DWithPostProcessing = {
     testDuration: 10000,
     minFPS: 25,
     minGPUTier: 1,
-    skipIfPreviouslyTested: true
   },
   name: {
     fr: "La place du village",

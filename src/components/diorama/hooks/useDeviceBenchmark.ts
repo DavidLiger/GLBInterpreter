@@ -301,14 +301,6 @@ export function useDeviceBenchmark(config: BenchmarkConfig, callbacks?: Benchmar
       
       setResult(result);
       
-      // Sauvegarder dans localStorage
-      if (passed) {
-        localStorage.setItem('device-benchmark-passed', JSON.stringify({
-          date: new Date().toISOString(),
-          result,
-        }));
-      }
-      
     } catch (error) {
       console.error('❌ Benchmark error:', error);
       setResult({

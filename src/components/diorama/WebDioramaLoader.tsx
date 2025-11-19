@@ -123,29 +123,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   const [checkingCache, setCheckingCache] = useState(true);
   
   const [showDeviceTester, setShowDeviceTester] = useState(() => {
-  // ✅ Initialisation intelligente
-  const deviceTesterConfig = (config as any).deviceTester;
-    if (!deviceTesterConfig?.enabled) return false;
-    
-    // Vérifier cache si skipIfPreviouslyTested
-    if (deviceTesterConfig.skipIfPreviouslyTested) {
-      const cached = localStorage.getItem('device-benchmark-passed');
-      if (cached) {
-        try {
-          const data = JSON.parse(cached);
-          const testDate = new Date(data.date);
-          const daysSince = (Date.now() - testDate.getTime()) / (1000 * 60 * 60 * 24);
-          if (daysSince < 30) {
-            console.log('✅ Test déjà passé il y a', daysSince.toFixed(0), 'jours');
-            return false; // Ne pas montrer le tester
-          }
-        } catch (e) {
-          console.warn('Cache benchmark invalide');
-        }
-      }
-    }
-    
-    return true; // Montrer le tester
+    return (config as any).deviceTester?.enabled || false;
   });
 
   const [deviceTestPassed, setDeviceTestPassed] = useState(false);

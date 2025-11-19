@@ -126,16 +126,16 @@ const translations = {
       optimizing: "GPU memory optimisation"
     },
     deviceTester: {
-      title: "Test de compatibilité",
-      description: "Vérifions que votre appareil peut faire tourner l'application correctement. Ce test prend environ 10 secondes.",
-      start: "Démarrer le test",
-      skip: "Passer",
-      testing: "Test en cours...",
-      resultPassed: "Appareil compatible !",
-      resultFailed: "Performances limitées",
-      continue: "Continuer",
-      continueAnyway: "Continuer quand même",
-      warningMessage: "L'expérience pourrait être dégradée sur cet appareil.",
+      title: "Compatibility test",
+      description: "Let us verify that your device can run the application correctly. This test takes approximately 10 seconds.",
+      start: "Start the test",
+      skip: "Pass",
+      testing: "Testing in progress...",
+      resultPassed: "Compatible device!",
+      resultFailed: "Limited performance",
+      continue: "Continue",
+      continueAnyway: "Keep going anyway",
+      warningMessage: "The experience may be degraded on this device.",
     }
   },
   es: {
@@ -193,16 +193,16 @@ const translations = {
       optimizing: "Optimización de la memoria GPU"
     },
     deviceTester: {
-      title: "Test de compatibilité",
-      description: "Vérifions que votre appareil peut faire tourner l'application correctement. Ce test prend environ 10 secondes.",
-      start: "Démarrer le test",
-      skip: "Passer",
-      testing: "Test en cours...",
-      resultPassed: "Appareil compatible !",
-      resultFailed: "Performances limitées",
-      continue: "Continuer",
-      continueAnyway: "Continuer quand même",
-      warningMessage: "L'expérience pourrait être dégradée sur cet appareil.",
+      title: "Prueba de compatibilidad",
+      description: "Comprobemos que tu dispositivo puede ejecutar la aplicación correctamente. Esta prueba dura unos 10 segundos.",
+      start: "Iniciar la prueba",
+      skip: "Pasar",
+      testing: "Prueba en curso...",
+      resultPassed: "¡Dispositivo compatible!",
+      resultFailed: "Rendimiento limitado",
+      continue: "Continuar",
+      continueAnyway: "Continuar de todos modos",
+      warningMessage: "La experiencia podría verse afectada en este dispositivo.",
     }
   }
 };

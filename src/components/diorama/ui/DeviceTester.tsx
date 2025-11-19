@@ -13,7 +13,6 @@ interface DeviceTesterProps {
     testDuration: number;
     minFPS: number;
     minGPUTier: number;
-    skipIfPreviouslyTested?: boolean;
   };
   onComplete: (passed: boolean) => void;
   onSkip: () => void;
@@ -433,6 +432,26 @@ export default function DeviceTester({ glbUrl, config, onComplete, onSkip }: Dev
 
                 {/* Actions */}
                 <div className="flex gap-3 sm:gap-4">
+                  <button
+                    onClick={() => {
+                      console.log('🔄 Refaire le test');
+                      setPhase('intro');
+                      // Reset tous les états
+                      setSceneReady(false);
+                      setTestSteps({
+                        gpu: 'pending',
+                        capabilities: 'pending',
+                        memory: 'pending',
+                        fps: 'pending',
+                      });
+                      setGpuName('');
+                      hasStartedTestRef.current = false;
+                    }}
+                    className="flex-1 px-4 sm:px-6 py-2 sm:py-3 bg-gray-700 hover:bg-gray-600 text-white text-sm sm:text-base font-bold rounded-full transition"
+                  >
+                    🔄 Refaire le test
+                  </button>
+                  
                   <button
                     onClick={() => {
                       console.log('✅ Clic continuer, passed:', result.passed);
