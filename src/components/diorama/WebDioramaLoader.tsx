@@ -42,6 +42,7 @@ import { disposeScene, logSceneStats } from "./utils/webglHelpers";
 import BookDownloadModal from "./ui/BookDownloadModal";
 import { isBookFullyCached } from "./lib/downloadManager";
 import useUnifiedAudio from "./hooks/useUnifiedAudio";
+import DeviceTester from "./ui/DeviceTester";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -120,6 +121,49 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   const [showDownloadModal, setShowDownloadModal] = useState(true);
   const [isInitializing, setIsInitializing] = useState(false);  // ✅ NOUVEAU
   const [checkingCache, setCheckingCache] = useState(true);
+  
+  const [showDeviceTester, setShowDeviceTester] = useState(() => {
+  // ✅ Initialisation intelligente
+  const deviceTesterConfig = (config as any).deviceTester;
+    if (!deviceTesterConfig?.enabled) return false;
+    
+    // Vérifier cache si skipIfPreviouslyTested
+    if (deviceTesterConfig.skipIfPreviouslyTested) {
+      const cached = localStorage.getItem('device-benchmark-passed');
+      if (cached) {
+        try {
+          const data = JSON.parse(cached);
+          const testDate = new Date(data.date);
+          const daysSince = (Date.now() - testDate.getTime()) / (1000 * 60 * 60 * 24);
+          if (daysSince < 30) {
+            console.log('✅ Test déjà passé il y a', daysSince.toFixed(0), 'jours');
+            return false; // Ne pas montrer le tester
+          }
+        } catch (e) {
+          console.warn('Cache benchmark invalide');
+        }
+      }
+    }
+    
+    return true; // Montrer le tester
+  });
+
+  const [deviceTestPassed, setDeviceTestPassed] = useState(false);
+
+  useEffect(() => {
+  // ✅ Force le test en dev avec Ctrl+Shift+T
+  const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === 'P' && process.env.NODE_ENV === 'development') {
+        console.log('🔍 Force device test');
+        localStorage.removeItem('device-benchmark-passed');
+        setShowDeviceTester(true);
+        setDeviceTestPassed(false);
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     const checkCacheStatus = async () => {
@@ -159,60 +203,91 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
         </div>
       )}
 
-      {showDownloadModal && !assetsReady && (
-        <BookDownloadModal
-          bookId={bookId}
-          onComplete={() => {
-            setShowDownloadModal(false);
-            setIsInitializing(true); // ✅ État intermédiaire
-            
-            console.log("⏳ Pause 2s pour libérer mémoire...");
-            
-            // ✅ Forcer garbage collection (si disponible)
-            if (typeof window !== 'undefined' && (window as any).gc) {
-              (window as any).gc();
-            }
-            
-            // ✅ Délai avant de lancer la scène 3D
-            setTimeout(() => {
-              console.log("✅ Mémoire libérée, lancement scène...");
-              setAssetsReady(true);
-              // setIsInitializing(false);
-            }, 2000);
+      {/* ✅ Device Tester EN PREMIER, bloque tout */}
+      {showDeviceTester && (config as any).deviceTester && (
+        <DeviceTester
+          glbUrl={config.glb}
+          config={(config as any).deviceTester}
+          onComplete={(passed) => {
+            console.log('✅ Test terminé, résultat:', passed);
+            setDeviceTestPassed(true);
+            setShowDeviceTester(false);
           }}
-          onCancel={() => setShowDownloadModal(false)}
+          onSkip={() => {
+            console.log('⏭️ Test skippé');
+            setDeviceTestPassed(true);
+            setShowDeviceTester(false);
+          }}
         />
       )}
 
-      {/* ✅ Écran de transition */}
-      {isInitializing && !assetsReady && (
-        <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-          <div className="text-white text-center">
-            <div className="text-6xl mb-4 animate-pulse">🎬</div>
-            <p className="text-xl">{t.reload?.preparing || "Préparation de la scène..."}</p>
-            <p className="text-sm text-gray-400 mt-2">{t.reload?.optimizing || "Optimisation mémoire GPU"}</p>
-          </div>
-        </div>
+      {/* ✅ Le reste seulement si pas de device tester */}
+      {!showDeviceTester && (
+        <>
+          {checkingCache && (
+            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+              {/* ... */}
+            </div>
+          )}
+
+          {showDownloadModal && !assetsReady && (
+            <BookDownloadModal
+              bookId={bookId}
+              onComplete={() => {
+                setShowDownloadModal(false);
+                setIsInitializing(true); // ✅ État intermédiaire
+                
+                console.log("⏳ Pause 2s pour libérer mémoire...");
+                
+                // ✅ Forcer garbage collection (si disponible)
+                if (typeof window !== 'undefined' && (window as any).gc) {
+                  (window as any).gc();
+                }
+                
+                // ✅ Délai avant de lancer la scène 3D
+                setTimeout(() => {
+                  console.log("✅ Mémoire libérée, lancement scène...");
+                  setAssetsReady(true);
+                  // setIsInitializing(false);
+                }, 2000);
+              }}
+              onCancel={() => setShowDownloadModal(false)}
+            />
+          )}
+
+          {/* ✅ Écran de transition */}
+          {isInitializing && !assetsReady && (
+            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+              <div className="text-white text-center">
+                <div className="text-6xl mb-4 animate-pulse">🎬</div>
+                <p className="text-xl">{t.reload?.preparing || "Préparation de la scène..."}</p>
+                <p className="text-sm text-gray-400 mt-2">{t.reload?.optimizing || "Optimisation mémoire GPU"}</p>
+              </div>
+            </div>
+          )}
+
+          {!assetsReady && !showDownloadModal && !checkingCache && !isInitializing && (
+            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+              <div className="text-center">
+                <div className="text-6xl mb-6">📦</div>
+                <h2 className="text-white text-xl mb-6">
+                  {t.bookDownload?.required || "Téléchargement requis"}
+                </h2>
+                <button
+                  onClick={() => setShowDownloadModal(true)}
+                  className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transition"
+                >
+                  📥 {t.bookDownload?.download || "Télécharger"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {assetsReady && <WebDioramaLoaderInner config={config} bookId={bookId} />}
+        </>
       )}
 
-      {!assetsReady && !showDownloadModal && !checkingCache && !isInitializing && (
-        <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-          <div className="text-center">
-            <div className="text-6xl mb-6">📦</div>
-            <h2 className="text-white text-xl mb-6">
-              {t.bookDownload?.required || "Téléchargement requis"}
-            </h2>
-            <button
-              onClick={() => setShowDownloadModal(true)}
-              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transition"
-            >
-              📥 {t.bookDownload?.download || "Télécharger"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {assetsReady && <WebDioramaLoaderInner config={config} bookId={bookId} />}
+      
     </>
   );
 }
@@ -913,154 +988,158 @@ function WebDioramaLoaderInner({
       }}
       className="bg-black"
     >
-      {/* ✅ Overlay de masquage quand en arrière-plan */}
-      {isHidden && (
-        <div className="fixed inset-0 bg-black z-[10000] flex items-center justify-center">
-          <div className="text-white text-center">
-            <div className="text-6xl mb-4 animate-pulse">💤</div>
-            <p className="text-xl">{t.reload.sleep}</p>
-          </div>
-        </div>
-      )}
-      <AnimatePresence>
-        {showLoaderOverlay && (
-          <LoaderOverlay
-            isPortrait={isPortrait}
-            isMobile={isMobile}
-            loadingProgress={loadingProgress}
-            isLoaded={isLoaded}
-            sceneName={config.name[lang]}
-            loaderImage={config.loaderImage}
-            fontClassName={BullstandRegular.className}
-            autoplay={autoplay}
-            bookId={bookId}
-            // assetLoadingStatus={
-            //   currentAsset 
-            //     ? `${currentAsset.type} : ${currentAsset.name}` 
-            //     : loadingProgress < 70 
-            //       ? "Chargement de la scène 3D..." 
-            //       : loadingProgress < 100 
-            //         ? `Chargement des assets (${loadedCount}/${totalCount})...`
-            //         : ""
-            // }
-            onStart={() => {
-              window.scrollTo(0, 0);
-
-              // ✅ Activer audio
-              enableAudio();
-
-              // ✅ Procéder selon le mode
-              if (autoplay) {
-                console.log("🎬 Mode autoplay : lancement scène");
-                if (!isFullscreen) toggleFullscreen();
-                if (!isPlaying) togglePlayPause(); // Lance scène + sceneSound
-                setShowLoaderOverlay(false);
-              } else {
-                console.log("🎵 Mode normal : activation ambient");
-                if (!isFullscreen) toggleFullscreen();
-                if (muted) toggleMute(); // Active ambient
-                setShowLoaderOverlay(false);
-              }
-            }}
-          />
-        )}
-      </AnimatePresence>
-
-      {showRotateHint && <RotateHint show={true} />}
-
-      <DownloadTooltip bookId={bookId} isPortrait={isPortrait} variant="scene" />
-
-      <div className="absolute top-2 right-2 z-50 flex flex-row gap-2 items-end">
-        <InfoButton onClick={() => setShowInfoModal(true)} />
-      </div>
-
-      <div className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end">
-        {currentPoi && currentPoi.dialogue && (
-          <DialogueButton visible={showDialogue} onToggle={() => setShowDialogue((v) => !v)} />
-        )}
-        <AnimatePresence>
-          {startSoundReady && (
-            <SoundButton muted={muted} onToggle={toggleMute} />
+      {/* ✅ Overlay de masquage */}
+          {isHidden && (
+            <div className="fixed inset-0 bg-black z-[10000] flex items-center justify-center">
+              <div className="text-white text-center">
+                <div className="text-6xl mb-4 animate-pulse">💤</div>
+                <p className="text-xl">{t.reload.sleep}</p>
+              </div>
+            </div>
           )}
-        </AnimatePresence>
-        <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
-      </div>
 
-      <POIBreadcrumbs
-        currentPOI={currentPOI}
-        goToPOI={goToPOI}
-        findPOIRecursively={findPOIRecursively}
-        findParentPOI={findParentPOI}
-        configPOIs={config.pois}
-        isPortrait={isPortrait}
-        viewportHeight={viewportHeight}
-      />
+          {/* LoaderOverlay et le reste... */}
+          <AnimatePresence>
+            {showLoaderOverlay && (
+              <LoaderOverlay
+                isPortrait={isPortrait}
+                isMobile={isMobile}
+                loadingProgress={loadingProgress}
+                isLoaded={isLoaded}
+                sceneName={config.name[lang]}
+                loaderImage={config.loaderImage}
+                fontClassName={BullstandRegular.className}
+                autoplay={autoplay}
+                bookId={bookId}
+                // assetLoadingStatus={
+                //   currentAsset 
+                //     ? `${currentAsset.type} : ${currentAsset.name}` 
+                //     : loadingProgress < 70 
+                //       ? "Chargement de la scène 3D..." 
+                //       : loadingProgress < 100 
+                //         ? `Chargement des assets (${loadedCount}/${totalCount})...`
+                //         : ""
+                // }
+                onStart={() => {
+                  window.scrollTo(0, 0);
 
-      {process.env.NODE_ENV === "development" && composerRef.current && (
-        <PostProcessingControls
-          composer={composerRef.current}
-          onUpdate={(type, values) => {
-            if (!composerRef.current) return;
-            if (type === "bloom")
-              composerRef.current.updateBloom(values.strength, values.radius, values.threshold);
-            if (type === "ssao")
-              composerRef.current.updateSSAO(values.kernelRadius, values.minDistance);
-            if (type === "dof") {
-              if ("enabled" in values) composerRef.current.enableDOF(values.enabled);
-              else composerRef.current.updateDOF(values.focus, values.aperture, values.maxblur);
-            }
-            if (type === "toneMapping")
-              composerRef.current?.updateToneMapping(values.type, values.exposure);
-          }}
-        />
-      )}
+                  // ✅ Activer audio
+                  enableAudio();
 
-      {process.env.NODE_ENV === "development" && (
-        <ConfigConverterTool
-          defaultProxyUrl="https://webdiorama-proxy.david-liger-pro.workers.dev/assets/1"
-          defaultSceneId="street"
-        />
-      )}
+                  // ✅ Procéder selon le mode
+                  if (autoplay) {
+                    console.log("🎬 Mode autoplay : lancement scène");
+                    if (!isFullscreen) toggleFullscreen();
+                    if (!isPlaying) togglePlayPause(); // Lance scène + sceneSound
+                    setShowLoaderOverlay(false);
+                  } else {
+                    console.log("🎵 Mode normal : activation ambient");
+                    if (!isFullscreen) toggleFullscreen();
+                    if (muted) toggleMute(); // Active ambient
+                    setShowLoaderOverlay(false);
+                  }
+                }}
+              />
+            )}
+          </AnimatePresence>
 
-      {process.env.NODE_ENV === "development" && <QRCodeModal />}
+          {showRotateHint && <RotateHint show={true} />}
+
+          <DownloadTooltip bookId={bookId} isPortrait={isPortrait} variant="scene" />
+
+          <div className="absolute top-2 right-2 z-50 flex flex-row gap-2 items-end">
+            <InfoButton onClick={() => setShowInfoModal(true)} />
+          </div>
+
+          <div className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end">
+            {currentPoi && currentPoi.dialogue && (
+              <DialogueButton visible={showDialogue} onToggle={() => setShowDialogue((v) => !v)} />
+            )}
+            <AnimatePresence>
+              {startSoundReady && (
+                <SoundButton muted={muted} onToggle={toggleMute} />
+              )}
+            </AnimatePresence>
+            <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
+          </div>
+
+          <POIBreadcrumbs
+            currentPOI={currentPOI}
+            goToPOI={goToPOI}
+            findPOIRecursively={findPOIRecursively}
+            findParentPOI={findParentPOI}
+            configPOIs={config.pois}
+            isPortrait={isPortrait}
+            viewportHeight={viewportHeight}
+          />
+
+          {process.env.NODE_ENV === "development" && composerRef.current && (
+            <PostProcessingControls
+              composer={composerRef.current}
+              onUpdate={(type, values) => {
+                if (!composerRef.current) return;
+                if (type === "bloom")
+                  composerRef.current.updateBloom(values.strength, values.radius, values.threshold);
+                if (type === "ssao")
+                  composerRef.current.updateSSAO(values.kernelRadius, values.minDistance);
+                if (type === "dof") {
+                  if ("enabled" in values) composerRef.current.enableDOF(values.enabled);
+                  else composerRef.current.updateDOF(values.focus, values.aperture, values.maxblur);
+                }
+                if (type === "toneMapping")
+                  composerRef.current?.updateToneMapping(values.type, values.exposure);
+              }}
+            />
+          )}
+
+          {process.env.NODE_ENV === "development" && (
+            <ConfigConverterTool
+              defaultProxyUrl="https://webdiorama-proxy.david-liger-pro.workers.dev/assets/1"
+              defaultSceneId="street"
+            />
+          )}
+
+          {process.env.NODE_ENV === "development" && <QRCodeModal />}
 
 
-      {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
-        <POIPlayer
-          isPlaying={isPlaying}
-          isPaused={isPaused}
-          isEnded={isEnded}
-          progress={progress}
-          duration={duration}
-          onTogglePlayPause={() => {
-            // ✅ Si on reprend après un seek, synchroniser l'audio
-            if (!isPlaying && !isPaused && isEnded) {
-              // Replay : sync audio au temps actuel (progress)
-              seekSceneAudio(progress);
-            }
-            togglePlayPause();
-          }}
-          onSeek={(time) => {
-            seekScene(time); // Sync animation
-            seekSceneAudio(time); // ✅ Sync audio
-          }}
-          onStop={stopScene}
-          isPortrait={isPortrait}
-        />
-      )}
+          {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
+            <POIPlayer
+              isPlaying={isPlaying}
+              isPaused={isPaused}
+              isEnded={isEnded}
+              progress={progress}
+              duration={duration}
+              onTogglePlayPause={() => {
+                // ✅ Si on reprend après un seek, synchroniser l'audio
+                if (!isPlaying && !isPaused && isEnded) {
+                  // Replay : sync audio au temps actuel (progress)
+                  seekSceneAudio(progress);
+                }
+                togglePlayPause();
+              }}
+              onSeek={(time) => {
+                seekScene(time); // Sync animation
+                seekSceneAudio(time); // ✅ Sync audio
+              }}
+              onStop={stopScene}
+              isPortrait={isPortrait}
+            />
+          )}
 
-      {currentPoi && currentPoi.dialogue && showDialogue && (
-        <DialogueModal 
-          dialogue={currentPoi.dialogue} progress={progress} isPlaying={isPlaying} isPortrait={isPortrait} />
-      )}
+          {currentPoi && currentPoi.dialogue && showDialogue && (
+            <DialogueModal 
+              dialogue={currentPoi.dialogue} progress={progress} isPlaying={isPlaying} isPortrait={isPortrait} />
+          )}
 
-      <InfoModal
-        show={showInfoModal}
-        onClose={() => setShowInfoModal(false)}
-        credits={config.credits}
-        isMobile={useTouchIcons}
-        poiIcon={activePOIIcon}
-      />
+          <InfoModal
+            show={showInfoModal}
+            onClose={() => setShowInfoModal(false)}
+            credits={config.credits}
+            isMobile={useTouchIcons}
+            poiIcon={activePOIIcon}
+          />
+
+          {/* Reste de votre UI (RotateHint, InfoButton, etc.) */}
     </div>
   );
 }

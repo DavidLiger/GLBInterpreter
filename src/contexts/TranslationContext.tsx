@@ -57,6 +57,18 @@ const translations = {
       sleep: "Mise en veille...",
       preparing: "Préparation de la scène...",
       optimizing: "Optimisation mémoire GPU"
+    },
+    deviceTester: {
+      title: "Test de compatibilité",
+      description: "Vérifions que votre appareil peut faire tourner l'application correctement. Ce test prend environ 10 secondes.",
+      start: "Démarrer le test",
+      skip: "Passer",
+      testing: "Test en cours...",
+      resultPassed: "Appareil compatible !",
+      resultFailed: "Performances limitées",
+      continue: "Continuer",
+      continueAnyway: "Continuer quand même",
+      warningMessage: "L'expérience pourrait être dégradée sur cet appareil.",
     }
   },
   en: {
@@ -112,6 +124,18 @@ const translations = {
       sleep: "Standby mode...",
       preparing: "Preparing the stage...",
       optimizing: "GPU memory optimisation"
+    },
+    deviceTester: {
+      title: "Test de compatibilité",
+      description: "Vérifions que votre appareil peut faire tourner l'application correctement. Ce test prend environ 10 secondes.",
+      start: "Démarrer le test",
+      skip: "Passer",
+      testing: "Test en cours...",
+      resultPassed: "Appareil compatible !",
+      resultFailed: "Performances limitées",
+      continue: "Continuer",
+      continueAnyway: "Continuer quand même",
+      warningMessage: "L'expérience pourrait être dégradée sur cet appareil.",
     }
   },
   es: {
@@ -167,6 +191,18 @@ const translations = {
       sleep: "Modo de espera...",
       preparing: "Preparación del escenario...",
       optimizing: "Optimización de la memoria GPU"
+    },
+    deviceTester: {
+      title: "Test de compatibilité",
+      description: "Vérifions que votre appareil peut faire tourner l'application correctement. Ce test prend environ 10 secondes.",
+      start: "Démarrer le test",
+      skip: "Passer",
+      testing: "Test en cours...",
+      resultPassed: "Appareil compatible !",
+      resultFailed: "Performances limitées",
+      continue: "Continuer",
+      continueAnyway: "Continuer quand même",
+      warningMessage: "L'expérience pourrait être dégradée sur cet appareil.",
     }
   }
 };
