@@ -116,15 +116,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   const { t } = useTranslation(); // ✅ Maintenant c'est OK !
   const [assetsReady, setAssetsReady] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(true);
-  const [configWithCache, setConfigWithCache] = useState<DioramaConfig3D | null>(null); // ✅ NOUVEAU
-
-  // ✅ RÉCUPÉRER dioramaId depuis l'URL
-  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
-  const dioramaId = pathname.split('/')[3] || 'street';
-
-  const assetsToDownload = useMemo(() => {
-    // ... votre code
-  }, [config, bookId]);
+  const [isInitializing, setIsInitializing] = useState(false);  // ✅ NOUVEAU
 
   return (
     <>
@@ -132,11 +124,36 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
         <BookDownloadModal
           bookId={bookId}
           onComplete={() => {
-            setAssetsReady(true);
             setShowDownloadModal(false);
+            setIsInitializing(true); // ✅ État intermédiaire
+            
+            console.log("⏳ Pause 2s pour libérer mémoire...");
+            
+            // ✅ Forcer garbage collection (si disponible)
+            if (typeof window !== 'undefined' && (window as any).gc) {
+              (window as any).gc();
+            }
+            
+            // ✅ Délai avant de lancer la scène 3D
+            setTimeout(() => {
+              console.log("✅ Mémoire libérée, lancement scène...");
+              setAssetsReady(true);
+              setIsInitializing(false);
+            }, 2000);
           }}
           onCancel={() => setShowDownloadModal(false)}
         />
+      )}
+
+      {/* ✅ Écran de transition */}
+      {isInitializing && (
+        <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+          <div className="text-white text-center">
+            <div className="text-6xl mb-4 animate-pulse">🎬</div>
+            <p className="text-xl">Préparation de la scène...</p>
+            <p className="text-sm text-gray-400 mt-2">Optimisation mémoire GPU</p>
+          </div>
+        </div>
       )}
 
       {!assetsReady && !showDownloadModal && (
@@ -496,7 +513,7 @@ function WebDioramaLoaderInner({
             (config as DioramaConfig3DWithVideos).videos,
             videoElementsRef // ✅ Passer la ref
           );
-        }, 200);
+        }, 3000);
 
         setLoadingProgress(70);
 
@@ -871,7 +888,7 @@ function WebDioramaLoaderInner({
         <div className="fixed inset-0 bg-black z-[10000] flex items-center justify-center">
           <div className="text-white text-center">
             <div className="text-6xl mb-4 animate-pulse">💤</div>
-            <p className="text-xl">Mise en veille...</p>
+            <p className="text-xl">{t.reload.sleep}</p>
           </div>
         </div>
       )}

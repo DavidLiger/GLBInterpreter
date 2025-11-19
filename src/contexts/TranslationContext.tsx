@@ -49,6 +49,9 @@ const translations = {
       boutonTitle : "Allez, debout là-dedans !",
       boutonSubTitle : "Relancer l'application",
       technicalNote : "💡 Si le problème persiste, fermez complètement l'onglet puis fermer le navigateur et rouvrez le lien"
+    },
+    reload: {
+      sleep: "Mise en veille..."
     }
   },
   en: {
@@ -96,6 +99,9 @@ const translations = {
       boutonTitle : "Come on, get up in there!",
       boutonSubTitle : "Restart the application",
       technicalNote : "💡 If the problem persists, close the tab completely, then close the browser and reopen the link."
+    },
+    reload: {
+      sleep: "Standby mode..."
     }
   },
   es: {
@@ -143,6 +149,9 @@ const translations = {
       boutonTitle : "¡Vamos, levántate!",
       boutonSubTitle : "Reiniciar la aplicación",
       technicalNote : "💡 Si el problema persiste, cierre completamente la pestaña, cierre el navegador y vuelva a abrir el enlace."
+    },
+    reload: {
+      sleep: "Modo de espera..."
     }
   }
 };
