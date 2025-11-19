@@ -777,10 +777,8 @@ function WebDioramaLoaderInner({
         wasHiddenRef.current = true;
         pauseStartTimeRef.current = Date.now();
         
-        // ✅ Cleanup léger immédiat
         performLightCleanup();
         
-        // ✅ Programmer cleanup complet après 3 min
         cleanupTimeoutRef.current = setTimeout(() => {
           if (document.hidden) {
             console.log("⚠️ Arrière-plan > 3min → cleanup complet");
@@ -790,34 +788,31 @@ function WebDioramaLoaderInner({
         }, MAX_PAUSE_BEFORE_FULL_CLEANUP);
         
       } else if (!document.hidden && wasHiddenRef.current) {
+        // ✅ ENLEVER L'OVERLAY IMMÉDIATEMENT au retour
+        setIsHidden(false);
+        
         const pauseDuration = Date.now() - (pauseStartTimeRef.current || 0);
         
-        // ✅ Annuler le timer de cleanup complet
         if (cleanupTimeoutRef.current) {
           clearTimeout(cleanupTimeoutRef.current);
           cleanupTimeoutRef.current = null;
         }
         
         if (voluntaryCleanupRef.current || pauseDuration > MAX_PAUSE_BEFORE_FULL_CLEANUP) {
-          // Cleanup complet a été fait → Reload
           console.log("🔄 Retour après cleanup complet → Reload");
           setTimeout(() => window.location.reload(), 100);
         } else if (renderer?.getContext().isContextLost?.()) {
-          // Contexte perdu mais pas volontaire
           console.log("⚠️ Contexte perdu → Attente restauration ou reload...");
           
-          // Attendre 2s pour voir si restauration auto
           setTimeout(() => {
             if (contextRestoredRef.current) {
               console.log("✅ Contexte restauré → Pas besoin de reload");
-              // La restauration auto va trigger le reload via onContextRestored
             } else {
               console.log("❌ Pas de restauration → Reload manuel");
               window.location.reload();
             }
           }, 2000);
         } else {
-          // Resume simple
           console.log("✅ Retour rapide → Resume simple");
           wasHiddenRef.current = false;
           pauseStartTimeRef.current = null;
