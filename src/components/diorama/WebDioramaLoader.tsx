@@ -700,6 +700,12 @@ function WebDioramaLoaderInner({
       
       // 4. Pause animations (ne pas destroy)
       Object.values(mixerRef.current).forEach(mixer => mixer.stopAllAction());
+
+      // ✅ 5. SUPPRIMER LE CANVAS DU DOM (mais garder le renderer en mémoire)
+      if (renderer?.domElement?.parentNode) {
+        renderer.domElement.parentNode.removeChild(renderer.domElement);
+        console.log("🗑️ Canvas retiré du DOM");
+      }
       
       console.log("✅ Pause légère terminée (contexte WebGL préservé)");
     };
@@ -744,6 +750,12 @@ function WebDioramaLoaderInner({
     const performResume = () => {
       console.log("▶️ Resume");
       setIsHidden(false);
+
+      // ✅ Remettre le canvas dans le DOM
+      if (renderer && containerRef.current && !renderer.domElement.parentNode) {
+        containerRef.current.appendChild(renderer.domElement);
+        console.log("✅ Canvas remis dans le DOM");
+      }
       
       // Relancer RAF si le renderer existe encore
       if (!animationFrameRef.current && renderer && cameraRef.current && sceneRef.current) {
