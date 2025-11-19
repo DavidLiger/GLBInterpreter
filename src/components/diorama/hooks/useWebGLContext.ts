@@ -31,7 +31,6 @@ export function useWebGLContext(
   const [renderer, setRenderer] = useState<THREE.WebGLRenderer | null>(null);
   const [error, setError] = useState<"lost" | "unsupported" | null>(null);
   const [isReady, setIsReady] = useState(false);
-  const contextRestoredRef = useRef(false); // ✅ NOUVEAU
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -60,7 +59,7 @@ export function useWebGLContext(
       newRenderer.setPixelRatio(Math.min(window.devicePixelRatio, options.isMobile ? 2 : 2));
       containerRef.current.appendChild(newRenderer.domElement);
 
-      // ✅ Gestion perte de contexte
+      // ✅ Gestion perte de contexte (juste logging)
       newRenderer.domElement.addEventListener(
         "webglcontextlost",
         (event) => {
@@ -70,20 +69,6 @@ export function useWebGLContext(
           options.onContextLost?.();
         },
         { once: true }
-      );
-
-      // ✅ NOUVEAU : Gestion restauration automatique
-      newRenderer.domElement.addEventListener(
-        "webglcontextrestored",
-        () => {
-          console.log("✅ Contexte WebGL RESTAURÉ automatiquement");
-          contextRestoredRef.current = true;
-          setError(null); // ✅ Clear l'erreur
-          
-          // ✅ Callback de restauration
-          options.onContextRestored?.();
-        },
-        { once: false } // ✅ Peut se produire plusieurs fois
       );
 
       setRenderer(newRenderer);
@@ -103,12 +88,10 @@ export function useWebGLContext(
     };
   }, [containerRef.current]);
 
-  return { renderer, error, isReady, contextRestoredRef };
+  return { renderer, error, isReady };
 }
 
-// ✅ Mettre à jour le type
 interface WebGLContextOptions {
   isMobile?: boolean;
   onContextLost?: () => void;
-  onContextRestored?: () => void; // ✅ NOUVEAU
 }

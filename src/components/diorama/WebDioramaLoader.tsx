@@ -249,20 +249,13 @@ function WebDioramaLoaderInner({
   );
 
   // ✅ Modifiez le hook WebGL pour ajouter la restauration
-  const { renderer, error: webglError, isReady: webglReady, contextRestoredRef } = useWebGLContext(containerRef, {
+  const { renderer, error: webglError, isReady: webglReady } = useWebGLContext(containerRef, {
     isMobile: isMobileDevice,
     onContextLost: () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = undefined;
       }
-    },
-    onContextRestored: () => {
-      // ✅ Auto-restart après restauration
-      console.log("🔄 Contexte restauré → Relance automatique");
-      setTimeout(() => {
-        window.location.reload();
-      }, 500);
     },
   });
 
