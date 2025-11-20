@@ -477,29 +477,24 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
                   </div>
                 )}
 
-                {/* Actions */}
-                <div className="flex gap-3 sm:gap-4">
-                  <button
-                    onClick={() => {
-                      console.log('🔄 Refaire le test (unmount/remount)');
-                      onRetest(); // ✅ Appeler le parent au lieu de reset local
-                    }}
-                    className="flex-1 px-4 sm:px-6 py-2 sm:py-3 bg-gray-700 hover:bg-gray-600 text-white text-sm sm:text-base font-bold rounded-full transition"
-                  >
-                    {t.deviceTester?.testRetry || "🔄 Refaire le test"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      console.log('✅ Clic continuer, passed:', result.passed);
-                      onComplete(result.passed);
-                    }}
-                    className="flex-1 px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-sm sm:text-base font-bold rounded-full transition"
-                  >
-                    {result.passed 
-                      ? (t.deviceTester?.continue || "Continuer")
-                      : (t.deviceTester?.continueAnyway || "Continuer quand même")}
-                  </button>
-                </div>
+                {result.gpuTier === 0 && (
+                  <div className="bg-red-900/30 border border-red-500 rounded-lg p-4 mb-4">
+                    <p className="text-red-300 font-semibold mb-2">
+                      {t.deviceTester?.noWebGL || "❌ WebGL non disponible ou en mode compatibilité"}
+                    </p>
+                    <p className="text-red-200 text-sm">
+                      {t.deviceTester?.impossible || "Votre navigateur ne peut pas utiliser l'accélération matérielle 3D."}
+                      {t.deviceTester?.impossible2 || "L'expérience sera très dégradée ou impossible."}
+                    </p>
+                    <p className="text-red-200 text-sm mt-2">
+                      {t.deviceTester?.checkBrowserParams || "• Vérifiez que WebGL est activé dans les paramètres du navigateur"}
+                      <br />
+                      {t.deviceTester?.tryAnotherBrowser || "• Essayez un autre navigateur (Chrome, Edge, Safari)"}
+                      <br />
+                      {t.deviceTester?.updateGPUDriver || "• Mettez à jour vos pilotes graphiques"}
+                    </p>
+                  </div>
+                )}
 
                 {!result.passed && (
                   <div className="mt-4 space-y-3">
@@ -553,6 +548,30 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
                     </p>
                   </div>
                 )}
+
+                {/* Actions */}
+                <div className="flex gap-3 sm:gap-4">
+                  <button
+                    onClick={() => {
+                      console.log('🔄 Refaire le test (unmount/remount)');
+                      onRetest(); // ✅ Appeler le parent au lieu de reset local
+                    }}
+                    className="flex-1 px-4 sm:px-6 py-2 sm:py-3 bg-gray-700 hover:bg-gray-600 text-white text-sm sm:text-base font-bold rounded-full transition"
+                  >
+                    {t.deviceTester?.testRetry || "🔄 Refaire le test"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      console.log('✅ Clic continuer, passed:', result.passed);
+                      onComplete(result.passed);
+                    }}
+                    className="flex-1 px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-sm sm:text-base font-bold rounded-full transition"
+                  >
+                    {result.passed 
+                      ? (t.deviceTester?.continue || "Continuer")
+                      : (t.deviceTester?.continueAnyway || "Continuer quand même")}
+                  </button>
+                </div>
               </motion.div>
             ) : (
               <div className="text-white">{t.deviceTester?.resultsLoading || "Chargement résultats..."}</div>

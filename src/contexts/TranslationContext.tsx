@@ -97,7 +97,14 @@ const translations = {
       resultsLoading: "Chargement résultats...",
       low: "Faible",
       medium: "Moyen",
-      high: "Élevé"
+      high: "Élevé",
+      preparing: "Préparation de l'expérience...",
+      noWebGL: "❌ WebGL non disponible ou en mode compatibilité",
+      impossible: "Votre navigateur ne peut pas utiliser l'accélération matérielle 3D.",
+      impossible2: "L'expérience sera très dégradée ou impossible.",
+      checkBrowserParams: "• Vérifiez que WebGL est activé dans les paramètres du navigateur",
+      tryAnotherBrowser: "• Essayez un autre navigateur (Chrome, Edge, Safari)",
+      updateGPUDriver: "• Mettez à jour vos pilotes graphiques"
     }
   },
   en: {
@@ -193,7 +200,14 @@ const translations = {
       resultsLoading: "Loading results...",
       low: "Low",
       medium: "Medium",
-      high: "High"
+      high: "High",
+      preparing: "Preparing for the experiment...",
+      noWebGL: "❌ WebGL unavailable or in compatibility mode",
+      impossible: "Your browser cannot use 3D hardware acceleration.",
+      impossible2: "The experience will be significantly degraded or impossible.",
+      checkBrowserParams: "• Check that WebGL is enabled in your browser settings.",
+      tryAnotherBrowser: "• Try another browser (Chrome, Edge, Safari)",
+      updateGPUDriver: "• Update your graphics drivers"
     }
   },
   es: {
@@ -289,7 +303,14 @@ const translations = {
       resultsLoading: "Cargando resultados...",
       low: "Bajo",
       medium: "Medio",
-      high: "Elevado"
+      high: "Elevado",
+      preparing: "Preparación del experimento...",
+      noWebGL: "❌ WebGL no disponible o en modo compatibilidad",
+      impossible: "Su navegador no puede utilizar la aceleración 3D por hardware.",
+      impossible2: "La experiencia será muy deficiente o imposible.",
+      checkBrowserParams: "• Comprueba que WebGL está activado en la configuración del navegador.",
+      tryAnotherBrowser: "• Prueba con otro navegador (Chrome, Edge, Safari).",
+      updateGPUDriver: "• Actualiza tus controladores gráficos."
     }
   }
 };
