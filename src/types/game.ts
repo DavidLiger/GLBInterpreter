@@ -13,4 +13,5 @@ export interface GameConfig {
 export type GameConfigEntry = {
   token: string;
   config: GameConfig;
+  redirectUrl?: string;
 };
