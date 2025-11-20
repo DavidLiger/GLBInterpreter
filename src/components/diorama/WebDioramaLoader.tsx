@@ -59,51 +59,6 @@ export default function WebDioramaLoader({ config, bookId }: { config: DioramaCo
     setMounted(true);
   }, []);
 
-  // ✅ Liste des assets à télécharger
-  const assetsToDownload = useMemo(() => {
-    const list = [];
-    
-    // GLB
-    list.push({
-      id: `${bookId}-glb`,
-      url: config.glb,
-      type: 'glb' as const,
-      size: 10 * 1024 * 1024, // Estimer ou récupérer depuis config
-    });
-
-    // Vidéos
-    (config as DioramaConfig3DWithVideos).videos?.forEach((video, i) => {
-      list.push({
-        id: `${bookId}-video-${i}`,
-        url: video.src,
-        type: 'video' as const,
-        size: 20 * 1024 * 1024, // Estimer
-      });
-    });
-
-    // Sons
-    config.pois.forEach((poi) => {
-      if (poi.ambientSound) {
-        list.push({
-          id: `${bookId}-audio-${poi.id}-ambient`,
-          url: poi.ambientSound,
-          type: 'audio' as const,
-          size: 2 * 1024 * 1024,
-        });
-      }
-      if (poi.sceneSound) {
-        list.push({
-          id: `${bookId}-audio-${poi.id}-scene`,
-          url: poi.sceneSound,
-          type: 'audio' as const,
-          size: 3 * 1024 * 1024,
-        });
-      }
-    });
-
-    return list;
-  }, [config, bookId]);
-
   // ✅ Ne rien afficher avant le mount
   if (!mounted) {
     return null;
