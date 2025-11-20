@@ -13,10 +13,10 @@ const serwist = new Serwist({
   navigationPreload: true,
   runtimeCaching: [
     // ✅ Assets R2 → Toujours réseau (pas de cache SW)
-    // {
-    //   matcher: ({ url }) => url.hostname.includes('workers.dev'),
-    //   handler: new NetworkOnly(),
-    // },
+    {
+      matcher: ({ url }) => url.hostname.includes('workers.dev'),
+      handler: new NetworkOnly(),
+    },
     
     // Pages HTML → Network First
     {
