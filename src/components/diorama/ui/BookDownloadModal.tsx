@@ -4,14 +4,16 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { downloadManager, getBookManifest, isBookFullyCached } from '../lib/downloadManager';
 import { useTranslation } from '@/contexts/TranslationContext';
+import { DioramaConfig3D } from '@/types/diorama';
 
 interface BookDownloadModalProps {
   bookId: string;
+  config: DioramaConfig3D;
   onComplete: () => void;
   onCancel?: () => void;
 }
 
-export default function BookDownloadModal({ bookId, onComplete, onCancel }: BookDownloadModalProps) {
+export default function BookDownloadModal({ bookId, config, onComplete, onCancel }: BookDownloadModalProps) {
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -26,6 +28,7 @@ export default function BookDownloadModal({ bookId, onComplete, onCancel }: Book
   const [totalSize, setTotalSize] = useState(0); // ✅ NOUVEAU
   const [storageWarning, setStorageWarning] = useState<'low' | 'critical' | null>(null); // ✅ NOUVEAU
   const { t } = useTranslation();
+  const isDemo = (config as any).deviceTester?.enabled || false;
 
   useEffect(() => {
     setMounted(true);
@@ -181,13 +184,17 @@ export default function BookDownloadModal({ bookId, onComplete, onCancel }: Book
             exit={{ scale: 0.9, y: 20 }}
           >
             <h2 className="text-2xl font-bold text-white mb-4">
-              {t.bookDownload?.modalTitle}
+              {isDemo 
+                ? (t.bookDownload?.demoTitle || "📦 Téléchargement de la démo")
+                : (t.bookDownload?.modalTitle || "📦 Téléchargement du livre")}
             </h2>
 
             {!downloading && !error && (
               <>
-                <p className="text-gray-300 mb-4">
-                  {t.bookDownload?.modalMessage}
+                <p className="text-gray-300 mb-6 text-sm">
+                  {isDemo
+                    ? (t.bookDownload?.demoMessage || "Téléchargez la démo pour découvrir les WebDioramas")
+                    : (t.bookDownload?.modalMessage || "Télécharger toutes les scènes du livre pour une utilisation hors ligne")}
                 </p>
 
                 {/* ✅ Infos de stockage */}

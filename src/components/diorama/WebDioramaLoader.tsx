@@ -222,6 +222,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
           {showDownloadModal && !assetsReady && (
             <BookDownloadModal
               bookId={bookId}
+              config={config}
               onComplete={() => {
                 setShowDownloadModal(false);
                 setIsInitializing(true); // ✅ État intermédiaire

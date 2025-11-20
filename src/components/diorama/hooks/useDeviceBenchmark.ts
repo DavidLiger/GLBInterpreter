@@ -52,25 +52,47 @@ export function useDeviceBenchmark(config: BenchmarkConfig, callbacks?: Benchmar
   const testStartTimeRef = useRef<number>(0);
   const rafRef = useRef<number | undefined>(undefined); 
 
-  // Détection GPU Tier (simplifié, vous pouvez utiliser 'detect-gpu' npm package)
-    const detectGPUTier = useCallback(async (): Promise<{ tier: number; name: string }> => {
-        const canvas = document.createElement('canvas');
-        const gl = canvas.getContext('webgl') || canvas.getContext('webgl2');
-        
-        if (!gl) return { tier: 0, name: 'Unknown' };
-        
-        // ✅ Cast explicite vers WebGLRenderingContext
-        const glContext = gl as WebGLRenderingContext | WebGL2RenderingContext;
-        
-        const debugInfo = glContext.getExtension('WEBGL_debug_renderer_info');
-        const renderer = debugInfo 
-            ? glContext.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) 
-            : 'Unknown GPU';
-        const cleanRenderer = renderer.replace(/^ANGLE\s*\([^)]*\)\s*/, '').trim();
+  const detectGPUTier = useCallback(async (): Promise<{ tier: number; name: string }> => {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('webgl2');
     
-    // Heuristique simple (à améliorer avec detect-gpu)
-    let tier = 2; // Par défaut
-    const rendererLower = renderer.toLowerCase();
+    if (!gl) return { tier: 0, name: 'Unknown' };
+    
+    const glContext = gl as WebGLRenderingContext | WebGL2RenderingContext;
+    
+    const debugInfo = glContext.getExtension('WEBGL_debug_renderer_info');
+    const renderer = debugInfo 
+      ? glContext.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) 
+      : 'Unknown GPU';
+    
+    // ✅ Extraire le nom propre du GPU
+    let cleanRenderer = renderer;
+    
+    // Enlever ANGLE ( ... )
+    if (renderer.startsWith('ANGLE (') && renderer.endsWith(')')) {
+      cleanRenderer = renderer.slice(7, -1).trim();
+    }
+    
+    // Extraire juste la partie intéressante
+    // Ex: "AMD, AMD Radeon(TM) Graphics (0x00001681) Direct3D11..."
+    //  -> "AMD Radeon(TM) Graphics"
+    const gpuMatch = cleanRenderer.match(/(NVIDIA GeForce [^(]+|AMD Radeon[^(]+|Intel[^(]+|Mali[^(]+|Adreno \d+)/i);
+    if (gpuMatch) {
+      cleanRenderer = gpuMatch[0].trim();
+    } else {
+      // Fallback : garder jusqu'au premier "("
+      const fallbackMatch = cleanRenderer.match(/^[^(]+/);
+      if (fallbackMatch) {
+        cleanRenderer = fallbackMatch[0].trim();
+      }
+    }
+    
+    // Nettoyer les doublons (ex: "AMD, AMD Radeon" -> "AMD Radeon")
+    cleanRenderer = cleanRenderer.replace(/^[^,]+,\s*/, '');
+    
+    // Heuristique
+    let tier = 2;
+    const rendererLower = cleanRenderer.toLowerCase();
     
     if (rendererLower.includes('adreno') && parseInt(rendererLower.match(/\d+/)?.[0] || '0') < 500) {
       tier = 1;
@@ -79,6 +101,8 @@ export function useDeviceBenchmark(config: BenchmarkConfig, callbacks?: Benchmar
     } else if (rendererLower.includes('intel') && !rendererLower.includes('iris')) {
       tier = 1;
     } else if (rendererLower.includes('nvidia') || rendererLower.includes('rtx') || rendererLower.includes('geforce')) {
+      tier = 3;
+    } else if (rendererLower.includes('radeon rx') || rendererLower.includes('radeon 7') || rendererLower.includes('radeon 6')) {
       tier = 3;
     }
     

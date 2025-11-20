@@ -217,7 +217,7 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
             {/* GPU Name Display */}
             {gpuName && (
               <div className="bg-gray-800 rounded-lg p-3 mb-6 border border-gray-700">
-                <p className="text-xs text-gray-400 mb-1">Carte graphique détectée</p>
+                <p className="text-xs text-gray-400 mb-1">{t.deviceTester?.GPUDetectorTitle || "Carte graphique détectée"}</p>
                 <p className="text-white text-sm truncate">{gpuName}</p>
               </div>
             )}
@@ -244,7 +244,7 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
                   )}
                 </div>
                 <p className={`flex-1 ${testSteps.gpu === 'done' ? 'text-white' : 'text-gray-400'}`}>
-                  Détection GPU
+                  {t.deviceTester?.GPUDetecting || "Détection GPU"}
                 </p>
               </div>
 
@@ -268,7 +268,7 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
                   )}
                 </div>
                 <p className={`flex-1 ${testSteps.capabilities === 'done' ? 'text-white' : 'text-gray-400'}`}>
-                  Analyse capacités WebGL
+                  {t.deviceTester?.WEBGLCapacitiesTitle || "Analyse capacités WebGL"}
                 </p>
               </div>
 
@@ -292,7 +292,7 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
                   )}
                 </div>
                 <p className={`flex-1 ${testSteps.memory === 'done' ? 'text-white' : 'text-gray-400'}`}>
-                  Vérification mémoire
+                  {t.deviceTester?.MemoryCheckTitle || "Vérification mémoire"}
                 </p>
               </div>
 
@@ -317,7 +317,7 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
                 </div>
                 <div className="flex-1">
                   <p className={`${testSteps.fps === 'done' ? 'text-white' : 'text-gray-400'}`}>
-                    Test de performance 3D
+                    {t.deviceTester?.ThreeDPERFTestTitle || "Test de performance 3D"}
                   </p>
                   {testSteps.fps === 'running' && (
                     <div className="mt-2">
@@ -341,7 +341,7 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
                 animate={{ opacity: 1 }}
                 className="text-center text-green-400 text-sm"
               >
-                ✓ Analyse terminée, préparation des résultats...
+                {t.deviceTester?.completesAnalysisTitle || "✓ Analyse terminée, préparation des résultats..."}
               </motion.p>
             )}
           </motion.div>
@@ -372,7 +372,7 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
                 {/* Stats - Grid responsive */}
                 <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-4 sm:mb-6">
                   <div className="bg-gray-800 rounded-lg p-3 sm:p-4">
-                    <p className="text-gray-400 text-xs sm:text-sm mb-1">FPS Moyen</p>
+                    <p className="text-gray-400 text-xs sm:text-sm mb-1">{t.deviceTester?.FPSAverage || "FPS Moyen"}</p>
                     <p className={`text-xl sm:text-2xl font-bold ${result.fps.average >= config.minFPS ? 'text-green-400' : 'text-red-400'}`}>
                       {result.fps.average.toFixed(1)}
                     </p>
@@ -380,27 +380,27 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
                   </div>
                   
                   <div className="bg-gray-800 rounded-lg p-3 sm:p-4">
-                    <p className="text-gray-400 text-xs sm:text-sm mb-1">Puissance GPU</p>
+                    <p className="text-gray-400 text-xs sm:text-sm mb-1">{t.deviceTester?.GPUPower || "Puissance GPU"}</p>
                     <p className={`text-xl sm:text-2xl font-bold ${result.gpuTier >= config.minGPUTier ? 'text-green-400' : 'text-red-400'}`}>
                       {result.gpuTier}/3
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {result.gpuTier === 1 && "Faible"}
-                      {result.gpuTier === 2 && "Moyen"}
-                      {result.gpuTier === 3 && "Élevé"}
+                      {result.gpuTier === 1 && (t.deviceTester?.low || "Faible")}
+                      {result.gpuTier === 2 && (t.deviceTester?.medium || "Moyen")}
+                      {result.gpuTier === 3 && (t.deviceTester?.high || "Élevé")}
                     </p>
                   </div>
                   
                   <div className="bg-gray-800 rounded-lg p-3 sm:p-4">
-                    <p className="text-gray-400 text-xs sm:text-sm mb-1">FPS Min (p5)</p>
+                    <p className="text-gray-400 text-xs sm:text-sm mb-1">{t.deviceTester?.FPSMin || "FPS Min (p5)"}</p>
                     <p className="text-lg sm:text-xl font-bold text-gray-300">
                       {result.fps.min.toFixed(1)}
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">5% le plus bas</p>
+                    <p className="text-xs text-gray-500 mt-1">{t.deviceTester?.lowest5PerCent || "5% le plus bas"}</p>
                   </div>
                   
                   <div className="bg-gray-800 rounded-lg p-3 sm:p-4">
-                    <p className="text-gray-400 text-xs sm:text-sm mb-1">Mémoire</p>
+                    <p className="text-gray-400 text-xs sm:text-sm mb-1">{t.deviceTester?.memoryTitle || "Mémoire"}</p>
                     <p className="text-lg sm:text-xl font-bold text-gray-300">
                       {result.memory ? `${result.memory} GB` : 'N/A'}
                     </p>
@@ -409,14 +409,14 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
 
                 {/* GPU Name - Responsive */}
                 <div className="bg-gray-800 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
-                  <p className="text-gray-400 text-xs sm:text-sm mb-1">Carte graphique</p>
+                  <p className="text-gray-400 text-xs sm:text-sm mb-1">{t.deviceTester?.graphicsCardTitle || "Carte graphique"}</p>
                   <p className="text-white text-xs sm:text-sm break-words">{result.gpuName}</p>
                 </div>
 
                 {/* Warnings/Errors - Responsive */}
                 {result.errors.length > 0 && (
                   <div className="bg-red-900/30 border border-red-500 rounded-lg p-3 sm:p-4 mb-3 sm:mb-4">
-                    <p className="text-red-300 font-semibold mb-2 text-sm sm:text-base">❌ Problèmes détectés :</p>
+                    <p className="text-red-300 font-semibold mb-2 text-sm sm:text-base">{t.deviceTester?.detectedProblems || "❌ Problèmes détectés :"}</p>
                     {result.errors.map((error, i) => (
                       <p key={i} className="text-red-200 text-xs sm:text-sm">• {error}</p>
                     ))}
@@ -425,7 +425,7 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
 
                 {result.warnings.length > 0 && (
                   <div className="bg-yellow-900/30 border border-yellow-500 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
-                    <p className="text-yellow-300 font-semibold mb-2 text-sm sm:text-base">⚠️ Avertissements :</p>
+                    <p className="text-yellow-300 font-semibold mb-2 text-sm sm:text-base">{t.deviceTester?.warningsTitle || "⚠️ Avertissements :"}</p>
                     {result.warnings.map((warning, i) => (
                       <p key={i} className="text-yellow-200 text-xs sm:text-sm">• {warning}</p>
                     ))}
@@ -441,7 +441,7 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
                     }}
                     className="flex-1 px-4 sm:px-6 py-2 sm:py-3 bg-gray-700 hover:bg-gray-600 text-white text-sm sm:text-base font-bold rounded-full transition"
                   >
-                    🔄 Refaire le test
+                    {t.deviceTester?.testRetry || "🔄 Refaire le test"}
                   </button>
                   <button
                     onClick={() => {
@@ -466,37 +466,37 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
                     {/* Conseils */}
                     <div className="bg-blue-900/30 border border-blue-500 rounded-lg p-3 sm:p-4">
                       <p className="text-blue-300 font-semibold mb-2 text-sm sm:text-base">
-                        💡 Conseils pour améliorer les performances
+                        {t.deviceTester?.advicesTitle || "💡 Conseils pour améliorer les performances"}
                       </p>
                       <ul className="text-blue-200 text-xs sm:text-sm space-y-2">
                         <li className="flex gap-2">
                           <span className="flex-shrink-0">•</span>
-                          <span>Fermez les autres applications et onglets du navigateur</span>
+                          <span>{t.deviceTester?.closeApps || "Fermez les autres applications et onglets du navigateur"}</span>
                         </li>
                         <li className="flex gap-2">
                           <span className="flex-shrink-0">•</span>
-                          <span>Désactivez l'économiseur de batterie ou le mode économie d'énergie</span>
+                          <span>{t.deviceTester?.disableEnergySaver || "Désactivez l'économiseur de batterie ou le mode économie d'énergie"}</span>
                         </li>
                         {result.gpuTier < config.minGPUTier && (
                           <li className="flex gap-2">
                             <span className="flex-shrink-0">•</span>
-                            <span>Activez le mode « Performances » dans les paramètres système</span>
+                            <span>{t.deviceTester?.enablePerfMode || "Activez le mode « Performances » dans les paramètres système"}</span>
                           </li>
                         )}
                         {result.fps.average < config.minFPS && (
                           <li className="flex gap-2">
                             <span className="flex-shrink-0">•</span>
-                            <span>Réduisez la luminosité de l'écran et fermez le multitâche</span>
+                            <span>{t.deviceTester?.reduceLight || "Réduisez la luminosité de l'écran et fermez le multitâche"}</span>
                           </li>
                         )}
                         <li className="flex gap-2">
                           <span className="flex-shrink-0">•</span>
-                          <span>Assurez-vous que votre appareil n'est pas en surchauffe</span>
+                          <span>{t.deviceTester?.controlHeating || "Assurez-vous que votre appareil n'est pas en surchauffe"}</span>
                         </li>
                         {isMobileDevice && (
                           <li className="flex gap-2">
                             <span className="flex-shrink-0">•</span>
-                            <span>Connectez votre téléphone au chargeur pour activer le mode haute performance</span>
+                            <span>{t.deviceTester?.highPerfMode || "Connectez votre téléphone au chargeur pour activer le mode haute performance"}</span>
                           </li>
                         )}
                       </ul>
@@ -504,13 +504,13 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
 
                     {/* Note finale */}
                     <p className="text-center text-gray-500 text-xs">
-                      Ces conseils peuvent améliorer temporairement les performances, mais ne remplaceront pas un appareil plus puissant.
+                      {t.deviceTester?.finalNote || "Ces conseils peuvent améliorer temporairement les performances, mais ne remplaceront pas un appareil plus puissant."}
                     </p>
                   </div>
                 )}
               </motion.div>
             ) : (
-              <div className="text-white">Chargement résultats...</div>
+              <div className="text-white">{t.deviceTester?.resultsLoading || "Chargement résultats..."}</div>
             )}
           </>
           
