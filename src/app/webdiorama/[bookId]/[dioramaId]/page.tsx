@@ -2,6 +2,8 @@ import { notFound, redirect } from "next/navigation"; // ✅ Ajouter redirect
 import WebDioramaLoader from "@/components/diorama/WebDioramaLoader";
 import type { DioramaConfig3DWithVideos } from "@/types/diorama";
 
+export const dynamic = 'force-dynamic';
+
 type Props = {
   params: Promise<{
     bookId: string;
