@@ -14,11 +14,13 @@ interface DeviceTesterProps {
     minFPS: number;
     minGPUTier: number;
   };
+  onRetest: () => void;
   onComplete: (passed: boolean) => void;
   onSkip: () => void;
+  isMobileDevice: boolean;
 }
 
-export default function DeviceTester({ glbUrl, config, onComplete, onSkip }: DeviceTesterProps) {
+export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onSkip, isMobileDevice }: DeviceTesterProps) {
   const { t } = useTranslation();
   const [phase, setPhase] = useState<'intro' | 'testing' | 'results'>('intro');
   const [sceneReady, setSceneReady] = useState(false);
@@ -434,24 +436,13 @@ export default function DeviceTester({ glbUrl, config, onComplete, onSkip }: Dev
                 <div className="flex gap-3 sm:gap-4">
                   <button
                     onClick={() => {
-                      console.log('🔄 Refaire le test');
-                      setPhase('intro');
-                      // Reset tous les états
-                      setSceneReady(false);
-                      setTestSteps({
-                        gpu: 'pending',
-                        capabilities: 'pending',
-                        memory: 'pending',
-                        fps: 'pending',
-                      });
-                      setGpuName('');
-                      hasStartedTestRef.current = false;
+                      console.log('🔄 Refaire le test (unmount/remount)');
+                      onRetest(); // ✅ Appeler le parent au lieu de reset local
                     }}
                     className="flex-1 px-4 sm:px-6 py-2 sm:py-3 bg-gray-700 hover:bg-gray-600 text-white text-sm sm:text-base font-bold rounded-full transition"
                   >
                     🔄 Refaire le test
                   </button>
-                  
                   <button
                     onClick={() => {
                       console.log('✅ Clic continuer, passed:', result.passed);
@@ -466,9 +457,56 @@ export default function DeviceTester({ glbUrl, config, onComplete, onSkip }: Dev
                 </div>
 
                 {!result.passed && (
-                  <p className="text-center text-gray-400 text-xs sm:text-sm mt-3 sm:mt-4">
-                    {t.deviceTester?.warningMessage || "L'expérience pourrait être dégradée sur cet appareil."}
-                  </p>
+                  <div className="mt-4 space-y-3">
+                    {/* Message principal */}
+                    <p className="text-center text-gray-400 text-xs sm:text-sm">
+                      {t.deviceTester?.warningMessage || "L'expérience pourrait être dégradée sur cet appareil."}
+                    </p>
+                    
+                    {/* Conseils */}
+                    <div className="bg-blue-900/30 border border-blue-500 rounded-lg p-3 sm:p-4">
+                      <p className="text-blue-300 font-semibold mb-2 text-sm sm:text-base">
+                        💡 Conseils pour améliorer les performances
+                      </p>
+                      <ul className="text-blue-200 text-xs sm:text-sm space-y-2">
+                        <li className="flex gap-2">
+                          <span className="flex-shrink-0">•</span>
+                          <span>Fermez les autres applications et onglets du navigateur</span>
+                        </li>
+                        <li className="flex gap-2">
+                          <span className="flex-shrink-0">•</span>
+                          <span>Désactivez l'économiseur de batterie ou le mode économie d'énergie</span>
+                        </li>
+                        {result.gpuTier < config.minGPUTier && (
+                          <li className="flex gap-2">
+                            <span className="flex-shrink-0">•</span>
+                            <span>Activez le mode « Performances » dans les paramètres système</span>
+                          </li>
+                        )}
+                        {result.fps.average < config.minFPS && (
+                          <li className="flex gap-2">
+                            <span className="flex-shrink-0">•</span>
+                            <span>Réduisez la luminosité de l'écran et fermez le multitâche</span>
+                          </li>
+                        )}
+                        <li className="flex gap-2">
+                          <span className="flex-shrink-0">•</span>
+                          <span>Assurez-vous que votre appareil n'est pas en surchauffe</span>
+                        </li>
+                        {isMobileDevice && (
+                          <li className="flex gap-2">
+                            <span className="flex-shrink-0">•</span>
+                            <span>Connectez votre téléphone au chargeur pour activer le mode haute performance</span>
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+
+                    {/* Note finale */}
+                    <p className="text-center text-gray-500 text-xs">
+                      Ces conseils peuvent améliorer temporairement les performances, mais ne remplaceront pas un appareil plus puissant.
+                    </p>
+                  </div>
                 )}
               </motion.div>
             ) : (

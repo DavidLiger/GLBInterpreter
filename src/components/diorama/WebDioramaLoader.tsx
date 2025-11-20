@@ -121,6 +121,10 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   const [showDownloadModal, setShowDownloadModal] = useState(true);
   const [isInitializing, setIsInitializing] = useState(false);  // ✅ NOUVEAU
   const [checkingCache, setCheckingCache] = useState(true);
+  const [testKey, setTestKey] = useState(0);
+  const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent
+  );
   
   const [showDeviceTester, setShowDeviceTester] = useState(() => {
     return (config as any).deviceTester?.enabled || false;
@@ -169,6 +173,10 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
     checkCacheStatus();
   }, [bookId]);
 
+  const handleRetest = () => {
+    setTestKey(prev => prev + 1);
+  };
+
   return (
     <>
       {/* ✅ Écran de vérification cache */}
@@ -184,8 +192,11 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
       {/* ✅ Device Tester EN PREMIER, bloque tout */}
       {showDeviceTester && (config as any).deviceTester && (
         <DeviceTester
+          key={testKey}
+          isMobileDevice={isMobileDevice}
           glbUrl={config.glb}
           config={(config as any).deviceTester}
+          onRetest={handleRetest}
           onComplete={(passed) => {
             console.log('✅ Test terminé, résultat:', passed);
             setDeviceTestPassed(true);

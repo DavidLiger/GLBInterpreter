@@ -66,6 +66,7 @@ export function useDeviceBenchmark(config: BenchmarkConfig, callbacks?: Benchmar
         const renderer = debugInfo 
             ? glContext.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) 
             : 'Unknown GPU';
+        const cleanRenderer = renderer.replace(/^ANGLE\s*\([^)]*\)\s*/, '').trim();
     
     // Heuristique simple (à améliorer avec detect-gpu)
     let tier = 2; // Par défaut
@@ -81,7 +82,7 @@ export function useDeviceBenchmark(config: BenchmarkConfig, callbacks?: Benchmar
       tier = 3;
     }
     
-    return { tier, name: renderer };
+    return { tier, name: cleanRenderer };
   }, []);
 
   // Obtenir WebGL capabilities
