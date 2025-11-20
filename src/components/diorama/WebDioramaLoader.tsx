@@ -43,6 +43,7 @@ import BookDownloadModal from "./ui/BookDownloadModal";
 import { isBookFullyCached } from "./lib/downloadManager";
 import useUnifiedAudio from "./hooks/useUnifiedAudio";
 import DeviceTester from "./ui/DeviceTester";
+import SceneAnalyzer from "./ui/SceneAnalyzer";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -354,6 +355,7 @@ function WebDioramaLoaderInner({
   const [reloading, setReloading] = useState(false);
   const [assetLoadingStatus, setAssetLoadingStatus] = useState<string>("");
   const [isHidden, setIsHidden] = useState(false);
+  const [loadedScene, setLoadedScene] = useState<THREE.Scene | null>(null);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
 
@@ -581,6 +583,9 @@ function WebDioramaLoaderInner({
       async (gltf: GLTF) => {
         scene.add(gltf.scene);
         scene.userData.gltfAnimations = gltf.animations;
+      
+        // ✅ AJOUTER : Mettre à jour le state pour l'analyzer
+        setLoadedScene(scene);
 
         // Frustum culling + bounding boxes
         gltf.scene.traverse((child: any) => {
@@ -1093,6 +1098,13 @@ function WebDioramaLoaderInner({
                 if (type === "toneMapping")
                   composerRef.current?.updateToneMapping(values.type, values.exposure);
               }}
+            />
+          )}
+
+          {process.env.NODE_ENV === "development" && (
+            <SceneAnalyzer
+              scene={loadedScene} 
+              glbUrl={config.glb}
             />
           )}
 
