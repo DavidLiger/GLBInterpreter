@@ -44,6 +44,7 @@ import { isBookFullyCached } from "./lib/downloadManager";
 import useUnifiedAudio from "./hooks/useUnifiedAudio";
 import DeviceTester from "./ui/DeviceTester";
 import SceneAnalyzer from "./ui/SceneAnalyzer";
+import GLBOptimizer from "./ui/GLBOptimizer";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -352,10 +353,10 @@ function WebDioramaLoaderInner({
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
-  const [reloading, setReloading] = useState(false);
-  const [assetLoadingStatus, setAssetLoadingStatus] = useState<string>("");
   const [isHidden, setIsHidden] = useState(false);
   const [loadedScene, setLoadedScene] = useState<THREE.Scene | null>(null);
+  const [devToolOpen, setDevToolOpen] = useState(false);
+  const devToolOpenRef = useRef(false);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
 
@@ -408,6 +409,10 @@ function WebDioramaLoaderInner({
     }
     return active.icon;
   }, [currentPOI, findPOIRecursively, findParentPOI]);
+
+  useEffect(() => {
+    devToolOpenRef.current = devToolOpen;
+  }, [devToolOpen]);
 
   // Detect mobile/touch
   useEffect(() => {
@@ -739,6 +744,11 @@ function WebDioramaLoaderInner({
   // ✅ Puis modifiez le useEffect de cleanup :
   useEffect(() => {
     const performCleanup = () => {
+      // ✅ AJOUTER : Ne pas cleanup si outil dev ouvert
+      if (devToolOpenRef.current) {
+        console.log("⏸️ Cleanup ignoré : outil dev ouvert");
+        return;
+      }
       console.log("🛑 Cleanup WebGL immédiat");
 
       // ✅ 0. MUTER ET STOPPER via les hooks AVANT tout
@@ -830,7 +840,12 @@ function WebDioramaLoaderInner({
     
     const handleVisibilityChange = () => {
       console.log("👁️ Visibility changed:", document.hidden ? "HIDDEN" : "VISIBLE");
-      
+      // ✅ AJOUTER : Ignorer si outil dev ouvert
+      if (devToolOpenRef.current) {
+        console.log("⏸️ Visibility change ignoré : outil dev ouvert");
+        return;
+      }
+    
       if (document.hidden && !wasHiddenRef.current) {
         console.log("🚨 Détection: onglet caché → cleanup");
         wasHiddenRef.current = true;
@@ -846,6 +861,13 @@ function WebDioramaLoaderInner({
 
     const handleFocus = () => {
       console.log("👁️ Window focus");
+
+      // ✅ AJOUTER : Ignorer si outil dev ouvert
+      if (devToolOpenRef.current) {
+        console.log("⏸️ Focus ignoré : outil dev ouvert");
+        return;
+      }
+
       if (wasHiddenRef.current) {
         // ✅ Retour après blur → reload
         console.log("🔄 Détection: retour focus → reload");
@@ -857,6 +879,13 @@ function WebDioramaLoaderInner({
     
     const handleBlur = () => {
       console.log("👁️ Window blur");
+
+      // ✅ AJOUTER : Ignorer si outil dev ouvert
+      if (devToolOpenRef.current) {
+        console.log("⏸️ Blur ignoré : outil dev ouvert");
+        return;
+      }
+
       if (!wasHiddenRef.current) {
         wasHiddenRef.current = true;
         voluntaryCleanupRef.current = true;
@@ -866,6 +895,13 @@ function WebDioramaLoaderInner({
     
     const handlePageHide = () => {
       console.log("👁️ Page hide");
+
+      // ✅ AJOUTER : Ignorer si outil dev ouvert
+      if (devToolOpenRef.current) {
+        console.log("⏸️ PageHide ignoré : outil dev ouvert");
+        return;
+      }
+
       if (!wasHiddenRef.current) {
         wasHiddenRef.current = true;
         voluntaryCleanupRef.current = true;
@@ -1098,6 +1134,7 @@ function WebDioramaLoaderInner({
                 if (type === "toneMapping")
                   composerRef.current?.updateToneMapping(values.type, values.exposure);
               }}
+              onOpenChange={setDevToolOpen} 
             />
           )}
 
@@ -1105,6 +1142,7 @@ function WebDioramaLoaderInner({
             <SceneAnalyzer
               scene={loadedScene} 
               glbUrl={config.glb}
+              onOpenChange={setDevToolOpen}
             />
           )}
 
@@ -1112,11 +1150,21 @@ function WebDioramaLoaderInner({
             <ConfigConverterTool
               defaultProxyUrl="https://webdiorama-proxy.david-liger-pro.workers.dev/assets/1"
               defaultSceneId="street"
+              onOpenChange={setDevToolOpen} 
             />
           )}
 
-          {process.env.NODE_ENV === "development" && <QRCodeModal />}
+          {process.env.NODE_ENV === "development" && (
+            <QRCodeModal 
+              onOpenChange={setDevToolOpen} 
+            />
+          )}
 
+          {process.env.NODE_ENV === "development" && (
+            <GLBOptimizer 
+              onOpenChange={setDevToolOpen} 
+            />
+          )}
 
           {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
             <POIPlayer

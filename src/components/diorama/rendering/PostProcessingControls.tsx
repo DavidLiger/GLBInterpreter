@@ -5,19 +5,26 @@ import { AlertTriangle } from "lucide-react";
 interface PostProcessingControlsProps {
   composer: any;
   onUpdate: (type: string, values: any) => void;
+  onOpenChange?: (isOpen: boolean) => void;
 }
 
-export default function PostProcessingControls({ composer, onUpdate }: PostProcessingControlsProps) {
+export default function PostProcessingControls({ composer, onUpdate, onOpenChange }: PostProcessingControlsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [bloom, setBloom] = useState({ strength: 1.2, radius: 0.6, threshold: 0.8 });
   const [ssao, setSSAO] = useState({ kernelRadius: 10, minDistance: 0.005, maxDistance: 0.15 });
   const [dof, setDOF] = useState({ focus: 5.0, aperture: 0.02, maxblur: 0.015, enabled: false });
   const [toneMapping, setToneMapping] = useState({ exposure: 1.2, type: "ACESFilmicToneMapping" });
 
+        // ✅ MODIFIER le setIsOpen
+  const handleSetIsOpen = (value: boolean) => {
+    setIsOpen(value);
+    onOpenChange?.(value); // ✅ Notifier le parent
+  };
+
   if (!isOpen) {
     return (
       <button
-        onClick={() => setIsOpen(true)}
+        onClick={() => handleSetIsOpen(true)}
         className="fixed bottom-16 right-4 z-500 bg-gray-800 text-white p-3 rounded-full shadow-lg hover:bg-gray-700 transition"
         title="Post-Processing Controls"
       >
@@ -31,7 +38,7 @@ export default function PostProcessingControls({ composer, onUpdate }: PostProce
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-lg font-bold">Post-Processing</h3>
         <button
-          onClick={() => setIsOpen(false)}
+          onClick={() => handleSetIsOpen(false)}
           className="text-gray-400 hover:text-white"
         >
           ✕

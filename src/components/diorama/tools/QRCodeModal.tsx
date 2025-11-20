@@ -4,10 +4,20 @@ import React, { useState, useRef } from "react";
 import { X } from "lucide-react";
 import { QRCodeCanvas } from "qrcode.react";
 
-export default function QRModal() {
+interface QRModalProps {
+  onOpenChange?: (isOpen: boolean) => void; // ✅
+}
+
+export default function QRModal({ onOpenChange }: QRModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [url, setUrl] = useState("https://faerium-site.vercel.app/webdiorama/1/street?t=abcd1234");
   const qrRef = useRef<HTMLCanvasElement>(null);
+
+  // ✅ MODIFIER le setIsOpen
+  const handleSetIsOpen = (value: boolean) => {
+    setIsOpen(value);
+    onOpenChange?.(value); // ✅ Notifier le parent
+  };
 
   const downloadQRCode = () => {
     if (!qrRef.current) return;
@@ -23,7 +33,7 @@ export default function QRModal() {
   if (!isOpen) {
     return (
       <button
-        onClick={() => setIsOpen(true)}
+        onClick={() => handleSetIsOpen(true)}
         className="fixed bottom-60 right-4 z-[500] bg-green-600 text-white p-3 rounded-full shadow-lg hover:bg-purple-700 transition"
         title="QR Code Generator (Dev Tool)"
       >
@@ -38,7 +48,7 @@ export default function QRModal() {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-white">QR Code Generator</h2>
-          <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-white transition">
+          <button onClick={() => handleSetIsOpen(false)} className="text-gray-400 hover:text-white transition">
             <X size={24} />
           </button>
         </div>

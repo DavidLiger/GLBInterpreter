@@ -4,11 +4,13 @@ import { FileJson, Copy, Download, X, Code2, Settings2, Info } from 'lucide-reac
 interface ConfigConverterToolProps {
   defaultProxyUrl?: string;
   defaultSceneId?: string;
+  onOpenChange?: (isOpen: boolean) => void;
 }
 
 export default function ConfigConverterTool({
   defaultProxyUrl = "https://webdiorama-proxy.david-liger-pro.workers.dev/assets/1",
-  defaultSceneId = "street"
+  defaultSceneId = "street",
+  onOpenChange
 }: ConfigConverterToolProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [tsInput, setTsInput] = useState('');
@@ -17,6 +19,11 @@ export default function ConfigConverterTool({
   const [sceneId, setSceneId] = useState(defaultSceneId);
   const [status, setStatus] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
+
+  const handleSetIsOpen = (value: boolean) => {
+    setIsOpen(value);
+    onOpenChange?.(value); // ✅ Notifier le parent
+  };
 
   // Ta fiche d’instructions (mémo humain)
 const instructions = [
@@ -247,7 +254,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
   if (!isOpen) {
     return (
       <button
-        onClick={() => setIsOpen(true)}
+        onClick={() => handleSetIsOpen(true)}
         className="fixed bottom-38 right-4 z-[500] bg-purple-600 text-white p-3 rounded-full shadow-lg hover:bg-purple-700 transition"
         title="Config Converter (Dev Tool)"
       >
@@ -266,7 +273,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
             <h2 className="text-xl font-bold text-white">Config Converter (Dev Tool)</h2>
           </div>
           <button
-            onClick={() => setIsOpen(false)}
+            onClick={() => handleSetIsOpen(false)}
             className="text-gray-400 hover:text-white transition"
           >
             <X size={24} />

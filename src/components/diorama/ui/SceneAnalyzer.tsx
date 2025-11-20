@@ -8,6 +8,7 @@ import * as THREE from "three";
 interface SceneAnalyzerProps {
   scene: THREE.Scene | null;
   glbUrl?: string;
+  onOpenChange?: (isOpen: boolean) => void;
 }
 
 interface MeshInfo {
@@ -34,7 +35,7 @@ interface TextureInfo {
   resolution: number; // ✅ Pour le tri
 }
 
-export default function SceneAnalyzer({ scene, glbUrl }: SceneAnalyzerProps) {
+export default function SceneAnalyzer({ scene, glbUrl, onOpenChange }: SceneAnalyzerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'overview' | 'meshes' | 'armatures' | 'textures'>('overview');
   const [stats, setStats] = useState({
@@ -221,14 +222,20 @@ export default function SceneAnalyzer({ scene, glbUrl }: SceneAnalyzerProps) {
     return recs;
   };
 
+    // ✅ MODIFIER le setIsOpen
+  const handleSetIsOpen = (value: boolean) => {
+    setIsOpen(value);
+    onOpenChange?.(value); // ✅ Notifier le parent
+  };
+
   if (!scene) return null;
 
   return (
     <>
       {/* Bouton flottant */}
       <button
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-20 right-4 z-[9998] bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-4 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 transition-all hover:scale-105"
+        onClick={() => handleSetIsOpen(true)}
+        className="fixed bottom-82 right-4 z-[9998] bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-4 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 transition-all hover:scale-105"
         title="Analyser la scène 3D"
       >
         <span className="text-xl">📊</span>
@@ -244,7 +251,7 @@ export default function SceneAnalyzer({ scene, glbUrl }: SceneAnalyzerProps) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
+              onClick={() => handleSetIsOpen(false)}
               className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9998]"
             />
 
@@ -279,7 +286,7 @@ export default function SceneAnalyzer({ scene, glbUrl }: SceneAnalyzerProps) {
                     🔄
                     </button>
                     <button
-                    onClick={() => setIsOpen(false)}
+                    onClick={() => handleSetIsOpen(false)}
                     className="text-white hover:bg-white/20 rounded-lg p-2 transition"
                     >
                     ✕

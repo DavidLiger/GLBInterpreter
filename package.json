@@ -11,6 +11,9 @@
     "export-configs": "ts-node scripts/export-configs.ts"
   },
   "dependencies": {
+    "@gltf-transform/core": "^4.2.1",
+    "@gltf-transform/extensions": "^4.2.1",
+    "@gltf-transform/functions": "^4.2.1",
     "@serwist/next": "^9.2.1",
     "framer-motion": "^12.23.12",
     "glob": "^11.0.3",
