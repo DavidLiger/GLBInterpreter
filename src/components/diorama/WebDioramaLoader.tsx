@@ -122,6 +122,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   const [isInitializing, setIsInitializing] = useState(false);  // ✅ NOUVEAU
   const [checkingCache, setCheckingCache] = useState(true);
   const [testKey, setTestKey] = useState(0);
+  const [isPreparingAfterTest, setIsPreparingAfterTest] = useState(false);
   const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
   );
@@ -200,7 +201,13 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
           onComplete={(passed) => {
             console.log('✅ Test terminé, résultat:', passed);
             setDeviceTestPassed(true);
-            setShowDeviceTester(false);
+            
+            // ✅ ATTENDRE 2 secondes pour libérer WebGL
+            console.log('⏳ Pause 2s pour libérer le contexte WebGL du test...');
+            setTimeout(() => {
+              console.log('✅ Contexte WebGL libéré, continuer');
+              setShowDeviceTester(false);
+            }, 2000);
           }}
           onSkip={() => {
             console.log('⏭️ Test skippé');
@@ -209,7 +216,14 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
           }}
         />
       )}
-
+      {isPreparingAfterTest && (
+        <div className="fixed inset-0 bg-black z-[9998] flex items-center justify-center">
+          <div className="text-white text-center">
+            <div className="animate-spin text-4xl mb-4">⚙️</div>
+            <p className="text-xl">Préparation de l'expérience...</p>
+          </div>
+        </div>
+      )}
       {/* ✅ Le reste seulement si pas de device tester */}
       {!showDeviceTester && (
         <>

@@ -146,6 +146,51 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
     }
   }, [result, phase, isRunning]); // ✅ Ajouter isRunning
 
+  // Dans DeviceTester.tsx, ajoutez un useEffect de cleanup global :
+  useEffect(() => {
+    // Cleanup à l'unmount du composant entier
+    return () => {
+      console.log('🧹 Cleanup DeviceTester - Libération WebGL');
+      
+      // Annuler le benchmark en cours
+      if (isRunning) {
+        cancelBenchmark();
+      }
+      
+      // Dispose renderer
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+        rendererRef.current.forceContextLoss(); // ✅ Force la libération
+        rendererRef.current = null;
+      }
+      
+      // Clear scene
+      if (sceneRef.current) {
+        sceneRef.current.traverse((obj) => {
+          if ((obj as any).geometry) (obj as any).geometry.dispose();
+          if ((obj as any).material) {
+            if (Array.isArray((obj as any).material)) {
+              (obj as any).material.forEach((mat: any) => mat.dispose());
+            } else {
+              (obj as any).material.dispose();
+            }
+          }
+        });
+        sceneRef.current = null;
+      }
+      
+      cameraRef.current = null;
+      
+      // Supprimer tous les canvas créés
+      if (containerRef.current) {
+        const canvases = containerRef.current.querySelectorAll('canvas');
+        canvases.forEach(canvas => canvas.remove());
+      }
+      
+      console.log('✅ Cleanup DeviceTester terminé');
+    };
+  }, []); // ✅ Seulement à l'unmount, pas de deps
+
     return (
       <div className="fixed inset-0 bg-black z-[10000] overflow-y-auto">
         {/* ✅ Container seulement visible en phase testing ET avec pointer-events: none */}
