@@ -45,6 +45,7 @@ import useUnifiedAudio from "./hooks/useUnifiedAudio";
 import DeviceTester from "./ui/DeviceTester";
 import SceneAnalyzer from "./ui/SceneAnalyzer";
 import GLBOptimizer from "./ui/GLBOptimizer";
+import SpritesheetGenerator from "./ui/SpritesheetGenerator";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -1117,6 +1118,12 @@ function WebDioramaLoaderInner({
 
           {process.env.NODE_ENV === "development" && (
             <GLBOptimizer 
+              onOpenChange={setDevToolOpen} 
+            />
+          )}
+
+          {process.env.NODE_ENV === "development" && (
+            <SpritesheetGenerator 
               onOpenChange={setDevToolOpen} 
             />
           )}

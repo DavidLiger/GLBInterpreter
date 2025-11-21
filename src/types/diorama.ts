@@ -103,13 +103,22 @@ export type OrbitParams = {
   dampingFactor?: number;
 };
 
+// Dans src/types/diorama.ts
 export type DioramaVideo = {
   name: string;          // Object name in Blender
   src: string;           // Path to the video
-  materialIndex?: number; // Optional: which material index to apply it to
-  loop?: boolean;        // Default true
-  muted?: boolean;       // Default true
-  autoplay?: boolean;    // Default true
+  materialIndex?: number;
+  loop?: boolean;
+  muted?: boolean;
+  autoplay?: boolean;
+  type?: 'video' | 'spritesheet'; // ✅ AJOUTER
+  spritesheet?: {                  // ✅ AJOUTER
+    columns: number;
+    rows: number;
+    totalFrames: number;
+    fps?: number;
+    mode?: 'loop' | 'controlled';
+  };
 };
 
 export type DioramaLight = {
