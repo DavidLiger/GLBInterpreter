@@ -417,7 +417,7 @@ useEffect(() => {
     // setProgress(Math.min(t, duration));
 
     frameCountRef.current++;
-    if (frameCountRef.current % 1.5 === 0) { // Update tous les 3 frames (20fps)
+    if (frameCountRef.current % 2 === 0) { // Update tous les 3 frames (20fps)
       const newProgress = Math.min(t, duration);
       if (Math.abs(newProgress - lastProgressRef .current) > 0.01) {
         setProgress(newProgress);
