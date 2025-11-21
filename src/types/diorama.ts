@@ -7,6 +7,15 @@ export type AnimatedElement = {
   clipName: string;  // Nom du clip à jouer
   autoplay: boolean; 
   loop: boolean;
+  facialSpritesheets?: Array<{
+    meshName: string;
+    src: string;
+    columns: number;
+    rows: number;
+    totalFrames: number;
+    fps: number;
+    mode: 'loop' | 'controlled';
+  }>;
 };
 
 export type DialogueCharacter = {
