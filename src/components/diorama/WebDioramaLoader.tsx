@@ -140,7 +140,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
 
   return (
     <>
-      {/* ✅ 1. Vérification cache */}
+      {/* ✅ Écran de vérification cache */}
       {checkingCache && (
         <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
           <div className="text-white text-center">
@@ -150,42 +150,8 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
         </div>
       )}
 
-      {/* ✅ 2. Téléchargement EN PREMIER */}
-      {showDownloadModal && !assetsReady && (
-        <BookDownloadModal
-          bookId={bookId}
-          config={config}
-          onComplete={() => {
-            setShowDownloadModal(false);
-            setIsInitializing(true);
-            
-            console.log("⏳ Pause 2s pour libérer mémoire...");
-            
-            if (typeof window !== 'undefined' && (window as any).gc) {
-              (window as any).gc();
-            }
-            
-            setTimeout(() => {
-              console.log("✅ Mémoire libérée");
-              
-              // ✅ Vérifier si on doit montrer le device tester
-              const shouldTest = (config as any).deviceTester?.enabled && !deviceTestPassed;
-              
-              if (shouldTest) {
-                setShowDeviceTester(true);
-                setIsInitializing(false);
-              } else {
-                setAssetsReady(true);
-                setIsInitializing(false);
-              }
-            }, 2000);
-          }}
-          onCancel={() => setShowDownloadModal(false)}
-        />
-      )}
-
-      {/* ✅ 3. Device Tester APRÈS téléchargement */}
-      {showDeviceTester && !deviceTestPassed && (config as any).deviceTester && (
+      {/* ✅ Device Tester EN PREMIER, bloque tout */}
+      {showDeviceTester && (config as any).deviceTester && (
         <DeviceTester
           key={testKey}
           isMobileDevice={isMobileDevice}
@@ -196,51 +162,96 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
             console.log('✅ Test terminé, résultat:', passed);
             setDeviceTestPassed(true);
             
+            // ✅ ATTENDRE 2 secondes pour libérer WebGL
+            console.log('⏳ Pause 2s pour libérer le contexte WebGL du test...');
             setTimeout(() => {
-              console.log('✅ Contexte WebGL libéré');
+              console.log('✅ Contexte WebGL libéré, continuer');
               setShowDeviceTester(false);
-              setAssetsReady(true); // ✅ Lancer la scène
             }, 2000);
           }}
           onSkip={() => {
+            console.log('⏭️ Test skippé');
             setDeviceTestPassed(true);
             setShowDeviceTester(false);
-            setAssetsReady(true);
           }}
         />
       )}
-
-      {/* ✅ 4. Écran de transition */}
-      {isInitializing && !assetsReady && (
-        <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+      {isPreparingAfterTest && (
+        <div className="fixed inset-0 bg-black z-[9998] flex items-center justify-center">
           <div className="text-white text-center">
-            <div className="text-6xl mb-4 animate-pulse">🎬</div>
-            <p className="text-xl">{t.reload?.preparing || "Préparation de la scène..."}</p>
-            <p className="text-sm text-gray-400 mt-2">{t.reload?.optimizing || "Optimisation mémoire GPU"}</p>
+            <div className="animate-spin text-4xl mb-4">⚙️</div>
+            <p className="text-xl">{t.deviceTester?.preparing || "Préparation de l'expérience..."}</p>
           </div>
         </div>
       )}
+      {/* ✅ Le reste seulement si pas de device tester */}
+      {!showDeviceTester && (
+        <>
+          {checkingCache && (
+            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+              {/* ... */}
+            </div>
+          )}
 
-      {/* ✅ 5. Bouton téléchargement si besoin */}
-      {!assetsReady && !showDownloadModal && !checkingCache && !isInitializing && !showDeviceTester && (
-        <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-          <div className="text-center">
-            <div className="text-6xl mb-6">📦</div>
-            <h2 className="text-white text-xl mb-6">
-              {t.bookDownload?.required || "Téléchargement requis"}
-            </h2>
-            <button
-              onClick={() => setShowDownloadModal(true)}
-              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transition"
-            >
-              📥 {t.bookDownload?.download || "Télécharger"}
-            </button>
-          </div>
-        </div>
+          {showDownloadModal && !assetsReady && (
+            <BookDownloadModal
+              bookId={bookId}
+              config={config}
+              onComplete={() => {
+                setShowDownloadModal(false);
+                setIsInitializing(true); // ✅ État intermédiaire
+                
+                console.log("⏳ Pause 2s pour libérer mémoire...");
+                
+                // ✅ Forcer garbage collection (si disponible)
+                if (typeof window !== 'undefined' && (window as any).gc) {
+                  (window as any).gc();
+                }
+                
+                // ✅ Délai avant de lancer la scène 3D
+                setTimeout(() => {
+                  console.log("✅ Mémoire libérée, lancement scène...");
+                  setAssetsReady(true);
+                  // setIsInitializing(false);
+                }, 2000);
+              }}
+              onCancel={() => setShowDownloadModal(false)}
+            />
+          )}
+
+          {/* ✅ Écran de transition */}
+          {isInitializing && !assetsReady && (
+            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+              <div className="text-white text-center">
+                <div className="text-6xl mb-4 animate-pulse">🎬</div>
+                <p className="text-xl">{t.reload?.preparing || "Préparation de la scène..."}</p>
+                <p className="text-sm text-gray-400 mt-2">{t.reload?.optimizing || "Optimisation mémoire GPU"}</p>
+              </div>
+            </div>
+          )}
+
+          {!assetsReady && !showDownloadModal && !checkingCache && !isInitializing && (
+            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+              <div className="text-center">
+                <div className="text-6xl mb-6">📦</div>
+                <h2 className="text-white text-xl mb-6">
+                  {t.bookDownload?.required || "Téléchargement requis"}
+                </h2>
+                <button
+                  onClick={() => setShowDownloadModal(true)}
+                  className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transition"
+                >
+                  📥 {t.bookDownload?.download || "Télécharger"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {assetsReady && <WebDioramaLoaderInner config={config} bookId={bookId} />}
+        </>
       )}
 
-      {/* ✅ 6. Scène 3D finale */}
-      {assetsReady && <WebDioramaLoaderInner config={config} bookId={bookId} />}
+      
     </>
   );
 }
