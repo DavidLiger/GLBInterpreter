@@ -183,6 +183,17 @@ export const usePOIScenePlayer = ({
     setIsEnded(true);
   }, [poi]);
 
+  
+
+  // ✅ AJOUTER après les autres useEffects (ligne ~100)
+  useEffect(() => {
+    // Si le POI change pendant qu'une animation tourne, la stopper
+    if (isPlaying && poi?.id !== poiRef.current?.id) {
+      console.log("🛑 POI changé pendant animation, stop automatique");
+      stopScene();
+    }
+  }, [poi?.id, isPlaying, stopScene]);
+
   // 🔹 Toggle play/pause
   const togglePlayPause = useCallback(() => {
     const shouldSyncAudio = isPaused || (!isPlaying && !isEnded && lastSeekTimeRef.current > 0);
@@ -417,7 +428,7 @@ useEffect(() => {
     // setProgress(Math.min(t, duration));
 
     frameCountRef.current++;
-    if (frameCountRef.current % 2 === 0) { // Update tous les 3 frames (20fps)
+    if (frameCountRef.current % 3 === 0) { // Update tous les 3 frames (20fps)
       const newProgress = Math.min(t, duration);
       if (Math.abs(newProgress - lastProgressRef .current) > 0.01) {
         setProgress(newProgress);

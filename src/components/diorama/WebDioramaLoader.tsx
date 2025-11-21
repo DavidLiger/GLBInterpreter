@@ -48,7 +48,6 @@ import GLBOptimizer from "./ui/GLBOptimizer";
 import SpritesheetGenerator from "./ui/SpritesheetGenerator";
 import { applySpritesheets } from "./rendering/applySpritesheet";
 import { SpritesheetAnimator } from "./rendering/SpritesheetAnimator";
-import { applyFacialSpritesheets } from "./rendering/applyFacialSpritesheets";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -610,13 +609,6 @@ function WebDioramaLoaderInner({
             emptyRefs.current, 
             config.videos,
             spritesheetAnimatorRef.current // ✅ Passer l'animator
-          );
-            // ✅ AJOUTER :
-          applyFacialSpritesheets(
-            gltf.scene,
-            emptyRefs.current,
-            config.pois as POIWithElements[],
-            spritesheetAnimatorRef.current
           );
           applyVideoTextures(
             gltf.scene, 

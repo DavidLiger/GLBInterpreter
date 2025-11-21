@@ -237,26 +237,6 @@ export const street: DioramaConfig3DWithPostProcessing = {
           clipName: "walkAppart",
           autoplay: false,
           loop: false,
-          facialSpritesheets: [
-            {
-              meshName: "billboard_eye", // Mesh dans Blender
-              src: `${BASE_URL}/spritesheets/spritesheet_TV-screen.webp`,
-              columns: 4,
-              rows: 2,
-              totalFrames: 8,
-              fps: 24,
-              mode: 'controlled' // Sync avec animation
-            },
-            {
-              meshName: "billboard_mouth",
-              src: `${BASE_URL}/spritesheets/spritesheet_TV-screen.webp`,
-              columns: 6,
-              rows: 4,
-              totalFrames: 24,
-              fps: 24,
-              mode: 'controlled'
-            }
-          ]
         },
         {
           name: "Suzanne",
