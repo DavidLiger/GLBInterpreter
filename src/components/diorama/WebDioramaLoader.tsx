@@ -300,7 +300,20 @@ function WebDioramaLoaderInner({
   // const { loadAssets, progress: assetProgress, loadedCount, totalCount, currentAsset } = useAssetPreloader();
 
   const { currentPOI, goToPOI, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively } =
-    usePOINavigation(config, cameraRef, controlsRef, emptyRefs);
+    usePOINavigation(
+      config, 
+      cameraRef, 
+      controlsRef, 
+      emptyRefs,
+    () => {
+      // ✅ NOUVEAU : Callback appelé AVANT chaque changement de POI
+      if (isPlaying) {
+        console.log("🛑 Changement POI détecté, stop scène");
+        prepareForPOIChange();
+        stopScene();
+      }
+    }
+    );
 
   const currentPoi = currentPOI ? findPOIRecursively(currentPOI) ?? undefined : undefined;
   const [isLoaded, setIsLoaded] = useState(false);
@@ -346,7 +359,8 @@ function WebDioramaLoaderInner({
     startSoundReady,  
     enableAudio,
     cleanup: cleanupAudio,
-    seekSceneAudio
+    seekSceneAudio,
+    prepareForPOIChange
   } = useUnifiedAudio({
     pois: config.pois,
     currentPOI,

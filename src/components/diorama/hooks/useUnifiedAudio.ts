@@ -29,6 +29,7 @@ export default function useUnifiedAudio({
   const [muted, setMuted] = useState(false);
   const [startSoundReady, setStartSoundReady] = useState(false);
   const previousPOIRef = useRef<string | null>(null);
+  const [isTransitioning, setIsTransitioning] = useState(false);
 
     // ══════════════════════════════════════
     // 1. CRÉATION LAZY DES AUDIOS (au lieu de preload)
@@ -90,61 +91,68 @@ export default function useUnifiedAudio({
     // 3. GESTION AMBIENT (avec création lazy)
     // ══════════════════════════════════════
     useEffect(() => {
-    console.log("🎵 [AMBIENT] Check:", { 
-        currentPOI, 
-        startSoundReady, 
-        isPlaying: audioState.isPlaying, 
-        isEnded: audioState.isEnded,
-        muted 
-    });
-    
-    if (!currentPOI || !startSoundReady) {
-        console.log("⏸️ [AMBIENT] Early return (pas de POI ou pas ready)");
-        return;
-    }
-
-    const isScenePlaying = audioState.isPlaying && !audioState.isEnded;
-    console.log("🎵 [AMBIENT] isScenePlaying:", isScenePlaying);
-    
-    // Arrêter ancien POI
-    if (previousPOIRef.current && previousPOIRef.current !== currentPOI) {
-        const oldAmbient = ambientAudioRefs.current[previousPOIRef.current];
-        if (oldAmbient) {
-        console.log("⏹️ [AMBIENT] Stop ancien:", previousPOIRef.current);
-        oldAmbient.pause();
-        oldAmbient.currentTime = 0;
-        }
-    }
-
-    // Play nouveau POI (sauf si scène en cours)
-    if (!isScenePlaying) {
-        // ✅ Trouver l'URL dans la config
-        const poi = pois.find(p => p.id === currentPOI) || 
-                    findPOIRecursively(pois, currentPOI);
+        console.log("🎵 [AMBIENT] Check:", { 
+            currentPOI, 
+            startSoundReady, 
+            isPlaying: audioState.isPlaying, 
+            isEnded: audioState.isEnded,
+            muted,
+            isTransitioning
+        });
         
-        if (poi?.ambientSound) {
-        const ambient = getOrCreateAmbientAudio(currentPOI, poi.ambientSound);
-        console.log("▶️ [AMBIENT] Play:", currentPOI, "src:", ambient.src, "muted:", muted);
-        ambient.muted = muted;
-        ambient.play()
-            .then(() => console.log("✅ [AMBIENT] Lecture démarrée"))
-            .catch((err) => {
-            console.error("❌ [AMBIENT] Erreur play:", err);
-            console.log("🔍 [AMBIENT] Audio state:", {
-                src: ambient.src,
-                readyState: ambient.readyState,
-                networkState: ambient.networkState,
-                error: ambient.error
-            });
-            });
-        } else {
-        console.warn("⚠️ [AMBIENT] Pas d'ambientSound pour POI:", currentPOI);
+        // ✅ VÉRIFIER LA TRANSITION EN PREMIER
+        if (isTransitioning) {
+            console.log("⏸️ [AMBIENT] Transition en cours, skip");
+            return;
         }
-    } else {
-        console.log("⏸️ [AMBIENT] Scène en cours, pas de lecture ambient");
-    }
 
-    previousPOIRef.current = currentPOI;
+        if (!currentPOI || !startSoundReady) {
+            console.log("⏸️ [AMBIENT] Early return (pas de POI ou pas ready)");
+            return;
+        }
+
+        const isScenePlaying = audioState.isPlaying && !audioState.isEnded;
+        console.log("🎵 [AMBIENT] isScenePlaying:", isScenePlaying);
+        
+        // Arrêter ancien POI
+        if (previousPOIRef.current && previousPOIRef.current !== currentPOI) {
+            const oldAmbient = ambientAudioRefs.current[previousPOIRef.current];
+            if (oldAmbient) {
+            console.log("⏹️ [AMBIENT] Stop ancien:", previousPOIRef.current);
+            oldAmbient.pause();
+            oldAmbient.currentTime = 0;
+            }
+        }
+
+        // Play nouveau POI (sauf si scène en cours)
+        if (!isScenePlaying) {
+            // ✅ Trouver l'URL dans la config
+            const poi = pois.find(p => p.id === currentPOI) || 
+                        findPOIRecursively(pois, currentPOI);
+            
+            if (poi?.ambientSound) {
+            const ambient = getOrCreateAmbientAudio(currentPOI, poi.ambientSound);
+            console.log("▶️ [AMBIENT] Play:", currentPOI, "src:", ambient.src, "muted:", muted);
+            ambient.muted = muted;
+            ambient.play()
+                .then(() => console.log("✅ [AMBIENT] Lecture démarrée"))
+                .catch((err) => {
+                console.error("❌ [AMBIENT] Erreur play:", err);
+                console.log("🔍 [AMBIENT] Audio state:", {
+                    src: ambient.src,
+                    readyState: ambient.readyState,
+                    networkState: ambient.networkState,
+                    error: ambient.error
+                });
+                });
+            } else {
+            console.warn("⚠️ [AMBIENT] Pas d'ambientSound pour POI:", currentPOI);
+            }
+        } else {
+            console.log("⏸️ [AMBIENT] Scène en cours, pas de lecture ambient");
+        }
+
+        previousPOIRef.current = currentPOI;
     }, [currentPOI, muted, startSoundReady, audioState.isPlaying, audioState.isEnded, pois, getOrCreateAmbientAudio]);
 
     // Helper pour trouver POI récursivement
@@ -181,7 +189,7 @@ export default function useUnifiedAudio({
         // ─── Démarrage scène ───
         if (isScenePlaying && !audioState.isPaused && audioState.currentSceneSound) {
             Object.values(ambientAudioRefs.current).forEach(audio => {
-            audio.pause();
+                audio.pause();
             });
 
             if (!sceneAudioRef.current || sceneAudioRef.current.src !== audioState.currentSceneSound) {
@@ -196,7 +204,6 @@ export default function useUnifiedAudio({
                 sceneAudioRef.current = audio;
                 allAudiosRef.current.push(audio);
                 
-                // ✅ Attendre metadata PUIS repositionner PUIS play
                 audio.addEventListener('loadedmetadata', () => {
                     const seekTime = audioState.currentTime || 0;
                     
@@ -209,40 +216,40 @@ export default function useUnifiedAudio({
                     audio.play().catch(() => {});
                 }, { once: true });
                 
-                audio.load(); // ✅ Déclenche le chargement
-                } else if (sceneAudioRef.current.paused) {
-                    console.log("▶️ [SCENE] Resume scene audio depuis:", sceneAudioRef.current.currentTime);
-                    sceneAudioRef.current.play().catch(() => {});
+                audio.load();
+            } else if (sceneAudioRef.current.paused) {
+                console.log("▶️ [SCENE] Resume scene audio depuis:", sceneAudioRef.current.currentTime);
+                sceneAudioRef.current.play().catch(() => {});
             }
         }
         // ─── Pause scène ───
         else if (audioState.isPaused && sceneAudioRef.current) {
             if (!sceneAudioRef.current.paused) {
-            console.log("⏸️ [SCENE] Pause scene audio");
-            sceneAudioRef.current.pause();
+                console.log("⏸️ [SCENE] Pause scene audio");
+                sceneAudioRef.current.pause();
             }
         }
-        // ─── Fin de scène ───
-        else if (audioState.isEnded) {
+        // ─── Fin de scène ─── ✅ BLOQUER SI TRANSITION
+        else if (audioState.isEnded && !isTransitioning) {
             console.log("🏁 [SCENE] Fin détectée");
             
             if (sceneAudioRef.current) {
-            console.log("⏹️ [SCENE] Stop scene audio");
-            sceneAudioRef.current.pause();
-            sceneAudioRef.current.currentTime = 0;
-            sceneAudioRef.current = null;
+                console.log("⏹️ [SCENE] Stop scene audio");
+                sceneAudioRef.current.pause();
+                sceneAudioRef.current.currentTime = 0;
+                sceneAudioRef.current = null;
             }
 
             if (currentPOI) {
-            const poi = pois.find(p => p.id === currentPOI) || 
-                        findPOIRecursively(pois, currentPOI);
-            
-            if (poi?.ambientSound) {
-                const ambient = getOrCreateAmbientAudio(currentPOI, poi.ambientSound);
-                console.log("▶️ [AMBIENT] Relance après scène:", currentPOI);
-                ambient.muted = muted;
-                ambient.play().catch(() => {});
-            }
+                const poi = pois.find(p => p.id === currentPOI) || 
+                            findPOIRecursively(pois, currentPOI);
+                
+                if (poi?.ambientSound) {
+                    const ambient = getOrCreateAmbientAudio(currentPOI, poi.ambientSound);
+                    console.log("▶️ [AMBIENT] Relance après scène:", currentPOI);
+                    ambient.muted = muted;
+                    ambient.play().catch(() => {});
+                }
             }
         }
     }, [
@@ -254,7 +261,8 @@ export default function useUnifiedAudio({
         currentPOI,
         muted,
         pois,
-        getOrCreateAmbientAudio
+        getOrCreateAmbientAudio,
+        isTransitioning // ✅ AJOUTÉ
     ]);
 
   // ══════════════════════════════════════
@@ -307,6 +315,19 @@ export default function useUnifiedAudio({
     // ══════════════════════════════════════
     // 6. CLEANUP (déplacé après seekSceneAudio)
     // ══════════════════════════════════════
+    const prepareForPOIChange = useCallback(() => {
+        console.log("🔄 [AUDIO] Préparation changement POI");
+        setIsTransitioning(true);
+        
+        // Arrêter l'ambient actuel
+        Object.values(ambientAudioRefs.current).forEach(audio => audio.pause());
+        
+        // Reset après un délai
+        setTimeout(() => {
+            setIsTransitioning(false);
+            console.log("✅ [AUDIO] Transition terminée");
+        }, 1500);
+    }, []);
 
     const cleanup = () => {
         console.log("🔇 Cleanup audio unifié - Début");
@@ -366,5 +387,6 @@ export default function useUnifiedAudio({
         seekSceneAudio, // ✅ AJOUTER
         cleanup,
         sceneAudioRef,
+        prepareForPOIChange,
     };
 }

@@ -59,6 +59,7 @@ export const usePOIScenePlayer = ({
   const lastProgressRef = useRef(0);
   const frameCountRef = useRef(0);
   const audioProgressRef = useRef(0);
+  const activePOIIdRef = useRef<string | null>(null);
 
   // 🔹 Reset stable de la scène
   const resetSceneStable = useCallback(() => {
@@ -182,17 +183,6 @@ export const usePOIScenePlayer = ({
     setIsPaused(false);
     setIsEnded(true);
   }, [poi]);
-
-  
-
-  // ✅ AJOUTER après les autres useEffects (ligne ~100)
-  useEffect(() => {
-    // Si le POI change pendant qu'une animation tourne, la stopper
-    if (isPlaying && poi?.id !== poiRef.current?.id) {
-      console.log("🛑 POI changé pendant animation, stop automatique");
-      stopScene();
-    }
-  }, [poi?.id, isPlaying, stopScene]);
 
   // 🔹 Toggle play/pause
   const togglePlayPause = useCallback(() => {
@@ -417,69 +407,79 @@ useEffect(() => {
 
   resetCameraToPOI();
 
+    // ✅ Mettre à jour l'ID actif
+  activePOIIdRef.current = poi.id;
+
   const update = () => {
-    if (activeActionsRef.current.length === 0) {
+  // ✅ Utiliser poiRef.current partout
+  if (activePOIIdRef.current !== poi.id) {
+      if (activeActionsRef.current.length > 0) {
+        console.log(`🛑 POI changé: ${activePOIIdRef.current} → ${poi.id}, stop des actions`);
+        activeActionsRef.current.forEach(a => a.stop());
+        activeActionsRef.current = [];
+        setIsPlaying(false);
+        setIsPaused(false);
+        activePOIIdRef.current = poi.id; // ✅ Mettre à jour
+      }
       rafRef.current = requestAnimationFrame(update);
       return;
     }
-
-    // 🔹 Progress basé sur mixers pour keep seek
-    const t = Math.max(...activeActionsRef.current.map(a => a.time));
-    // setProgress(Math.min(t, duration));
-
-    frameCountRef.current++;
-    if (frameCountRef.current % 3 === 0) { // Update tous les 3 frames (20fps)
-      const newProgress = Math.min(t, duration);
-      if (Math.abs(newProgress - lastProgressRef .current) > 0.01) {
-        setProgress(newProgress);
-        lastProgressRef .current = newProgress;
-      }
-    }
-
-    // 🔹 Gestion cameraPath pendant animation
-    if (poi.cameraPath?.length) {
-      const step = getCameraStepAtTime(poi, t);
-      if (step) {
-        const { curr, next } = step;
-        const pointA = emptyRefs.current[curr.point];
-        const pointB = emptyRefs.current[next.point];
-        const targetA = emptyRefs.current[curr.target || curr.point];
-        const targetB = emptyRefs.current[next.target || next.point];
-
-        if (pointA && pointB && targetA && targetB) {
-          const progressStep = Math.min((t - (curr.time ?? 0)) / (curr.duration ?? 1), 1);
-
-          const pos = new THREE.Vector3().lerpVectors(pointA.position, pointB.position, progressStep);
-          const look = new THREE.Vector3().lerpVectors(targetA.position, targetB.position, progressStep);
-
-          const tempObj = new THREE.Object3D();
-          tempObj.position.copy(pos);
-          tempObj.lookAt(look);
-
-          // 🔹 Zoom progressif si défini
-          if (curr.zoom !== undefined && next.zoom !== undefined) {
-            const zoomDistance = curr.zoom + (next.zoom - curr.zoom) * progressStep;
-            const direction = new THREE.Vector3().subVectors(tempObj.position, look).normalize();
-            tempObj.position.copy(look).addScaledVector(direction, zoomDistance);
-          }
-
-          moveCameraDuringAnimation(tempObj, poi, false);
-        }
-      }
-    }
-
-    // 🔹 Fin de l’animation
-    if (t >= duration) {
-      setIsPlaying(false);
-      setIsPaused(false);
-      setIsEnded(true);
-
-      // 🔹 Reset à la position de base pour que l'utilisateur reprenne le contrôle
-      resetCameraToPOI();
-    }
-
+  
+  if (activeActionsRef.current.length === 0) {
     rafRef.current = requestAnimationFrame(update);
-  };
+    return;
+  }
+
+  const t = Math.max(...activeActionsRef.current.map(a => a.time));
+
+  frameCountRef.current++;
+  if (frameCountRef.current % 3 === 0) {
+    const newProgress = Math.min(t, durationRef.current); // ✅ durationRef
+    if (Math.abs(newProgress - lastProgressRef.current) > 0.01) {
+      setProgress(newProgress);
+      lastProgressRef.current = newProgress;
+    }
+  }
+
+  // ✅ Utiliser poiRef.current
+  if (poiRef.current?.cameraPath?.length) {
+    const step = getCameraStepAtTime(poiRef.current, t);
+    if (step) {
+      const { curr, next } = step;
+      const pointA = emptyRefs.current[curr.point];
+      const pointB = emptyRefs.current[next.point];
+      const targetA = emptyRefs.current[curr.target || curr.point];
+      const targetB = emptyRefs.current[next.target || next.point];
+
+      if (pointA && pointB && targetA && targetB) {
+        const progressStep = Math.min((t - (curr.time ?? 0)) / (curr.duration ?? 1), 1);
+        const pos = new THREE.Vector3().lerpVectors(pointA.position, pointB.position, progressStep);
+        const look = new THREE.Vector3().lerpVectors(targetA.position, targetB.position, progressStep);
+
+        const tempObj = new THREE.Object3D();
+        tempObj.position.copy(pos);
+        tempObj.lookAt(look);
+
+        if (curr.zoom !== undefined && next.zoom !== undefined) {
+          const zoomDistance = curr.zoom + (next.zoom - curr.zoom) * progressStep;
+          const direction = new THREE.Vector3().subVectors(tempObj.position, look).normalize();
+          tempObj.position.copy(look).addScaledVector(direction, zoomDistance);
+        }
+
+        moveCameraDuringAnimationRef.current?.(tempObj, poiRef.current, false); // ✅ poiRef.current
+      }
+    }
+  }
+
+  if (t >= durationRef.current) { // ✅ durationRef
+    setIsPlaying(false);
+    setIsPaused(false);
+    setIsEnded(true);
+    resetCameraToPOI();
+  }
+
+  rafRef.current = requestAnimationFrame(update);
+};
 
   rafRef.current = requestAnimationFrame(update);
   return () => cancelAnimationFrame(rafRef.current!);

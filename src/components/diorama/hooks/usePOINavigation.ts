@@ -3,11 +3,16 @@ import { useState, useCallback } from "react";
 import * as THREE from "three";
 import type { POI, POIWithElements, DioramaConfig3D } from "@/types/diorama";
 
+type UsePOINavigationProps = {
+  onPOIChange?: () => void; // ✅ NOUVEAU
+};
+
 export const usePOINavigation = (
   config: DioramaConfig3D,
   cameraRef: React.RefObject<THREE.PerspectiveCamera | null>,
   controlsRef: React.RefObject<any>,
   emptyRefs: React.RefObject<Record<string, THREE.Object3D>>,
+  onPOIChange?: () => void 
 ) => {
   const [currentPOI, setCurrentPOI] = useState<string | null>(null);
 
@@ -235,6 +240,9 @@ const moveCameraToPOI = useCallback((obj: THREE.Object3D, poi: POI, smooth = tru
 
   // ────────────── Navigation principale ──────────────
   const goToPOI = useCallback((poi: POI) => {
+    // ✅ AJOUTER : Appeler le callback AVANT de bouger
+    onPOIChange?.();
+
     const targetObj = emptyRefs.current[poi.emptyName];
     if (!targetObj) return;
 
@@ -261,7 +269,7 @@ const moveCameraToPOI = useCallback((obj: THREE.Object3D, poi: POI, smooth = tru
     } else {
       moveCameraToPOI(targetObj, poi, true, () => setCurrentPOI(poi.id));
     }
-  }, [currentPOI, emptyRefs, moveCameraToPOI, config.pois, findParentPOI]);
+  }, [currentPOI, emptyRefs, moveCameraToPOI, config.pois, findParentPOI, onPOIChange]);
 
   return { currentPOI, goToPOI, getVisiblePOIs, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively  };
 };

@@ -66,13 +66,13 @@ export default function POIBreadcrumbs({
     ? `
       absolute top-2 left-2 z-50 flex flex-row items-center gap-2 
       bg-zinc-900/70 backdrop-blur-md rounded-xl px-4 py-2 shadow-lg border border-white/10
-      max-w-[calc(90vw-2rem)] overflow-x-auto scrollbar-none
+      max-w-[calc(90vw-2rem)] overflow-x-auto
     `
     : `
       absolute top-2 left-2 z-40 
       flex flex-col items-center gap-1
       bg-zinc-900/70 backdrop-blur-md rounded-2xl px-2 py-3 shadow-lg border border-white/10
-      overflow-y-auto scrollbar-none
+      overflow-y-auto
     `;
 
   const separatorClass = isPortrait ? "text-white/50" : "text-white/50 rotate-90";
@@ -99,6 +99,16 @@ export default function POIBreadcrumbs({
 
   // ── Rendu
   return (
+    <>
+    <style jsx>{`
+      div::-webkit-scrollbar {
+        display: none;
+      }
+      div {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+    `}</style>
     <div
       ref={containerRef}
       className={containerClass}
@@ -152,5 +162,6 @@ export default function POIBreadcrumbs({
         })}
       </AnimatePresence>
     </div>
+    </>
   );
 }
