@@ -111,8 +111,8 @@ export type DioramaVideo = {
   loop?: boolean;
   muted?: boolean;
   autoplay?: boolean;
-  type?: 'video' | 'spritesheet'; // ✅ AJOUTER
-  spritesheet?: {                  // ✅ AJOUTER
+  type?: 'video' | 'spritesheet';
+  spritesheet?: {                  
     columns: number;
     rows: number;
     totalFrames: number;

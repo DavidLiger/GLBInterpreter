@@ -364,12 +364,24 @@ export const street: DioramaConfig3DWithPostProcessing = {
     },
   ],
   videos: [ // pour les videostextures
+    // {
+    //   name: "TVScreen",
+    //   src: `${BASE_URL}/videos/test_street/Cab_Calloway_1933.mp4`,
+    //   materialIndex: 0,
+    //   loop: true,
+    //   muted: true,
+    // },
     {
       name: "TVScreen",
-      src: `${BASE_URL}/videos/test_street/Cab_Calloway_1933.mp4`,
-      materialIndex: 0,
-      loop: true,
-      muted: true,
+      src: "https://webdiorama-proxy.david-liger-pro.workers.dev/assets/1/spritesheets/spritesheet_TV-screen.webp",
+      type: "spritesheet",
+      spritesheet: {
+        columns: 8,
+        rows: 6,
+        totalFrames: 48,
+        fps: 24,
+        mode: "loop"
+      }
     },
     {
       name: "TVScreen2",

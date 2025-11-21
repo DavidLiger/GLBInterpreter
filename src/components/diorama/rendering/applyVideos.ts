@@ -2,14 +2,26 @@ import * as THREE from "three";
 import type { DioramaVideo } from "@/types/diorama";
 
 export function applyVideoTextures(
-  root: THREE.Object3D,
+  sceneOrGroup: THREE.Object3D,
   emptyRefs: Record<string, THREE.Object3D>,
   videos?: DioramaVideo[],
   videoElementsRef?: { current: HTMLVideoElement[] }
 ) {
   if (!videos) return;
 
-  videos.forEach(({ name, src, materialIndex, loop = true, muted = true, autoplay = true }) => {
+  videos.forEach(({ name, src, type, materialIndex, loop = true, muted = true, autoplay = true }) => {
+
+    if (type === 'spritesheet') {
+      console.log(`⏭️ Spritesheet ignorée par applyVideoTextures: ${name}`);
+      return;
+    }
+
+    const targetObj = emptyRefs[name];
+    if (!targetObj) {
+      console.warn(`❌ Mesh introuvable pour vidéo: ${name}`);
+      return;
+    }
+
     const obj = emptyRefs[name];
     if (!obj || !(obj as THREE.Mesh).isMesh) return;
 

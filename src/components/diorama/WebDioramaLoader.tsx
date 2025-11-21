@@ -46,6 +46,8 @@ import DeviceTester from "./ui/DeviceTester";
 import SceneAnalyzer from "./ui/SceneAnalyzer";
 import GLBOptimizer from "./ui/GLBOptimizer";
 import SpritesheetGenerator from "./ui/SpritesheetGenerator";
+import { applySpritesheets } from "./rendering/applySpritesheet";
+import { SpritesheetAnimator } from "./rendering/SpritesheetAnimator";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -313,6 +315,7 @@ function WebDioramaLoaderInner({
   const [loadedScene, setLoadedScene] = useState<THREE.Scene | null>(null);
   const [devToolOpen, setDevToolOpen] = useState(false);
   const devToolOpenRef = useRef(false);
+  const spritesheetAnimatorRef = useRef<SpritesheetAnimator | null>(null);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
 
@@ -495,6 +498,8 @@ function WebDioramaLoaderInner({
     camera.position.set(0, 2, 5);
     cameraRef.current = camera;
 
+    spritesheetAnimatorRef.current = new SpritesheetAnimator();
+
     // Post-processing config
     const configWithPP = config as any;
     const toneMappingMap: Record<string, THREE.ToneMapping> = {
@@ -598,11 +603,17 @@ function WebDioramaLoaderInner({
         }, 100);
 
         setTimeout(() => {
+          applySpritesheets(
+            gltf.scene, 
+            emptyRefs.current, 
+            config.videos,
+            spritesheetAnimatorRef.current // ✅ Passer l'animator
+          );
           applyVideoTextures(
             gltf.scene, 
             emptyRefs.current, 
             (config as DioramaConfig3DWithVideos).videos,
-            videoElementsRef // ✅ Passer la ref
+            videoElementsRef
           );
         }, 3000);
 
@@ -650,6 +661,10 @@ function WebDioramaLoaderInner({
       updateMixers(delta);
       controlsRef.current?.update();
 
+      if (spritesheetAnimatorRef.current) {
+        spritesheetAnimatorRef.current.update(delta);
+      }
+
       if (composerRef.current) {
         composerRef.current.composer.render();
       } else if (renderer && cameraRef.current && sceneRef.current) {
@@ -671,6 +686,11 @@ function WebDioramaLoaderInner({
       if (controlsRef.current) {
         controlsRef.current.dispose();
         controlsRef.current = null;
+      }
+
+      if (spritesheetAnimatorRef.current) {
+        spritesheetAnimatorRef.current.dispose();
+        spritesheetAnimatorRef.current = null;
       }
 
       disposeScene(sceneRef.current);
@@ -761,6 +781,11 @@ function WebDioramaLoaderInner({
       // 4. Stop animations
       stopAllAnimations();
       Object.values(mixerRef.current).forEach(mixer => mixer.stopAllAction());
+
+      if (spritesheetAnimatorRef.current) {
+        spritesheetAnimatorRef.current.dispose();
+        spritesheetAnimatorRef.current = null;
+      }
       
       // 5. Dispose scene
       if (sceneRef.current) {
