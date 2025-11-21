@@ -56,6 +56,9 @@ export const usePOIScenePlayer = ({
 
   const poiRef = useRef(poi);
   const durationRef = useRef(duration);
+  const lastProgressRef = useRef(0);
+  const frameCountRef = useRef(0);
+  const audioProgressRef = useRef(0);
 
   // 🔹 Reset stable de la scène
   const resetSceneStable = useCallback(() => {
@@ -182,28 +185,27 @@ export const usePOIScenePlayer = ({
 
   // 🔹 Toggle play/pause
   const togglePlayPause = useCallback(() => {
-  if (isPaused) {
-    // reprendre là où on était réellement
-    activeActionsRef.current.forEach(a => {
-      a.paused = false;
-      a.play();
-    });
-
-    setIsPaused(false);
-    setIsPlaying(true);
-  } else if (!isPlaying && isEnded) {
-    // replay depuis le début
-    replayScene();
-  } else if (!isPlaying) {
-    // play depuis le début
-    playScene();
-  } else {
-    // pause
-    activeActionsRef.current.forEach(a => (a.paused = true));
-    // if (!sceneAudioRef.current?.paused) sceneAudioRef.current?.pause();
-    setIsPaused(true);
-  }
-}, [isPlaying, isPaused, isEnded, playScene, replayScene]);
+    const shouldSyncAudio = isPaused || (!isPlaying && !isEnded && lastSeekTimeRef.current > 0);
+    
+    if (isPaused) {
+      activeActionsRef.current.forEach(a => {
+        a.paused = false;
+        a.play();
+      });
+      setIsPaused(false);
+      setIsPlaying(true);
+    } else if (!isPlaying && isEnded) {
+      replayScene();
+    } else if (!isPlaying) {
+      playScene();
+    } else {
+      activeActionsRef.current.forEach(a => (a.paused = true));
+      setIsPaused(true);
+    }
+    
+    // ✅ Retourner si on doit sync l'audio et à quel moment
+    return { shouldSyncAudio, syncTime: lastSeekTimeRef.current };
+  }, [isPlaying, isPaused, isEnded, playScene, replayScene]);
 
 
 
@@ -261,28 +263,144 @@ function getCameraStepAtTime(poi: POIWithElements, t: number) {
   return null;
 }
 
-// ✅ REMPLACER tout le useEffect par ceci :
-useEffect(() => {
-  // ✅ Capturer les valeurs au moment du mount
-  const currentEmptyRefs = emptyRefs?.current;
-  const currentControls = controlsRef?.current;
-  const currentCamera = cameraRef?.current;
+// ✅ 1. useEffect pour écouter le changement de POI (cleanup uniquement)
+// useEffect(() => {
+//   // Cancel la RAF précédente quand le POI change
+//   return () => {
+//     if (rafRef.current) {
+//       cancelAnimationFrame(rafRef.current);
+//       rafRef.current = undefined;
+//     }
+//   };
+// }, [poi?.id]);
+
+// ✅ 2. useEffect pour la RAF (mount une seule fois)
+// useEffect(() => {
+//   const update = () => {
+//     const currentEmptyRefs = emptyRefs?.current;
+//     const currentControls = controlsRef?.current;
+//     const currentCamera = cameraRef?.current;
+    
+//     if (!poiRef.current || !currentEmptyRefs || !currentControls) {
+//       rafRef.current = requestAnimationFrame(update);
+//       return;
+//     }
+
+//     const currentPOI = poiRef.current;
+
+//     if (activeActionsRef.current.length === 0) {
+//       rafRef.current = requestAnimationFrame(update);
+//       return;
+//     }
+
+//     // const t = Math.max(...activeActionsRef.current.map(a => a.time));
+    
+//     // // ✅ Throttle le setProgress pour éviter trop de re-renders
+//     // const newProgress = Math.min(t, durationRef.current);
+//     // if (Math.abs(newProgress - lastProgressRef.current) > 0.016) {
+//     //   setProgress(newProgress);
+//     //   lastProgressRef.current = newProgress; // ✅ Mettre à jour la ref
+//     // }
+
+//     const t = Math.max(...activeActionsRef.current.map(a => a.time));
+//     const newProgress = Math.min(t, durationRef.current);
+
+//     audioProgressRef.current = newProgress;
+
+//     frameCountRef.current++;
+
+//     // Update le state seulement toutes les 6 frames (~100ms à 60fps)
+//     if (frameCountRef.current % 6 === 0) {
+//       setProgress(newProgress);
+//       lastProgressRef.current = newProgress;
+//     }
+
+//     if (currentPOI.cameraPath?.length) {
+//       const step = getCameraStepAtTime(currentPOI, t);
+//       if (step) {
+//         const { curr, next } = step;
+//         const pointA = currentEmptyRefs[curr.point];
+//         const pointB = currentEmptyRefs[next.point];
+//         const targetA = currentEmptyRefs[curr.target || curr.point];
+//         const targetB = currentEmptyRefs[next.target || next.point];
+
+//         if (pointA && pointB && targetA && targetB) {
+//           const progressStep = Math.min((t - (curr.time ?? 0)) / (curr.duration ?? 1), 1);
+//           const pos = new THREE.Vector3().lerpVectors(pointA.position, pointB.position, progressStep);
+//           const look = new THREE.Vector3().lerpVectors(targetA.position, targetB.position, progressStep);
+
+//           const tempObj = new THREE.Object3D();
+//           tempObj.position.copy(pos);
+//           tempObj.lookAt(look);
+
+//           if (curr.zoom !== undefined && next.zoom !== undefined) {
+//             const zoomDistance = curr.zoom + (next.zoom - curr.zoom) * progressStep;
+//             const direction = new THREE.Vector3().subVectors(tempObj.position, look).normalize();
+//             tempObj.position.copy(look).addScaledVector(direction, zoomDistance);
+//           }
+
+//           moveCameraDuringAnimationRef.current?.(tempObj, currentPOI, false);
+//         }
+//       }
+//     }
+
+//     if (t >= durationRef.current) {
+//       setIsPlaying(false);
+//       setIsPaused(false);
+//       setIsEnded(true);
+      
+//       // Reset camera
+//       const baseObj = currentEmptyRefs[currentPOI.emptyName];
+//       if (baseObj && currentCamera) {
+//         currentCamera.position.copy(baseObj.position.clone().add(new THREE.Vector3(0, 0, currentPOI.zoom ?? 3)));
+//         if (currentControls) {
+//           currentControls.target.copy(baseObj.position);
+//           currentControls.update();
+//           currentControls.enabled = true;
+//         }
+//       }
+//     }
+
+//     rafRef.current = requestAnimationFrame(update);
+//   };
+
+//   rafRef.current = requestAnimationFrame(update);
   
-  if (!poiRef.current || !currentEmptyRefs || !currentControls) return;
+//   return () => {
+//     if (rafRef.current) {
+//       cancelAnimationFrame(rafRef.current);
+//     }
+//   };
+// }, []); // ✅ Mount une seule fois
 
-  const currentPOI = poiRef.current;
 
-  // Fonction reset
+useEffect(() => {
+  if (!poi || !emptyRefs?.current || !controlsRef?.current || !moveCameraDuringAnimation || !moveCameraToPOI) return;
+
+  const controls = controlsRef.current;
+
+  const getLookOffset = (axis: "x" | "y" | "z" = "x") => {
+    switch (axis) {
+      case "x": return new THREE.Vector3(1, 0, 0);
+      case "y": return new THREE.Vector3(0, 1, 0);
+      case "z": return new THREE.Vector3(0, 0, 1);
+      default: return new THREE.Vector3(1, 0, 0);
+    }
+  };
+
+  // 🔹 Fonction pour reset camera POI de base (utilisateur)
   const resetCameraToPOI = () => {
-    const baseObj = currentEmptyRefs[currentPOI.emptyName];
-    if (!baseObj || !currentCamera) return;
+    const baseObj = emptyRefs.current[poi.emptyName];
+    if (!baseObj) return;
 
-    currentCamera.position.copy(baseObj.position.clone().add(new THREE.Vector3(0, 0, currentPOI.zoom ?? 3)));
+    // Déplace la caméra
+    cameraRef?.current!.position.copy(baseObj.position.clone().add(new THREE.Vector3(0, 0, poi.zoom ?? 3)));
 
-    if (currentControls) {
-      currentControls.target.copy(baseObj.position);
-      currentControls.update();
-      currentControls.enabled = true;
+    // Débloque OrbitControls
+    if (controlsRef?.current) {
+      controlsRef.current.target.copy(baseObj.position); // cible = POI
+      controlsRef.current.update(); // recalcul
+      controlsRef.current.enabled = true; // s'assurer qu'il est actif
     }
   };
 
@@ -294,20 +412,32 @@ useEffect(() => {
       return;
     }
 
+    // 🔹 Progress basé sur mixers pour keep seek
     const t = Math.max(...activeActionsRef.current.map(a => a.time));
-    setProgress(Math.min(t, durationRef.current));
+    // setProgress(Math.min(t, duration));
 
-    if (poiRef.current?.cameraPath?.length) {
-      const step = getCameraStepAtTime(poiRef.current, t);
+    frameCountRef.current++;
+    if (frameCountRef.current % 1.5 === 0) { // Update tous les 3 frames (20fps)
+      const newProgress = Math.min(t, duration);
+      if (Math.abs(newProgress - lastProgressRef .current) > 0.01) {
+        setProgress(newProgress);
+        lastProgressRef .current = newProgress;
+      }
+    }
+
+    // 🔹 Gestion cameraPath pendant animation
+    if (poi.cameraPath?.length) {
+      const step = getCameraStepAtTime(poi, t);
       if (step) {
         const { curr, next } = step;
-        const pointA = currentEmptyRefs[curr.point];
-        const pointB = currentEmptyRefs[next.point];
-        const targetA = currentEmptyRefs[curr.target || curr.point];
-        const targetB = currentEmptyRefs[next.target || next.point];
+        const pointA = emptyRefs.current[curr.point];
+        const pointB = emptyRefs.current[next.point];
+        const targetA = emptyRefs.current[curr.target || curr.point];
+        const targetB = emptyRefs.current[next.target || next.point];
 
         if (pointA && pointB && targetA && targetB) {
           const progressStep = Math.min((t - (curr.time ?? 0)) / (curr.duration ?? 1), 1);
+
           const pos = new THREE.Vector3().lerpVectors(pointA.position, pointB.position, progressStep);
           const look = new THREE.Vector3().lerpVectors(targetA.position, targetB.position, progressStep);
 
@@ -315,21 +445,25 @@ useEffect(() => {
           tempObj.position.copy(pos);
           tempObj.lookAt(look);
 
+          // 🔹 Zoom progressif si défini
           if (curr.zoom !== undefined && next.zoom !== undefined) {
             const zoomDistance = curr.zoom + (next.zoom - curr.zoom) * progressStep;
             const direction = new THREE.Vector3().subVectors(tempObj.position, look).normalize();
             tempObj.position.copy(look).addScaledVector(direction, zoomDistance);
           }
 
-          moveCameraDuringAnimationRef.current?.(tempObj, poiRef.current, false);
+          moveCameraDuringAnimation(tempObj, poi, false);
         }
       }
     }
 
-    if (t >= durationRef.current) {
+    // 🔹 Fin de l’animation
+    if (t >= duration) {
       setIsPlaying(false);
       setIsPaused(false);
       setIsEnded(true);
+
+      // 🔹 Reset à la position de base pour que l'utilisateur reprenne le contrôle
       resetCameraToPOI();
     }
 
@@ -337,13 +471,9 @@ useEffect(() => {
   };
 
   rafRef.current = requestAnimationFrame(update);
-  
-  return () => {
-    if (rafRef.current) {
-      cancelAnimationFrame(rafRef.current);
-    }
-  };
-}, []); // ✅ ARRAY VIDE - mount une seule fois
+  return () => cancelAnimationFrame(rafRef.current!);
+}, [poi, duration, emptyRefs, controlsRef, moveCameraDuringAnimation, moveCameraToPOI]);
+
 
 const cleanup = useCallback(() => {
   console.log("🔇 Cleanup POI Scene Player");
@@ -375,6 +505,7 @@ const cleanup = useCallback(() => {
     isEnded,
     progress,
     duration,
+    audioProgress: audioProgressRef, 
     togglePlayPause,
     seekScene,
     playScene,

@@ -323,6 +323,7 @@ function WebDioramaLoaderInner({
 
   const { 
     isPlaying, isPaused, isEnded, progress, duration, 
+    audioProgress,
     togglePlayPause, seekScene, stopScene,
     currentSceneSound, // ✅ NOUVEAU
     cleanup: cleanupScenePlayer 
@@ -354,7 +355,7 @@ function WebDioramaLoaderInner({
       isPaused,
       isEnded,
       currentSceneSound,
-      currentTime: progress,
+      currentTime: audioProgress.current,
     }
   });
 
@@ -1162,12 +1163,10 @@ function WebDioramaLoaderInner({
               progress={progress}
               duration={duration}
               onTogglePlayPause={() => {
-                // ✅ Si on reprend après un seek, synchroniser l'audio
-                if (!isPlaying && !isPaused && isEnded) {
-                  // Replay : sync audio au temps actuel (progress)
-                  seekSceneAudio(progress);
+                const syncInfo = togglePlayPause();
+                if (syncInfo?.shouldSyncAudio) {
+                  setTimeout(() => seekSceneAudio(syncInfo.syncTime), 50);
                 }
-                togglePlayPause();
               }}
               onSeek={(time) => {
                 seekScene(time); // Sync animation
