@@ -22,6 +22,9 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production', // ✅ Tout retirer
+  },
 };
 
 export default withSerwist(nextConfig);

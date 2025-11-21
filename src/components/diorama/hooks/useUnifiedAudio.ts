@@ -135,7 +135,7 @@ export default function useUnifiedAudio({
             console.log("▶️ [AMBIENT] Play:", currentPOI, "src:", ambient.src, "muted:", muted);
             ambient.muted = muted;
             ambient.play()
-                .then(() => console.log("✅ [AMBIENT] Lecture démarrée"))
+                // .then(() => console.log("✅ [AMBIENT] Lecture démarrée"))
                 .catch((err) => {
                 console.error("❌ [AMBIENT] Erreur play:", err);
                 console.log("🔍 [AMBIENT] Audio state:", {
