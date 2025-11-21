@@ -35,7 +35,7 @@ export default function GLBOptimizer({ onOpenChange }: GLBOptimizerProps) {
 
   const [options, setOptions] = useState<OptimizationOptions>({
     dedup: true,
-    prune: true,
+    prune: false,
     weld: true,
     resample: false,
   });
@@ -288,6 +288,10 @@ export default function GLBOptimizer({ onOpenChange }: GLBOptimizerProps) {
                         <div>
                           <p className="font-medium">Nettoyer</p>
                           <p className="text-xs text-gray-500">Supprime les données inutilisées</p>
+                          {/* ✅ AJOUTER CE WARNING */}
+                          <p className="text-xs text-orange-400 mt-1">
+                            ⚠️ Attention : supprime aussi les Empty (POIs, camera paths)
+                          </p>
                         </div>
                       </label>
 

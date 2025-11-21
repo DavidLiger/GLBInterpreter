@@ -821,6 +821,27 @@ export default function SceneAnalyzer({ scene, glbUrl, onOpenChange }: SceneAnal
                 </ul>
             </div>
 
+            <div>
+              <h4 className="text-red-400 font-bold text-lg mb-3 flex items-center gap-2">
+                <span>⚠️</span>
+                Optimisation GLB - Important !
+              </h4>
+              <ul className="space-y-2 text-gray-300 text-sm">
+                <li className="flex gap-2">
+                  <span className="text-red-400 flex-shrink-0">⚠️</span>
+                  <span><strong>Ne jamais activer "Nettoyer" (prune)</strong> sur vos GLB de production</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-red-400 flex-shrink-0">⚠️</span>
+                  <span>Prune supprime les Empty utilisés pour les POIs et camera paths</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-green-400 flex-shrink-0">✓</span>
+                  <span>Utilisez uniquement : Dédupliquer et Souder les vertices</span>
+                </li>
+              </ul>
+            </div>
+
             {/* Note finale */}
             <div className="bg-cyan-900/30 border border-cyan-500/30 rounded-lg p-4">
                 <p className="text-cyan-300 text-sm">

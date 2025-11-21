@@ -368,6 +368,7 @@ function WebDioramaLoaderInner({
 
   useEffect(() => {
     devToolOpenRef.current = devToolOpen;
+    console.log('🔧 DevTool state changed:', devToolOpen);
   }, [devToolOpen]);
 
   // Detect mobile/touch

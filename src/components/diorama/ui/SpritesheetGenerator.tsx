@@ -16,7 +16,10 @@ interface SpritesheetResult {
     totalFrames: number;
     fps: number;
   };
+  filename: string;
 }
+
+type DitheringAlgorithm = 'none' | 'floyd-steinberg' | 'threshold' | 'atkinson';
 
 export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGeneratorProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -28,13 +31,22 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
   const [result, setResult] = useState<SpritesheetResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Options
+  // Options de base
   const [fps, setFps] = useState(24);
   const [maxFrames, setMaxFrames] = useState(48);
   const [frameWidth, setFrameWidth] = useState(256);
   const [frameHeight, setFrameHeight] = useState(256);
   const [columns, setColumns] = useState(8);
   const [quality, setQuality] = useState(0.8);
+  const [filename, setFilename] = useState('spritesheet');
+
+  // ✅ Nouvelles options
+  const [startTime, setStartTime] = useState(0);
+  const [endTime, setEndTime] = useState(0);
+  const [dithering, setDithering] = useState<DitheringAlgorithm>('none');
+  const [forceBlackAndWhite, setForceBlackAndWhite] = useState(false);
+  const [invertColors, setInvertColors] = useState(false);
+  const [forceOneLine, setForceOneLine] = useState(false);
 
   const videoInputRef = useRef<HTMLInputElement>(null);
   const imagesInputRef = useRef<HTMLInputElement>(null);
@@ -45,11 +57,112 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
     onOpenChange?.(value); // ✅ Notifier le parent
   };
 
+  // ✅ Algorithmes de dithering
+  const applyDithering = (imageData: ImageData, algorithm: DitheringAlgorithm): ImageData => {
+    const data = imageData.data;
+    const width = imageData.width;
+    const height = imageData.height;
+
+    if (algorithm === 'none') return imageData;
+
+    // Conversion en niveaux de gris d'abord
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+      data[i] = data[i + 1] = data[i + 2] = gray;
+    }
+
+    const getPixel = (x: number, y: number) => {
+      if (x < 0 || x >= width || y < 0 || y >= height) return 0;
+      const idx = (y * width + x) * 4;
+      return data[idx];
+    };
+
+    const setPixel = (x: number, y: number, value: number) => {
+      if (x < 0 || x >= width || y < 0 || y >= height) return;
+      const idx = (y * width + x) * 4;
+      data[idx] = data[idx + 1] = data[idx + 2] = value;
+    };
+
+    if (algorithm === 'threshold') {
+      // Simple threshold
+      for (let i = 0; i < data.length; i += 4) {
+        const value = data[i] > 127 ? 255 : 0;
+        data[i] = data[i + 1] = data[i + 2] = value;
+      }
+    } else if (algorithm === 'floyd-steinberg') {
+      // Floyd-Steinberg dithering
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const oldPixel = getPixel(x, y);
+          const newPixel = oldPixel > 127 ? 255 : 0;
+          setPixel(x, y, newPixel);
+
+          const error = oldPixel - newPixel;
+          setPixel(x + 1, y, getPixel(x + 1, y) + error * 7 / 16);
+          setPixel(x - 1, y + 1, getPixel(x - 1, y + 1) + error * 3 / 16);
+          setPixel(x, y + 1, getPixel(x, y + 1) + error * 5 / 16);
+          setPixel(x + 1, y + 1, getPixel(x + 1, y + 1) + error * 1 / 16);
+        }
+      }
+    } else if (algorithm === 'atkinson') {
+      // Atkinson dithering
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const oldPixel = getPixel(x, y);
+          const newPixel = oldPixel > 127 ? 255 : 0;
+          setPixel(x, y, newPixel);
+
+          const error = (oldPixel - newPixel) / 8;
+          setPixel(x + 1, y, getPixel(x + 1, y) + error);
+          setPixel(x + 2, y, getPixel(x + 2, y) + error);
+          setPixel(x - 1, y + 1, getPixel(x - 1, y + 1) + error);
+          setPixel(x, y + 1, getPixel(x, y + 1) + error);
+          setPixel(x + 1, y + 1, getPixel(x + 1, y + 1) + error);
+          setPixel(x, y + 2, getPixel(x, y + 2) + error);
+        }
+      }
+    }
+
+    return imageData;
+  };
+
+  // ✅ Effets de post-traitement
+  const applyEffects = (imageData: ImageData): ImageData => {
+    const data = imageData.data;
+
+    // Force black and white
+    if (forceBlackAndWhite) {
+      for (let i = 0; i < data.length; i += 4) {
+        const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+        data[i] = data[i + 1] = data[i + 2] = gray;
+      }
+    }
+
+    // Invert colors
+    if (invertColors) {
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = 255 - data[i];
+        data[i + 1] = 255 - data[i + 1];
+        data[i + 2] = 255 - data[i + 2];
+      }
+    }
+
+    return imageData;
+  };
+
   const handleVideoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.type.startsWith('video/')) {
       setVideoFile(file);
       setError(null);
+
+      // Charger la vidéo pour obtenir la durée
+      const video = document.createElement('video');
+      video.src = URL.createObjectURL(file);
+      video.onloadedmetadata = () => {
+        setEndTime(video.duration);
+        URL.revokeObjectURL(video.src);
+      };
     } else {
       setError("Veuillez sélectionner un fichier vidéo valide");
     }
@@ -72,26 +185,28 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
     const ctx = canvas.getContext('2d')!;
 
     const frames: ImageData[] = [];
-    const duration = video.duration;
+    const duration = Math.min(endTime, video.duration) - startTime;
     const frameInterval = 1 / fps;
     const totalPossibleFrames = Math.floor(duration * fps);
     const framesToExtract = Math.min(maxFrames, totalPossibleFrames);
 
     for (let i = 0; i < framesToExtract; i++) {
-      const time = i * frameInterval;
+      const time = startTime + (i * frameInterval);
       
-      // Seek to time
       video.currentTime = time;
       await new Promise(resolve => {
         video.onseeked = resolve;
       });
 
-      // Draw frame
       ctx.drawImage(video, 0, 0, frameWidth, frameHeight);
-      const imageData = ctx.getImageData(0, 0, frameWidth, frameHeight);
-      frames.push(imageData);
+      let imageData = ctx.getImageData(0, 0, frameWidth, frameHeight);
 
-      setProgress(Math.round((i / framesToExtract) * 50)); // 0-50%
+      // ✅ Appliquer les effets
+      imageData = applyEffects(imageData);
+      imageData = applyDithering(imageData, dithering);
+
+      frames.push(imageData);
+      setProgress(Math.round((i / framesToExtract) * 50));
     }
 
     return frames;
@@ -112,10 +227,14 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
       
       ctx.clearRect(0, 0, frameWidth, frameHeight);
       ctx.drawImage(img, 0, 0, frameWidth, frameHeight);
-      const imageData = ctx.getImageData(0, 0, frameWidth, frameHeight);
-      frames.push(imageData);
+      let imageData = ctx.getImageData(0, 0, frameWidth, frameHeight);
 
-      setProgress(Math.round((i / filesToProcess.length) * 50)); // 0-50%
+      // ✅ Appliquer les effets
+      imageData = applyEffects(imageData);
+      imageData = applyDithering(imageData, dithering);
+
+      frames.push(imageData);
+      setProgress(Math.round((i / filesToProcess.length) * 50));
     }
 
     return frames;
@@ -123,28 +242,34 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
 
   const createSpritesheet = async (frames: ImageData[]): Promise<Blob> => {
     const totalFrames = frames.length;
-    const rows = Math.ceil(totalFrames / columns);
+    
+    // ✅ Force one line si demandé
+    let finalColumns = columns;
+    let finalRows = Math.ceil(totalFrames / columns);
+    
+    if (forceOneLine) {
+      finalColumns = totalFrames;
+      finalRows = 1;
+    }
 
-    const spritesheetWidth = columns * frameWidth;
-    const spritesheetHeight = rows * frameHeight;
+    const spritesheetWidth = finalColumns * frameWidth;
+    const spritesheetHeight = finalRows * frameHeight;
 
     const canvas = document.createElement('canvas');
     canvas.width = spritesheetWidth;
     canvas.height = spritesheetHeight;
     const ctx = canvas.getContext('2d')!;
 
-    // Dessiner toutes les frames
     for (let i = 0; i < totalFrames; i++) {
-      const col = i % columns;
-      const row = Math.floor(i / columns);
+      const col = i % finalColumns;
+      const row = Math.floor(i / finalColumns);
       const x = col * frameWidth;
       const y = row * frameHeight;
 
       ctx.putImageData(frames[i], x, y);
-      setProgress(50 + Math.round((i / totalFrames) * 50)); // 50-100%
+      setProgress(50 + Math.round((i / totalFrames) * 50));
     }
 
-    // Convertir en WebP
     const blob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob(
         (blob) => {
@@ -169,7 +294,6 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
       let frames: ImageData[];
 
       if (sourceType === 'video' && videoFile) {
-        // Charger la vidéo
         const video = document.createElement('video');
         video.src = URL.createObjectURL(videoFile);
         video.muted = true;
@@ -189,16 +313,18 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
       }
 
       const blob = await createSpritesheet(frames);
-      const rows = Math.ceil(frames.length / columns);
+      const finalColumns = forceOneLine ? frames.length : columns;
+      const finalRows = forceOneLine ? 1 : Math.ceil(frames.length / columns);
 
       setResult({
         imageBlob: blob,
         config: {
-          columns,
-          rows,
+          columns: finalColumns,
+          rows: finalRows,
           totalFrames: frames.length,
           fps,
         },
+        filename,
       });
 
       setProgress(100);
@@ -216,7 +342,7 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
     const url = URL.createObjectURL(result.imageBlob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'spritesheet.webp';
+    a.download = `${result.filename}.webp`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -236,6 +362,18 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
 
   const formatSize = (bytes: number) => {
     return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  };
+
+  const setCurrentTimeAsStart = () => {
+    if (videoPreviewRef.current) {
+      setStartTime(videoPreviewRef.current.currentTime);
+    }
+  };
+
+  const setCurrentTimeAsEnd = () => {
+    if (videoPreviewRef.current) {
+      setEndTime(videoPreviewRef.current.currentTime);
+    }
   };
 
   return (
@@ -266,7 +404,7 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="fixed inset-4 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[800px] sm:max-h-[90vh] bg-gray-900 rounded-2xl z-[9999] overflow-hidden flex flex-col shadow-2xl border border-green-500/30"
+              className="fixed inset-4 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[900px] sm:max-h-[90vh] bg-gray-900 rounded-2xl z-[9999] overflow-hidden flex flex-col shadow-2xl border border-green-500/30"
             >
               {/* Header */}
               <div className="bg-gradient-to-r from-green-600 to-teal-700 p-4 flex items-center justify-between">
@@ -332,7 +470,7 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
                       </button>
                     ) : (
                       <div className="space-y-3">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between mb-3">
                           <div className="flex-1 min-w-0">
                             <p className="text-white font-medium truncate">{videoFile.name}</p>
                             <p className="text-gray-400 text-sm">{formatSize(videoFile.size)}</p>
@@ -344,6 +482,14 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
                             ✕
                           </button>
                         </div>
+                        
+                        {/* Prévisualisation vidéo */}
+                        <video
+                          ref={videoPreviewRef}
+                          src={URL.createObjectURL(videoFile)}
+                          controls
+                          className="w-full rounded bg-black"
+                        />
                       </div>
                     )}
                   </div>
@@ -390,17 +536,62 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
                       Options de génération
                     </h3>
 
+                    {/* Nom du fichier */}
+                    <div>
+                      <label className="text-gray-300 text-sm mb-1 block">Filename (without extension)</label>
+                      <input
+                        type="text"
+                        value={filename}
+                        onChange={(e) => setFilename(e.target.value)}
+                        className="w-full bg-gray-700 text-white rounded px-3 py-2"
+                        placeholder="spritesheet"
+                      />
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
+                      {/* Dimensions */}
                       <div>
-                        <label className="text-gray-300 text-sm mb-1 block">FPS</label>
-                        <input
-                          type="number"
+                        <label className="text-gray-300 text-sm mb-1 block">Width (px)</label>
+                        <select
+                          value={frameWidth}
+                          onChange={(e) => setFrameWidth(parseInt(e.target.value))}
+                          className="w-full bg-gray-700 text-white rounded px-3 py-2"
+                        >
+                          <option value={128}>128</option>
+                          <option value={256}>256</option>
+                          <option value={512}>512</option>
+                          <option value={1024}>1024</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-gray-300 text-sm mb-1 block">Height (px)</label>
+                        <select
+                          value={frameHeight}
+                          onChange={(e) => setFrameHeight(parseInt(e.target.value))}
+                          className="w-full bg-gray-700 text-white rounded px-3 py-2"
+                        >
+                          <option value={128}>128</option>
+                          <option value={256}>256</option>
+                          <option value={512}>512</option>
+                          <option value={1024}>1024</option>
+                        </select>
+                      </div>
+
+                      {/* FPS */}
+                      <div>
+                        <label className="text-gray-300 text-sm mb-1 block">Frames per second</label>
+                        <select
                           value={fps}
                           onChange={(e) => setFps(parseInt(e.target.value))}
                           className="w-full bg-gray-700 text-white rounded px-3 py-2"
-                          min="1"
-                          max="60"
-                        />
+                        >
+                          <option value={6}>6 FPS</option>
+                          <option value={12}>12 FPS</option>
+                          <option value={15}>15 FPS</option>
+                          <option value={24}>24 FPS</option>
+                          <option value={30}>30 FPS</option>
+                        </select>
                       </div>
 
                       <div>
@@ -414,35 +605,74 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
                           max="200"
                         />
                       </div>
+                    </div>
 
-                      <div>
-                        <label className="text-gray-300 text-sm mb-1 block">Largeur frame (px)</label>
-                        <select
-                          value={frameWidth}
-                          onChange={(e) => setFrameWidth(parseInt(e.target.value))}
-                          className="w-full bg-gray-700 text-white rounded px-3 py-2"
-                        >
-                          <option value={128}>128</option>
-                          <option value={256}>256</option>
-                          <option value={512}>512</option>
-                        </select>
+                    {/* ✅ Start/End Time (vidéo uniquement) */}
+                    {sourceType === 'video' && videoFile && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-gray-300 text-sm mb-1 block">Start time (seconds)</label>
+                          <div className="flex gap-2">
+                            <input
+                              type="number"
+                              value={startTime.toFixed(2)}
+                              onChange={(e) => setStartTime(parseFloat(e.target.value))}
+                              className="flex-1 bg-gray-700 text-white rounded px-3 py-2"
+                              min="0"
+                              step="0.1"
+                            />
+                            <button
+                              onClick={setCurrentTimeAsStart}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-xs"
+                              title="Use current video time"
+                            >
+                              📋
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-gray-300 text-sm mb-1 block">End time (seconds)</label>
+                          <div className="flex gap-2">
+                            <input
+                              type="number"
+                              value={endTime.toFixed(2)}
+                              onChange={(e) => setEndTime(parseFloat(e.target.value))}
+                              className="flex-1 bg-gray-700 text-white rounded px-3 py-2"
+                              min="0"
+                              step="0.1"
+                            />
+                            <button
+                              onClick={setCurrentTimeAsEnd}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-xs"
+                              title="Use current video time"
+                            >
+                              📋
+                            </button>
+                          </div>
+                        </div>
                       </div>
+                    )}
 
-                      <div>
-                        <label className="text-gray-300 text-sm mb-1 block">Hauteur frame (px)</label>
-                        <select
-                          value={frameHeight}
-                          onChange={(e) => setFrameHeight(parseInt(e.target.value))}
-                          className="w-full bg-gray-700 text-white rounded px-3 py-2"
-                        >
-                          <option value={128}>128</option>
-                          <option value={256}>256</option>
-                          <option value={512}>512</option>
-                        </select>
-                      </div>
+                    {/* ✅ Dithering */}
+                    <div>
+                      <label className="text-gray-300 text-sm mb-1 block">Dithering algorithm</label>
+                      <select
+                        value={dithering}
+                        onChange={(e) => setDithering(e.target.value as DitheringAlgorithm)}
+                        className="w-full bg-gray-700 text-white rounded px-3 py-2"
+                      >
+                        <option value="none">None</option>
+                        <option value="floyd-steinberg">Floyd-Steinberg</option>
+                        <option value="threshold">Threshold</option>
+                        <option value="atkinson">Atkinson</option>
+                      </select>
+                    </div>
 
+                    {/* ✅ Layout */}
+                    {!forceOneLine && (
                       <div>
-                        <label className="text-gray-300 text-sm mb-1 block">Colonnes</label>
+                        <label className="text-gray-300 text-sm mb-1 block">Columns</label>
                         <input
                           type="number"
                           value={columns}
@@ -452,24 +682,58 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
                           max="20"
                         />
                       </div>
+                    )}
 
-                      <div>
-                        <label className="text-gray-300 text-sm mb-1 block">Qualité WebP</label>
+                    {/* ✅ Checkboxes */}
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 text-gray-300 cursor-pointer hover:text-white transition">
                         <input
-                          type="range"
-                          value={quality}
-                          onChange={(e) => setQuality(parseFloat(e.target.value))}
-                          className="w-full"
-                          min="0.1"
-                          max="1"
-                          step="0.1"
+                          type="checkbox"
+                          checked={forceBlackAndWhite}
+                          onChange={(e) => setForceBlackAndWhite(e.target.checked)}
+                          className="rounded"
                         />
-                        <p className="text-gray-400 text-xs text-center">{Math.round(quality * 100)}%</p>
-                      </div>
+                        <span className="text-sm">Force black and white</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-gray-300 cursor-pointer hover:text-white transition">
+                        <input
+                          type="checkbox"
+                          checked={invertColors}
+                          onChange={(e) => setInvertColors(e.target.checked)}
+                          className="rounded"
+                        />
+                        <span className="text-sm">Invert colors</span>
+                      </label>
+
+                      <label className="flex items-center gap-2 text-gray-300 cursor-pointer hover:text-white transition">
+                        <input
+                          type="checkbox"
+                          checked={forceOneLine}
+                          onChange={(e) => setForceOneLine(e.target.checked)}
+                          className="rounded"
+                        />
+                        <span className="text-sm">Force one line (avoid empty cells)</span>
+                      </label>
+                    </div>
+
+                    {/* Qualité */}
+                    <div>
+                      <label className="text-gray-300 text-sm mb-1 block">Qualité WebP</label>
+                      <input
+                        type="range"
+                        value={quality}
+                        onChange={(e) => setQuality(parseFloat(e.target.value))}
+                        className="w-full"
+                        min="0.1"
+                        max="1"
+                        step="0.1"
+                      />
+                      <p className="text-gray-400 text-xs text-center">{Math.round(quality * 100)}%</p>
                     </div>
 
                     <div className="bg-blue-900/30 border border-blue-500/30 rounded p-3 text-sm text-blue-200">
-                      <p>📐 Taille finale estimée : {columns} × {Math.ceil(maxFrames / columns)} = {columns * frameWidth}×{Math.ceil(maxFrames / columns) * frameHeight}px</p>
+                      <p>📐 Taille finale : {forceOneLine ? maxFrames : columns} × {forceOneLine ? 1 : Math.ceil(maxFrames / columns)} = {(forceOneLine ? maxFrames : columns) * frameWidth}×{(forceOneLine ? 1 : Math.ceil(maxFrames / columns)) * frameHeight}px</p>
                     </div>
 
                     <button
@@ -553,7 +817,7 @@ export default function SpritesheetGenerator({ onOpenChange }: SpritesheetGenera
                       className="w-full bg-gradient-to-r from-green-600 to-teal-600 hover:from-green-700 hover:to-teal-700 text-white font-bold py-4 rounded-lg transition-all transform hover:scale-105 flex items-center justify-center gap-2"
                     >
                       <span className="text-xl">⬇️</span>
-                      Télécharger spritesheet.webp
+                      Télécharger {result.filename}.webp
                     </button>
 
                     <button
