@@ -23,6 +23,12 @@ const Alstoria = localFont({
   variable: "--font-Alstoria", // optionnel si tu veux l'utiliser avec Tailwind
 });
 
+const HandyGeorge = localFont({
+  src: "../../../public/fonts/HandyGeorge.ttf",
+  variable: "--font-HandyGeorge", // optionnel si tu veux l'utiliser avec Tailwind
+});
+
+
 export default function Header({ onDiscoverClick }: HeaderProps) {
   const { title, subtitle, cta, backgroundImage } = content.header;
   const [scrolled, setScrolled] = useState(false);
@@ -37,7 +43,7 @@ export default function Header({ onDiscoverClick }: HeaderProps) {
 
   return (
     <header
-      className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${scrolled ? "h-20" : "h-48 sm:h-56 xs:h-48"}`}
+      className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${scrolled ? "h-25" : "h-52 sm:h-56 xs:h-48"}`}
     >
       {/* Image de fond */}
       <div
@@ -50,14 +56,14 @@ export default function Header({ onDiscoverClick }: HeaderProps) {
 
       {/* Contenu */}
       <div
-        className={`relative z-10 w-full px-6 flex items-center justify-between transition-all duration-300 ${scrolled ? "h-20" : "flex-col justify-center h-full text-center"}`}
+        className={`relative z-10 w-full px-6 flex items-center justify-between transition-all duration-300 ${scrolled ? "h-25" : "flex-col justify-center h-full text-center"}`}
       >
-        <h1 className={`${Alstoria.className} font-bold transition-all duration-300 text-white ${scrolled ? "text-4xl text-left" : "text-7xl"}`}>
+        <h1 className={`${HandyGeorge.className} font-bold transition-all duration-300 text-white ${scrolled ? "text-4xl text-left" : "text-5xl"}`}>
           {title}
         </h1>
 
         {!scrolled && (
-          <p className={`${BullstandRegular.className} text-2xl text-white sm:text-3xl mb-2`}>
+          <p className={`${HandyGeorge.className} text-3xl text-white sm:text-4xl mb-2`}>
             {subtitle}
           </p>
         

@@ -1,12 +1,12 @@
 {
   "header": {
-    "title": "Faerium",
-    "subtitle": "Un univers à nul autre pareil...",
+    "title": "Éditions Liger",
+    "subtitle": "Livres augmentés",
     "cta": {
       "label": "Découvrir l'univers de Faerium",
       "href": "#books"
     },
-    "backgroundImage": "/images/header-bg.jpg"
+    "backgroundImage": "/images/chaloupes-en-mer-header.png"
   },
   "bookSection": {
     "title": "Les livres",
