@@ -5,6 +5,7 @@ import content from "../../content/content.json";
 import localFont from "next/font/local";
 import HowItWorksModal from "./HowItWorksModal";
 import { getAssetUrl } from "../diorama/lib/assets";
+import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
 
 const HandyGeorge = localFont({
   src: "../../../public/fonts/HandyGeorge.ttf",
@@ -30,6 +31,7 @@ interface HeaderProps {
 
 
 export default function Header({ header, howItWorks }: HeaderProps) {
+  const { t } = useHomeTranslation();
   const { titleLine1, titleLine2, subtitle, cta, backgroundImage, logo } = content.header;
   const [scrolled, setScrolled] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -95,7 +97,7 @@ export default function Header({ header, howItWorks }: HeaderProps) {
           }
         `}
       >
-        {titleLine2.slice(1)}
+        {t.header.titleLine2.slice(1)}
       </h1>
 
       {/* --- 3. AUTRES ÉLÉMENTS DU CONTENU --- */}
@@ -105,7 +107,7 @@ export default function Header({ header, howItWorks }: HeaderProps) {
         {/* Titre ligne 1 ("Éditions") */}
           <div className={`overflow-hidden transition-all duration-300 ${scrolled ? "max-h-0 opacity-0 mb-0" : "max-h-20 opacity-100"} mb-2 mr-3 -translate-x-[0.3rem]`}>
           <p className={`${HandyGeorge.className} font-bold text-white text-3xl text-center`}>
-              {titleLine1}
+              {t.header.titleLine1}
           </p>
         </div>
 
@@ -121,7 +123,7 @@ export default function Header({ header, howItWorks }: HeaderProps) {
           `}
         >
           <p className={`${HandyGeorge.className} text-white text-center ${scrolled ? "text-3xl" : "text-2xl sm:text-3xl"}`}>
-            {subtitle}
+            {t.header.subtitle}
           </p>
         </div>
 
@@ -133,7 +135,7 @@ export default function Header({ header, howItWorks }: HeaderProps) {
           onClick={() => setIsModalOpen(true)}
           className={`bg-yellow-400 text-black font-semibold px-6 py-3 rounded-2xl shadow hover:bg-yellow-300 transition-all cursor-pointer duration-300`}
         >
-          {scrolled ? "C'est quoi ?" : cta.label}
+          {scrolled ? "C'est quoi ?" : t.header.cta.label}
         </button>
       </div>
       

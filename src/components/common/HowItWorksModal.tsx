@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { QRCodeSVG } from 'qrcode.react';
 import { getAssetUrl } from "../diorama/lib/assets";
+import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
 
 interface HowItWorksModalProps {
   isOpen: boolean;
@@ -16,6 +17,7 @@ interface HowItWorksModalProps {
 }
 
 export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorksModalProps) {
+  const { t } = useHomeTranslation(); // ✅ Hook i18n
   const [scrolled, setScrolled] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const lastState = useRef(false);
@@ -102,7 +104,7 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
         }`}>
           <img
             src={getAssetUrl(content.image)}
-            alt={content.title}
+            alt={t.howItWorks.title}
             className="absolute inset-0 w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-2">
@@ -113,7 +115,7 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
                   ? "text-2xl text-center" 
                   : "text-3xl text-center mb-5"
             }`}>
-              {content.title}
+              {t.howItWorks.title}
             </p>
           </div>
         </div>
@@ -122,7 +124,7 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
         <div className={`mt-6 flex flex-col gap-6 px-6 ${isMobile ? "pb-32" : "pb-24"}`}>
           {/* Texte explicatif */}
           <div className="text-gray-700 text-lg leading-relaxed whitespace-pre-line">
-            {content.text}
+            {t.howItWorks.text}
           </div>
 
           {/* QR Code ou Bouton selon device */}
