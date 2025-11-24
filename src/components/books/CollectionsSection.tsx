@@ -4,18 +4,38 @@ import { useEffect, useRef, useState } from "react";
 import localFont from "next/font/local";
 import CollectionModal from "./CollectionModal";
 import { getAssetUrl } from "../diorama/lib/assets";
+
 const Alstoria = localFont({
   src: "../../../public/fonts/Alstoria.ttf",
   variable: "--font-Alstoria",
 });
 
+// 1. Définir le détail (utilisé dans Book et Collection)
+interface Detail {
+  image: string;
+  text: string;
+}
+
+// 2. Définir la structure d'un Livre
+interface Book {
+  id: number;
+  onForeground?: boolean; // Optionnel (?) ou obligatoire selon tes besoins
+  title: string;
+  summary: string;
+  image: string;
+  link?: string;
+  details?: Detail[];
+}
+
+// 3. Mettre à jour la Collection pour inclure les livres complets
 interface Collection {
   id: number;
   name: string;
   image: string;
   description?: string;
-  books?: number[]; // IDs des livres de cette collection
-  details?: { image: string; text: string }[];
+  // C'est ici que ça change : ce n'est plus "number[]" mais "Book[]"
+  books: Book[]; 
+  details?: Detail[];
 }
 
 interface CollectionsSectionProps {

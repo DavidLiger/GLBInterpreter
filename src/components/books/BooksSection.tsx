@@ -13,12 +13,31 @@ const Alstoria = localFont({
   variable: "--font-Alstoria",
 });
 
+interface Detail {
+  image: string;
+  text: string;
+}
+
+interface Book {
+  id: number;
+  onForeground?: boolean;
+  title: string;
+  summary: string;
+  image: string;
+  link?: string;
+  details?: Detail[];
+}
+
+interface Collection {
+  books: Book[];
+}
+
 export default function BooksSection() {
   const { title, detailLink } = content.bookSection;
-  const [selectedBook, setSelectedBook] = useState<typeof content.books[0] | null>(null);
+  const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const openModal = (book: typeof content.books[0]) => {
+  const openModal = (book: Book) => {
     setSelectedBook(book);
     setIsModalOpen(true);
   };
@@ -28,16 +47,25 @@ export default function BooksSection() {
     setSelectedBook(null);
   };
 
+  // On parcourt toutes les collections, on récupère les livres, et on ne garde que les foreground
+  const foregroundBooks = content.collections.flatMap(collection => 
+    collection.books.filter(book => book.onForeground)
+  );
+
   return (
     <section id="books" className="py-16 px-6 max-w-6xl mx-auto scroll-mt-20">
-      <h2 className={`${Alstoria.className} text-4xl font-bold text-center mb-12`}>{title}</h2>
+      <h2 className={`${Alstoria.className} text-4xl font-bold text-center mb-12`}>
+        {content.bookSection.title}
+      </h2>
 
       <div className="grid gap-12 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 justify-items-center">
-        {content.books.map((book) => (
+        {/* 2. On map sur notre tableau calculé 'foregroundBooks' */}
+        {foregroundBooks.map((book) => (
           <div
             key={book.id}
+            onClick={() => openModal(book)} // Clic sur toute la carte ouvre la modale
             className="bg-gray-100 rounded-2xl shadow-lg p-6 flex flex-col cursor-pointer hover:scale-105 transition-transform
-               min-h-[420px] max-h-[500px] max-w-[265px]"
+               min-h-[420px] max-h-[500px] max-w-[265px] group"
           >
             <div className="h-48 relative mb-4">
               <Image
@@ -53,20 +81,21 @@ export default function BooksSection() {
 
             <p className="text-sm text-gray-700 font-bold mb-4">{book.summary}</p>
 
-            {/* Conteneur des boutons */}
-            <div className="flex flex-col gap-2 mt-auto">
-              <button
-                onClick={() => openModal(book)}
-                className="bg-indigo-600 text-white shadow-lg font-semibold px-4 py-2 rounded-lg hover:bg-indigo-500 transition cursor-pointer"
-              >
-                {detailLink}
-              </button>
-
+            {/* Zone du bouton Amazon uniquement */}
+            <div 
+              className="mt-auto w-full"
+              onClick={(e) => e.stopPropagation()} // Empêche d'ouvrir la modale au clic sur Amazon
+            >
               {book.link && <AmazonButton href={book.link} />}
             </div>
           </div>
         ))}
       </div>
+
+      {/* S'il n'y a aucun livre à la une, on peut afficher un message optionnel */}
+      {foregroundBooks.length === 0 && (
+        <p className="text-center text-gray-500">Aucun livre à la une pour le moment.</p>
+      )}
 
       {/* Modale */}
       <BookModal
@@ -75,5 +104,5 @@ export default function BooksSection() {
         book={selectedBook ?? undefined}
       />
     </section>
-  );
+);
 }

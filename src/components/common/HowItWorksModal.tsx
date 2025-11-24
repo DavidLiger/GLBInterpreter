@@ -58,10 +58,13 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
       const scrollTop = modal.scrollTop;
 
       requestAnimationFrame(() => {
-        if (!lastState.current && scrollTop > 2) {
+        // Seuil plus bas pour mobile (1px au lieu de 2)
+        const threshold = isMobile ? 1 : 2;
+        
+        if (!lastState.current && scrollTop > threshold) {
           setScrolled(true);
           lastState.current = true;
-        } else if (lastState.current && scrollTop < 2) {
+        } else if (lastState.current && scrollTop < threshold) {
           setScrolled(false);
           lastState.current = false;
         }
@@ -70,7 +73,7 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
 
     modal.addEventListener("scroll", handleScroll);
     return () => modal.removeEventListener("scroll", handleScroll);
-  }, [isOpen]);
+  }, [isOpen, isMobile]);
 
   if (!isOpen) return null;
 
@@ -93,22 +96,30 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
         className="bg-white w-full sm:w-[80%] lg:max-w-[60%] h-full overflow-auto relative transform transition-transform duration-500"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header sticky */}
-        <div className={`sticky top-0 w-full transition-all duration-300 ${scrolled ? "h-20" : "h-48"}`}>
+        {/* Header sticky - Plus petit sur mobile */}
+        <div className={`sticky top-0 w-full transition-all duration-300 ${
+          scrolled ? "h-20" : isMobile ? "h-32" : "h-48"
+        }`}>
           <img
             src={getAssetUrl(content.image)}
             alt={content.title}
             className="absolute inset-0 w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-2">
-            <p className={`text-white font-semibold transition-all duration-300 ${scrolled ? "text-2xl" : "text-3xl text-center mb-5"}`}>
+            <p className={`text-white font-semibold transition-all duration-300 ${
+              scrolled 
+                ? "text-xl" 
+                : isMobile 
+                  ? "text-2xl text-center" 
+                  : "text-3xl text-center mb-5"
+            }`}>
               {content.title}
             </p>
           </div>
         </div>
 
-        {/* Contenu scrollable */}
-        <div className="mt-6 flex flex-col gap-6 px-6 pb-24">
+        {/* Contenu scrollable - Plus de padding en bas sur mobile */}
+        <div className={`mt-6 flex flex-col gap-6 px-6 ${isMobile ? "pb-32" : "pb-24"}`}>
           {/* Texte explicatif */}
           <div className="text-gray-700 text-lg leading-relaxed whitespace-pre-line">
             {content.text}
