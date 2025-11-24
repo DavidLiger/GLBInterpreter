@@ -1,12 +1,14 @@
 {
   "header": {
-    "title": "Éditions Liger",
+    "titleLine1": "Éditions",
+    "titleLine2": "Liger",
     "subtitle": "Livres augmentés",
     "cta": {
       "label": "Découvrir l'univers de Faerium",
       "href": "#books"
     },
-    "backgroundImage": "/images/chaloupes-en-mer-header.png"
+    "backgroundImage": "/images/chaloupes-en-mer-header.png",
+    "logo": "/images/logo.png"
   },
   "bookSection": {
     "title": "Les livres",
