@@ -10,22 +10,22 @@ interface HeaderProps {
 
 const VictorianPolice = localFont({
   src: "../../../public/fonts/Victorian_Art_Magic_Remains.ttf",
-  variable: "--font-Victorian_Art_Magic_Remains", // optionnel si tu veux l'utiliser avec Tailwind
+  variable: "--font-Victorian_Art_Magic_Remains",
 });
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
-  variable: "--font-Bullstand-Regular", // optionnel si tu veux l'utiliser avec Tailwind
+  variable: "--font-Bullstand-Regular",
 });
 
 const Alstoria = localFont({
   src: "../../../public/fonts/Alstoria.ttf",
-  variable: "--font-Alstoria", // optionnel si tu veux l'utiliser avec Tailwind
+  variable: "--font-Alstoria",
 });
 
 const HandyGeorge = localFont({
   src: "../../../public/fonts/HandyGeorge.ttf",
-  variable: "--font-HandyGeorge", // optionnel si tu veux l'utiliser avec Tailwind
+  variable: "--font-HandyGeorge",
 });
 
 
@@ -41,120 +41,100 @@ export default function Header({ onDiscoverClick }: HeaderProps) {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Fonction pour remonter en haut de page
+  const handleLogoClick = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
-    <header
-      className={`fixed top-0 left-0 w-full z-50 transition-all duration-700 ease-in-out ${
-        scrolled ? "h-28 shadow-xl" : "h-52 sm:h-56 xs:h-48"
-      }`}
+  <header
+    className={`fixed top-0 left-0 w-full z-50 transition-all duration-700 ease-in-out ${
+      scrolled ? "h-28 shadow-xl" : "h-56"
+    }`}
+  >
+    {/* --- 1. FONDS --- */}
+    <div
+      className="absolute inset-0 bg-cover bg-center transition-opacity duration-700"
+      style={{ backgroundImage: `url(${backgroundImage})` }}
+    ></div>
+
+    <div className={`absolute inset-0 bg-gradient-to-r from-purple-800 to-indigo-700 transition-all duration-700 ${scrolled ? "opacity-60" : "opacity-30"}`}></div>
+
+    {/* --- 2. GROUPE LOGO + TEXTE "IGER" (ANIMATION SYNCHRO) --- */}
+    
+    {/* A. Le Logo "L" */}
+    <img 
+      src={logo} 
+      alt="Logo Liger" 
+      onClick={handleLogoClick} // Ajout de l'action au clic
+      className={`absolute z-20 object-contain transition-all duration-700 ease-in-out cursor-pointer
+        ${scrolled 
+          ? "left-4 top-2 h-24 w-auto"  // SCROLLÉ : À gauche, grand
+          : "left-1/2 top-1/2 -translate-y-[4.4rem] -translate-x-[4.8rem] h-14 w-auto" // NON-SCROLLÉ
+        }
+      `}
+    />
+
+    {/* B. Le Texte "iger" */}
+    {/* Il est maintenant ABSOLUTE pour pouvoir glisser physiquement vers la gauche comme l'image */}
+    <h1 
+      // Optionnel : Tu peux aussi ajouter le onClick ici si tu veux que cliquer sur le texte remonte aussi la page
+      // onClick={handleLogoClick} 
+      // className={`... cursor-pointer ...`}
+      className={`${HandyGeorge.className} font-bold text-black absolute z-20 transition-all duration-700 ease-in-out whitespace-nowrap
+        ${scrolled 
+          /* --- POSITION SCROLLÉE --- */
+          /* Mobile : on cache. Desktop (md) : on affiche à gauche du logo */
+          ? "opacity-0 scale-60 left-4 top-10 md:opacity-100 md:scale-100 md:left-23 md:top-13 md:text-5xl" 
+          
+          /* --- POSITION NON-SCROLLÉE --- */
+          /* On le place au centre. */
+          : "opacity-100 scale-90 text-5xl left-1/2 top-31 -translate-y-[4.4rem] -translate-x-[2.3rem]" 
+        }
+      `}
     >
-      {/* --- 1. FONDS --- */}
-      {/* Image de fond */}
-      <div
-        className="absolute inset-0 bg-cover bg-center transition-opacity duration-700"
-        style={{ backgroundImage: `url(${backgroundImage})` }}
-      ></div>
+      {titleLine2.slice(1)}
+    </h1>
 
-      {/* Overlay gradient */}
-      <div className={`absolute inset-0 bg-gradient-to-r from-purple-800 to-indigo-700 transition-all duration-700 ${scrolled ? "opacity-60" : "opacity-30"}`}></div>
+    {/* --- 3. AUTRES ÉLÉMENTS DU CONTENU --- */}
+    <div
+      className="relative z-10 w-full h-full px-4 flex flex-col items-center mt-2 pointer-events-none" // pointer-events-none pour laisser cliquer les éléments absolute si besoin
+    >
+      {/* Titre ligne 1 ("Éditions") */}
+        <div className={`overflow-hidden transition-all duration-300 ${scrolled ? "max-h-0 opacity-0 mb-0" : "max-h-20 opacity-100"} mb-2 mr-3 -translate-x-[0.3rem]`}>
+         <p className={`${HandyGeorge.className} font-bold text-white text-3xl text-center`}>
+            {titleLine1}
+         </p>
+      </div>
 
-      {/* --- 2. LOGO VOLANT (L) --- */}
-      {/* C'est lui qui fait l'animation Centre -> Gauche */}
-      <img 
-        src={logo} 
-        alt="Logo Liger" 
-        className={`absolute z-10 object-contain transition-all duration-700 ease-in-out
+      {/* Sous-titre ("Livres augmentés") */}
+      <div 
+        className={`transition-all duration-700 ease-in-out pointer-events-auto
           ${scrolled 
-            ? "left-4 top-2 h-24 w-auto"  // SCROLLÉ : Collé à gauche, GRANDE taille (h-24 = 96px)
-            : "left-1/2 top-1/2 -translate-y-[4.4rem] -translate-x-[4.8rem] h-14 w-auto" // NON-SCROLLÉ : Au centre (ajusté pour coller au texte), taille normale
+            /* SCROLLÉ : Absolute au centre (Desktop uniquement) */
+            ? "max-h-0 opacity-0 md:max-h-20 md:opacity-100 md:absolute md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2" 
+            /* NON-SCROLLÉ : Dans le flux, sous le titre */
+            : "max-h-20 opacity-100 mt-14 relative" 
           }
         `}
-      />
-
-      {/* --- 3. CONTENU TEXTE --- */}
-      <div
-        className={`relative z-50 w-full h-full px-4 flex flex-col items-center transition-all duration-700 mt-2`}
       >
-        {/* Titre ligne 1 ("Éditions") */}
-        <div className={`overflow-hidden transition-all duration-300 ${scrolled ? "max-h-0 opacity-0 mb-0" : "max-h-20 opacity-100"} mb-2 mr-3`}>
-          <p className={`${HandyGeorge.className} font-bold text-white text-3xl text-center`}>
-              {titleLine1}
-          </p>
-        </div>
-
-        {/* Reste du titre ("iger") */}
-        {/* On ajoute un ml-10 (margin-left) ou translate quand non-scrollé pour compenser le trou laissé par le L */}
-        <div className={`transition-all duration-700 flex items-center ${scrolled ? "opacity-0" : "opacity-100"} translate-x-4`}>
-          <h1 className={`${HandyGeorge.className} font-bold text-black text-5xl`}>
-            {titleLine2.slice(1)}
-          </h1>
-        </div>
-
-        {/* Sous-titre */}
-        <div className={`overflow-hidden transition-all duration-300 ${scrolled ? "max-h-0 opacity-0 mt-0" : "max-h-20 opacity-100 mt-2"}`}>
-          <p className={`${HandyGeorge.className} text-3xl text-white sm:text-4xl text-center`}>
-            {subtitle}
-          </p>
-        </div>
-
-        {/* Bouton CTA (Apparaît à droite au scroll) */}
-        <div className={`absolute  ${scrolled ? "right-4 top-10" : "right-4 top-38"} transition-all duration-700 `}>
-          <button
-            onClick={onDiscoverClick}
-            className={`bg-yellow-400 text-black font-semibold px-6 py-3 rounded-2xl shadow hover:bg-yellow-300 transition-all cursor-pointer duration-300 ${
-              scrolled ? "ml-auto" : ""
-            }`}
-          >
-            {scrolled ? "Découvrir l'univers..." : cta.label}
-          </button>
-        </div>
-        
+        <p className={`${HandyGeorge.className} text-white text-center ${scrolled ? "text-3xl" : "text-2xl sm:text-3xl"}`}>
+          {subtitle}
+        </p>
       </div>
-    </header>
-  );
 
-  return (
-    <header
-      className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ${scrolled ? "h-25" : "h-52 sm:h-56 xs:h-48"}`}
-    >
-      {/* Image de fond */}
-      <div
-        className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: `url(${backgroundImage})` }}
-      ></div>
+    </div>
 
-      {/* Overlay gradient */}
-      <div className="absolute inset-0 bg-gradient-to-r from-purple-800 to-indigo-700 opacity-30"></div>
-
-      {/* Contenu */}
-      <div
-        className={`relative z-10 w-full px-2 flex items-center justify-between transition-all duration-300 ${scrolled ? "h-25" : "flex-col justify-center h-full text-center"}`}
-      >
-        {!scrolled &&
-          <p className={`${HandyGeorge.className} font-bold transition-all duration-300 text-white ${scrolled ? "text-2xl text-left" : "text-3xl"}`}>
-            {titleLine1}
-          </p>
-        }
-        <h1 className={`${HandyGeorge.className} font-bold transition-all duration-300 text-white ${scrolled ? "text-4xl text-left" : "text-5xl"}`}>
-          {titleLine2}
-        </h1>
-
-        {!scrolled && (
-          <p className={`${HandyGeorge.className} text-3xl text-white sm:text-4xl mb-2`}>
-            {subtitle}
-          </p>
-        
-        )}
-
+    {/* --- 4. BOUTON CTA --- */}
+    <div className={`absolute z-30 transition-all duration-700 ease-in-out ${scrolled ? "right-4 top-9" : "right-4 top-38"}`}>
       <button
         onClick={onDiscoverClick}
-        className={`bg-yellow-400 text-black font-semibold px-6 py-3 rounded-2xl shadow hover:bg-yellow-300 transition-all cursor-pointer duration-300 ${
-          scrolled ? "ml-auto" : ""
-        }`}
+        className={`bg-yellow-400 text-black font-semibold px-6 py-3 rounded-2xl shadow hover:bg-yellow-300 transition-all cursor-pointer duration-300`}
       >
-        {scrolled ? "Découvrir l'univers..." : cta.label}
+        {scrolled ? "C'est quoi ?" : cta.label}
       </button>
-
-      </div>
-    </header>
-  );
+    </div>
+    
+  </header>
+);
 }
