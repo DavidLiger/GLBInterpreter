@@ -4,49 +4,56 @@
     "titleLine2": "Liger",
     "subtitle": "Livres augmentés",
     "cta": {
-      "label": "C'est quoi, un livre augmenté ?",
-      "href": "#books"
+      "label": "C'est quoi un livre augmenté ?"
     },
-    "backgroundImage": "/images/chaloupes-en-mer-header.png",
-    "logo": "/images/logo.png"
+    "backgroundImage": "chaloupes-en-mer-header.png",
+    "logo": "logo.png"
   },
   "bookSection": {
     "title": "Les livres",
     "detailLink": "En savoir +"
   },
-  "discoverSection": {
-    "title": "L'univers"
+  "collectionsSection": {
+    "title": "Les collections"
+  },
+  "howItWorks": {
+    "title": "C'est quoi un livre augmenté ?",
+    "image": "how-it-works-demo.jpg",
+    "text": "Nos livres augmentés vous offrent une expérience unique : en scannant un QR code présent dans le livre, vous accédez à des scènes 3D immersives qui donnent vie à l'histoire.\n\nDécouvrez des univers en réalité augmentée, explorez les décors, et plongez dans une nouvelle dimension de lecture.\n\nEssayez notre démo interactive pour découvrir la magie des livres augmentés !",
+    "demoUrl": "https://editions-liger.com/webdiorama/9999/street?t=abcd1234"
   },
   "amazonButton": {
     "title": "Acheter sur Amazon"
   },
-  "universe": [
+  "collections": [
     {
       "id": 1,
-      "image": "/images/universe1.jpg",
-      "text": "La forêt enchantée",
+      "name": "Science-Fiction",
+      "image": "collection-sf.jpg",
+      "description": "Explorez des mondes futuristes et des technologies avancées à travers nos récits de science-fiction captivants.",
       "details": [
-        { "image": "/images/foret1.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum." },
-        { "image": "/images/foret2.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." },
-        { "image": "/images/foret3.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." }
+        { "image": "sf-detail1.jpg", "text": "Des vaisseaux spatiaux aux confins de l'univers" },
+        { "image": "sf-detail2.jpg", "text": "Des civilisations extraterrestres fascinantes" }
       ]
     },
     {
       "id": 2,
-      "image": "/images/universe2.jpg",
-      "text": "Le château mystérieux",
+      "name": "Fantastique",
+      "image": "collection-fantasy.jpg",
+      "description": "Plongez dans des univers magiques peuplés de créatures légendaires et de héros extraordinaires.",
       "details": [
-        { "image": "/images/chateau1.jpg", "text": "La tour abandonnée" },
-        { "image": "/images/chateau2.jpg", "text": "Les jardins secrets" }
+        { "image": "fantasy-detail1.jpg", "text": "Des forêts enchantées et des créatures mythiques" },
+        { "image": "fantasy-detail2.jpg", "text": "Des quêtes épiques et des sortilèges puissants" }
       ]
     },
     {
       "id": 3,
-      "image": "/images/universe3.jpg",
-      "text": "Le village des elfes",
+      "name": "Policier",
+      "image": "collection-policier.png",
+      "description": "Résolvez des énigmes complexes et suivez des enquêtes palpitantes dans nos thrillers policiers.",
       "details": [
-        { "image": "/images/village1.jpg", "text": "La place du marché" },
-        { "image": "/images/village2.jpg", "text": "Les maisons dans les arbres" }
+        { "image": "policier-detail1.jpg", "text": "Des scènes de crime minutieusement reconstituées" },
+        { "image": "policier-detail2.jpg", "text": "Des indices à découvrir en 3D" }
       ]
     }
   ],
@@ -55,47 +62,42 @@
       "id": 1,
       "title": "Titre vraiment vachement plus long du Livre 1",
       "summary": "Résumé rapide du livre 1…",
-      "image": "/images/book1.jpg",
+      "image": "book1.jpg",
       "link": "https://amazon.com/livre1",
+      "collectionId": 2,
       "details": [
-        { "image": "/images/book1Illu1.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum." },
-        { "image": "/images/book1Illu2.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." },
-        { "image": "/images/book1Illu3.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." }
+        { "image": "book1Illu1.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum." },
+        { "image": "book1Illu2.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." },
+        { "image": "book1Illu3.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." }
       ]
     },
     {
       "id": 2,
       "title": "Titre du Livre 2",
       "summary": "Résumé rapide du livre 2…",
-      "image": "/images/book2.jpg",
+      "image": "book2.jpg",
       "link": "https://amazon.com/livre2",
+      "collectionId": 1,
       "details": [
-        { "image": "/images/book2Illu1.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum." },
-        { "image": "/images/book2Illu2.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." },
-        { "image": "/images/book2Illu3.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." }
+        { "image": "book2Illu1.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum." },
+        { "image": "book2Illu2.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." },
+        { "image": "book2Illu3.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." }
       ]
     },
     {
       "id": 3,
       "title": "Titre du Livre 3",
       "summary": "Résumé rapide du livre 3…",
-      "image": "/images/book3.jpg",
+      "image": "book3.jpg",
       "link": "https://amazon.com/livre3",
+      "collectionId": 3,
       "details": [
-        { "image": "/images/book3Illu1.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum." },
-        { "image": "/images/book3Illu2.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." },
-        { "image": "/images/book3Illu3.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." }
+        { "image": "book3Illu1.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum." },
+        { "image": "book3Illu2.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." },
+        { "image": "book3Illu3.jpg", "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit. Quisque faucibus ex sapien vitae pellentesque sem placerat. In id cursus mi pretium tellus duis convallis. Tempus leo eu aenean sed diam urna tempor. Pulvinar vivamus fringilla lacus nec metus bibendum egestas. Iaculis massa nisl malesuada lacinia integer nunc posuere. Ut hendrerit semper vel class aptent taciti sociosqu. Ad litora torquent per conubia nostra inceptos himenaeos." }
       ]
     }
   ],
-  "extrait": {
-    "text": "« Ici tu peux afficher un extrait de ton livre, ou une image immersive qui plonge le lecteur dans ton monde. »"
-  },
-  "newsletter": {
-    "title": "Rejoignez la Communauté",
-    "description": "Recevez des extraits inédits, des illustrations exclusives et soyez les premiers informés des prochaines sorties.",
-    "cta": "S'inscrire"
-  },
   "footer": {
     "copyright": "© 2025 Les Éditions Liger — Tous droits réservés",
     "links": [

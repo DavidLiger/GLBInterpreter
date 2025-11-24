@@ -1,34 +1,33 @@
 'use client'
 
-import { useRef } from "react";
-import Header from "../components/common/Header";
-import BooksSection from "../components/books/BooksSection";
-import Footer from "../components/common/Footer";
-import DiscoverSection from "../components/books/DiscoverSection";
+import HeaderV2 from "@/components/common/Header";
+import BooksSection from "@/components/books/BooksSection";
+import CollectionsSection from "@/components/books/CollectionsSection";
+import Footer from "@/components/common/Footer";
 import Copyright from "@/components/common/Copyright";
+import content from "../content/content.json";
 
 export default function Home() {
-  const discoverRef = useRef<HTMLDivElement>(null);
-
-  // Fonction pour scroller vers DiscoverSection
-  const scrollToDiscover = () => {
-    if (discoverRef.current) {
-      const yOffset = -60; // hauteur approximative du header + marge
-      const y = discoverRef.current.getBoundingClientRect().top + window.pageYOffset + yOffset;
-      window.scrollTo({ top: y, behavior: "smooth" });
-    }
-  };
-
   return (
     <div className="min-h-screen flex flex-col bg-gray-300 text-gray-900">
-      <Header onDiscoverClick={scrollToDiscover} />
-      <main className="pt-48"> {/* Ajuste selon la hauteur du header */}
+      <HeaderV2 
+        header={content.header}
+        howItWorks={content.howItWorks}
+      />
+      
+      <main className="pt-48">
+        {/* Section des livres */}
         <BooksSection />
-        <div ref={discoverRef}>
-          <DiscoverSection />
-        </div>
+        
+        {/* Section des collections */}
+        <CollectionsSection 
+          title={content.collectionsSection.title}
+          collections={content.collections}
+        />
+        
         <Copyright />
       </main>
+      
       <Footer />
     </div>
   );

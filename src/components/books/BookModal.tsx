@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import AmazonButton from "../common/AmazonButton";
+import { getAssetUrl } from "../diorama/lib/assets";
 
 interface Detail {
   image: string;
@@ -60,8 +61,6 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
 
   if (!isOpen || !book) return null;
 
-  const scaleY = scrolled ? 0.5 : 1;
-
   return (
     <div
       className="fixed inset-0 z-50 bg-black/70 flex justify-end lg:justify-center overflow-hidden"
@@ -80,13 +79,13 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header sticky */}
-        <div className={`sticky top-0 w-full transition-all duration-300 ${ scrolled ? "h-24" : "h-48" }`} >
+        <div className={`sticky top-0 w-full transition-all duration-300 ${scrolled ? "h-24" : "h-48"}`}>
           <div className="absolute inset-0 overflow-hidden">
             {/* Image réduite quand scroll */}
             <img
-              src={book.image}
+              src={getAssetUrl(book.image)}
               alt={book.title}
-              className={`absolute inset-0 w-full h-full object-cover transition-transform duration-300 `}
+              className={`absolute inset-0 w-full h-full object-cover transition-transform duration-300`}
             />
           </div>
 
@@ -122,7 +121,7 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
           {book.details?.map((detail, idx) => (
             <div key={idx} className="w-full">
               <img
-                src={detail.image}
+                src={getAssetUrl(detail.image)}
                 alt={detail.text}
                 className="w-full h-auto object-cover rounded-lg"
               />
