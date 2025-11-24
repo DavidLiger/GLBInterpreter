@@ -8,9 +8,9 @@ import AmazonButton from "../common/AmazonButton";
 import localFont from "next/font/local";
 import { getAssetUrl } from "../diorama/lib/assets";
 
-const Alstoria = localFont({
-  src: "../../../public/fonts/Alstoria.ttf",
-  variable: "--font-Alstoria",
+const HandyGeorge = localFont({
+  src: "../../../public/fonts/HandyGeorge.ttf",
+  variable: "--font-HandyGeorge",
 });
 
 interface Detail {
@@ -54,11 +54,19 @@ export default function BooksSection() {
 
   return (
     <section id="books" className="py-16 px-6 max-w-6xl mx-auto scroll-mt-20">
-      <h2 className={`${Alstoria.className} text-4xl font-bold text-center mb-12`}>
+      <h2 className={`${HandyGeorge.className} text-4xl font-bold text-center mb-12 tracking-tighter`}>
         {content.bookSection.title}
       </h2>
 
-      <div className="grid gap-12 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 justify-items-center">
+      <div
+        className={`
+          grid gap-12 justify-items-center
+          ${foregroundBooks.length === 1
+            ? "grid-cols-1 place-items-center"
+            : "grid-cols-1 sm:grid-cols-2 md:grid-cols-3"
+          }
+        `}
+      >
         {/* 2. On map sur notre tableau calculé 'foregroundBooks' */}
         {foregroundBooks.map((book) => (
           <div

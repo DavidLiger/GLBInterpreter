@@ -69,6 +69,28 @@
           "details": [
              { "image": "book1Illu2.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing " }
           ]
+        },
+        {
+          "id": 202,
+          "onForeground": false,
+          "title": "Titre du Livre Fantastique",
+          "summary": "Résumé rapide...",
+          "image": "book2.jpg",
+          "link": "https://amazon.com/livre1",
+          "details": [
+             { "image": "book1Illu2.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+          ]
+        },
+        {
+          "id": 203,
+          "onForeground": false,
+          "title": "Titre du Livre Fantastique",
+          "summary": "Résumé rapide...",
+          "image": "book2.jpg",
+          "link": "https://amazon.com/livre1",
+          "details": [
+             { "image": "book1Illu2.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+          ]
         }
       ]
     },

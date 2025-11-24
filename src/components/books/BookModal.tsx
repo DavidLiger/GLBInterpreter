@@ -63,12 +63,12 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-60 bg-black/30 flex justify-end lg:justify-center overflow-hidden"
+      className="fixed inset-0 z-70 bg-black/30 flex justify-end lg:justify-center overflow-hidden"
       onClick={onClose}
     >
       <button
         onClick={onClose}
-        className="fixed right-2 text-4xl font-bold text-gray-100 z-50 cursor-pointer"
+        className="fixed right-3 top-3 text-4xl font-bold text-gray-100 z-50 cursor-pointer"
       >
         &times;
       </button>

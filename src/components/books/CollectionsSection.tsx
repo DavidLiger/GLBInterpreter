@@ -5,9 +5,9 @@ import localFont from "next/font/local";
 import CollectionModal from "./CollectionModal";
 import { getAssetUrl } from "../diorama/lib/assets";
 
-const Alstoria = localFont({
-  src: "../../../public/fonts/Alstoria.ttf",
-  variable: "--font-Alstoria",
+const HandyGeorge = localFont({
+  src: "../../../public/fonts/HandyGeorge.ttf",
+  variable: "--font-HandyGeorge",
 });
 
 // 1. Définir le détail (utilisé dans Book et Collection)
@@ -64,7 +64,7 @@ export default function CollectionsSection({ title, collections }: CollectionsSe
   return (
     <>
       <section className="py-12 px-6 max-w-full mx-auto relative">
-        <h2 className={`${Alstoria.className} text-4xl font-bold text-center mb-8`}>
+        <h2 className={`${HandyGeorge.className} text-4xl font-bold text-center mb-8 tracking-tighter`}>
           {title}
         </h2>
         <div

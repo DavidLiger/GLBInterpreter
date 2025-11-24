@@ -79,7 +79,7 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/70 flex justify-end lg:justify-center overflow-hidden"
+      className="fixed inset-0 z-60 bg-black/70 flex justify-end lg:justify-center overflow-hidden"
       onClick={onClose}
     >
       {/* Bouton croix */}
