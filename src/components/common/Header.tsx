@@ -6,7 +6,6 @@ import localFont from "next/font/local";
 import HowItWorksModal from "./HowItWorksModal";
 import { getAssetUrl } from "../diorama/lib/assets";
 import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
-import HomeLanguageSelector from "./HomeLanguageSelector";
 
 const HandyGeorge = localFont({
   src: "../../../public/fonts/HandyGeorge.ttf",
@@ -144,7 +143,7 @@ export default function Header({ header, howItWorks, onScrollChange }: HeaderPro
           onClick={() => setIsModalOpen(true)}
           className={`bg-yellow-400 text-black font-semibold px-6 py-3 rounded-2xl shadow hover:bg-yellow-300 transition-all cursor-pointer duration-300`}
         >
-          {scrolled ? "C'est quoi ?" : t.header.cta.label}
+          {scrolled ? t.header.cta.shortLabel : t.header.cta.label}
         </button>
       </div>
       

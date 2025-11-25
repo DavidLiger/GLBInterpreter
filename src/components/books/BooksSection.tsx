@@ -7,6 +7,7 @@ import BookModal from "./BookModal";
 import AmazonButton from "../common/AmazonButton";
 import localFont from "next/font/local";
 import { getAssetUrl } from "../diorama/lib/assets";
+import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
 
 const HandyGeorge = localFont({
   src: "../../../public/fonts/HandyGeorge.ttf",
@@ -19,13 +20,14 @@ interface Detail {
 }
 
 interface Book {
-  id: number;
-  onForeground?: boolean;
-  title: string;
-  summary: string;
+  id: string;
   image: string;
   link?: string;
-  details?: Detail[];
+  collection: string;
+  foreground?: boolean;
+  title: string;
+  summary: string;
+  details?: Array<{ text: string; image?: string }>;
 }
 
 interface Collection {
@@ -33,9 +35,14 @@ interface Collection {
 }
 
 export default function BooksSection() {
+  const { t } = useHomeTranslation();
   const { title, detailLink } = content.bookSection;
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+    // ✅ DEBUG
+  console.log('🔍 t.books:', t.books);
+  console.log('🔍 content.books:', content.books);
 
   const openModal = (book: Book) => {
     setSelectedBook(book);
@@ -47,15 +54,25 @@ export default function BooksSection() {
     setSelectedBook(null);
   };
 
-  // On parcourt toutes les collections, on récupère les livres, et on ne garde que les foreground
-  const foregroundBooks = content.collections.flatMap(collection => 
-    collection.books.filter(book => book.onForeground)
-  );
+  const booksWithTranslations = content.books.map(book => {
+    const translation = (t.books as any)[book.id];
+    console.log(`📖 Book ${book.id}:`, { book, translation }); // ✅ DEBUG
+    return {
+      ...book,
+      ...translation,
+    };
+  });
+
+  console.log('✅ Books with translations:', booksWithTranslations); // ✅ DEBUG
+
+  const foregroundBooks = booksWithTranslations.filter(b => b.foreground);
+
+  console.log('⭐ Foreground books:', foregroundBooks); // ✅ DEBUG
 
   return (
     <section id="books" className="py-16 px-6 max-w-6xl mx-auto scroll-mt-20">
       <h2 className={`${HandyGeorge.className} text-4xl font-bold text-center mb-12 tracking-tighter`}>
-        {content.bookSection.title}
+        {t.bookSection.title}
       </h2>
 
       <div

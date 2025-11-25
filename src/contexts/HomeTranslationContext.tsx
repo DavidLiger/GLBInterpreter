@@ -10,7 +10,8 @@ const translations = {
       titleLine2: "Liger",
       subtitle: "Livres augmentés",
       cta: {
-        label: "C'est quoi un livre augmenté ?"
+        label: "C'est quoi un livre augmenté ?",
+        shortLabel: "C'est quoi ?"
       }
     },
     bookSection: {
@@ -30,16 +31,65 @@ const translations = {
     collections: {
       scifi: {
         name: "Science-Fiction",
-        description: "Explorez des mondes futuristes et des technologies avancées à travers nos récits de science-fiction captivants."
+        description: "Explorez des mondes futuristes et des technologies avancées à travers nos récits de science-fiction captivants.",
+        details: [
+          { text: "Des vaisseaux spatiaux aux confins de l'univers" },
+          { text: "Des civilisations extraterrestres fascinantes" }
+        ],
       },
       fantasy: {
         name: "Fantastique",
-        description: "Plongez dans des univers magiques peuplés de créatures légendaires et de héros extraordinaires."
+        description: "Plongez dans des univers magiques peuplés de créatures légendaires et de héros extraordinaires.",
+        details: [
+          { text: "Des forêts enchantées et des créatures mythiques" },
+          { text: "Des quêtes épiques et des sortilèges puissants" }
+        ]
       },
       thriller: {
         name: "Policier",
-        description: "Résolvez des énigmes complexes et suivez des enquêtes palpitantes dans nos thrillers policiers."
+        description: "Résolvez des énigmes complexes et suivez des enquêtes palpitantes dans nos thrillers policiers.",
+        details: [
+          { text: "Des scènes de crime minutieusement reconstituées" },
+          { text: "Des indices à découvrir en 3D" }
+        ]
       }
+    },
+    books: {
+        "SF-01": {
+          title: "Titre du Livre SF",
+          summary: "Résumé rapide du livre SF...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+          ]
+        },
+        "Fantasy-01" : {
+          title: "Titre du Livre Fantastique",
+          summary: "Résumé rapide...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+          ]
+        },
+        "Fantasy-02" : {
+          title: "Titre du Livre Fantastique",
+          summary: "Résumé rapide...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+          ]
+        },
+        "Fantasy-03" : {
+          title: "Titre du Livre Fantastique",
+          summary: "Résumé rapide...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+          ]
+        },
+        "Polar-01": {
+          title: "Titre du Livre Policier",
+          summary: "Résumé rapide...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+          ]
+        }
     },
     footer: {
       copyright: "© 2025 Les Éditions Liger — Tous droits réservés"
@@ -51,7 +101,8 @@ const translations = {
       titleLine2: "Liger",
       subtitle: "Augmented Books",
       cta: {
-        label: "What is an augmented book?"
+        label: "What is an augmented book?",
+        shortLabel: "What is it?"
       }
     },
     bookSection: {
@@ -71,16 +122,65 @@ const translations = {
     collections: {
       scifi: {
         name: "Science Fiction",
-        description: "Explore futuristic worlds and advanced technologies through our captivating science fiction stories."
+        description: "Explore futuristic worlds and advanced technologies through our captivating science fiction stories.",
+        details: [
+          { text: "Spaceships at the edge of the universe" },
+          { text: "Fascinating alien civilisations" }
+        ],
       },
       fantasy: {
         name: "Fantasy",
-        description: "Dive into magical universes populated with legendary creatures and extraordinary heroes."
+        description: "Dive into magical universes populated with legendary creatures and extraordinary heroes.",
+        details: [
+          { text: "Enchanted forests and mythical creatures" },
+          { text: "Epic quests and powerful spells" }
+        ],
       },
       thriller: {
         name: "Thriller",
-        description: "Solve complex riddles and follow thrilling investigations in our police thrillers."
+        description: "Solve complex riddles and follow thrilling investigations in our police thrillers.",
+        details: [
+          { text: "Meticulously reconstructed crime scenes’" },
+          { text: "Clues to discover in 3D" }
+        ]
       }
+    },
+    books: {
+        "SF-01": {
+          title: "Title of SF Book",
+          summary: "Quick summary of SF book...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+          ]
+        },
+        "Fantasy-01" : {
+          title: "Title of Fantasy Book",
+          summary: "Quick summary...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+          ]
+        },
+        "Fantasy-02" : {
+          title: "Title of Fantasy Book",
+          summary: "Quick summary...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+          ]
+        },
+        "Fantasy-03" : {
+          title: "Title of Fantasy Book",
+          summary: "Quick summary...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+          ]
+        },
+        "Polar-01": {
+          title: "Title of the Detective Novel",
+          summary: "Quick summary...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+          ]
+        }
     },
     footer: {
       copyright: "© 2025 Éditions Liger — All rights reserved"
@@ -92,7 +192,8 @@ const translations = {
       titleLine2: "Liger",
       subtitle: "Libros aumentados",
       cta: {
-        label: "¿Qué es un libro aumentado?"
+        label: "¿Qué es un libro aumentado?",
+        shortLabel: "¿Qué es?"
       }
     },
     bookSection: {
@@ -112,16 +213,65 @@ const translations = {
     collections: {
       scifi: {
         name: "Ciencia Ficción",
-        description: "Explore mundos futuristas y tecnologías avanzadas a través de nuestros cautivadores relatos de ciencia ficción."
+        description: "Explore mundos futuristas y tecnologías avanzadas a través de nuestros cautivadores relatos de ciencia ficción.",
+        details: [
+          { text: "Naves espaciales en los confines del universo" },
+          { text: "Fascinantes civilizaciones extraterrestres" }
+        ]
       },
       fantasy: {
         name: "Fantasía",
-        description: "Sumérjase en universos mágicos poblados de criaturas legendarias y héroes extraordinarios."
+        description: "Sumérjase en universos mágicos poblados de criaturas legendarias y héroes extraordinarios.",
+        details: [
+          { text: "Bosques encantados y criaturas míticas"},
+          { text: "Misiones épicas y hechizos poderosos"}
+        ],
       },
       thriller: {
         name: "Policíaco",
-        description: "Resuelva enigmas complejos y siga investigaciones apasionantes en nuestros thrillers policíacos."
+        description: "Resuelva enigmas complejos y siga investigaciones apasionantes en nuestros thrillers policíacos.",
+         details: [
+          { text: "Escenas del crimen minuciosamente reconstituidas" },
+          { text: "Pistas por descubrir en 3D" }
+        ]
       }
+    },
+    books: {
+        "SF-01": {
+          title: "Título del libro de ciencia ficción",
+          summary: "Breve resumen del libro de ciencia ficción...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+          ]
+        },
+        "Fantasy-01" : {
+          title: "Título del libro fantástico",
+          summary: "Resumen rápido...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing"}
+          ]
+        },
+        "Fantasy-02" : {
+          title: "Título del libro fantástico",
+          summary: "Resumen rápido...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing"}
+          ]
+        },
+        "Fantasy-03" : {
+          title: "Título del libro fantástico",
+          summary: "Resumen rápido...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing"}
+          ]
+        },
+        "Polar-01": {
+          title: "Título del Libro Policíaco",
+          summary: "Resumen rápido...",
+          details: [
+            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+          ]
+        }
     },
     footer: {
       copyright: "© 2025 Éditions Liger — Todos los derechos reservados"

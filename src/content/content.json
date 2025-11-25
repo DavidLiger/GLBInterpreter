@@ -25,96 +25,72 @@
   "amazonButton": {
     "title": "Acheter sur Amazon"
   },
+  "books": [
+    {
+      "id": "SF-01",
+      "image": "book2Illu1.jpg",
+      "link": "https://amazon.com/livre2",
+      "collection": "scifi",
+      "foreground": true
+    },
+    {
+      "id": "Fantasy-01",
+      "image": "book2.jpg",
+      "link": "https://amazon.com/livre1",
+      "collection": "fantasy",
+      "foreground": true
+    },
+    {
+      "id": "Fantasy-02",
+      "image": "book2.jpg",
+      "link": "https://amazon.com/livre1",
+      "collection": "fantasy",
+      "foreground": false
+    },
+    {
+      "id": "Fantasy-03",
+      "image": "book2.jpg",
+      "link": "https://amazon.com/livre1",
+      "collection": "fantasy",
+      "foreground": false
+    },
+    {
+      "id": "Polar-01",
+      "image": "book3.jpg",
+      "link": "https://amazon.com/livre3",
+      "collection": "thriller",
+      "foreground": true
+    }
+  ],
   "collections": [
     {
-      "id": 1,
+      "id": "scifi",
       "name": "Science-Fiction",
       "image": "collection-sf.jpg",
       "description": "Explorez des mondes futuristes et des technologies avancées à travers nos récits de science-fiction captivants.",
       "details": [
         { "image": "sf-detail1.jpg", "text": "Des vaisseaux spatiaux aux confins de l'univers" },
         { "image": "sf-detail2.jpg", "text": "Des civilisations extraterrestres fascinantes" }
-      ],
-      "books": [
-        {
-          "id": 101,
-          "onForeground": true,
-          "title": "Titre du Livre SF",
-          "summary": "Résumé rapide du livre SF...",
-          "image": "book1.jpg",
-          "link": "https://amazon.com/livre2",
-          "details": [
-             { "image": "book2Illu1.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing " }
-          ]
-        }
       ]
     },
     {
-      "id": 2,
+      "id": "fantasy",
       "name": "Fantastique",
       "image": "collection-fantasy.jpg",
       "description": "Plongez dans des univers magiques peuplés de créatures légendaires et de héros extraordinaires.",
       "details": [
         { "image": "fantasy-detail1.jpg", "text": "Des forêts enchantées et des créatures mythiques" },
         { "image": "fantasy-detail2.jpg", "text": "Des quêtes épiques et des sortilèges puissants" }
-      ],
-      "books": [
-        {
-          "id": 201,
-          "onForeground": true,
-          "title": "Titre du Livre Fantastique",
-          "summary": "Résumé rapide...",
-          "image": "book2.jpg",
-          "link": "https://amazon.com/livre1",
-          "details": [
-             { "image": "book1Illu2.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing " }
-          ]
-        },
-        {
-          "id": 202,
-          "onForeground": false,
-          "title": "Titre du Livre Fantastique",
-          "summary": "Résumé rapide...",
-          "image": "book2.jpg",
-          "link": "https://amazon.com/livre1",
-          "details": [
-             { "image": "book1Illu2.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing " }
-          ]
-        },
-        {
-          "id": 203,
-          "onForeground": false,
-          "title": "Titre du Livre Fantastique",
-          "summary": "Résumé rapide...",
-          "image": "book2.jpg",
-          "link": "https://amazon.com/livre1",
-          "details": [
-             { "image": "book1Illu2.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing " }
-          ]
-        }
       ]
     },
     {
-      "id": 3,
+      "id": "thriller",
       "name": "Policier",
       "image": "collection-policier.png",
       "description": "Résolvez des énigmes complexes et suivez des enquêtes palpitantes dans nos thrillers policiers.",
       "details": [
         { "image": "policier-detail1.jpg", "text": "Des scènes de crime minutieusement reconstituées" },
         { "image": "policier-detail2.jpg", "text": "Des indices à découvrir en 3D" }
-      ],
-      "books": [
-        {
-          "id": 301,
-          "onForeground": false,
-          "title": "Titre du Livre Policier",
-          "summary": "Résumé rapide...",
-          "image": "book3.jpg",
-          "link": "https://amazon.com/livre3",
-          "details": [
-             { "image": "book3Illu3.jpg", "text": "Lorem ipsum dolor sit amet, consectetur adipiscing " }
-          ]
-        }
       ]
     }
   ],

@@ -3,19 +3,24 @@
 import { useEffect, useRef, useState } from "react";
 import AmazonButton from "../common/AmazonButton";
 import { getAssetUrl } from "../diorama/lib/assets";
+import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
+import content from "@/content/content.json";
 
 interface Detail {
   image: string;
   text: string;
 }
 
-interface Book {
-  id: number;
+export interface Book {
+  id: string;
   image: string;
-  title: string;
-  summary?: string;
   link?: string;
-  details?: Detail[];
+  collection: string;
+  foreground?: boolean;
+  // Propriétés ajoutées par traduction :
+  title: string;
+  summary: string;
+  details?: Array<{ text: string; image?: string }>;
 }
 
 interface BookModalProps {
@@ -25,6 +30,7 @@ interface BookModalProps {
 }
 
 export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
+  const { t } = useHomeTranslation();
   const [scrolled, setScrolled] = useState(false);
   const lastState = useRef(false);
 
@@ -60,6 +66,11 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
   }, [isOpen]);
 
   if (!isOpen || !book) return null;
+
+  const booksWithTranslations = content.books.map(book => ({
+    ...book,
+    ...(t.books as any)[book.id], // Ajoute title, summary, details traduits
+  }));
 
   return (
     <div
@@ -121,7 +132,7 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
           {book.details?.map((detail, idx) => (
             <div key={idx} className="w-full">
               <img
-                src={getAssetUrl(detail.image)}
+                src={getAssetUrl(book.image)}
                 alt={detail.text}
                 className="w-full h-auto object-cover rounded-lg"
               />

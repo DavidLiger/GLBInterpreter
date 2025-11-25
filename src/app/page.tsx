@@ -29,7 +29,7 @@ export default function Home() {
           <BooksSection />
           <CollectionsSection 
             title={content.collectionsSection.title}
-            collections={content.collections}
+            // collections={content.collections}
           />
           <Copyright />
         </main>
