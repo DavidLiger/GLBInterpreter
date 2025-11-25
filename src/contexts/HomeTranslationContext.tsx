@@ -26,11 +26,13 @@ const translations = {
       text: "Nos livres augmentés vous offrent une expérience unique : en scannant un QR code présent dans le livre, vous accédez à des scènes 3D immersives qui donnent vie à l'histoire.\n\nDécouvrez des univers en réalité augmentée, explorez les décors, et plongez dans une nouvelle dimension de lecture.\n\nEssayez notre démo interactive pour découvrir la magie des livres augmentés !"
     },
     amazonButton: {
-      title: "Acheter sur Amazon"
+      title: "Acheter sur Amazon",
+      shortTitle: "Acheter"
     },
     collections: {
       scifi: {
         name: "Science-Fiction",
+        subtitle: "Les livres de la collection",
         description: "Explorez des mondes futuristes et des technologies avancées à travers nos récits de science-fiction captivants.",
         details: [
           { text: "Des vaisseaux spatiaux aux confins de l'univers" },
@@ -39,6 +41,7 @@ const translations = {
       },
       fantasy: {
         name: "Fantastique",
+        subtitle: "Les livres de la collection",
         description: "Plongez dans des univers magiques peuplés de créatures légendaires et de héros extraordinaires.",
         details: [
           { text: "Des forêts enchantées et des créatures mythiques" },
@@ -47,6 +50,7 @@ const translations = {
       },
       thriller: {
         name: "Policier",
+        subtitle: "Les livres de la collection",
         description: "Résolvez des énigmes complexes et suivez des enquêtes palpitantes dans nos thrillers policiers.",
         details: [
           { text: "Des scènes de crime minutieusement reconstituées" },
@@ -58,36 +62,41 @@ const translations = {
         "SF-01": {
           title: "Titre du Livre SF",
           summary: "Résumé rapide du livre SF...",
+          dispo: true,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+            { text: "Des vaisseaux spatiaux aux confins de l'univers " }
           ]
         },
         "Fantasy-01" : {
           title: "Titre du Livre Fantastique",
           summary: "Résumé rapide...",
+          dispo: true,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+            { text: "Des forêts enchantées et des créatures mythiques" }
           ]
         },
         "Fantasy-02" : {
           title: "Titre du Livre Fantastique",
           summary: "Résumé rapide...",
+          dispo: true,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+            { text: "Des quêtes épiques et des sortilèges puissants" }
           ]
         },
         "Fantasy-03" : {
           title: "Titre du Livre Fantastique",
           summary: "Résumé rapide...",
+          dispo: true,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+            { text: "Des forêts enchantées et des créatures mythiques" }
           ]
         },
         "Polar-01": {
           title: "Titre du Livre Policier",
           summary: "Résumé rapide...",
+          dispo: true,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+            { text: "Des scènes de crime minutieusement reconstituées" }
           ]
         }
     },
@@ -117,11 +126,13 @@ const translations = {
       text: "Our augmented books offer you a unique experience: by scanning a QR code in the book, you access immersive 3D scenes that bring the story to life.\n\nDiscover augmented reality universes, explore the settings, and dive into a new dimension of reading.\n\nTry our interactive demo to discover the magic of augmented books!"
     },
     amazonButton: {
-      title: "Buy on Amazon"
+      title: "Buy on Amazon",
+      shortTitle: "Buy"
     },
     collections: {
       scifi: {
         name: "Science Fiction",
+        subtitle: "The books in the collection",
         description: "Explore futuristic worlds and advanced technologies through our captivating science fiction stories.",
         details: [
           { text: "Spaceships at the edge of the universe" },
@@ -130,6 +141,7 @@ const translations = {
       },
       fantasy: {
         name: "Fantasy",
+        subtitle: "The books in the collection",
         description: "Dive into magical universes populated with legendary creatures and extraordinary heroes.",
         details: [
           { text: "Enchanted forests and mythical creatures" },
@@ -138,6 +150,7 @@ const translations = {
       },
       thriller: {
         name: "Thriller",
+        subtitle: "The books in the collection",
         description: "Solve complex riddles and follow thrilling investigations in our police thrillers.",
         details: [
           { text: "Meticulously reconstructed crime scenes’" },
@@ -149,36 +162,41 @@ const translations = {
         "SF-01": {
           title: "Title of SF Book",
           summary: "Quick summary of SF book...",
+          dispo: true,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+            { text: "Spaceships at the edge of the universe " }
           ]
         },
         "Fantasy-01" : {
           title: "Title of Fantasy Book",
           summary: "Quick summary...",
+          dispo: true,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+            { text: "Enchanted forests and mythical creatures" }
           ]
         },
         "Fantasy-02" : {
           title: "Title of Fantasy Book",
           summary: "Quick summary...",
+          dispo: true,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+            { text: "Epic quests and powerful spells" }
           ]
         },
         "Fantasy-03" : {
           title: "Title of Fantasy Book",
           summary: "Quick summary...",
+          dispo: false,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+            { text: "Enchanted forests and mythical creatures" }
           ]
         },
         "Polar-01": {
           title: "Title of the Detective Novel",
           summary: "Quick summary...",
+          dispo: true,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+            { text: "Meticulously reconstructed crime scenes" }
           ]
         }
     },
@@ -208,11 +226,13 @@ const translations = {
       text: "Nuestros libros aumentados le ofrecen una experiencia única: al escanear un código QR presente en el libro, accede a escenas 3D inmersivas que dan vida a la historia.\n\nDescubra universos en realidad aumentada, explore los decorados y sumérjase en una nueva dimensión de lectura.\n\n¡Pruebe nuestra demo interactiva para descubrir la magia de los libros aumentados!"
     },
     amazonButton: {
-      title: "Comprar en Amazon"
+      title: "Comprar en Amazon",
+      shortTitle: "Comprar"
     },
     collections: {
       scifi: {
         name: "Ciencia Ficción",
+        subtitle: "Los libros de la colección",
         description: "Explore mundos futuristas y tecnologías avanzadas a través de nuestros cautivadores relatos de ciencia ficción.",
         details: [
           { text: "Naves espaciales en los confines del universo" },
@@ -221,6 +241,7 @@ const translations = {
       },
       fantasy: {
         name: "Fantasía",
+        subtitle: "Los libros de la colección",
         description: "Sumérjase en universos mágicos poblados de criaturas legendarias y héroes extraordinarios.",
         details: [
           { text: "Bosques encantados y criaturas míticas"},
@@ -229,6 +250,7 @@ const translations = {
       },
       thriller: {
         name: "Policíaco",
+        subtitle: "Los libros de la colección",
         description: "Resuelva enigmas complejos y siga investigaciones apasionantes en nuestros thrillers policíacos.",
          details: [
           { text: "Escenas del crimen minuciosamente reconstituidas" },
@@ -240,36 +262,41 @@ const translations = {
         "SF-01": {
           title: "Título del libro de ciencia ficción",
           summary: "Breve resumen del libro de ciencia ficción...",
+          dispo: true,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+            { text: "Naves espaciales en los confines del universo " }
           ]
         },
         "Fantasy-01" : {
           title: "Título del libro fantástico",
           summary: "Resumen rápido...",
+          dispo: true,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing"}
+            { text: "Bosques encantados y criaturas míticas"}
           ]
         },
         "Fantasy-02" : {
           title: "Título del libro fantástico",
           summary: "Resumen rápido...",
+          dispo: true,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing"}
+            { text: "Misiones épicas y hechizos poderosos"}
           ]
         },
         "Fantasy-03" : {
           title: "Título del libro fantástico",
           summary: "Resumen rápido...",
+          dispo: true,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing"}
+            { text: "Bosques encantados y criaturas míticas"}
           ]
         },
         "Polar-01": {
           title: "Título del Libro Policíaco",
           summary: "Resumen rápido...",
+          dispo: true,
           details: [
-            { text: "Lorem ipsum dolor sit amet, consectetur adipiscing " }
+            { text: "Escenas del crimen minuciosamente reconstituidas " }
           ]
         }
     },

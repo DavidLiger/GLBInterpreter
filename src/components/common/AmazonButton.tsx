@@ -1,13 +1,13 @@
 import Image from "next/image";
-import content from "../../content/content.json";
+import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
 
 interface AmazonButtonProps {
   href: string;
   label?: string; // <-- option pour changer le texte
 }
 
-export default function AmazonButton({ href, label }: AmazonButtonProps) {
-  const { title } = content.amazonButton;
+export default function AmazonButton({ href }: AmazonButtonProps) {
+  const { t } = useHomeTranslation();
 
   return (
     <a
@@ -22,7 +22,7 @@ export default function AmazonButton({ href, label }: AmazonButtonProps) {
         width={20}
         height={20}
       />
-      {label || title} {/* si on passe label="Acheter", il prend le dessus */}
+      {t.amazonButton.title || t.amazonButton.shortTitle} {/* si on passe label="Acheter", il prend le dessus */}
     </a>
   );
 }

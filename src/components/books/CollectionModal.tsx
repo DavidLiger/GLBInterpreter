@@ -84,34 +84,36 @@ export default function CollectionModal({ isOpen, onClose, collectionId }: Colle
             {collectionBooks.length > 0 && (
               <div className="border-t pt-6">
                 <h3 className="text-2xl font-bold text-center mb-6 text-gray-800">
-                  Les livres de la collection
+                  {collectionInfo.subtitle} 
                 </h3>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 justify-items-center">
-                  {collectionBooks.map((book) => (
-                    <div
-                      key={book.id}
-                      onClick={() => handleBookClick(book)}
-                      className="bg-white border rounded-xl shadow-md p-4 cursor-pointer hover:shadow-xl transition max-w-[280px] w-full"
-                    >
-                      <div className="h-40 relative mb-3 rounded-lg overflow-hidden">
-                        <img 
-                          src={getAssetUrl(book.image)}
-                          alt={book.title}
-                          className="object-cover w-full h-full"
-                        />
+                  {collectionBooks
+                    .filter((book) => book.dispo === true) // 1. On filtre d'abord
+                    .map((book) => (
+                      <div
+                        key={book.id}
+                        onClick={() => handleBookClick(book)}
+                        className="bg-white border rounded-xl shadow-md p-4 cursor-pointer hover:shadow-xl transition max-w-[280px] w-full"
+                      >
+                        <div className="h-40 relative mb-3 rounded-lg overflow-hidden">
+                          <img 
+                            src={getAssetUrl(book.image)}
+                            alt={book.title}
+                            className="object-cover w-full h-full"
+                          />
+                        </div>
+                        <h4 className="text-lg font-bold text-gray-800 mb-2">
+                          {book.title}
+                        </h4>
+                        <p className="text-sm text-gray-600 line-clamp-3 mb-3">
+                          {book.summary}
+                        </p>
+                        <span className="text-indigo-600 font-semibold text-sm">
+                          {t.bookSection.detailLink} &rarr;
+                        </span>
                       </div>
-                      <h4 className="text-lg font-bold text-gray-800 mb-2">
-                        {book.title} {/* ✅ Traduit */}
-                      </h4>
-                      <p className="text-sm text-gray-600 line-clamp-3 mb-3">
-                        {book.summary} {/* ✅ Traduit */}
-                      </p>
-                      <span className="text-indigo-600 font-semibold text-sm">
-                        Voir le livre &rarr;
-                      </span>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               </div>
             )}

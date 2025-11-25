@@ -44,7 +44,7 @@ export default function CollectionsSection({ title }: CollectionsSectionProps) {
     <>
       <section className="py-12 px-6 max-w-full mx-auto relative">
         <h2 className={`${HandyGeorge.className} text-4xl font-bold text-center mb-8 tracking-tighter`}>
-          {title}
+          {t.collectionsSection.title}
         </h2>
         <div
           ref={containerRef}

@@ -15,7 +15,7 @@ export default function HomeLanguageSelector() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="fixed top-4 right-4 z-[60]">
+    <div className="fixed top-4 right-4 z-[50]">
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1 px-3 py-1 bg-black/60 rounded-full text-white text-sm"
