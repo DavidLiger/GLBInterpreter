@@ -1,11 +1,13 @@
 "use client";
+
 import React, { useState } from "react";
 import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
+import { motion, AnimatePresence } from "framer-motion";
 
-const flags = {
-  fr: "🇫🇷",
-  en: "🇬🇧",
-  es: "🇪🇸"
+const flags = { 
+  fr: "/icons/flags/fr.png", 
+  en: "/icons/flags/en.png", 
+  es: "/icons/flags/es.png" 
 };
 
 export default function HomeLanguageSelector() {
@@ -13,45 +15,41 @@ export default function HomeLanguageSelector() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="fixed top-24 right-4 z-[60]">
+    <div className="fixed top-4 right-4 z-[60]">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 px-4 py-2 bg-white/90 backdrop-blur-sm rounded-full shadow-lg hover:bg-white transition-all"
+        className="flex items-center gap-1 px-3 py-1 bg-black/60 rounded-full text-white text-sm"
       >
-        <span className="text-xl">{flags[lang]}</span>
-        <span className="uppercase font-semibold text-gray-800">{lang}</span>
+        <img src={flags[lang]} alt={lang} className="w-5 h-4 object-cover" />
+        {lang}
       </button>
 
-      {open && (
-        <>
-          {/* Backdrop pour fermer au clic */}
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setOpen(false)}
-          />
-          
-          {/* Menu dropdown */}
-          <div className="absolute top-14 right-0 bg-white rounded-lg shadow-xl p-2 space-y-1 min-w-[120px] z-50">
+      <AnimatePresence>
+        {open && (
+          <>
+            {/* Backdrop pour fermer au clic */}
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="absolute top-10 right-0 bg-black/80 rounded-lg p-2 space-y-1 min-w-[100px]" // ✅ min-w pour contraindre
+          >
             {(["fr", "en", "es"] as const).map(l => (
               <button
                 key={l}
-                onClick={() => {
-                  setLang(l);
-                  setOpen(false);
-                }}
-                className={`flex items-center gap-2 px-3 py-2 rounded text-sm w-full transition-colors ${
-                  lang === l
-                    ? "bg-indigo-600 text-white"
-                    : "text-gray-800 hover:bg-gray-100"
-                }`}
+                onClick={() => { setLang(l); setOpen(false); }}
+                className={`flex items-center gap-2 px-3 py-2 rounded text-white text-sm w-full ${
+                  lang === l ? "bg-green-500" : "hover:bg-white/10"
+                }`} // ✅ w-full + text-sm
               >
-                <span className="text-lg">{flags[l]}</span>
-                <span className="uppercase font-medium">{l}</span>
+                <img src={flags[l]} alt={l} className="w-5 h-4 object-cover flex-shrink-0" /> {/* ✅ flex-shrink-0 */}
+                <span className="uppercase">{l}</span> {/* ✅ span pour le texte */}
               </button>
             ))}
-          </div>
-        </>
-      )}
+          </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import localFont from "next/font/local";
 import HowItWorksModal from "./HowItWorksModal";
 import { getAssetUrl } from "../diorama/lib/assets";
 import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
+import HomeLanguageSelector from "./HomeLanguageSelector";
 
 const HandyGeorge = localFont({
   src: "../../../public/fonts/HandyGeorge.ttf",
@@ -27,22 +28,30 @@ interface HeaderProps {
     text: string;
     demoUrl: string;
   };
+  onScrollChange?: (scrolled: boolean) => void;
 }
 
 
-export default function Header({ header, howItWorks }: HeaderProps) {
+export default function Header({ header, howItWorks, onScrollChange }: HeaderProps) {
   const { t } = useHomeTranslation();
   const { titleLine1, titleLine2, subtitle, cta, backgroundImage, logo } = content.header;
   const [scrolled, setScrolled] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
-      setScrolled(window.scrollY > 50);
+      const isScrolled = window.scrollY > 50;
+      setScrolled(isScrolled);
+      onScrollChange?.(isScrolled); 
     };
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [onScrollChange]);
 
   // Fonction pour remonter en haut de page
   const handleLogoClick = () => {
@@ -53,7 +62,7 @@ export default function Header({ header, howItWorks }: HeaderProps) {
   <>
     <header
       className={`fixed top-0 left-0 w-full z-50 transition-all duration-700 ease-in-out ${
-        scrolled ? "h-28 shadow-xl" : "h-56"
+        scrolled ? "h-24 shadow-xl" : "h-56"
       }`}
     >
       {/* --- 1. FONDS --- */}
@@ -73,7 +82,7 @@ export default function Header({ header, howItWorks }: HeaderProps) {
         onClick={handleLogoClick} // Ajout de l'action au clic
         className={`absolute z-20 object-contain transition-all duration-700 ease-in-out cursor-pointer
           ${scrolled 
-            ? "left-4 top-2 h-24 w-auto"  // SCROLLÉ : À gauche, grand
+            ? "left-4 top-2 h-20 w-auto"  // SCROLLÉ : À gauche, grand
             : "left-1/2 top-1/2 -translate-y-[4.4rem] -translate-x-[4.8rem] h-14 w-auto" // NON-SCROLLÉ
           }
         `}
@@ -89,7 +98,7 @@ export default function Header({ header, howItWorks }: HeaderProps) {
           ${scrolled 
             /* --- POSITION SCROLLÉE --- */
             /* Mobile : on cache. Desktop (md) : on affiche à gauche du logo */
-            ? "opacity-0 scale-60 left-4 top-10 md:opacity-100 md:scale-100 md:left-23 md:top-13 md:text-5xl" 
+            ? "opacity-0 scale-60 left-4 top-10 md:opacity-100 md:scale-100 md:left-20 md:top-10 md:text-5xl" 
             
             /* --- POSITION NON-SCROLLÉE --- */
             /* On le place au centre. */

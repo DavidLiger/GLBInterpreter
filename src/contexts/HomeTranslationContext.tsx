@@ -138,46 +138,42 @@ interface HomeTranslationContextType {
 const HomeTranslationContext = createContext<HomeTranslationContextType | null>(null);
 
 export function HomeTranslationProvider({ children }: { children: ReactNode }) {
-  // ✅ Fonction pour détecter la langue
-  const detectLanguage = (): Lang => {
-    if (typeof window === "undefined") return "fr"; // SSR fallback
-    
+  // ✅ TOUJOURS initialiser avec "fr" (valeur statique SSR-safe)
+  const [lang, setLangState] = useState<Lang>("fr");
+  const [mounted, setMounted] = useState(false); // ✅ AJOUTER
+  
+  // ✅ Détecter la langue UNIQUEMENT côté client
+  useEffect(() => {
     // 1. D'abord vérifier localStorage
     const saved = localStorage.getItem("homepage-lang");
     if (saved && ["fr", "en", "es"].includes(saved)) {
-      return saved as Lang;
+      setLangState(saved as Lang);
+      setMounted(true);
+      return;
     }
     
     // 2. Sinon détecter depuis le navigateur
     const browserLang = navigator.language.split("-")[0];
     
     if (["fr", "en", "es"].includes(browserLang)) {
-      return browserLang as Lang;
+      setLangState(browserLang as Lang);
     }
     
-    // 3. Par défaut : français
-    return "fr";
-  };
-  
-  const [lang, setLangState] = useState<Lang>(() => detectLanguage());
-  
-  // ✅ Détecter la langue au mount (côté client uniquement)
-  useEffect(() => {
-    const detected = detectLanguage();
-    if (detected !== lang) {
-      setLangState(detected);
-    }
-    console.log("🏠 Langue homepage détectée:", detected);
+    setMounted(true);
+    console.log("🏠 Langue homepage détectée:", lang);
   }, []);
   
   // ✅ Fonction pour changer la langue + sauvegarder
   const setLang = (newLang: Lang) => {
     setLangState(newLang);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("homepage-lang", newLang);
-      console.log("💾 Langue homepage sauvegardée:", newLang);
-    }
+    localStorage.setItem("homepage-lang", newLang);
+    console.log("💾 Langue homepage sauvegardée:", newLang);
   };
+  
+  // ✅ Ne rien afficher jusqu'à ce que la langue soit détectée
+  if (!mounted) {
+    return null; // Ou un loader minimal
+  }
   
   return (
     <HomeTranslationContext.Provider value={{ lang, setLang, t: translations[lang] }}>
