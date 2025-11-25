@@ -17,24 +17,39 @@ interface HowItWorksModalProps {
 }
 
 export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorksModalProps) {
-  const { t } = useHomeTranslation(); // ✅ Hook i18n
+  const { t } = useHomeTranslation();
   const [scrolled, setScrolled] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  
+  // États pour la détection
+  const [isMobileWidth, setIsMobileWidth] = useState(false);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
+  
   const lastState = useRef(false);
 
-  // Détecter si on est sur mobile
+  // ✅ Détection unique et sûre (taille écran + type d'appareil)
   useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 768);
+    const handleResize = () => {
+      // 1. Vérifie la largeur (pour le CSS/Layout)
+      setIsMobileWidth(window.innerWidth < 768);
+    };
+
+    const checkUserAgent = () => {
+      // 2. Vérifie si c'est un appareil mobile (pour la logique QR Code vs Bouton)
+      // On le fait ici pour éviter l'erreur "navigator is not defined" côté serveur
+      const userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+      const isMobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+      setIsMobileDevice(isMobileUA);
     };
     
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    return () => window.removeEventListener('resize', checkMobile);
+    // Initialisation
+    handleResize();
+    checkUserAgent();
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Bloquer le scroll du body et reset état à la fermeture
+  // Bloquer le scroll du body et reset état
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = "hidden";
@@ -58,10 +73,8 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
 
     const handleScroll = () => {
       const scrollTop = modal.scrollTop;
-
       requestAnimationFrame(() => {
-        // Seuil plus bas pour mobile (1px au lieu de 2)
-        const threshold = isMobile ? 1 : 2;
+        const threshold = isMobileWidth ? 1 : 2; // Utilisation de isMobileWidth ici
         
         if (!lastState.current && scrollTop > threshold) {
           setScrolled(true);
@@ -75,16 +88,21 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
 
     modal.addEventListener("scroll", handleScroll);
     return () => modal.removeEventListener("scroll", handleScroll);
-  }, [isOpen, isMobile]);
+  }, [isOpen, isMobileWidth]); // Dépendance mise à jour
 
   if (!isOpen) return null;
+
+  // Logique d'affichage :
+  // On affiche le QR Code SEULEMENT SI :
+  // 1. L'écran est assez large (!isMobileWidth)
+  // 2. ET ce n'est pas un téléphone/tablette (!isMobileDevice)
+  const showQRCode = !isMobileWidth && !isMobileDevice;
 
   return (
     <div
       className="fixed inset-0 z-60 bg-black/70 flex justify-end lg:justify-center overflow-hidden"
       onClick={onClose}
     >
-      {/* Bouton croix */}
       <button
         onClick={onClose}
         className="fixed right-3 top-3 text-4xl font-bold text-gray-100 z-50 cursor-pointer hover:text-white transition"
@@ -92,15 +110,14 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
         &times;
       </button>
 
-      {/* Contenu de la modale */}
       <div
         id="how-it-works-modal-content"
         className="bg-white w-full sm:w-[80%] lg:max-w-[60%] h-full overflow-auto relative transform transition-transform duration-500"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header sticky - Plus petit sur mobile */}
+        {/* Header */}
         <div className={`sticky top-0 w-full transition-all duration-300 ${
-          scrolled ? "h-20" : isMobile ? "h-32" : "h-48"
+          scrolled ? "h-20" : isMobileWidth ? "h-32" : "h-48"
         }`}>
           <img
             src={getAssetUrl(content.image)}
@@ -111,7 +128,7 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
             <p className={`text-white font-semibold transition-all duration-300 ${
               scrolled 
                 ? "text-xl" 
-                : isMobile 
+                : isMobileWidth 
                   ? "text-2xl text-center" 
                   : "text-3xl text-center mb-5"
             }`}>
@@ -120,17 +137,15 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
           </div>
         </div>
 
-        {/* Contenu scrollable - Plus de padding en bas sur mobile */}
-        <div className={`mt-6 flex flex-col gap-6 px-6 ${isMobile ? "pb-32" : "pb-24"}`}>
-          {/* Texte explicatif */}
+        {/* Contenu */}
+        <div className={`mt-6 flex flex-col gap-6 px-6 ${isMobileWidth ? "pb-32" : "pb-24"}`}>
           <div className="text-gray-700 text-lg leading-relaxed whitespace-pre-line">
             {t.howItWorks.text}
           </div>
 
-          {/* QR Code ou Bouton selon device */}
           <div className="flex flex-col items-center gap-6 mt-8 p-8 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl">
-            {!isMobile ? (
-              // Desktop : QR Code
+            {showQRCode ? (
+              // ✅ Desktop uniquement (PC)
               <>
                 <h3 className="text-2xl font-bold text-indigo-900 mb-2">
                   {t.howItWorks.scanTitle}
@@ -148,7 +163,7 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
                 </p>
               </>
             ) : (
-              // Mobile : Bouton
+              // ✅ Mobile (Portrait) OU Mobile (Paysage)
               <>
                 <h3 className="text-2xl font-bold text-indigo-900 mb-2 text-center">
                   {t.howItWorks.demoTitle}
