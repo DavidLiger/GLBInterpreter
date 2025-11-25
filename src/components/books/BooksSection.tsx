@@ -27,6 +27,7 @@ interface Book {
   foreground?: boolean;
   title: string;
   summary: string;
+  releaseDate: string;
   details?: Array<{ text: string; image?: string }>;
 }
 

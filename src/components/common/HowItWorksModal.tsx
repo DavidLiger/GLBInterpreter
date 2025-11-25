@@ -133,7 +133,7 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
               // Desktop : QR Code
               <>
                 <h3 className="text-2xl font-bold text-indigo-900 mb-2">
-                  Scannez avec votre téléphone
+                  {t.howItWorks.scanTitle}
                 </h3>
                 <div className="bg-white p-6 rounded-xl shadow-lg">
                   <QRCodeSVG
@@ -144,14 +144,14 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
                   />
                 </div>
                 <p className="text-sm text-gray-600 text-center mt-2">
-                  Utilisez l'appareil photo de votre smartphone<br/>pour scanner ce QR code
+                  {t.howItWorks.scanSubtitle}<br/>{t.howItWorks.scanSubtitle2}
                 </p>
               </>
             ) : (
               // Mobile : Bouton
               <>
                 <h3 className="text-2xl font-bold text-indigo-900 mb-2 text-center">
-                  Essayez maintenant !
+                  {t.howItWorks.demoTitle}
                 </h3>
                 <a
                   href={content.demoUrl}
@@ -159,7 +159,7 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
                   rel="noopener noreferrer"
                   className="w-full max-w-md bg-yellow-400 text-black text-center font-bold text-xl px-8 py-4 rounded-2xl shadow-lg hover:bg-yellow-300 transition-all"
                 >
-                  Lancer la démo 3D
+                  {t.howItWorks.demoButton}
                 </a>
               </>
             )}

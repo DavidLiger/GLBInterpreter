@@ -18,12 +18,21 @@ const translations = {
       title: "Les livres",
       detailLink: "En savoir +"
     },
+    bookModal: {
+      release: "📅 Sortie prévue le : ",
+      dateToBeAnnounced: "Date à venir"
+    },
     collectionsSection: {
       title: "Les collections"
     },
     howItWorks: {
       title: "C'est quoi un livre augmenté ?",
-      text: "Nos livres augmentés vous offrent une expérience unique : en scannant un QR code présent dans le livre, vous accédez à des scènes 3D immersives qui donnent vie à l'histoire.\n\nDécouvrez des univers en réalité augmentée, explorez les décors, et plongez dans une nouvelle dimension de lecture.\n\nEssayez notre démo interactive pour découvrir la magie des livres augmentés !"
+      text: "Nos livres augmentés vous offrent une expérience unique : en scannant un QR code présent dans le livre, vous accédez à des scènes 3D immersives qui donnent vie à l'histoire.\n\nDécouvrez des univers en réalité augmentée, explorez les décors, et plongez dans une nouvelle dimension de lecture.\n\nEssayez notre démo interactive pour découvrir la magie des livres augmentés !",
+      demoTitle: "Essayez maintenant !",
+      demoButton: "Lancez la démo 3D",
+      scanTitle: "Scannez avec votre téléphone",
+      scanSubtitle: "Utilisez l'appareil photo de votre smartphone",
+      scanSubtitle2: "pour scanner ce QR code"
     },
     amazonButton: {
       title: "Acheter sur Amazon",
@@ -62,6 +71,7 @@ const translations = {
         "SF-01": {
           title: "Titre du Livre SF",
           summary: "Résumé rapide du livre SF...",
+          releaseDate: "",
           dispo: true,
           details: [
             { text: "Des vaisseaux spatiaux aux confins de l'univers " }
@@ -70,6 +80,7 @@ const translations = {
         "Fantasy-01" : {
           title: "Titre du Livre Fantastique",
           summary: "Résumé rapide...",
+          releaseDate: "",
           dispo: true,
           details: [
             { text: "Des forêts enchantées et des créatures mythiques" }
@@ -78,6 +89,7 @@ const translations = {
         "Fantasy-02" : {
           title: "Titre du Livre Fantastique",
           summary: "Résumé rapide...",
+          releaseDate: "",
           dispo: true,
           details: [
             { text: "Des quêtes épiques et des sortilèges puissants" }
@@ -86,6 +98,7 @@ const translations = {
         "Fantasy-03" : {
           title: "Titre du Livre Fantastique",
           summary: "Résumé rapide...",
+          releaseDate: "",
           dispo: true,
           details: [
             { text: "Des forêts enchantées et des créatures mythiques" }
@@ -94,6 +107,7 @@ const translations = {
         "Polar-01": {
           title: "Titre du Livre Policier",
           summary: "Résumé rapide...",
+          releaseDate: "Premier semestre 2026",
           dispo: true,
           details: [
             { text: "Des scènes de crime minutieusement reconstituées" }
@@ -118,12 +132,21 @@ const translations = {
       title: "The Books",
       detailLink: "Learn more"
     },
+    bookModal: {
+      release: "📅 Scheduled release date : ",
+      dateToBeAnnounced: "Date to be announced"
+    },
     collectionsSection: {
       title: "Collections"
     },
     howItWorks: {
       title: "What is an augmented book?",
-      text: "Our augmented books offer you a unique experience: by scanning a QR code in the book, you access immersive 3D scenes that bring the story to life.\n\nDiscover augmented reality universes, explore the settings, and dive into a new dimension of reading.\n\nTry our interactive demo to discover the magic of augmented books!"
+      text: "Our augmented books offer you a unique experience: by scanning a QR code in the book, you access immersive 3D scenes that bring the story to life.\n\nDiscover augmented reality universes, explore the settings, and dive into a new dimension of reading.\n\nTry our interactive demo to discover the magic of augmented books!",
+      demoTitle: "Try it now !",
+      demoButton: "Start the 3D demo",
+      scanTitle: "Scan with your phone",
+      scanSubtitle: "Use your smartphone's camera",
+      scanSubtitle2: "to scan this QR code"
     },
     amazonButton: {
       title: "Buy on Amazon",
@@ -162,6 +185,7 @@ const translations = {
         "SF-01": {
           title: "Title of SF Book",
           summary: "Quick summary of SF book...",
+          releaseDate: "",
           dispo: true,
           details: [
             { text: "Spaceships at the edge of the universe " }
@@ -170,6 +194,7 @@ const translations = {
         "Fantasy-01" : {
           title: "Title of Fantasy Book",
           summary: "Quick summary...",
+          releaseDate: "",
           dispo: true,
           details: [
             { text: "Enchanted forests and mythical creatures" }
@@ -178,6 +203,7 @@ const translations = {
         "Fantasy-02" : {
           title: "Title of Fantasy Book",
           summary: "Quick summary...",
+          releaseDate: "",
           dispo: true,
           details: [
             { text: "Epic quests and powerful spells" }
@@ -186,6 +212,7 @@ const translations = {
         "Fantasy-03" : {
           title: "Title of Fantasy Book",
           summary: "Quick summary...",
+          releaseDate: "",
           dispo: false,
           details: [
             { text: "Enchanted forests and mythical creatures" }
@@ -194,6 +221,7 @@ const translations = {
         "Polar-01": {
           title: "Title of the Detective Novel",
           summary: "Quick summary...",
+          releaseDate: "First half of 2026",
           dispo: true,
           details: [
             { text: "Meticulously reconstructed crime scenes" }
@@ -218,12 +246,21 @@ const translations = {
       title: "Los libros",
       detailLink: "Saber más"
     },
+    bookModal: {
+      release: "📅 Salida prevista para el : ",
+      dateToBeAnnounced: "Fecha por determinar"
+    },
     collectionsSection: {
       title: "Las colecciones"
     },
     howItWorks: {
       title: "¿Qué es un libro aumentado?",
-      text: "Nuestros libros aumentados le ofrecen una experiencia única: al escanear un código QR presente en el libro, accede a escenas 3D inmersivas que dan vida a la historia.\n\nDescubra universos en realidad aumentada, explore los decorados y sumérjase en una nueva dimensión de lectura.\n\n¡Pruebe nuestra demo interactiva para descubrir la magia de los libros aumentados!"
+      text: "Nuestros libros aumentados le ofrecen una experiencia única: al escanear un código QR presente en el libro, accede a escenas 3D inmersivas que dan vida a la historia.\n\nDescubra universos en realidad aumentada, explore los decorados y sumérjase en una nueva dimensión de lectura.\n\n¡Pruebe nuestra demo interactiva para descubrir la magia de los libros aumentados!",
+      demoTitle: "¡Pruébelo ahora!",
+      demoButton: "Iniciar la demostración en 3D",
+      scanTitle: "Escanee con su teléfono",
+      scanSubtitle: "Utilice la cámara de su smartphone",
+      scanSubtitle2: "para escanear este código QR"
     },
     amazonButton: {
       title: "Comprar en Amazon",
@@ -262,6 +299,7 @@ const translations = {
         "SF-01": {
           title: "Título del libro de ciencia ficción",
           summary: "Breve resumen del libro de ciencia ficción...",
+          releaseDate: "",
           dispo: true,
           details: [
             { text: "Naves espaciales en los confines del universo " }
@@ -270,6 +308,7 @@ const translations = {
         "Fantasy-01" : {
           title: "Título del libro fantástico",
           summary: "Resumen rápido...",
+          releaseDate: "",
           dispo: true,
           details: [
             { text: "Bosques encantados y criaturas míticas"}
@@ -278,6 +317,7 @@ const translations = {
         "Fantasy-02" : {
           title: "Título del libro fantástico",
           summary: "Resumen rápido...",
+          releaseDate: "",
           dispo: true,
           details: [
             { text: "Misiones épicas y hechizos poderosos"}
@@ -286,6 +326,7 @@ const translations = {
         "Fantasy-03" : {
           title: "Título del libro fantástico",
           summary: "Resumen rápido...",
+          releaseDate: "",
           dispo: true,
           details: [
             { text: "Bosques encantados y criaturas míticas"}
@@ -294,6 +335,7 @@ const translations = {
         "Polar-01": {
           title: "Título del Libro Policíaco",
           summary: "Resumen rápido...",
+          releaseDate: "Primer semestre de 2026",
           dispo: true,
           details: [
             { text: "Escenas del crimen minuciosamente reconstituidas " }

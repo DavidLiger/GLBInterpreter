@@ -3,10 +3,11 @@ import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
 
 interface AmazonButtonProps {
   href: string;
-  label?: string; // <-- option pour changer le texte
+  label?: string; 
 }
 
-export default function AmazonButton({ href }: AmazonButtonProps) {
+// ⚠️ Ajout de "label" ici dans les accolades
+export default function AmazonButton({ href, label }: AmazonButtonProps) {
   const { t } = useHomeTranslation();
 
   return (
@@ -22,7 +23,11 @@ export default function AmazonButton({ href }: AmazonButtonProps) {
         width={20}
         height={20}
       />
-      {t.amazonButton.title || t.amazonButton.shortTitle} {/* si on passe label="Acheter", il prend le dessus */}
+      {/* 
+         Si un label est fourni (ex: version courte quand on scroll), on l'affiche.
+         Sinon, on affiche le titre par défaut du fichier de traduction.
+      */}
+      {label || t.amazonButton.title} 
     </a>
   );
 }

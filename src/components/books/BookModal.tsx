@@ -18,6 +18,7 @@ export interface Book {
   collection: string;
   foreground?: boolean;
   // Propriétés ajoutées par traduction :
+  releaseDate: string;
   title: string;
   summary: string;
   details?: Array<{ text: string; image?: string }>;
@@ -89,45 +90,62 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
         className="bg-white w-full sm:w-[80%] lg:max-w-[60%] h-full overflow-auto relative transform transition-transform duration-500"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header sticky */}
-        <div className={`sticky top-0 w-full transition-all duration-300 ${scrolled ? "h-24" : "h-48"}`}>
-          <div className="absolute inset-0 overflow-hidden">
-            {/* Image réduite quand scroll */}
-            <img
-              src={getAssetUrl(book.image)}
-              alt={book.title}
-              className={`absolute inset-0 w-full h-full object-cover transition-transform duration-300`}
-            />
-          </div>
-
-          {/* Conteneur texte + bouton (toujours visible) */}
-          <div
-            className={`absolute inset-0 bg-black/50 flex transition-all duration-300 ${
-              scrolled
-                ? "flex-row justify-between items-center px-5"
-                : "flex-col justify-center items-center p-2 gap-2"
-            }`}
-          >
-            <p
-              className={`text-white font-semibold transition-all duration-300 ${
-                scrolled ? "text-xl text-left max-w-[60%]" : "text-3xl text-center mb-2"
+        {/* 
+            NOUVEAU CONTENEUR STICKY 
+            Il englobe le Header (image/titre) ET le Bandeau Bleu 
+        */}
+        <div className="sticky top-0 w-full z-20 bg-white shadow-sm">
+          
+          {/* --- HEADER VISUEL (Image & Titre) --- */}
+          {/* Note: J'ai retiré 'sticky top-0' ici car c'est le parent qui gère ça maintenant */}
+          <div className={`relative w-full transition-all duration-300 ${scrolled ? "h-24" : "h-48"}`}>
+            <div className="absolute inset-0 overflow-hidden">
+              <img
+                src={getAssetUrl(book.image)}
+                alt={book.title}
+                className={`absolute inset-0 w-full h-full object-cover transition-transform duration-300`}
+              />
+            </div>
+            
+            <div
+              className={`absolute inset-0 bg-black/50 flex transition-all duration-300 ${
+                scrolled
+                  ? "flex-row justify-between items-center px-5"
+                  : "flex-col justify-center items-center p-2 gap-2"
               }`}
             >
-              {book.title}
-            </p>
+              <p
+                className={`text-white font-semibold transition-all duration-300 ${
+                  scrolled ? "text-xl text-left max-w-[60%]" : "text-3xl text-center mb-2"
+                }`}
+              >
+                {book.title}
+              </p>
 
-            {book.link && (
-              <div className={scrolled ? "mr-5" : ""}>
-                <AmazonButton
-                  href={book.link}
-                  label={scrolled ? "Acheter" : undefined}
-                />
-              </div>
-            )}
+              {book.link && (
+                <div className={scrolled ? "mr-5" : ""}>
+                  <AmazonButton
+                    href={book.link}
+                    // Si scrolle : shortTitle (ex: "Acheter"), sinon : title (ex: "Acheter sur Amazon")
+                    label={scrolled ? t.amazonButton.shortTitle : t.amazonButton.title}
+                  />
+                </div>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Contenu */}
+          {/* --- BANDEAU BLEU (Date de sortie) --- */}
+          {/* Affiche le bandeau uniquement si une date est présente (facultatif) */}
+          <div className="bg-green-600 w-full py-2 px-4 text-center">
+            <p className="text-white text-sm font-semibold tracking-wide">
+              {t.bookModal.release}{book.releaseDate || t.bookModal.dateToBeAnnounced} 
+            </p>
+          </div>
+
+        </div> 
+        {/* Fin du conteneur sticky */}
+
+        {/* Contenu (Détails) */}
         <div className="mt-6 flex flex-col gap-6 px-4 pb-24">
           {book.details?.map((detail, idx) => (
             <div key={idx} className="w-full">
@@ -145,5 +163,5 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
         </div>
       </div>
     </div>
-  );
+);
 }
