@@ -27,7 +27,7 @@ const translations = {
     },
     howItWorks: {
       title: "C'est quoi un livre augmenté ?",
-      text: "Scannez un QR code dans le livre et plongez instantanément dans des scènes 3D complètes : explorez les décors en détail, naviguez entre les lieux emblématiques, rencontrez les personnages animés et vivez votre lecture comme jamais auparavant.\n\nPas d'application à installer, tout fonctionne directement dans votre navigateur. Une fois téléchargé, explorez même hors ligne.\n\nEssayez notre démo pour découvrir l'expérience !",      
+      text: "Scannez un QR code dans un livre augmenté, c'est plonger instantanément au cœur de l'histoire : explorez des décors 3D fidèles au récit, naviguez librement entre les lieux emblématiques, rencontrez les personnages qui s'animent sous vos yeux.\n\nAucune application à installer, tout se passe dans votre navigateur. Une fois téléchargé, l'expérience reste accessible même hors connexion.\n\nDécouvrez notre démo interactive !",      
       demoTitle: "Essayez maintenant !",
       demoButton: "Lancez la démo 3D",
       scanTitle: "Scannez avec votre téléphone",
@@ -141,7 +141,7 @@ const translations = {
     },
     howItWorks: {
       title: "What is an augmented book?",
-      text: "Scan a QR code in the book and instantly immerse yourself in full 3D scenes: explore the settings in detail, navigate between iconic locations, meet animated characters and experience your reading like never before.\n\nNo app to install, everything works directly in your browser. Once downloaded, you can even explore offline.\n\nTry our demo to discover the experience!",
+      text: "Scan a QR code in an augmented book and instantly immerse yourself in the heart of the story: explore 3D settings faithful to the narrative, navigate freely between iconic locations, and meet characters who come to life before your eyes. No app to install, everything happens in your browser. Once downloaded, the experience remains accessible even when you're offline. Discover our interactive demo!",
       demoTitle: "Try it now !",
       demoButton: "Start the 3D demo",
       scanTitle: "Scan with your phone",
@@ -255,7 +255,7 @@ const translations = {
     },
     howItWorks: {
       title: "¿Qué es un libro aumentado?",
-      text: "Escanea un código QR del libro y sumérgete al instante en escenas 3D completas: explora los decorados con todo detalle, navega entre lugares emblemáticos, conoce a los personajes animados y vive tu lectura como nunca antes lo habías hecho.\n\nNo es necesario instalar ninguna aplicación, todo funciona directamente en tu navegador. Una vez descargado, explora incluso sin conexión.\n\n¡Prueba nuestra demo para descubrir la experiencia!",      
+      text: "Escanear un código QR en un libro aumentado es sumergirse instantáneamente en el corazón de la historia: explore decorados en 3D fieles al relato, navegue libremente entre los lugares emblemáticos, conozca a los personajes que cobran vida ante sus ojos.\n\nNo es necesario instalar ninguna aplicación, todo se hace desde su navegador. Una vez descargada, la experiencia sigue siendo accesible incluso sin conexión. \n\n¡Descubre nuestra demo interactiva!",      
       demoTitle: "¡Pruébelo ahora!",
       demoButton: "Iniciar la demostración en 3D",
       scanTitle: "Escanee con su teléfono",
