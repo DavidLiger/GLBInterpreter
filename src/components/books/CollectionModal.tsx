@@ -1,7 +1,7 @@
 import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
 import content from "@/content/content.json";
 import BookModal, { Book } from "./BookModal";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getAssetUrl } from "../diorama/lib/assets";
 
 interface CollectionModalProps {
@@ -18,7 +18,31 @@ export default function CollectionModal({ isOpen, onClose, collectionId }: Colle
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
 
-  if (!isOpen || !collectionId) return null;
+  const isBookModalOpenRef = useRef(false);
+  
+  // ✅ Synchroniser le ref avec le state
+  useEffect(() => {
+    isBookModalOpenRef.current = isBookModalOpen;
+  }, [isBookModalOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      window.history.pushState({ collectionModal: true }, '');
+      
+      const handlePopState = () => {
+        // ✅ Utiliser le ref au lieu du state
+        if (!isBookModalOpenRef.current) {
+          onClose();
+        }
+      };
+      
+      window.addEventListener('popstate', handlePopState);
+      
+      return () => {
+        window.removeEventListener('popstate', handlePopState);
+      };
+    }
+  }, [isOpen, onClose]);
 
   // ✅ 1. Récupérer les infos de la collection depuis les traductions
   const collectionInfo = t.collections[collectionId as CollectionId];
@@ -34,24 +58,6 @@ export default function CollectionModal({ isOpen, onClose, collectionId }: Colle
       ...(t.books as any)[book.id], // ✅ Force le cast
     }));
 
-    // Après les autres useEffect, ajoutez :
-  useEffect(() => {
-    if (isOpen) {
-      // Pousser un état dans l'historique
-      window.history.pushState({ modalOpen: true }, '');
-      
-      const handlePopState = () => {
-        onClose();
-      };
-      
-      window.addEventListener('popstate', handlePopState);
-      
-      return () => {
-        window.removeEventListener('popstate', handlePopState);
-      };
-    }
-  }, [isOpen, onClose]);
-
   const handleBookClick = (book: Book) => {
     setSelectedBook(book);
     setIsBookModalOpen(true);
@@ -62,6 +68,8 @@ export default function CollectionModal({ isOpen, onClose, collectionId }: Colle
     setTimeout(() => setSelectedBook(null), 300);
     document.body.style.overflow = "hidden";
   };
+
+  if (!isOpen || !collectionId) return null;
 
   return (
     <>

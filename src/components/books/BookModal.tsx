@@ -69,8 +69,7 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
   // Après les autres useEffect, ajoutez :
   useEffect(() => {
     if (isOpen) {
-      // Pousser un état dans l'historique
-      window.history.pushState({ modalOpen: true }, '');
+      window.history.pushState({ bookModal: true }, '');
       
       const handlePopState = () => {
         onClose();
