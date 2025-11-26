@@ -147,8 +147,8 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
               scrolled 
                 ? "text-xl" 
                 : isMobileWidth 
-                  ? "text-2xl text-center" 
-                  : "text-3xl text-center mb-5"
+                  ? "text-xl text-center" 
+                  : "text-2xl text-center mb-5"
             }`}>
               {t.howItWorks.title}
             </p>
