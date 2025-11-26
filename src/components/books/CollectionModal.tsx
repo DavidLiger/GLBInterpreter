@@ -1,7 +1,7 @@
 import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
 import content from "@/content/content.json";
 import BookModal, { Book } from "./BookModal";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getAssetUrl } from "../diorama/lib/assets";
 
 interface CollectionModalProps {
@@ -33,6 +33,24 @@ export default function CollectionModal({ isOpen, onClose, collectionId }: Colle
       ...book,
       ...(t.books as any)[book.id], // ✅ Force le cast
     }));
+
+    // Après les autres useEffect, ajoutez :
+  useEffect(() => {
+    if (isOpen) {
+      // Pousser un état dans l'historique
+      window.history.pushState({ modalOpen: true }, '');
+      
+      const handlePopState = () => {
+        onClose();
+      };
+      
+      window.addEventListener('popstate', handlePopState);
+      
+      return () => {
+        window.removeEventListener('popstate', handlePopState);
+      };
+    }
+  }, [isOpen, onClose]);
 
   const handleBookClick = (book: Book) => {
     setSelectedBook(book);

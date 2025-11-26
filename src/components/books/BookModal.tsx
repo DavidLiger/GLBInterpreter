@@ -66,6 +66,24 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
     return () => modal.removeEventListener("scroll", handleScroll);
   }, [isOpen]);
 
+  // Après les autres useEffect, ajoutez :
+  useEffect(() => {
+    if (isOpen) {
+      // Pousser un état dans l'historique
+      window.history.pushState({ modalOpen: true }, '');
+      
+      const handlePopState = () => {
+        onClose();
+      };
+      
+      window.addEventListener('popstate', handlePopState);
+      
+      return () => {
+        window.removeEventListener('popstate', handlePopState);
+      };
+    }
+  }, [isOpen, onClose]);
+
   if (!isOpen || !book) return null;
 
   const booksWithTranslations = content.books.map(book => ({

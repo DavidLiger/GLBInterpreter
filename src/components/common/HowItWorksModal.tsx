@@ -90,6 +90,24 @@ export default function HowItWorksModal({ isOpen, onClose, content }: HowItWorks
     return () => modal.removeEventListener("scroll", handleScroll);
   }, [isOpen, isMobileWidth]); // Dépendance mise à jour
 
+  // Après les autres useEffect, ajoutez :
+  useEffect(() => {
+    if (isOpen) {
+      // Pousser un état dans l'historique
+      window.history.pushState({ modalOpen: true }, '');
+      
+      const handlePopState = () => {
+        onClose();
+      };
+      
+      window.addEventListener('popstate', handlePopState);
+      
+      return () => {
+        window.removeEventListener('popstate', handlePopState);
+      };
+    }
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   // Logique d'affichage :
