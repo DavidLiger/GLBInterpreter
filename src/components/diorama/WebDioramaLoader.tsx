@@ -409,39 +409,46 @@ function WebDioramaLoaderInner({
     const processedRequests = new Set<string>();
     
     const checkSceneChange = () => {
-      const changeRequest = localStorage.getItem('webdiorama-change-scene');
-      
-      if (changeRequest) {
-        try {
-          const { url, requestId, bookId, dioramaId } = JSON.parse(changeRequest);
-          
-          if (processedRequests.has(requestId)) {
-            console.log('⏭️ VIEWER: Demande déjà traitée:', requestId);
-            return;
-          }
-          
-          console.log('🔄 VIEWER: Nouvelle demande détectée:', requestId, url);
-          
-          const currentUrl = window.location.href;
-          if (currentUrl.includes(`/${bookId}/${dioramaId}`)) {
-            console.log('⏭️ VIEWER: Déjà sur cette scène, ignorer');
-            processedRequests.add(requestId);
-            localStorage.setItem('webdiorama-scene-processed', requestId);
-            return;
-          }
-          
-          // ✅ NOUVEAU : Marquer qu'un changement est en cours
-          localStorage.setItem('webdiorama-changing-scene', 'true');
-          
+    const changeRequest = localStorage.getItem('webdiorama-change-scene');
+    
+    if (changeRequest) {
+      try {
+        const { url, requestId, bookId, dioramaId } = JSON.parse(changeRequest);
+        
+        if (processedRequests.has(requestId)) {
+          console.log('⏭️ VIEWER: Demande déjà traitée:', requestId);
+          return;
+        }
+        
+        console.log('🔄 VIEWER: Nouvelle demande détectée:', requestId, url);
+        
+        const currentUrl = window.location.href;
+        if (currentUrl.includes(`/${bookId}/${dioramaId}`)) {
+          console.log('⏭️ VIEWER: Déjà sur cette scène, ignorer');
           processedRequests.add(requestId);
           localStorage.setItem('webdiorama-scene-processed', requestId);
-          
-          // ✅ Annuler le needsManualRestart (au cas où)
-          setNeedsManualRestart(false);
-          wasHiddenRef.current = false; // ✅ Reset pour éviter le reload
+          return;
+        }
+        
+        localStorage.setItem('webdiorama-changing-scene', 'true');
+        processedRequests.add(requestId);
+        localStorage.setItem('webdiorama-scene-processed', requestId);
+        
+        setNeedsManualRestart(false);
+        wasHiddenRef.current = false;
+        
+        // ✅ CRITIQUE : Arrêter RAF AVANT cleanup
+        console.log('🛑 VIEWER: Arrêt RAF avant changement scène');
+        if (animationFrameRef.current !== undefined) {
+          cancelAnimationFrame(animationFrameRef.current);
+          animationFrameRef.current = undefined;
+        }
+        
+        // ✅ Attendre que RAF soit vraiment arrêté (1 frame)
+        requestAnimationFrame(() => {
+          console.log('🧹 VIEWER: RAF arrêté, cleanup maintenant');
           
           if (performCleanupRef.current) {
-            console.log('🧹 VIEWER: Cleanup avant changement');
             performCleanupRef.current();
           }
           
@@ -450,13 +457,14 @@ function WebDioramaLoaderInner({
             localStorage.removeItem('webdiorama-change-scene');
             localStorage.removeItem('webdiorama-changing-scene');
             window.location.href = url;
-          }, 300);
-          
-        } catch (e) {
-          console.error('❌ VIEWER: Erreur parsing:', e);
-        }
+          }, 100); // ✅ Réduit à 100ms
+        });
+        
+      } catch (e) {
+        console.error('❌ VIEWER: Erreur parsing:', e);
       }
-    };
+    }
+  };
     
     checkSceneChange();
     const pollInterval = setInterval(checkSceneChange, 500);
