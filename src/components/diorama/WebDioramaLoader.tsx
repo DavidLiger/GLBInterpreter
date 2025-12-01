@@ -324,6 +324,7 @@ function WebDioramaLoaderInner({
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
+  const [needsManualRestart, setNeedsManualRestart] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const [loadedScene, setLoadedScene] = useState<THREE.Scene | null>(null);
   const [devToolOpen, setDevToolOpen] = useState(false);
@@ -387,7 +388,7 @@ function WebDioramaLoaderInner({
 
   useEffect(() => {
     console.log('🎬 VIEWER: Démarrage polling changement scène');
-    const processedRequests = new Set<string>(); // ✅ Garder trace des IDs traités
+    const processedRequests = new Set<string>();
     
     const checkSceneChange = () => {
       const changeRequest = localStorage.getItem('webdiorama-change-scene');
@@ -396,7 +397,6 @@ function WebDioramaLoaderInner({
         try {
           const { url, requestId, bookId, dioramaId } = JSON.parse(changeRequest);
           
-          // ✅ Vérifier si déjà traité
           if (processedRequests.has(requestId)) {
             console.log('⏭️ VIEWER: Demande déjà traitée:', requestId);
             return;
@@ -404,7 +404,6 @@ function WebDioramaLoaderInner({
           
           console.log('🔄 VIEWER: Nouvelle demande détectée:', requestId, url);
           
-          // ✅ Vérifier si c'est bien une nouvelle scène
           const currentUrl = window.location.href;
           if (currentUrl.includes(`/${bookId}/${dioramaId}`)) {
             console.log('⏭️ VIEWER: Déjà sur cette scène, ignorer');
@@ -413,20 +412,25 @@ function WebDioramaLoaderInner({
             return;
           }
           
-          // ✅ Marquer comme traité
+          // ✅ NOUVEAU : Marquer qu'un changement est en cours
+          localStorage.setItem('webdiorama-changing-scene', 'true');
+          
           processedRequests.add(requestId);
           localStorage.setItem('webdiorama-scene-processed', requestId);
           
-          // ✅ Cleanup
+          // ✅ Annuler le needsManualRestart (au cas où)
+          setNeedsManualRestart(false);
+          wasHiddenRef.current = false; // ✅ Reset pour éviter le reload
+          
           if (performCleanupRef.current) {
             console.log('🧹 VIEWER: Cleanup avant changement');
             performCleanupRef.current();
           }
           
-          // ✅ Changer de scène
           setTimeout(() => {
             console.log('🔄 VIEWER: Redirection vers:', url);
-            localStorage.removeItem('webdiorama-change-scene'); // ✅ Nettoyer après traitement
+            localStorage.removeItem('webdiorama-change-scene');
+            localStorage.removeItem('webdiorama-changing-scene');
             window.location.href = url;
           }, 300);
           
@@ -436,13 +440,9 @@ function WebDioramaLoaderInner({
       }
     };
     
-    // ✅ Check immédiat
     checkSceneChange();
+    const pollInterval = setInterval(checkSceneChange, 200);
     
-    // ✅ Polling rapide
-    const pollInterval = setInterval(checkSceneChange, 200); // ✅ 200ms au lieu de 500ms
-    
-    // ✅ Check au focus
     const handleVisibilityChange = () => {
       if (!document.hidden) {
         console.log('👁️ VIEWER: Retour focus, check immédiat');
@@ -954,40 +954,46 @@ function WebDioramaLoaderInner({
     
     const handleVisibilityChange = () => {
       console.log("👁️ Visibility changed:", document.hidden ? "HIDDEN" : "VISIBLE");
-      // ✅ AJOUTER : Ignorer si outil dev ouvert
+      
       if (devToolOpenRef.current) {
         console.log("⏸️ Visibility change ignoré : outil dev ouvert");
         return;
       }
-    
+      
+      // ✅ NOUVEAU : Ignorer si changement de scène en cours
+      if (localStorage.getItem('webdiorama-changing-scene') === 'true') {
+        console.log("⏸️ Visibility change ignoré : changement de scène en cours");
+        return;
+      }
+
       if (document.hidden && !wasHiddenRef.current) {
         console.log("🚨 Détection: onglet caché → cleanup");
         wasHiddenRef.current = true;
         voluntaryCleanupRef.current = true;
         performCleanup();
       } else if (!document.hidden && wasHiddenRef.current) {
-        console.log("🔄 Détection: retour onglet → reload");
-        setTimeout(() => {
-          window.location.reload();
-        }, 100);
+        console.log("⏸️ Détection: retour onglet → demander relance manuelle");
+        setNeedsManualRestart(true);
       }
     };
 
     const handleFocus = () => {
       console.log("👁️ Window focus");
 
-      // ✅ AJOUTER : Ignorer si outil dev ouvert
       if (devToolOpenRef.current) {
         console.log("⏸️ Focus ignoré : outil dev ouvert");
         return;
       }
+      
+      // ✅ NOUVEAU : Ignorer si changement de scène en cours
+      if (localStorage.getItem('webdiorama-changing-scene') === 'true') {
+        console.log("⏸️ Focus ignoré : changement de scène en cours");
+        return;
+      }
 
       if (wasHiddenRef.current) {
-        // ✅ Retour après blur → reload
-        console.log("🔄 Détection: retour focus → reload");
-        setTimeout(() => {
-          window.location.reload();
-        }, 100);
+        console.log("⏸️ Détection: retour focus → demander relance manuelle");
+        setNeedsManualRestart(true);
       }
     };
     
@@ -1131,6 +1137,28 @@ function WebDioramaLoaderInner({
           </div>
         </div>
       </>
+    );
+  }
+
+  if (needsManualRestart) {
+    return (
+      <div className="fixed inset-0 bg-gradient-to-br from-blue-900 via-black to-purple-900 flex items-center justify-center z-[9999]">
+        <div className="text-center p-8 max-w-md">
+          <div className="text-6xl mb-6 animate-pulse">💤</div>
+          <h2 className="text-2xl font-bold text-white mb-4">
+            {t.restart?.title || "Scène en pause"}
+          </h2>
+          <p className="text-gray-300 mb-6">
+            {t.restart?.message || "La scène a été mise en pause pour économiser la mémoire."}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg"
+          >
+            {t.restart?.button || "⚡ Relancer la scène"}
+          </button>
+        </div>
+      </div>
     );
   }
 

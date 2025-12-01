@@ -105,6 +105,11 @@ const translations = {
       checkBrowserParams: "• Vérifiez que WebGL est activé dans les paramètres du navigateur",
       tryAnotherBrowser: "• Essayez un autre navigateur (Chrome, Edge, Safari)",
       updateGPUDriver: "• Mettez à jour vos pilotes graphiques"
+    },
+    restart: {
+      title: "Scène en pause",
+      message: "La scène a été mise en pause pour économiser la mémoire.",
+      button: "⚡ Relancer la scène"
     }
   },
   en: {
@@ -208,6 +213,11 @@ const translations = {
       checkBrowserParams: "• Check that WebGL is enabled in your browser settings.",
       tryAnotherBrowser: "• Try another browser (Chrome, Edge, Safari)",
       updateGPUDriver: "• Update your graphics drivers"
+    },
+    restart: {
+      title: "Scene on hold",
+      message: "The scene has been paused to save memory.",
+      button: "⚡ Restart the scene"
     }
   },
   es: {
@@ -311,6 +321,11 @@ const translations = {
       checkBrowserParams: "• Comprueba que WebGL está activado en la configuración del navegador.",
       tryAnotherBrowser: "• Prueba con otro navegador (Chrome, Edge, Safari).",
       updateGPUDriver: "• Actualiza tus controladores gráficos."
+    },
+    restart: {
+      title: "Escena en pausa",
+      message: "La escena se ha pausado para ahorrar memoria.",
+      button: "⚡ Reiniciar la escena"
     }
   }
 };
