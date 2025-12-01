@@ -27,7 +27,6 @@ export default function ScanLauncher({ params, searchParams }: Props) {
 
     const sceneUrl = `/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`;
     
-    // ✅ Vérifier si un viewer existe déjà
     const checkExistingViewer = () => {
         const existingViewer = localStorage.getItem('webdiorama-viewer-alive');
         
@@ -36,19 +35,11 @@ export default function ScanLauncher({ params, searchParams }: Props) {
             const { timestamp } = JSON.parse(existingViewer);
             const age = Date.now() - timestamp;
             
-            // Si heartbeat < 3s, le viewer est actif
             if (age < 3000) {
             console.log('♻️ Viewer existant détecté, envoi changement de scène');
             
             setIsReusingViewer(true);
-            // Avant localStorage.setItem
-            console.log('📤 LAUNCHER: Envoi changement scène:', sceneUrl);
-            localStorage.setItem('webdiorama-change-scene', JSON.stringify({
-            url: sceneUrl,
-            timestamp: Date.now()
-            }));
-            console.log('📤 LAUNCHER: Item écrit dans localStorage');
-            // ✅ Envoyer l'ordre de changer de scène
+            
             localStorage.setItem('webdiorama-change-scene', JSON.stringify({
                 url: sceneUrl,
                 timestamp: Date.now()
@@ -56,9 +47,18 @@ export default function ScanLauncher({ params, searchParams }: Props) {
             
             setStatus('success');
             
+            // ✅ NOUVEAU : Tenter de fermer l'onglet après 1s
             setTimeout(() => {
-                window.location.href = '/scan-success';
-            }, 1500);
+                console.log('🚪 Tentative fermeture onglet launcher');
+                window.close();
+                
+                // ✅ Fallback si window.close() échoue (après 500ms)
+                setTimeout(() => {
+                console.log('⚠️ Fermeture échouée, redirection vers viewer');
+                // Rediriger vers le viewer au lieu de /scan-success
+                window.location.href = sceneUrl;
+                }, 500);
+            }, 1000);
             
             return true;
             }
@@ -74,7 +74,6 @@ export default function ScanLauncher({ params, searchParams }: Props) {
     const checkTimeout = setTimeout(() => {
         if (checkExistingViewer()) return;
         
-        // ✅ Pas de viewer actif après 500ms, en créer un nouveau
         console.log('🆕 Création nouveau viewer');
         
         const viewer = window.open(sceneUrl, 'webdiorama-viewer');
@@ -83,8 +82,16 @@ export default function ScanLauncher({ params, searchParams }: Props) {
         viewer.focus();
         setStatus('success');
         
+        // ✅ NOUVEAU : Premier scan, tenter de fermer après ouverture
         setTimeout(() => {
-            window.location.href = '/scan-success';
+            console.log('🚪 Tentative fermeture onglet launcher (premier scan)');
+            window.close();
+            
+            // ✅ Fallback
+            setTimeout(() => {
+            console.log('⚠️ Fermeture échouée, redirection vers viewer');
+            window.location.href = sceneUrl;
+            }, 500);
         }, 1500);
         } else {
         console.warn('⚠️ Popup bloqué');
