@@ -360,60 +360,89 @@ function WebDioramaLoaderInner({
     return active.icon;
   }, [currentPOI, findPOIRecursively, findParentPOI]);
 
+  // ✅ REMPLACER tout le useEffect du BroadcastChannel par :
+  // ✅ Dans le useEffect principal, ajoute l'écoute de "force takeover"
   useEffect(() => {
-    const channel = new BroadcastChannel(CHANNEL_NAME);
-    channelRef.current = channel;
+    const TAB_ID = `webdiorama-tab-${Date.now()}-${Math.random()}`;
+    const STORAGE_KEY = 'webdiorama-active-tab';
+    const FORCE_KEY = 'webdiorama-force-takeover'; // ✅ NOUVEAU
+    const HEARTBEAT_INTERVAL = 1000;
     
-    let isPrimary = true;
-    let timeoutId: NodeJS.Timeout;
-    
-    channel.postMessage({ type: 'WHO_IS_PRIMARY' });
-    
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data.type === 'WHO_IS_PRIMARY') {
-        console.log('🚨 Onglet primaire détecté');
-        isPrimary = false;
-        channel.postMessage({ type: 'I_AM_SECONDARY' });
-        
-        // ✅ Si déjà chargé, cleanup immédiat
-        if (isLoaded) {
-          performCleanupRef.current?.();
-        }
-        setTabStatus('secondary');
-      }
+    const checkExistingTab = () => {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (!stored) return false;
       
-      if (event.data.type === 'I_AM_PRIMARY') {
-        isPrimary = false;
-        if (isLoaded) {
-          performCleanupRef.current?.();
-        }
-        setTabStatus('secondary');
+      try {
+        const { tabId, timestamp } = JSON.parse(stored);
+        return Date.now() - timestamp < 3000;
+      } catch {
+        return false;
       }
-      
-      if (event.data.type === 'FORCE_PAUSE') {
-        console.log('⏸️ Ordre reçu : mise en pause forcée');
-        wasHiddenRef.current = true;
-        voluntaryCleanupRef.current = true;
+    };
+    
+    const hasActiveTab = checkExistingTab();
+    
+    if (hasActiveTab) {
+      console.log('🚨 Onglet actif détecté immédiatement');
+      setTabStatus('secondary');
+      return;
+    }
+    
+    console.log('✅ Devenir onglet primaire');
+    setTabStatus('primary');
+    
+    const updateHeartbeat = () => {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        tabId: TAB_ID,
+        timestamp: Date.now()
+      }));
+    };
+    
+    updateHeartbeat();
+    const heartbeatInterval = setInterval(updateHeartbeat, HEARTBEAT_INTERVAL);
+    
+    // ✅ Écouter les changements
+    const handleStorageChange = (e: StorageEvent) => {
+      // ✅ NOUVEAU : Détecter ordre de fermeture
+      if (e.key === FORCE_KEY && e.newValue) {
+        console.log('⏸️ Ordre de fermeture reçu');
         performCleanupRef.current?.();
         setNeedsManualRestart(true);
+        clearInterval(heartbeatInterval);
+        localStorage.removeItem(STORAGE_KEY); // ✅ Libérer immédiatement
+      }
+      
+      // Ancien code pour détection normale
+      if (e.key === STORAGE_KEY && e.newValue) {
+        try {
+          const { tabId } = JSON.parse(e.newValue);
+          if (tabId !== TAB_ID) {
+            console.log('⏸️ Autre onglet a pris le contrôle');
+            performCleanupRef.current?.();
+            setNeedsManualRestart(true);
+            clearInterval(heartbeatInterval);
+          }
+        } catch {}
       }
     };
     
-    channel.addEventListener('message', handleMessage);
-    
-    timeoutId = setTimeout(() => {
-      if (isPrimary) {
-        console.log('✅ Aucun autre onglet, je suis primaire');
-        channel.postMessage({ type: 'I_AM_PRIMARY' });
-        setTabStatus('primary');
-      }
-    }, 200);
+    window.addEventListener('storage', handleStorageChange);
     
     return () => {
-      clearTimeout(timeoutId);
-      channel.removeEventListener('message', handleMessage);
+      clearInterval(heartbeatInterval);
+      window.removeEventListener('storage', handleStorageChange);
+      
+      const current = localStorage.getItem(STORAGE_KEY);
+      if (current) {
+        try {
+          const { tabId } = JSON.parse(current);
+          if (tabId === TAB_ID) {
+            localStorage.removeItem(STORAGE_KEY);
+          }
+        } catch {}
+      }
     };
-  }, [isLoaded]);
+  }, []);
 
   // ✅ Cleanup du channel au démontage du composant
   useEffect(() => {
@@ -1125,17 +1154,31 @@ function WebDioramaLoaderInner({
             {t.multiTab?.title || "Scène déjà ouverte"}
           </h2>
           <p className="text-gray-300 mb-6">
-            {t.multiTab?.message || "Cette scène est déjà ouverte dans un autre onglet. Pour éviter les problèmes de mémoire, fermez l'autre onglet ou utilisez celui-ci."}
+            {t.multiTab?.message || "Une scène est déjà ouverte dans un autre onglet. Pour éviter les problèmes de mémoire, fermez l'autre onglet ou utilisez celui-ci."}
           </p>
           <button
-            onClick={() => {
-              console.log('🔄 Forcer ouverture → pause des autres onglets');
-              channelRef.current?.postMessage({ type: 'FORCE_PAUSE' });
-              channelRef.current?.postMessage({ type: 'I_AM_PRIMARY' });
+            onClick={async () => {
+              console.log('🔄 Forcer ouverture → envoyer ordre de fermeture');
               
-              setTimeout(() => {
-                setTabStatus('primary');
-              }, 300);
+              // ✅ 1. Envoyer l'ordre de fermeture à l'autre onglet
+              localStorage.setItem('webdiorama-force-takeover', Date.now().toString());
+              
+              // ✅ 2. Attendre que l'autre onglet libère
+              await new Promise(resolve => setTimeout(resolve, 1000));
+              
+              // ✅ 3. Nettoyer le flag
+              localStorage.removeItem('webdiorama-force-takeover');
+              
+              // ✅ 4. Prendre le contrôle
+              const TAB_ID = `webdiorama-tab-${Date.now()}-${Math.random()}`;
+              localStorage.setItem('webdiorama-active-tab', JSON.stringify({
+                tabId: TAB_ID,
+                timestamp: Date.now()
+              }));
+              
+              // ✅ 5. Reload pour créer le renderer proprement
+              console.log('✅ Prise de contrôle, reload');
+              window.location.reload();
             }}
             className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-full"
           >
