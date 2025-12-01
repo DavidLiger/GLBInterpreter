@@ -16,14 +16,14 @@ export default function ScanSuccess() {
               <span className="text-2xl">✅</span>
               <span>Fermer cet onglet</span>
             </li>
-            <li className="flex items-start gap-3">
+            {/* <li className="flex items-start gap-3">
               <span className="text-2xl">📷</span>
               <span>Scanner le prochain QR code</span>
             </li>
             <li className="flex items-start gap-3">
               <span className="text-2xl">📖</span>
               <span>Continuer votre lecture</span>
-            </li>
+            </li> */}
           </ul>
         </div>
         

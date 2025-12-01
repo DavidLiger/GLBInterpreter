@@ -329,6 +329,7 @@ function WebDioramaLoaderInner({
   const [devToolOpen, setDevToolOpen] = useState(false);
   const devToolOpenRef = useRef(false);
   const spritesheetAnimatorRef = useRef<SpritesheetAnimator | null>(null);
+  const performCleanupRef = useRef<(() => void) | null>(null);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
 
@@ -383,6 +384,59 @@ function WebDioramaLoaderInner({
     }
     return active.icon;
   }, [currentPOI, findPOIRecursively, findParentPOI]);
+
+  // ✅ Polling actif pour détecter les changements de scène
+  useEffect(() => {
+    let lastCheck = Date.now();
+    
+    const checkSceneChange = () => {
+      const changeRequest = localStorage.getItem('webdiorama-change-scene');
+      
+      if (changeRequest) {
+        try {
+          const { url, timestamp } = JSON.parse(changeRequest);
+          
+          // Si la demande est plus récente que notre dernier check
+          if (timestamp > lastCheck) {
+            console.log('🔄 Changement de scène détecté:', url);
+            
+            // ✅ Nettoyer la demande
+            localStorage.removeItem('webdiorama-change-scene');
+            
+            // ✅ Cleanup avant changement
+            if (performCleanupRef.current) {
+              performCleanupRef.current();
+            }
+            
+            // ✅ Changer de scène
+            setTimeout(() => {
+              window.location.href = url;
+            }, 500);
+          }
+        } catch {}
+      }
+      
+      lastCheck = Date.now();
+    };
+    
+    // ✅ Vérifier toutes les 500ms
+    const pollInterval = setInterval(checkSceneChange, 500);
+    
+    // ✅ Vérifier aussi au retour de focus
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('👁️ Retour focus, vérification changement scène');
+        checkSceneChange();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   // ✅ Heartbeat pour indiquer au launcher qu'on est vivant
   useEffect(() => {
