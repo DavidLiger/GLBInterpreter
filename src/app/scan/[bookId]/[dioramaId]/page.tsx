@@ -41,7 +41,13 @@ export default function ScanLauncher({ params, searchParams }: Props) {
             console.log('♻️ Viewer existant détecté, envoi changement de scène');
             
             setIsReusingViewer(true);
-            
+            // Avant localStorage.setItem
+            console.log('📤 LAUNCHER: Envoi changement scène:', sceneUrl);
+            localStorage.setItem('webdiorama-change-scene', JSON.stringify({
+            url: sceneUrl,
+            timestamp: Date.now()
+            }));
+            console.log('📤 LAUNCHER: Item écrit dans localStorage');
             // ✅ Envoyer l'ordre de changer de scène
             localStorage.setItem('webdiorama-change-scene', JSON.stringify({
                 url: sceneUrl,

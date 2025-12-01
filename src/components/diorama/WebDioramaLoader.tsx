@@ -385,56 +385,77 @@ function WebDioramaLoaderInner({
     return active.icon;
   }, [currentPOI, findPOIRecursively, findParentPOI]);
 
-  // ✅ Polling actif pour détecter les changements de scène
   useEffect(() => {
-    let lastCheck = Date.now();
+    console.log('🎬 VIEWER: Démarrage polling changement scène');
+    let lastCheck = 0; // ✅ Commence à 0 pour détecter les anciennes demandes
     
     const checkSceneChange = () => {
       const changeRequest = localStorage.getItem('webdiorama-change-scene');
+      console.log('🔍 VIEWER: Check changement scène:', changeRequest);
       
       if (changeRequest) {
         try {
           const { url, timestamp } = JSON.parse(changeRequest);
+          console.log('🔍 VIEWER: Timestamp demande:', timestamp, 'lastCheck:', lastCheck);
           
           // Si la demande est plus récente que notre dernier check
           if (timestamp > lastCheck) {
-            console.log('🔄 Changement de scène détecté:', url);
+            console.log('🔄 VIEWER: Changement de scène détecté:', url);
             
-            // ✅ Nettoyer la demande
+            // ✅ Nettoyer la demande AVANT de reload
             localStorage.removeItem('webdiorama-change-scene');
             
-            // ✅ Cleanup avant changement
+            // ✅ Cleanup
             if (performCleanupRef.current) {
+              console.log('🧹 VIEWER: Cleanup avant changement');
               performCleanupRef.current();
             }
             
             // ✅ Changer de scène
             setTimeout(() => {
+              console.log('🔄 VIEWER: Redirection vers:', url);
               window.location.href = url;
             }, 500);
+            
+            return; // ✅ Arrêter le polling après détection
+          } else {
+            console.log('⏭️ VIEWER: Demande déjà traitée');
           }
-        } catch {}
+        } catch (e) {
+          console.error('❌ VIEWER: Erreur parsing changement scène:', e);
+        }
       }
       
       lastCheck = Date.now();
     };
     
-    // ✅ Vérifier toutes les 500ms
+    // ✅ Check immédiat au mount
+    checkSceneChange();
+    
+    // ✅ Puis toutes les 500ms
     const pollInterval = setInterval(checkSceneChange, 500);
     
-    // ✅ Vérifier aussi au retour de focus
+    // ✅ Check au retour de focus
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        console.log('👁️ Retour focus, vérification changement scène');
+        console.log('👁️ VIEWER: Retour focus, check changement');
         checkSceneChange();
       }
     };
     
+    const handleFocus = () => {
+      console.log('👁️ VIEWER: Focus window, check changement');
+      checkSceneChange();
+    };
+    
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
     
     return () => {
+      console.log('🛑 VIEWER: Arrêt polling');
       clearInterval(pollInterval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
     };
   }, []);
 
