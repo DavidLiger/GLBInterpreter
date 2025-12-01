@@ -110,19 +110,34 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
 
   useEffect(() => {
     const checkCacheStatus = async () => {
+      // ✅ NOUVEAU : Vérifier s'il y a trop d'onglets zombies
+      const activeTab = localStorage.getItem('webdiorama-active-tab');
+      if (activeTab) {
+        try {
+          const { timestamp } = JSON.parse(activeTab);
+          const age = Date.now() - timestamp;
+          
+          // Si heartbeat > 5s = onglet zombie
+          if (age > 5000) {
+            console.warn('🧟 Onglet zombie détecté, nettoyage');
+            localStorage.removeItem('webdiorama-active-tab');
+          }
+        } catch {}
+      }
+      
       const cached = await isBookFullyCached(bookId);
       
       if (cached) {
         console.log("✅ Assets en cache, lancement direct");
         setCheckingCache(false);
         setShowDownloadModal(false);
-        setIsInitializing(true); // ✅ Afficher "Préparation..."
+        setIsInitializing(true);
         
         console.log("⏳ Pause 2s pour libérer mémoire...");
         setTimeout(() => {
           console.log("✅ Mémoire libérée, lancement scène...");
           setAssetsReady(true);
-          setIsInitializing(false); // ✅ Masquer APRÈS
+          setIsInitializing(false);
         }, 2000);
       } else {
         console.log("📦 Assets manquants, afficher modal");
@@ -360,12 +375,12 @@ function WebDioramaLoaderInner({
     return active.icon;
   }, [currentPOI, findPOIRecursively, findParentPOI]);
 
-  // ✅ REMPLACER tout le useEffect du BroadcastChannel par :
-  // ✅ Dans le useEffect principal, ajoute l'écoute de "force takeover"
+  // ✅ Dans le useEffect de gestion des onglets, ajoute :
   useEffect(() => {
     const TAB_ID = `webdiorama-tab-${Date.now()}-${Math.random()}`;
     const STORAGE_KEY = 'webdiorama-active-tab';
-    const FORCE_KEY = 'webdiorama-force-takeover'; // ✅ NOUVEAU
+    const FORCE_KEY = 'webdiorama-force-takeover';
+    const CLOSE_KEY = 'webdiorama-close-others'; // ✅ NOUVEAU
     const HEARTBEAT_INTERVAL = 1000;
     
     const checkExistingTab = () => {
@@ -401,18 +416,34 @@ function WebDioramaLoaderInner({
     updateHeartbeat();
     const heartbeatInterval = setInterval(updateHeartbeat, HEARTBEAT_INTERVAL);
     
-    // ✅ Écouter les changements
     const handleStorageChange = (e: StorageEvent) => {
       // ✅ NOUVEAU : Détecter ordre de fermeture
+      if (e.key === CLOSE_KEY && e.newValue) {
+        const closeTabId = e.newValue;
+        if (closeTabId !== TAB_ID) {
+          console.log('🚪 Ordre de fermeture reçu, fermeture onglet');
+          performCleanupRef.current?.();
+          
+          // ✅ Fermer l'onglet (fonctionne si ouvert via script ou QR code)
+          setTimeout(() => {
+            window.close();
+            
+            // Si window.close() échoue (onglet ouvert manuellement), afficher UI
+            setTimeout(() => {
+              setNeedsManualRestart(true);
+            }, 500);
+          }, 100);
+        }
+      }
+      
       if (e.key === FORCE_KEY && e.newValue) {
         console.log('⏸️ Ordre de fermeture reçu');
         performCleanupRef.current?.();
         setNeedsManualRestart(true);
         clearInterval(heartbeatInterval);
-        localStorage.removeItem(STORAGE_KEY); // ✅ Libérer immédiatement
+        localStorage.removeItem(STORAGE_KEY);
       }
       
-      // Ancien code pour détection normale
       if (e.key === STORAGE_KEY && e.newValue) {
         try {
           const { tabId } = JSON.parse(e.newValue);
@@ -1095,34 +1126,48 @@ function WebDioramaLoaderInner({
             
             {/* Bouton principal */}
             <button
-              // onClick={() => {
-              //   console.log("🔄 Rechargement complet de la page...");
-              //   window.location.reload();
-              // }}
               onClick={async () => {
-                console.log("🔄 Nettoyage agressif...");
+                console.log("🔄 Nettoyage RADICAL...");
                 
-                // 1. Clear caches
-                const keys = await caches.keys();
-                await Promise.all(keys.map(k => caches.delete(k)));
+                // ✅ 1. Forcer libération localStorage
+                localStorage.removeItem('webdiorama-active-tab');
+                localStorage.removeItem('webdiorama-force-takeover');
                 
-                // 2. Clear IndexedDB
-                const dbs = await window.indexedDB.databases();
-                dbs.forEach(db => window.indexedDB.deleteDatabase(db.name || ''));
+                // ✅ 2. Clear tous les caches
+                try {
+                  const keys = await caches.keys();
+                  console.log(`🗑️ Suppression ${keys.length} caches`);
+                  await Promise.all(keys.map(k => caches.delete(k)));
+                } catch (e) {
+                  console.warn('Erreur clear cache:', e);
+                }
                 
-                // 3. Reload
+                // ✅ 3. Clear IndexedDB
+                try {
+                  const dbs = await window.indexedDB.databases();
+                  console.log(`🗑️ Suppression ${dbs.length} databases`);
+                  dbs.forEach(db => {
+                    if (db.name) window.indexedDB.deleteDatabase(db.name);
+                  });
+                } catch (e) {
+                  console.warn('Erreur clear IDB:', e);
+                }
+                
+                // ✅ 4. Attendre 2s pour libération mémoire GPU
+                console.log('⏳ Attente libération GPU...');
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // ✅ 5. Reload
+                console.log('✅ Reload');
                 window.location.reload();
               }}
               className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 mb-4"
             >
               {t.webglErrorScreen?.boutonTitle}
-                          {/* Sous-titre */}
               <p className="text-xs text-gray-100">
                 ( {t.webglErrorScreen?.boutonSubTitle} )
               </p>
             </button>
-            
-
             
             {/* Note technique (très petit) */}
             <p className="text-sm font-bold text-gray-300 mt-4 max-w-xs mx-auto animate-pulse">
@@ -1158,58 +1203,36 @@ function WebDioramaLoaderInner({
           </p>
           <button
             onClick={async () => {
-              console.log('🔄 Forcer ouverture → envoyer ordre de fermeture');
+              console.log('🔄 Forcer ouverture → fermeture autres onglets');
               
-              // ✅ 1. Envoyer l'ordre de fermeture à l'autre onglet
-              localStorage.setItem('webdiorama-force-takeover', Date.now().toString());
+              // ✅ 1. Ordonner la fermeture des autres onglets
+              const TAB_ID = `webdiorama-tab-${Date.now()}-${Math.random()}`;
+              localStorage.setItem('webdiorama-close-others', TAB_ID);
               
-              // ✅ 2. Attendre libération (plus long sur mobile)
+              // ✅ 2. Attendre fermeture
               const isMobile = /Android|webOS|iPhone|iPad|iPod/i.test(navigator.userAgent);
-              const waitTime = isMobile ? 3000 : 1000; // ✅ 3s sur mobile
+              const waitTime = isMobile ? 2000 : 1000;
               
-              console.log(`⏳ Attente ${waitTime}ms pour libération WebGL...`);
+              console.log(`⏳ Attente ${waitTime}ms fermeture onglets...`);
               await new Promise(resolve => setTimeout(resolve, waitTime));
               
-              // ✅ 3. Vérifier que le storage est libre
-              let attempts = 0;
-              while (attempts < 5) {
-                const stored = localStorage.getItem('webdiorama-active-tab');
-                if (!stored) {
-                  console.log('✅ Slot libéré');
-                  break;
-                }
-                
-                try {
-                  const { timestamp } = JSON.parse(stored);
-                  if (Date.now() - timestamp > 3000) {
-                    console.log('✅ Heartbeat mort, slot libre');
-                    localStorage.removeItem('webdiorama-active-tab');
-                    break;
-                  }
-                } catch {}
-                
-                console.log(`⏳ Attente libération... tentative ${attempts + 1}/5`);
-                await new Promise(resolve => setTimeout(resolve, 500));
-                attempts++;
-              }
-              
-              // ✅ 4. Nettoyer le flag
+              // ✅ 3. Nettoyer flags
+              localStorage.removeItem('webdiorama-close-others');
               localStorage.removeItem('webdiorama-force-takeover');
               
-              // ✅ 5. Prendre le contrôle
-              const TAB_ID = `webdiorama-tab-${Date.now()}-${Math.random()}`;
+              // ✅ 4. Prendre le contrôle
               localStorage.setItem('webdiorama-active-tab', JSON.stringify({
                 tabId: TAB_ID,
                 timestamp: Date.now()
               }));
               
-              // ✅ 6. Reload
+              // ✅ 5. Reload
               console.log('✅ Prise de contrôle, reload');
               window.location.reload();
             }}
             className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-full"
           >
-            {t.multiTab?.forceOpen || "Utiliser cet onglet"}
+            {t.multiTab?.forceOpen || "Utiliser cet onglet (ferme les autres)"}
           </button>
         </div>
       </div>
