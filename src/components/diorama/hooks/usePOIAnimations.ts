@@ -19,13 +19,15 @@ export const usePOIAnimations = (
           mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
         }
       }
-      // 🔹 Mesh simple ou avec morph targets
+      // ✅ CORRIGÉ : Uniquement si morph targets
       else if (child.type === "Mesh") {
         const mesh = child as THREE.Mesh;
-
-        // ✅ Si le mesh a des morph targets (shape keys)
-        if ((mesh.morphTargetInfluences && mesh.morphTargetInfluences.length > 0) || !mixerRef.current[child.name]) {
-          mixerRef.current[child.name] = new THREE.AnimationMixer(mesh);
+        
+        // ✅ SEULEMENT si le mesh a des morph targets
+        if (mesh.morphTargetInfluences && mesh.morphTargetInfluences.length > 0) {
+          if (!mixerRef.current[child.name]) {
+            mixerRef.current[child.name] = new THREE.AnimationMixer(mesh);
+          }
         }
       }
     });
