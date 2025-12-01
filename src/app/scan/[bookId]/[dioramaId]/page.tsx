@@ -7,13 +7,19 @@ type Props = {
   searchParams: Promise<{ t?: string }>;
 };
 
+// ✅ Constantes
+const COOLDOWN_KEY = 'webdiorama-last-scan';
+const COOLDOWN_DURATION = 5000; // 5 secondes
+
 export default function ScanLauncher({ params, searchParams }: Props) {
   const [mounted, setMounted] = useState(false);
   const [resolvedParams, setResolvedParams] = useState<{ bookId: string; dioramaId: string } | null>(null);
   const [resolvedToken, setResolvedToken] = useState<string | null>(null);
-  const [status, setStatus] = useState<'opening' | 'blocked' | 'success'>('opening');
+  const [status, setStatus] = useState<'opening' | 'blocked' | 'success' | 'cooldown'>('opening');
   const [isReusingViewer, setIsReusingViewer] = useState(false);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
 
+  // Résoudre les params async
   useEffect(() => {
     Promise.all([params, searchParams]).then(([p, sp]) => {
       setResolvedParams(p);
@@ -25,90 +31,116 @@ export default function ScanLauncher({ params, searchParams }: Props) {
   useEffect(() => {
     if (!mounted || !resolvedParams || !resolvedToken) return;
 
-    // ✅ NOUVEAU : Vérifier la validité du heartbeat
-    const cleanupStaleData = () => {
-      const existingViewer = localStorage.getItem('webdiorama-viewer-alive');
+    const sceneUrl = `/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`;
+    
+    // ✅ Vérifier le cooldown
+    const lastScan = localStorage.getItem(COOLDOWN_KEY);
+    if (lastScan) {
+      const timeSinceLastScan = Date.now() - parseInt(lastScan);
       
-      if (existingViewer) {
-        try {
-          const { timestamp } = JSON.parse(existingViewer);
-          const age = Date.now() - timestamp;
+      if (timeSinceLastScan < COOLDOWN_DURATION) {
+        const remaining = Math.ceil((COOLDOWN_DURATION - timeSinceLastScan) / 1000);
+        console.log(`⏱️ Cooldown actif: ${remaining}s restantes`);
+        setStatus('cooldown');
+        setCooldownRemaining(remaining);
+        
+        // Countdown
+        const countdown = setInterval(() => {
+          const newRemaining = Math.ceil((COOLDOWN_DURATION - (Date.now() - parseInt(lastScan))) / 1000);
           
-          // Si heartbeat > 5s = viewer mort
-          if (age > 5000) {
-            console.log('🧹 LAUNCHER: Viewer zombie détecté, nettoyage');
+          if (newRemaining <= 0) {
+            clearInterval(countdown);
+            console.log('✅ Cooldown terminé, lancement scan');
+            localStorage.setItem(COOLDOWN_KEY, Date.now().toString());
+            proceedWithScan();
+          } else {
+            setCooldownRemaining(newRemaining);
+          }
+        }, 1000);
+        
+        return () => clearInterval(countdown);
+      }
+    }
+    
+    // ✅ Pas de cooldown, enregistrer et continuer
+    localStorage.setItem(COOLDOWN_KEY, Date.now().toString());
+    proceedWithScan();
+    
+    function proceedWithScan() {
+      if (!resolvedParams || !resolvedToken) return; // ✅ Guard clause
+      // ✅ Nettoyer les données zombies
+      const cleanupStaleData = () => {
+        const existingViewer = localStorage.getItem('webdiorama-viewer-alive');
+        
+        if (existingViewer) {
+          try {
+            const { timestamp } = JSON.parse(existingViewer);
+            const age = Date.now() - timestamp;
+            
+            if (age > 5000) {
+              console.log('🧹 LAUNCHER: Viewer zombie détecté, nettoyage');
+              localStorage.removeItem('webdiorama-viewer-alive');
+              localStorage.removeItem('webdiorama-change-scene');
+              localStorage.removeItem('webdiorama-scene-processed');
+              localStorage.removeItem('webdiorama-changing-scene');
+            }
+          } catch {
+            console.log('🧹 LAUNCHER: Données corrompues, nettoyage');
             localStorage.removeItem('webdiorama-viewer-alive');
             localStorage.removeItem('webdiorama-change-scene');
             localStorage.removeItem('webdiorama-scene-processed');
             localStorage.removeItem('webdiorama-changing-scene');
           }
-        } catch {
-          // JSON invalide, nettoyer
-          console.log('🧹 LAUNCHER: Données corrompues, nettoyage');
-          localStorage.removeItem('webdiorama-viewer-alive');
-          localStorage.removeItem('webdiorama-change-scene');
-          localStorage.removeItem('webdiorama-scene-processed');
-          localStorage.removeItem('webdiorama-changing-scene');
         }
-      }
-    };
-    
-    // ✅ Nettoyer AVANT de vérifier
-    cleanupStaleData();
-
-    const sceneUrl = `/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`;
-    
-    const checkExistingViewer = () => {
-      const existingViewer = localStorage.getItem('webdiorama-viewer-alive');
+      };
       
-      if (existingViewer) {
-        try {
-          const { timestamp } = JSON.parse(existingViewer);
-          const age = Date.now() - timestamp;
-          
-          if (age < 3000) {
-            console.log('♻️ Viewer existant détecté, envoi changement de scène');
+      cleanupStaleData();
+      
+      const checkExistingViewer = () => {
+        const existingViewer = localStorage.getItem('webdiorama-viewer-alive');
+        
+        if (existingViewer) {
+          try {
+            const { timestamp } = JSON.parse(existingViewer);
+            const age = Date.now() - timestamp;
             
-            setIsReusingViewer(true);
-            
-            const requestId = `${Date.now()}-${Math.random()}`;
-            
-            localStorage.setItem('webdiorama-change-scene', JSON.stringify({
-              url: sceneUrl,
-              timestamp: Date.now(),
-              requestId,
-              bookId: resolvedParams.bookId,
-              dioramaId: resolvedParams.dioramaId
-            }));
-            
-            console.log('📤 Demande envoyée:', requestId, sceneUrl);
-            
-            setStatus('success');
-            
-            // ✅ CORRIGÉ : Juste fermer le launcher, pas de redirection
-            setTimeout(() => {
-              console.log('🚪 Fermeture launcher après envoi demande');
-              window.close();
+            if (age < 3000) {
+              console.log('♻️ Viewer existant détecté, envoi changement de scène');
               
-              // ✅ Fallback : Si window.close() échoue, NE PAS rediriger, juste rester sur success
+              setIsReusingViewer(true);
+              
+              const requestId = `${Date.now()}-${Math.random()}`;
+              
+              localStorage.setItem('webdiorama-change-scene', JSON.stringify({
+                url: sceneUrl,
+                timestamp: Date.now(),
+                requestId,
+                bookId: resolvedParams.bookId,
+                dioramaId: resolvedParams.dioramaId
+              }));
+              
+              console.log('📤 Demande envoyée:', requestId, sceneUrl);
+              
+              setStatus('success');
+              
+              // ✅ Juste fermer le launcher
               setTimeout(() => {
-                console.log('⚠️ Fermeture échouée, rester sur page success');
-                // Ne rien faire, l'utilisateur verra "C'est parti !" et pourra fermer manuellement
-              }, 500);
-            }, 1000); // ✅ Attendre 1s pour que le viewer reçoive le message
-            
-            return true;
-          }
-        } catch {}
-      }
-      return false;
-    };
-    
-    // ✅ Vérifier immédiatement
-    if (checkExistingViewer()) return;
-    
-    // ✅ Attendre un peu au cas où le viewer se lance
-    const checkTimeout = setTimeout(() => {
+                console.log('🚪 Fermeture launcher après envoi demande');
+                window.close();
+              }, 1000);
+              
+              return true;
+            }
+          } catch {}
+        }
+        return false;
+      };
+      
+      // Vérifier immédiatement
+      if (checkExistingViewer()) return;
+      
+      // Attendre un peu
+      const checkTimeout = setTimeout(() => {
         if (checkExistingViewer()) return;
         
         console.log('🆕 Création nouveau viewer');
@@ -119,7 +151,6 @@ export default function ScanLauncher({ params, searchParams }: Props) {
           viewer.focus();
           setStatus('success');
           
-          // ✅ Juste fermer, pas de redirection
           setTimeout(() => {
             console.log('🚪 Fermeture launcher après création viewer');
             window.close();
@@ -128,12 +159,13 @@ export default function ScanLauncher({ params, searchParams }: Props) {
           console.warn('⚠️ Popup bloqué');
           setStatus('blocked');
         }
-    }, 500);
-    
-    return () => clearTimeout(checkTimeout);
-    }, [mounted, resolvedParams, resolvedToken]);
+      }, 500);
+      
+      return () => clearTimeout(checkTimeout);
+    }
+  }, [mounted, resolvedParams, resolvedToken]);
 
-  if (!mounted) {
+  if (!mounted || !resolvedParams || !resolvedToken) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-white">Chargement...</div>
@@ -156,41 +188,58 @@ export default function ScanLauncher({ params, searchParams }: Props) {
           </>
         )}
         
+        {status === 'cooldown' && (
+          <>
+            <div className="text-6xl mb-6 animate-pulse">⏱️</div>
+            <h1 className="text-3xl font-bold text-white mb-4">
+              Préparation en cours...
+            </h1>
+            <div className="text-6xl font-bold text-purple-400 mb-4">
+              {cooldownRemaining}s
+            </div>
+            <p className="text-gray-300 mb-2">
+              La scène précédente se prépare
+            </p>
+            <p className="text-sm text-gray-400">
+              (Optimisation mémoire GPU)
+            </p>
+          </>
+        )}
+        
         {status === 'blocked' && (
-        <>
+          <>
             <div className="text-6xl mb-6">🚫</div>
             <h1 className="text-3xl font-bold text-white mb-4">
-            Action requise
+              Action requise
             </h1>
             <p className="text-gray-300 mb-6">
-            Cliquez ci-dessous pour ouvrir la scène :
+              Cliquez ci-dessous pour ouvrir la scène :
             </p>
             <a
-            href={`/webdiorama/${resolvedParams?.bookId}/${resolvedParams?.dioramaId}?t=${resolvedToken}`}
-            target="webdiorama-viewer"
-            onClick={() => {
-                // ✅ Après ouverture, recharger ce launcher pour détecter le viewer
+              href={`/webdiorama/${resolvedParams?.bookId}/${resolvedParams?.dioramaId}?t=${resolvedToken}`}
+              target="webdiorama-viewer"
+              onClick={() => {
                 setTimeout(() => {
-                window.location.reload();
+                  window.location.reload();
                 }, 1000);
-            }}
-            className="inline-block px-8 py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-full font-bold transition"
+              }}
+              className="inline-block px-8 py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-full font-bold transition"
             >
-            🎬 Ouvrir la scène
+              🎬 Ouvrir la scène
             </a>
-        </>
+          </>
         )}
         
         {status === 'success' && (
-        <>
+          <>
             <div className="text-6xl mb-6 animate-bounce">✅</div>
             <h1 className="text-3xl font-bold text-white mb-4">
-            C'est parti !
+              C'est parti !
             </h1>
             <p className="text-gray-300">
-            {isReusingViewer ? 'Changement de scène...' : 'Ouverture...'}
+              {isReusingViewer ? 'Changement de scène...' : 'Ouverture...'}
             </p>
-        </>
+          </>
         )}
       </div>
     </div>
