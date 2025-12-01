@@ -286,6 +286,7 @@ function WebDioramaLoaderInner({
   );
   const CHANNEL_NAME = 'webdiorama-tabs';
   const channelRef = useRef<BroadcastChannel | null>(null);
+  const performCleanupRef = useRef<(() => void) | null>(null);
   const [isSecondaryTab, setIsSecondaryTab] = useState(false);
   // ✅ Hook WebGL simplifié
   const { renderer, error: webglError, isReady: webglReady } = useWebGLContext(containerRef, {
@@ -392,7 +393,7 @@ function WebDioramaLoaderInner({
     channelRef.current = channel;
     
     // Annoncer présence
-    channel.postMessage({ type: 'TAB_OPENED' });
+    channel.postMessage({ type: 'TAB_OPENED', timestamp: Date.now() });
     
     // Écouter les autres onglets
     const handleMessage = (event: MessageEvent) => {
@@ -400,6 +401,15 @@ function WebDioramaLoaderInner({
         // Un autre onglet existe déjà
         console.log('🚨 Onglet secondaire détecté');
         setIsSecondaryTab(true);
+      }
+      
+      // ✅ NOUVEAU : Recevoir l'ordre de se mettre en pause
+      if (event.data.type === 'FORCE_PAUSE') {
+        console.log('⏸️ Ordre reçu : mise en pause forcée');
+        wasHiddenRef.current = true;
+        voluntaryCleanupRef.current = true;
+        performCleanupRef.current?.();
+        setNeedsManualRestart(true);
       }
     };
     
@@ -897,6 +907,8 @@ function WebDioramaLoaderInner({
       
       console.log("✅ Cleanup complet terminé");
     };
+
+    performCleanupRef.current = performCleanup;
     
     const handleVisibilityChange = () => {
       console.log("👁️ Visibility changed:", document.hidden ? "HIDDEN" : "VISIBLE");
@@ -1102,8 +1114,14 @@ function WebDioramaLoaderInner({
           </p>
           <button
             onClick={() => {
-              channelRef.current?.postMessage({ type: 'FORCE_CLOSE' });
-              setTimeout(() => setIsSecondaryTab(false), 500);
+              console.log('🔄 Forcer ouverture → pause des autres onglets');
+              // ✅ Envoyer l'ordre aux autres onglets de se mettre en pause
+              channelRef.current?.postMessage({ type: 'FORCE_PAUSE' });
+              
+              // ✅ Attendre que les autres se mettent en pause
+              setTimeout(() => {
+                setIsSecondaryTab(false);
+              }, 500);
             }}
             className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-full"
           >
