@@ -830,9 +830,36 @@ function WebDioramaLoaderInner({
 
     // ✅ Boucle d'animation
     const animate = () => {
-        // ✅ Log toutes les 60 frames (1x par seconde à 60fps)
-      if (animationFrameRef.current && animationFrameRef.current % 60 === 0) {
+      // ✅ Log toutes les 300 frames (5s à 60fps)
+      if (animationFrameRef.current && animationFrameRef.current % 300 === 0) {
         console.log('🎬 RAF actif:', animationFrameRef.current, 'shouldAnimate:', shouldAnimateRef.current);
+        
+        // ✅ DIAGNOSTIC : Compter les objets dans la scène
+        if (sceneRef.current) {
+          let meshCount = 0;
+          let textureCount = 0;
+          let materialCount = 0;
+          
+          sceneRef.current.traverse((obj) => {
+            if (obj instanceof THREE.Mesh) {
+              meshCount++;
+              if (obj.material) {
+                materialCount++;
+                const mat = obj.material as THREE.Material & { map?: THREE.Texture };
+                if (mat.map) textureCount++;
+              }
+            }
+          });
+          
+          console.log('📊 Scène:', { meshCount, textureCount, materialCount });
+          console.log('📊 Mixers:', Object.keys(mixerRef.current).length);
+          console.log('📊 Videos:', videoElementsRef.current.length);
+        }
+        
+        // ✅ Mémoire GPU (si disponible)
+        if (renderer) {
+          console.log('🎮 WebGL:', renderer.info.memory, renderer.info.render);
+        }
       }
 
       // ✅ CRITIQUE : Vérifier le flag EN PREMIER
@@ -892,6 +919,36 @@ function WebDioramaLoaderInner({
       sceneRef.current = null;
     };
   }, [renderer, webglReady, config.glb]);
+
+  // ✅ Nettoyage périodique du renderer pour éviter accumulation
+  useEffect(() => {
+    if (!renderer) return;
+    
+    const cleanupInterval = setInterval(() => {
+      if (!renderer || document.hidden || devToolOpenRef.current) return;
+      
+      console.log('🧹 Nettoyage périodique renderer');
+      
+      // ✅ Forcer le garbage collection des programmes WebGL
+      renderer.info.programs?.forEach((program: any) => {
+        if (program && program.usedTimes === 0) {
+          renderer.renderLists.dispose();
+        }
+      });
+      
+      // ✅ Logger les stats
+      console.log('📊 Renderer info:', {
+        geometries: renderer.info.memory.geometries,
+        textures: renderer.info.memory.textures,
+        programs: renderer.info.programs?.length || 0,
+        calls: renderer.info.render.calls,
+        triangles: renderer.info.render.triangles,
+      });
+      
+    }, 30000); // ✅ Toutes les 30 secondes
+    
+    return () => clearInterval(cleanupInterval);
+  }, [renderer]);
 
   // DOF selon POI
   useEffect(() => {
