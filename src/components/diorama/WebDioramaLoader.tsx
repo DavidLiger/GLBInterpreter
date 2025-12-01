@@ -273,7 +273,7 @@ function WebDioramaLoaderInner({
   const emptyRefs = useRef<Record<string, THREE.Object3D>>({});
   const animationFrameRef = useRef<number | undefined>(undefined);
   const videoElementsRef = useRef<HTMLVideoElement[]>([]);
-  const { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers } =
+  const { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers, cleanup: cleanupMixers } =
     usePOIAnimations(emptyRefs);
   const clock = useRef(new THREE.Clock());
   const hasAutoUnmutedRef = useRef(false);
@@ -1041,7 +1041,12 @@ function WebDioramaLoaderInner({
       
       // 4. Stop animations
       stopAllAnimations();
-      Object.values(mixerRef.current).forEach(mixer => mixer.stopAllAction());
+      cleanupMixers();
+      // Object.values(mixerRef.current).forEach(mixer => mixer.stopAllAction());
+
+      // ✅ AJOUTER : Vider les mixers
+      console.log('🧹 Nettoyage mixers:', Object.keys(mixerRef.current).length);
+      mixerRef.current = {};
 
       if (spritesheetAnimatorRef.current) {
         spritesheetAnimatorRef.current.dispose();

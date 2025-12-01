@@ -85,5 +85,14 @@ export const usePOIAnimations = (
     Object.values(mixerRef.current).forEach((m) => m.update(delta));
   }, []);
 
-  return { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers };
+  const cleanup = useCallback(() => {
+    console.log('🧹 Cleanup mixers:', Object.keys(mixerRef.current).length);
+    Object.values(mixerRef.current).forEach(mixer => {
+      mixer.stopAllAction();
+      // Les mixers Three.js n'ont pas de dispose(), juste les vider suffit
+    });
+    mixerRef.current = {};
+  }, []);
+
+  return { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers, cleanup };
 };
