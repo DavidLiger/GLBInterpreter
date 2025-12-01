@@ -328,6 +328,7 @@ function WebDioramaLoaderInner({
   const [loadedScene, setLoadedScene] = useState<THREE.Scene | null>(null);
   const [devToolOpen, setDevToolOpen] = useState(false);
   const devToolOpenRef = useRef(false);
+  const shouldAnimateRef = useRef(true); 
   const spritesheetAnimatorRef = useRef<SpritesheetAnimator | null>(null);
   const performCleanupRef = useRef<(() => void) | null>(null);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
@@ -436,6 +437,10 @@ function WebDioramaLoaderInner({
         
         setNeedsManualRestart(false);
         wasHiddenRef.current = false;
+
+        // ✅ CRITIQUE : Désactiver le flag RAF
+        console.log('🛑 VIEWER: Désactivation flag RAF');
+        shouldAnimateRef.current = false; // ✅ EN PREMIER
         
         // ✅ CRITIQUE : Arrêter RAF AVANT cleanup
         console.log('🛑 VIEWER: Arrêt RAF avant changement scène');
@@ -444,20 +449,22 @@ function WebDioramaLoaderInner({
           animationFrameRef.current = undefined;
         }
         
-        // ✅ Attendre que RAF soit vraiment arrêté (1 frame)
+        // ✅ Attendre 2 frames pour être sûr
         requestAnimationFrame(() => {
-          console.log('🧹 VIEWER: RAF arrêté, cleanup maintenant');
-          
-          if (performCleanupRef.current) {
-            performCleanupRef.current();
-          }
-          
-          setTimeout(() => {
-            console.log('🔄 VIEWER: Redirection vers:', url);
-            localStorage.removeItem('webdiorama-change-scene');
-            localStorage.removeItem('webdiorama-changing-scene');
-            window.location.href = url;
-          }, 100); // ✅ Réduit à 100ms
+          requestAnimationFrame(() => {
+            console.log('🧹 VIEWER: RAF définitivement arrêté, cleanup maintenant');
+            
+            if (performCleanupRef.current) {
+              performCleanupRef.current();
+            }
+            
+            setTimeout(() => {
+              console.log('🔄 VIEWER: Redirection vers:', url);
+              localStorage.removeItem('webdiorama-change-scene');
+              localStorage.removeItem('webdiorama-changing-scene');
+              window.location.href = url;
+            }, 100);
+          });
         });
         
       } catch (e) {
@@ -810,6 +817,17 @@ function WebDioramaLoaderInner({
 
     // ✅ Boucle d'animation
     const animate = () => {
+      // ✅ CRITIQUE : Vérifier le flag EN PREMIER
+      if (!shouldAnimateRef.current) {
+        console.log('🛑 RAF stoppé par flag');
+        return; // ✅ Ne pas rappeler RAF
+      }
+
+      if (!renderer || !cameraRef.current || !sceneRef.current) {
+        console.log('⚠️ RAF appelé alors que renderer/camera/scene null, arrêt');
+        shouldAnimateRef.current = false; // ✅ Désactiver le flag
+        return;
+      }
       if (document.hidden) {
         animationFrameRef.current = requestAnimationFrame(animate);
         return;
@@ -832,6 +850,7 @@ function WebDioramaLoaderInner({
       animationFrameRef.current = requestAnimationFrame(animate);
     };
 
+    shouldAnimateRef.current = true;
     animationFrameRef.current = requestAnimationFrame(animate);
 
     // Cleanup
@@ -885,6 +904,15 @@ function WebDioramaLoaderInner({
         return;
       }
       console.log("🛑 Cleanup WebGL immédiat");
+
+      // ✅ CRITIQUE : Désactiver RAF en premier
+      shouldAnimateRef.current = false;
+      
+      // ✅ Annuler RAF
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = undefined;
+      }
 
       // ✅ 0. MUTER ET STOPPER via les hooks AVANT tout
       console.log("🔇 Cleanup audio via hooks...");
