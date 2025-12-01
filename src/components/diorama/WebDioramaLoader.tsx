@@ -110,34 +110,19 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
 
   useEffect(() => {
     const checkCacheStatus = async () => {
-      // ✅ NOUVEAU : Vérifier s'il y a trop d'onglets zombies
-      const activeTab = localStorage.getItem('webdiorama-active-tab');
-      if (activeTab) {
-        try {
-          const { timestamp } = JSON.parse(activeTab);
-          const age = Date.now() - timestamp;
-          
-          // Si heartbeat > 5s = onglet zombie
-          if (age > 5000) {
-            console.warn('🧟 Onglet zombie détecté, nettoyage');
-            localStorage.removeItem('webdiorama-active-tab');
-          }
-        } catch {}
-      }
-      
       const cached = await isBookFullyCached(bookId);
       
       if (cached) {
         console.log("✅ Assets en cache, lancement direct");
         setCheckingCache(false);
         setShowDownloadModal(false);
-        setIsInitializing(true);
+        setIsInitializing(true); // ✅ Afficher "Préparation..."
         
         console.log("⏳ Pause 2s pour libérer mémoire...");
         setTimeout(() => {
           console.log("✅ Mémoire libérée, lancement scène...");
           setAssetsReady(true);
-          setIsInitializing(false);
+          setIsInitializing(false); // ✅ Masquer APRÈS
         }, 2000);
       } else {
         console.log("📦 Assets manquants, afficher modal");
@@ -154,91 +139,121 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   };
 
   return (
-  <>
-    {/* ✅ 1. Device Tester EN PREMIER */}
-    {showDeviceTester && (config as any).deviceTester && (
-      <DeviceTester
-        key={testKey}
-        isMobileDevice={isMobileDevice}
-        glbUrl={config.glb}
-        config={(config as any).deviceTester}
-        onRetest={handleRetest}
-        onComplete={(passed) => {
-          console.log('✅ Test terminé, résultat:', passed);
-          setDeviceTestPassed(true);
-          console.log('⏳ Pause 2s pour libérer le contexte WebGL du test...');
-          setTimeout(() => {
-            console.log('✅ Contexte WebGL libéré, continuer');
+    <>
+      {/* ✅ Écran de vérification cache */}
+      {checkingCache && (
+        <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+          <div className="text-white text-center">
+            <div className="animate-spin text-4xl mb-4">⚙️</div>
+            <p>{t.bookDownload.cacheChecking}</p>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ Device Tester EN PREMIER, bloque tout */}
+      {showDeviceTester && (config as any).deviceTester && (
+        <DeviceTester
+          key={testKey}
+          isMobileDevice={isMobileDevice}
+          glbUrl={config.glb}
+          config={(config as any).deviceTester}
+          onRetest={handleRetest}
+          onComplete={(passed) => {
+            console.log('✅ Test terminé, résultat:', passed);
+            setDeviceTestPassed(true);
+            
+            // ✅ ATTENDRE 2 secondes pour libérer WebGL
+            console.log('⏳ Pause 2s pour libérer le contexte WebGL du test...');
+            setTimeout(() => {
+              console.log('✅ Contexte WebGL libéré, continuer');
+              setShowDeviceTester(false);
+            }, 2000);
+          }}
+          onSkip={() => {
+            console.log('⏭️ Test skippé');
+            setDeviceTestPassed(true);
             setShowDeviceTester(false);
-          }, 2000);
-        }}
-        onSkip={() => {
-          console.log('⏭️ Test skippé');
-          setDeviceTestPassed(true);
-          setShowDeviceTester(false);
-        }}
-      />
-    )}
-
-    {/* ✅ 2. Preparing after test */}
-    {isPreparingAfterTest && (
-      <div className="fixed inset-0 bg-black z-[9998] flex items-center justify-center">
-        <div className="text-white text-center">
-          <div className="animate-spin text-4xl mb-4">⚙️</div>
-          <p className="text-xl">{t.deviceTester?.preparing || "Préparation de l'expérience..."}</p>
+          }}
+        />
+      )}
+      {isPreparingAfterTest && (
+        <div className="fixed inset-0 bg-black z-[9998] flex items-center justify-center">
+          <div className="text-white text-center">
+            <div className="animate-spin text-4xl mb-4">⚙️</div>
+            <p className="text-xl">{t.deviceTester?.preparing || "Préparation de l'expérience..."}</p>
+          </div>
         </div>
-      </div>
-    )}
+      )}
+      {/* ✅ Le reste seulement si pas de device tester */}
+      {!showDeviceTester && (
+        <>
+          {checkingCache && (
+            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+              {/* ... */}
+            </div>
+          )}
 
-    {/* ✅ 3. Cache checking */}
-    {checkingCache && !showDeviceTester && (
-      <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-        <div className="text-white text-center">
-          <div className="animate-spin text-4xl mb-4">⚙️</div>
-          <p>{t.bookDownload.cacheChecking}</p>
-        </div>
-      </div>
-    )}
+          {showDownloadModal && !assetsReady && (
+            <BookDownloadModal
+              bookId={bookId}
+              config={config}
+              onComplete={() => {
+                setShowDownloadModal(false);
+                setIsInitializing(true); // ✅ État intermédiaire
+                
+                console.log("⏳ Pause 2s pour libérer mémoire...");
+                
+                // ✅ Forcer garbage collection (si disponible)
+                if (typeof window !== 'undefined' && (window as any).gc) {
+                  (window as any).gc();
+                }
+                
+                // ✅ Délai avant de lancer la scène 3D
+                setTimeout(() => {
+                  console.log("✅ Mémoire libérée, lancement scène...");
+                  setAssetsReady(true);
+                  // setIsInitializing(false);
+                }, 2000);
+              }}
+              onCancel={() => setShowDownloadModal(false)}
+            />
+          )}
 
-    {/* ✅ 4. Download modal */}
-    {showDownloadModal && !assetsReady && !showDeviceTester && (
-      <BookDownloadModal
-        bookId={bookId}
-        config={config}
-        onComplete={() => {
-          setShowDownloadModal(false);
-          setIsInitializing(true);
-          
-          console.log("⏳ Pause 2s pour libérer mémoire...");
-          
-          if (typeof window !== 'undefined' && (window as any).gc) {
-            (window as any).gc();
-          }
-          
-          setTimeout(() => {
-            console.log("✅ Mémoire libérée, lancement scène...");
-            setAssetsReady(true);
-          }, 2000);
-        }}
-        onCancel={() => setShowDownloadModal(false)}
-      />
-    )}
+          {/* ✅ Écran de transition */}
+          {isInitializing && !assetsReady && (
+            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+              <div className="text-white text-center">
+                <div className="text-6xl mb-4 animate-pulse">🎬</div>
+                <p className="text-xl">{t.reload?.preparing || "Préparation de la scène..."}</p>
+                <p className="text-sm text-gray-400 mt-2">{t.reload?.optimizing || "Optimisation mémoire GPU"}</p>
+              </div>
+            </div>
+          )}
 
-    {/* ✅ 5. Preparing scene */}
-    {isInitializing && !assetsReady && !showDeviceTester && (
-      <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-        <div className="text-white text-center">
-          <div className="text-6xl mb-4 animate-pulse">🎬</div>
-          <p className="text-xl">{t.reload?.preparing || "Préparation de la scène..."}</p>
-          <p className="text-sm text-gray-400 mt-2">{t.reload?.optimizing || "Optimisation mémoire GPU"}</p>
-        </div>
-      </div>
-    )}
+          {!assetsReady && !showDownloadModal && !checkingCache && !isInitializing && (
+            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+              <div className="text-center">
+                <div className="text-6xl mb-6">📦</div>
+                <h2 className="text-white text-xl mb-6">
+                  {t.bookDownload?.required || "Téléchargement requis"}
+                </h2>
+                <button
+                  onClick={() => setShowDownloadModal(true)}
+                  className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transition"
+                >
+                  📥 {t.bookDownload?.download || "Télécharger"}
+                </button>
+              </div>
+            </div>
+          )}
 
-    {/* ✅ 6. Scene (seulement si assets ready) */}
-    {assetsReady && <WebDioramaLoaderInner config={config} bookId={bookId} />}
-  </>
-);
+          {assetsReady && <WebDioramaLoaderInner config={config} bookId={bookId} />}
+        </>
+      )}
+
+      
+    </>
+  );
 }
 
 function WebDioramaLoaderInner({
@@ -269,11 +284,6 @@ function WebDioramaLoaderInner({
   const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
   );
-  const CHANNEL_NAME = 'webdiorama-tabs';
-  const channelRef = useRef<BroadcastChannel | null>(null);
-  const performCleanupRef = useRef<(() => void) | null>(null);
-  const [isSecondaryTab, setIsSecondaryTab] = useState(false);
-  const [tabStatus, setTabStatus] = useState<'checking' | 'primary' | 'secondary'>('checking');
 
   // ✅ Hook WebGL simplifié
   const { renderer, error: webglError, isReady: webglReady } = useWebGLContext(containerRef, {
@@ -321,7 +331,6 @@ function WebDioramaLoaderInner({
   const spritesheetAnimatorRef = useRef<SpritesheetAnimator | null>(null);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
-  const [needsManualRestart, setNeedsManualRestart] = useState(false);
 
   usePOIEffects(sceneRef.current!, currentPoi, textureLoader);
 
@@ -375,113 +384,39 @@ function WebDioramaLoaderInner({
     return active.icon;
   }, [currentPOI, findPOIRecursively, findParentPOI]);
 
-  // ✅ Dans le useEffect de gestion des onglets, ajoute :
+  // ✅ Heartbeat pour indiquer au launcher qu'on est vivant
   useEffect(() => {
-    const TAB_ID = `webdiorama-tab-${Date.now()}-${Math.random()}`;
-    const STORAGE_KEY = 'webdiorama-active-tab';
-    const FORCE_KEY = 'webdiorama-force-takeover';
-    const CLOSE_KEY = 'webdiorama-close-others'; // ✅ NOUVEAU
-    const HEARTBEAT_INTERVAL = 1000;
-    
-    const checkExistingTab = () => {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (!stored) return false;
-      
-      try {
-        const { tabId, timestamp } = JSON.parse(stored);
-        return Date.now() - timestamp < 3000;
-      } catch {
-        return false;
-      }
-    };
-    
-    const hasActiveTab = checkExistingTab();
-    
-    if (hasActiveTab) {
-      console.log('🚨 Onglet actif détecté immédiatement');
-      setTabStatus('secondary');
-      return;
-    }
-    
-    console.log('✅ Devenir onglet primaire');
-    setTabStatus('primary');
-    
     const updateHeartbeat = () => {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        tabId: TAB_ID,
+      localStorage.setItem('webdiorama-viewer-alive', JSON.stringify({
         timestamp: Date.now()
       }));
     };
     
     updateHeartbeat();
-    const heartbeatInterval = setInterval(updateHeartbeat, HEARTBEAT_INTERVAL);
+    const interval = setInterval(updateHeartbeat, 1000);
     
+    return () => {
+      clearInterval(interval);
+      localStorage.removeItem('webdiorama-viewer-alive');
+    };
+  }, []);
+
+  // ✅ Écouter les changements de scène
+  useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      // ✅ NOUVEAU : Détecter ordre de fermeture
-      if (e.key === CLOSE_KEY && e.newValue) {
-        const closeTabId = e.newValue;
-        if (closeTabId !== TAB_ID) {
-          console.log('🚪 Ordre de fermeture reçu, fermeture onglet');
-          performCleanupRef.current?.();
-          
-          // ✅ Fermer l'onglet (fonctionne si ouvert via script ou QR code)
-          setTimeout(() => {
-            window.close();
-            
-            // Si window.close() échoue (onglet ouvert manuellement), afficher UI
-            setTimeout(() => {
-              setNeedsManualRestart(true);
-            }, 500);
-          }, 100);
-        }
-      }
-      
-      if (e.key === FORCE_KEY && e.newValue) {
-        console.log('⏸️ Ordre de fermeture reçu');
-        performCleanupRef.current?.();
-        setNeedsManualRestart(true);
-        clearInterval(heartbeatInterval);
-        localStorage.removeItem(STORAGE_KEY);
-      }
-      
-      if (e.key === STORAGE_KEY && e.newValue) {
-        try {
-          const { tabId } = JSON.parse(e.newValue);
-          if (tabId !== TAB_ID) {
-            console.log('⏸️ Autre onglet a pris le contrôle');
-            performCleanupRef.current?.();
-            setNeedsManualRestart(true);
-            clearInterval(heartbeatInterval);
-          }
-        } catch {}
+      if (e.key === 'webdiorama-change-scene' && e.newValue) {
+        const { url } = JSON.parse(e.newValue);
+        console.log('🔄 Changement de scène demandé:', url);
+        
+        // ✅ Changer de scène
+        window.location.href = url;
       }
     };
     
     window.addEventListener('storage', handleStorageChange);
     
     return () => {
-      clearInterval(heartbeatInterval);
       window.removeEventListener('storage', handleStorageChange);
-      
-      const current = localStorage.getItem(STORAGE_KEY);
-      if (current) {
-        try {
-          const { tabId } = JSON.parse(current);
-          if (tabId === TAB_ID) {
-            localStorage.removeItem(STORAGE_KEY);
-          }
-        } catch {}
-      }
-    };
-  }, []);
-
-  // ✅ Cleanup du channel au démontage du composant
-  useEffect(() => {
-    return () => {
-      if (channelRef.current) {
-        channelRef.current.close();
-        channelRef.current = null;
-      }
     };
   }, []);
 
@@ -598,43 +533,6 @@ function WebDioramaLoaderInner({
       playPOIAnimations(poi, sceneRef.current.userData.gltfAnimations);
     }
   }, [currentPOI]);
-
-  useEffect(() => {
-    const checkIntegrity = async () => {
-      try {
-        // Test IndexedDB
-        const request = window.indexedDB.open('test-integrity', 1);
-        const db = await new Promise<IDBDatabase>((resolve, reject) => {
-          request.onsuccess = () => resolve(request.result);
-          request.onerror = () => reject(request.error);
-        });
-        db.close();
-        
-        // Test cache corruption
-        const keys = await caches.keys();
-        for (const key of keys) {
-          try {
-            await caches.open(key);
-          } catch (e) {
-            console.warn('🗑️ Cache corrompu détecté:', key);
-            await caches.delete(key);
-          }
-        }
-      } catch (error) {
-        console.error('❌ Corruption détectée, nettoyage...', error);
-        
-        // Nettoyage complet
-        await caches.keys().then(keys => 
-          Promise.all(keys.map(key => caches.delete(key)))
-        );
-        
-        // Reload après nettoyage
-        setTimeout(() => window.location.reload(), 1000);
-      }
-    };
-    
-    checkIntegrity();
-  }, []);
 
   // ✅ Chargement de la scène
   useEffect(() => {
@@ -972,39 +870,43 @@ function WebDioramaLoaderInner({
       
       console.log("✅ Cleanup complet terminé");
     };
-
-    performCleanupRef.current = performCleanup;
     
     const handleVisibilityChange = () => {
       console.log("👁️ Visibility changed:", document.hidden ? "HIDDEN" : "VISIBLE");
-      
+      // ✅ AJOUTER : Ignorer si outil dev ouvert
       if (devToolOpenRef.current) {
         console.log("⏸️ Visibility change ignoré : outil dev ouvert");
         return;
       }
-
+    
       if (document.hidden && !wasHiddenRef.current) {
         console.log("🚨 Détection: onglet caché → cleanup");
         wasHiddenRef.current = true;
         voluntaryCleanupRef.current = true;
         performCleanup();
       } else if (!document.hidden && wasHiddenRef.current) {
-        console.log("⏸️ Détection: retour onglet → demander relance manuelle");
-        setNeedsManualRestart(true); // ✅ Au lieu de reload auto
+        console.log("🔄 Détection: retour onglet → reload");
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
       }
     };
 
     const handleFocus = () => {
       console.log("👁️ Window focus");
 
+      // ✅ AJOUTER : Ignorer si outil dev ouvert
       if (devToolOpenRef.current) {
         console.log("⏸️ Focus ignoré : outil dev ouvert");
         return;
       }
 
       if (wasHiddenRef.current) {
-        console.log("⏸️ Détection: retour focus → demander relance manuelle");
-        setNeedsManualRestart(true); // ✅ Au lieu de reload auto
+        // ✅ Retour après blur → reload
+        console.log("🔄 Détection: retour focus → reload");
+        setTimeout(() => {
+          window.location.reload();
+        }, 100);
       }
     };
     
@@ -1126,48 +1028,20 @@ function WebDioramaLoaderInner({
             
             {/* Bouton principal */}
             <button
-              onClick={async () => {
-                console.log("🔄 Nettoyage RADICAL...");
-                
-                // ✅ 1. Forcer libération localStorage
-                localStorage.removeItem('webdiorama-active-tab');
-                localStorage.removeItem('webdiorama-force-takeover');
-                
-                // ✅ 2. Clear tous les caches
-                try {
-                  const keys = await caches.keys();
-                  console.log(`🗑️ Suppression ${keys.length} caches`);
-                  await Promise.all(keys.map(k => caches.delete(k)));
-                } catch (e) {
-                  console.warn('Erreur clear cache:', e);
-                }
-                
-                // ✅ 3. Clear IndexedDB
-                try {
-                  const dbs = await window.indexedDB.databases();
-                  console.log(`🗑️ Suppression ${dbs.length} databases`);
-                  dbs.forEach(db => {
-                    if (db.name) window.indexedDB.deleteDatabase(db.name);
-                  });
-                } catch (e) {
-                  console.warn('Erreur clear IDB:', e);
-                }
-                
-                // ✅ 4. Attendre 2s pour libération mémoire GPU
-                console.log('⏳ Attente libération GPU...');
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                
-                // ✅ 5. Reload
-                console.log('✅ Reload');
+              onClick={() => {
+                console.log("🔄 Rechargement complet de la page...");
                 window.location.reload();
               }}
               className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 mb-4"
             >
               {t.webglErrorScreen?.boutonTitle}
+                          {/* Sous-titre */}
               <p className="text-xs text-gray-100">
                 ( {t.webglErrorScreen?.boutonSubTitle} )
               </p>
             </button>
+            
+
             
             {/* Note technique (très petit) */}
             <p className="text-sm font-bold text-gray-300 mt-4 max-w-xs mx-auto animate-pulse">
@@ -1176,120 +1050,6 @@ function WebDioramaLoaderInner({
           </div>
         </div>
       </>
-    );
-  }
-
-  // if (tabStatus === 'checking') {
-  //   return (
-  //     <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-  //       <div className="text-white text-center">
-  //         <div className="animate-spin text-4xl mb-4">⚙️</div>
-  //         <p>{t.multiTab?.checking || "Vérification des onglets..."}</p>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
-  if (tabStatus === 'secondary') {
-    return (
-      <div className="fixed inset-0 bg-gradient-to-br from-purple-900 via-black to-blue-900 flex items-center justify-center z-[9999]">
-        <div className="text-center p-8 max-w-md">
-          <div className="text-6xl mb-6">🔗</div>
-          <h2 className="text-2xl font-bold text-white mb-4">
-            {t.multiTab?.title || "Scène déjà ouverte"}
-          </h2>
-          <p className="text-gray-300 mb-6">
-            {t.multiTab?.message || "Une scène est déjà ouverte dans un autre onglet. Pour éviter les problèmes de mémoire, fermez l'autre onglet ou utilisez celui-ci."}
-          </p>
-          <button
-            onClick={async () => {
-              console.log('🔄 Forcer ouverture → fermeture autres onglets');
-              
-              // ✅ 1. Ordonner la fermeture des autres onglets
-              const TAB_ID = `webdiorama-tab-${Date.now()}-${Math.random()}`;
-              localStorage.setItem('webdiorama-close-others', TAB_ID);
-              
-              // ✅ 2. Attendre fermeture
-              const isMobile = /Android|webOS|iPhone|iPad|iPod/i.test(navigator.userAgent);
-              const waitTime = isMobile ? 2000 : 1000;
-              
-              console.log(`⏳ Attente ${waitTime}ms fermeture onglets...`);
-              await new Promise(resolve => setTimeout(resolve, waitTime));
-              
-              // ✅ 3. Nettoyer flags
-              localStorage.removeItem('webdiorama-close-others');
-              localStorage.removeItem('webdiorama-force-takeover');
-              
-              // ✅ 4. Prendre le contrôle
-              localStorage.setItem('webdiorama-active-tab', JSON.stringify({
-                tabId: TAB_ID,
-                timestamp: Date.now()
-              }));
-              
-              // ✅ 5. Reload
-              console.log('✅ Prise de contrôle, reload');
-              window.location.reload();
-            }}
-            className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-full"
-          >
-            {t.multiTab?.forceOpen || "Utiliser cet onglet (ferme les autres)"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Après le return de webglError
-  // if (isSecondaryTab) {
-  //   return (
-  //     <div className="fixed inset-0 bg-gradient-to-br from-purple-900 via-black to-blue-900 flex items-center justify-center z-[9999]">
-  //       <div className="text-center p-8 max-w-md">
-  //         <div className="text-6xl mb-6">🔗</div>
-  //         <h2 className="text-2xl font-bold text-white mb-4">
-  //           {t.multiTab?.title || "Scène déjà ouverte"}
-  //         </h2>
-  //         <p className="text-gray-300 mb-6">
-  //           {t.multiTab?.message || "Cette scène est déjà ouverte dans un autre onglet. Pour éviter les problèmes de mémoire, fermez l'autre onglet ou utilisez celui-ci."}
-  //         </p>
-  //         <button
-  //           onClick={() => {
-  //             console.log('🔄 Forcer ouverture → pause des autres onglets');
-  //             // ✅ Envoyer l'ordre aux autres onglets de se mettre en pause
-  //             channelRef.current?.postMessage({ type: 'FORCE_PAUSE' });
-              
-  //             // ✅ Attendre que les autres se mettent en pause
-  //             setTimeout(() => {
-  //               setIsSecondaryTab(false);
-  //             }, 500);
-  //           }}
-  //           className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-full"
-  //         >
-  //           {t.multiTab?.forceOpen || "Utiliser cet onglet"}
-  //         </button>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
-  if (needsManualRestart) {
-    return (
-      <div className="fixed inset-0 bg-gradient-to-br from-blue-900 via-black to-purple-900 flex items-center justify-center z-[9999]">
-        <div className="text-center p-8 max-w-md">
-          <div className="text-6xl mb-6 animate-pulse">💤</div>
-          <h2 className="text-2xl font-bold text-white mb-4">
-            {t.restart?.title || "Scène en pause"}
-          </h2>
-          <p className="text-gray-300 mb-6">
-            {t.restart?.message || "La scène a été mise en pause pour économiser la mémoire."}
-          </p>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg"
-          >
-            {t.restart?.button || "⚡ Relancer la scène"}
-          </button>
-        </div>
-      </div>
     );
   }
 
