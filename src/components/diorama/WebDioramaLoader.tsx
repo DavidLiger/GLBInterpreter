@@ -877,7 +877,7 @@ function WebDioramaLoaderInner({
         audioEl.src = '';
         audioEl.load();
       });
-      setIsHidden(true);
+      // setIsHidden(true);
       
       // 1. Annuler RAF
       if (animationFrameRef.current) {
@@ -969,6 +969,7 @@ function WebDioramaLoaderInner({
         console.log("🚨 Détection: onglet caché → cleanup");
         wasHiddenRef.current = true;
         voluntaryCleanupRef.current = true;
+        setIsHidden(true); // ✅ Mettre ici
         performCleanup();
       } else if (!document.hidden && wasHiddenRef.current) {
         console.log("⏸️ Détection: retour onglet → demander relance manuelle");
@@ -1009,6 +1010,7 @@ function WebDioramaLoaderInner({
       if (!wasHiddenRef.current) {
         wasHiddenRef.current = true;
         voluntaryCleanupRef.current = true;
+        setIsHidden(true); // ✅ Mettre ici aussi
         performCleanup();
       }
     };
