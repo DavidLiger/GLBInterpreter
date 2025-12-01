@@ -123,7 +123,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
           console.log("✅ Mémoire libérée, lancement scène...");
           setAssetsReady(true);
           setIsInitializing(false); // ✅ Masquer APRÈS
-        }, 2000);
+        }, 3000);
       } else {
         console.log("📦 Assets manquants, afficher modal");
         setShowDownloadModal(true);
@@ -476,7 +476,7 @@ function WebDioramaLoaderInner({
               localStorage.removeItem('webdiorama-changing-scene');
               sessionStorage.setItem('webdiorama-next-scene', url);
               window.location.reload();
-            }, 500);
+            }, 1000);
           });
         });
         

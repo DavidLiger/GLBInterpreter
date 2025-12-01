@@ -59,69 +59,49 @@ export default function ScanLauncher({ params, searchParams }: Props) {
     const sceneUrl = `/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`;
     
     const checkExistingViewer = () => {
-        const existingViewer = localStorage.getItem('webdiorama-viewer-alive');
-        
-        if (existingViewer) {
-            try {
-            const { timestamp } = JSON.parse(existingViewer);
-            const age = Date.now() - timestamp;
+      const existingViewer = localStorage.getItem('webdiorama-viewer-alive');
+      
+      if (existingViewer) {
+        try {
+          const { timestamp } = JSON.parse(existingViewer);
+          const age = Date.now() - timestamp;
+          
+          if (age < 3000) {
+            console.log('♻️ Viewer existant détecté, envoi changement de scène');
             
-            if (age < 3000) {
-                console.log('♻️ Viewer existant détecté, envoi changement de scène');
-                
-                setIsReusingViewer(true);
-                
-                // ✅ NOUVEAU : ID unique + attendre que le viewer confirme
-                const requestId = `${Date.now()}-${Math.random()}`;
-                
-                localStorage.setItem('webdiorama-change-scene', JSON.stringify({
-                url: sceneUrl,
-                timestamp: Date.now(),
-                requestId, // ✅ ID unique
-                bookId: resolvedParams.bookId,
-                dioramaId: resolvedParams.dioramaId
-                }));
-                
-                console.log('📤 Demande envoyée:', requestId, sceneUrl);
-                
-                setStatus('success');
-                
-                // ✅ Attendre confirmation du viewer (max 3s)
-                let checkCount = 0;
-                const checkInterval = setInterval(() => {
-                const processed = localStorage.getItem('webdiorama-scene-processed');
-                
-                if (processed === requestId) {
-                    console.log('✅ Changement confirmé par viewer');
-                    clearInterval(checkInterval);
-                    
-                    setTimeout(() => {
-                    window.close();
-                    setTimeout(() => {
-                        window.location.href = sceneUrl;
-                    }, 500);
-                    }, 500);
-                }
-                
-                checkCount++;
-                if (checkCount > 15) { // 15 * 200ms = 3s
-                    console.warn('⏱️ Timeout confirmation, fermeture quand même');
-                    clearInterval(checkInterval);
-                    
-                    setTimeout(() => {
-                    window.close();
-                    setTimeout(() => {
-                        window.location.href = sceneUrl;
-                    }, 500);
-                    }, 500);
-                }
-                }, 200);
-                
-                return true;
-            }
-            } catch {}
-        }
-        return false;
+            setIsReusingViewer(true);
+            
+            const requestId = `${Date.now()}-${Math.random()}`;
+            
+            localStorage.setItem('webdiorama-change-scene', JSON.stringify({
+              url: sceneUrl,
+              timestamp: Date.now(),
+              requestId,
+              bookId: resolvedParams.bookId,
+              dioramaId: resolvedParams.dioramaId
+            }));
+            
+            console.log('📤 Demande envoyée:', requestId, sceneUrl);
+            
+            setStatus('success');
+            
+            // ✅ CORRIGÉ : Juste fermer le launcher, pas de redirection
+            setTimeout(() => {
+              console.log('🚪 Fermeture launcher après envoi demande');
+              window.close();
+              
+              // ✅ Fallback : Si window.close() échoue, NE PAS rediriger, juste rester sur success
+              setTimeout(() => {
+                console.log('⚠️ Fermeture échouée, rester sur page success');
+                // Ne rien faire, l'utilisateur verra "C'est parti !" et pourra fermer manuellement
+              }, 500);
+            }, 1000); // ✅ Attendre 1s pour que le viewer reçoive le message
+            
+            return true;
+          }
+        } catch {}
+      }
+      return false;
     };
     
     // ✅ Vérifier immédiatement
@@ -136,23 +116,17 @@ export default function ScanLauncher({ params, searchParams }: Props) {
         const viewer = window.open(sceneUrl, 'webdiorama-viewer');
         
         if (viewer) {
-        viewer.focus();
-        setStatus('success');
-        
-        // ✅ NOUVEAU : Premier scan, tenter de fermer après ouverture
-        setTimeout(() => {
-            console.log('🚪 Tentative fermeture onglet launcher (premier scan)');
+          viewer.focus();
+          setStatus('success');
+          
+          // ✅ Juste fermer, pas de redirection
+          setTimeout(() => {
+            console.log('🚪 Fermeture launcher après création viewer');
             window.close();
-            
-            // ✅ Fallback
-            setTimeout(() => {
-            console.log('⚠️ Fermeture échouée, redirection vers viewer');
-            window.location.href = sceneUrl;
-            }, 500);
-        }, 1500);
+          }, 1500);
         } else {
-        console.warn('⚠️ Popup bloqué');
-        setStatus('blocked');
+          console.warn('⚠️ Popup bloqué');
+          setStatus('blocked');
         }
     }, 500);
     
