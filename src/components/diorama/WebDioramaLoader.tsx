@@ -285,6 +285,18 @@ function WebDioramaLoaderInner({
     navigator.userAgent
   );
 
+  // ✅ TOUT EN HAUT du composant, avant les hooks
+  useEffect(() => {
+    const nextScene = sessionStorage.getItem('webdiorama-next-scene');
+    
+    if (nextScene && nextScene !== window.location.href) {
+      console.log('🔄 Redirection vers scène suivante:', nextScene);
+      sessionStorage.removeItem('webdiorama-next-scene');
+      window.location.replace(nextScene); // ✅ replace au lieu de href
+      return;
+    }
+  }, []);
+
   // ✅ Hook WebGL simplifié
   const { renderer, error: webglError, isReady: webglReady } = useWebGLContext(containerRef, {
     isMobile: isMobileDevice,
@@ -462,8 +474,9 @@ function WebDioramaLoaderInner({
               console.log('🔄 VIEWER: Redirection vers:', url);
               localStorage.removeItem('webdiorama-change-scene');
               localStorage.removeItem('webdiorama-changing-scene');
-              window.location.href = url;
-            }, 100);
+              sessionStorage.setItem('webdiorama-next-scene', url);
+              window.location.reload();
+            }, 500);
           });
         });
         
