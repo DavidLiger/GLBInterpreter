@@ -139,121 +139,91 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   };
 
   return (
-    <>
-      {/* ✅ Écran de vérification cache */}
-      {checkingCache && (
-        <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-          <div className="text-white text-center">
-            <div className="animate-spin text-4xl mb-4">⚙️</div>
-            <p>{t.bookDownload.cacheChecking}</p>
-          </div>
-        </div>
-      )}
-
-      {/* ✅ Device Tester EN PREMIER, bloque tout */}
-      {showDeviceTester && (config as any).deviceTester && (
-        <DeviceTester
-          key={testKey}
-          isMobileDevice={isMobileDevice}
-          glbUrl={config.glb}
-          config={(config as any).deviceTester}
-          onRetest={handleRetest}
-          onComplete={(passed) => {
-            console.log('✅ Test terminé, résultat:', passed);
-            setDeviceTestPassed(true);
-            
-            // ✅ ATTENDRE 2 secondes pour libérer WebGL
-            console.log('⏳ Pause 2s pour libérer le contexte WebGL du test...');
-            setTimeout(() => {
-              console.log('✅ Contexte WebGL libéré, continuer');
-              setShowDeviceTester(false);
-            }, 2000);
-          }}
-          onSkip={() => {
-            console.log('⏭️ Test skippé');
-            setDeviceTestPassed(true);
+  <>
+    {/* ✅ 1. Device Tester EN PREMIER */}
+    {showDeviceTester && (config as any).deviceTester && (
+      <DeviceTester
+        key={testKey}
+        isMobileDevice={isMobileDevice}
+        glbUrl={config.glb}
+        config={(config as any).deviceTester}
+        onRetest={handleRetest}
+        onComplete={(passed) => {
+          console.log('✅ Test terminé, résultat:', passed);
+          setDeviceTestPassed(true);
+          console.log('⏳ Pause 2s pour libérer le contexte WebGL du test...');
+          setTimeout(() => {
+            console.log('✅ Contexte WebGL libéré, continuer');
             setShowDeviceTester(false);
-          }}
-        />
-      )}
-      {isPreparingAfterTest && (
-        <div className="fixed inset-0 bg-black z-[9998] flex items-center justify-center">
-          <div className="text-white text-center">
-            <div className="animate-spin text-4xl mb-4">⚙️</div>
-            <p className="text-xl">{t.deviceTester?.preparing || "Préparation de l'expérience..."}</p>
-          </div>
+          }, 2000);
+        }}
+        onSkip={() => {
+          console.log('⏭️ Test skippé');
+          setDeviceTestPassed(true);
+          setShowDeviceTester(false);
+        }}
+      />
+    )}
+
+    {/* ✅ 2. Preparing after test */}
+    {isPreparingAfterTest && (
+      <div className="fixed inset-0 bg-black z-[9998] flex items-center justify-center">
+        <div className="text-white text-center">
+          <div className="animate-spin text-4xl mb-4">⚙️</div>
+          <p className="text-xl">{t.deviceTester?.preparing || "Préparation de l'expérience..."}</p>
         </div>
-      )}
-      {/* ✅ Le reste seulement si pas de device tester */}
-      {!showDeviceTester && (
-        <>
-          {checkingCache && (
-            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-              {/* ... */}
-            </div>
-          )}
+      </div>
+    )}
 
-          {showDownloadModal && !assetsReady && (
-            <BookDownloadModal
-              bookId={bookId}
-              config={config}
-              onComplete={() => {
-                setShowDownloadModal(false);
-                setIsInitializing(true); // ✅ État intermédiaire
-                
-                console.log("⏳ Pause 2s pour libérer mémoire...");
-                
-                // ✅ Forcer garbage collection (si disponible)
-                if (typeof window !== 'undefined' && (window as any).gc) {
-                  (window as any).gc();
-                }
-                
-                // ✅ Délai avant de lancer la scène 3D
-                setTimeout(() => {
-                  console.log("✅ Mémoire libérée, lancement scène...");
-                  setAssetsReady(true);
-                  // setIsInitializing(false);
-                }, 2000);
-              }}
-              onCancel={() => setShowDownloadModal(false)}
-            />
-          )}
+    {/* ✅ 3. Cache checking */}
+    {checkingCache && !showDeviceTester && (
+      <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+        <div className="text-white text-center">
+          <div className="animate-spin text-4xl mb-4">⚙️</div>
+          <p>{t.bookDownload.cacheChecking}</p>
+        </div>
+      </div>
+    )}
 
-          {/* ✅ Écran de transition */}
-          {isInitializing && !assetsReady && (
-            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-              <div className="text-white text-center">
-                <div className="text-6xl mb-4 animate-pulse">🎬</div>
-                <p className="text-xl">{t.reload?.preparing || "Préparation de la scène..."}</p>
-                <p className="text-sm text-gray-400 mt-2">{t.reload?.optimizing || "Optimisation mémoire GPU"}</p>
-              </div>
-            </div>
-          )}
+    {/* ✅ 4. Download modal */}
+    {showDownloadModal && !assetsReady && !showDeviceTester && (
+      <BookDownloadModal
+        bookId={bookId}
+        config={config}
+        onComplete={() => {
+          setShowDownloadModal(false);
+          setIsInitializing(true);
+          
+          console.log("⏳ Pause 2s pour libérer mémoire...");
+          
+          if (typeof window !== 'undefined' && (window as any).gc) {
+            (window as any).gc();
+          }
+          
+          setTimeout(() => {
+            console.log("✅ Mémoire libérée, lancement scène...");
+            setAssetsReady(true);
+          }, 2000);
+        }}
+        onCancel={() => setShowDownloadModal(false)}
+      />
+    )}
 
-          {!assetsReady && !showDownloadModal && !checkingCache && !isInitializing && (
-            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-              <div className="text-center">
-                <div className="text-6xl mb-6">📦</div>
-                <h2 className="text-white text-xl mb-6">
-                  {t.bookDownload?.required || "Téléchargement requis"}
-                </h2>
-                <button
-                  onClick={() => setShowDownloadModal(true)}
-                  className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transition"
-                >
-                  📥 {t.bookDownload?.download || "Télécharger"}
-                </button>
-              </div>
-            </div>
-          )}
+    {/* ✅ 5. Preparing scene */}
+    {isInitializing && !assetsReady && !showDeviceTester && (
+      <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+        <div className="text-white text-center">
+          <div className="text-6xl mb-4 animate-pulse">🎬</div>
+          <p className="text-xl">{t.reload?.preparing || "Préparation de la scène..."}</p>
+          <p className="text-sm text-gray-400 mt-2">{t.reload?.optimizing || "Optimisation mémoire GPU"}</p>
+        </div>
+      </div>
+    )}
 
-          {assetsReady && <WebDioramaLoaderInner config={config} bookId={bookId} />}
-        </>
-      )}
-
-      
-    </>
-  );
+    {/* ✅ 6. Scene (seulement si assets ready) */}
+    {assetsReady && <WebDioramaLoaderInner config={config} bookId={bookId} />}
+  </>
+);
 }
 
 function WebDioramaLoaderInner({
@@ -395,29 +365,29 @@ function WebDioramaLoaderInner({
     channelRef.current = channel;
     
     let isPrimary = true;
+    let timeoutId: NodeJS.Timeout;
     
-    // ✅ Demander qui est là AVANT de continuer
     channel.postMessage({ type: 'WHO_IS_PRIMARY' });
     
     const handleMessage = (event: MessageEvent) => {
       if (event.data.type === 'WHO_IS_PRIMARY') {
-        // Quelqu'un d'autre est déjà là
         console.log('🚨 Onglet primaire détecté');
         isPrimary = false;
         channel.postMessage({ type: 'I_AM_SECONDARY' });
+        
+        // ✅ Si déjà chargé, cleanup immédiat
+        if (isLoaded) {
+          performCleanupRef.current?.();
+        }
         setTabStatus('secondary');
       }
       
       if (event.data.type === 'I_AM_PRIMARY') {
-        console.log('🚨 Je suis secondaire');
         isPrimary = false;
+        if (isLoaded) {
+          performCleanupRef.current?.();
+        }
         setTabStatus('secondary');
-      }
-      
-      if (event.data.type === 'I_AM_SECONDARY') {
-        console.log('✅ Je suis primaire');
-        isPrimary = true;
-        setTabStatus('primary');
       }
       
       if (event.data.type === 'FORCE_PAUSE') {
@@ -431,8 +401,7 @@ function WebDioramaLoaderInner({
     
     channel.addEventListener('message', handleMessage);
     
-    // ✅ Après 200ms, si personne n'a répondu = je suis primaire
-    setTimeout(() => {
+    timeoutId = setTimeout(() => {
       if (isPrimary) {
         console.log('✅ Aucun autre onglet, je suis primaire');
         channel.postMessage({ type: 'I_AM_PRIMARY' });
@@ -441,7 +410,18 @@ function WebDioramaLoaderInner({
     }, 200);
     
     return () => {
-      channel.close();
+      clearTimeout(timeoutId);
+      channel.removeEventListener('message', handleMessage);
+    };
+  }, [isLoaded]);
+
+  // ✅ Cleanup du channel au démontage du composant
+  useEffect(() => {
+    return () => {
+      if (channelRef.current) {
+        channelRef.current.close();
+        channelRef.current = null;
+      }
     };
   }, []);
 
@@ -1125,16 +1105,16 @@ function WebDioramaLoaderInner({
     );
   }
 
-  if (tabStatus === 'checking') {
-    return (
-      <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-        <div className="text-white text-center">
-          <div className="animate-spin text-4xl mb-4">⚙️</div>
-          <p>{t.multiTab?.checking || "Vérification des onglets..."}</p>
-        </div>
-      </div>
-    );
-  }
+  // if (tabStatus === 'checking') {
+  //   return (
+  //     <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+  //       <div className="text-white text-center">
+  //         <div className="animate-spin text-4xl mb-4">⚙️</div>
+  //         <p>{t.multiTab?.checking || "Vérification des onglets..."}</p>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   if (tabStatus === 'secondary') {
     return (
