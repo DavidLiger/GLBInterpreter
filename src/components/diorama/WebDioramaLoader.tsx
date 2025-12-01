@@ -1163,20 +1163,47 @@ function WebDioramaLoaderInner({
               // ✅ 1. Envoyer l'ordre de fermeture à l'autre onglet
               localStorage.setItem('webdiorama-force-takeover', Date.now().toString());
               
-              // ✅ 2. Attendre que l'autre onglet libère
-              await new Promise(resolve => setTimeout(resolve, 1000));
+              // ✅ 2. Attendre libération (plus long sur mobile)
+              const isMobile = /Android|webOS|iPhone|iPad|iPod/i.test(navigator.userAgent);
+              const waitTime = isMobile ? 3000 : 1000; // ✅ 3s sur mobile
               
-              // ✅ 3. Nettoyer le flag
+              console.log(`⏳ Attente ${waitTime}ms pour libération WebGL...`);
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+              
+              // ✅ 3. Vérifier que le storage est libre
+              let attempts = 0;
+              while (attempts < 5) {
+                const stored = localStorage.getItem('webdiorama-active-tab');
+                if (!stored) {
+                  console.log('✅ Slot libéré');
+                  break;
+                }
+                
+                try {
+                  const { timestamp } = JSON.parse(stored);
+                  if (Date.now() - timestamp > 3000) {
+                    console.log('✅ Heartbeat mort, slot libre');
+                    localStorage.removeItem('webdiorama-active-tab');
+                    break;
+                  }
+                } catch {}
+                
+                console.log(`⏳ Attente libération... tentative ${attempts + 1}/5`);
+                await new Promise(resolve => setTimeout(resolve, 500));
+                attempts++;
+              }
+              
+              // ✅ 4. Nettoyer le flag
               localStorage.removeItem('webdiorama-force-takeover');
               
-              // ✅ 4. Prendre le contrôle
+              // ✅ 5. Prendre le contrôle
               const TAB_ID = `webdiorama-tab-${Date.now()}-${Math.random()}`;
               localStorage.setItem('webdiorama-active-tab', JSON.stringify({
                 tabId: TAB_ID,
                 timestamp: Date.now()
               }));
               
-              // ✅ 5. Reload pour créer le renderer proprement
+              // ✅ 6. Reload
               console.log('✅ Prise de contrôle, reload');
               window.location.reload();
             }}
