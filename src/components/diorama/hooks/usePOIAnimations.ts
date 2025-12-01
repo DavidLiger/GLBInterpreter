@@ -10,6 +10,14 @@ export const usePOIAnimations = (
   // ────────────── Init Mixers ──────────────
   const initMixers = useCallback((scene: THREE.Object3D) => {
     console.log('🎭 initMixers appelé');
+    
+    // ✅ RESET COMPLET au début
+    console.log('🧹 Reset mixers existants:', Object.keys(mixerRef.current).length);
+    Object.values(mixerRef.current).forEach(mixer => {
+      mixer.stopAllAction();
+    });
+    mixerRef.current = {}; // ✅ Vider AVANT de recréer
+    
     let mixerCount = 0;
     
     scene.traverse((child) => {
