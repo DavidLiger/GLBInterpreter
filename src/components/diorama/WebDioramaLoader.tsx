@@ -325,7 +325,6 @@ function WebDioramaLoaderInner({
   const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   const [needsManualRestart, setNeedsManualRestart] = useState(false);
-  const [isHidden, setIsHidden] = useState(false);
   const [loadedScene, setLoadedScene] = useState<THREE.Scene | null>(null);
   const [devToolOpen, setDevToolOpen] = useState(false);
   const devToolOpenRef = useRef(false);
@@ -969,11 +968,9 @@ function WebDioramaLoaderInner({
         console.log("🚨 Détection: onglet caché → cleanup");
         wasHiddenRef.current = true;
         voluntaryCleanupRef.current = true;
-        setIsHidden(true); // ✅ Mettre ici
         performCleanup();
       } else if (!document.hidden && wasHiddenRef.current) {
         console.log("⏸️ Détection: retour onglet → demander relance manuelle");
-        setIsHidden(false); // ✅ RESET isHidden
         setNeedsManualRestart(true);
       }
     };
@@ -993,7 +990,6 @@ function WebDioramaLoaderInner({
 
       if (wasHiddenRef.current) {
         console.log("⏸️ Détection: retour focus → demander relance manuelle");
-        setIsHidden(false); // ✅ RESET isHidden
         setNeedsManualRestart(true);
       }
     };
@@ -1010,7 +1006,6 @@ function WebDioramaLoaderInner({
       if (!wasHiddenRef.current) {
         wasHiddenRef.current = true;
         voluntaryCleanupRef.current = true;
-        setIsHidden(true); // ✅ Mettre ici aussi
         performCleanup();
       }
     };
@@ -1177,15 +1172,6 @@ function WebDioramaLoaderInner({
       }}
       className="bg-black"
     >
-      {/* ✅ Overlay de masquage */}
-          {isHidden && (
-            <div className="fixed inset-0 bg-black z-[10000] flex items-center justify-center">
-              <div className="text-white text-center">
-                <div className="text-6xl mb-4 animate-pulse">💤</div>
-                <p className="text-xl">{t.reload.sleep}</p>
-              </div>
-            </div>
-          )}
 
           {/* LoaderOverlay et le reste... */}
           <AnimatePresence>
