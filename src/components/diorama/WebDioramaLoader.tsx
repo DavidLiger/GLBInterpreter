@@ -284,7 +284,9 @@ function WebDioramaLoaderInner({
   const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
   );
-
+  const CHANNEL_NAME = 'webdiorama-tabs';
+  const channelRef = useRef<BroadcastChannel | null>(null);
+  const [isSecondaryTab, setIsSecondaryTab] = useState(false);
   // ✅ Hook WebGL simplifié
   const { renderer, error: webglError, isReady: webglReady } = useWebGLContext(containerRef, {
     isMobile: isMobileDevice,
@@ -331,6 +333,7 @@ function WebDioramaLoaderInner({
   const spritesheetAnimatorRef = useRef<SpritesheetAnimator | null>(null);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
+  const [needsManualRestart, setNeedsManualRestart] = useState(false);
 
   usePOIEffects(sceneRef.current!, currentPoi, textureLoader);
 
@@ -383,6 +386,29 @@ function WebDioramaLoaderInner({
     }
     return active.icon;
   }, [currentPOI, findPOIRecursively, findParentPOI]);
+
+  useEffect(() => {
+    const channel = new BroadcastChannel(CHANNEL_NAME);
+    channelRef.current = channel;
+    
+    // Annoncer présence
+    channel.postMessage({ type: 'TAB_OPENED' });
+    
+    // Écouter les autres onglets
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === 'TAB_OPENED') {
+        // Un autre onglet existe déjà
+        console.log('🚨 Onglet secondaire détecté');
+        setIsSecondaryTab(true);
+      }
+    };
+    
+    channel.addEventListener('message', handleMessage);
+    
+    return () => {
+      channel.close();
+    };
+  }, []);
 
   useEffect(() => {
     devToolOpenRef.current = devToolOpen;
@@ -497,6 +523,43 @@ function WebDioramaLoaderInner({
       playPOIAnimations(poi, sceneRef.current.userData.gltfAnimations);
     }
   }, [currentPOI]);
+
+  useEffect(() => {
+    const checkIntegrity = async () => {
+      try {
+        // Test IndexedDB
+        const request = window.indexedDB.open('test-integrity', 1);
+        const db = await new Promise<IDBDatabase>((resolve, reject) => {
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        db.close();
+        
+        // Test cache corruption
+        const keys = await caches.keys();
+        for (const key of keys) {
+          try {
+            await caches.open(key);
+          } catch (e) {
+            console.warn('🗑️ Cache corrompu détecté:', key);
+            await caches.delete(key);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Corruption détectée, nettoyage...', error);
+        
+        // Nettoyage complet
+        await caches.keys().then(keys => 
+          Promise.all(keys.map(key => caches.delete(key)))
+        );
+        
+        // Reload après nettoyage
+        setTimeout(() => window.location.reload(), 1000);
+      }
+    };
+    
+    checkIntegrity();
+  }, []);
 
   // ✅ Chargement de la scène
   useEffect(() => {
@@ -837,40 +900,34 @@ function WebDioramaLoaderInner({
     
     const handleVisibilityChange = () => {
       console.log("👁️ Visibility changed:", document.hidden ? "HIDDEN" : "VISIBLE");
-      // ✅ AJOUTER : Ignorer si outil dev ouvert
+      
       if (devToolOpenRef.current) {
         console.log("⏸️ Visibility change ignoré : outil dev ouvert");
         return;
       }
-    
+
       if (document.hidden && !wasHiddenRef.current) {
         console.log("🚨 Détection: onglet caché → cleanup");
         wasHiddenRef.current = true;
         voluntaryCleanupRef.current = true;
         performCleanup();
       } else if (!document.hidden && wasHiddenRef.current) {
-        console.log("🔄 Détection: retour onglet → reload");
-        setTimeout(() => {
-          window.location.reload();
-        }, 100);
+        console.log("⏸️ Détection: retour onglet → demander relance manuelle");
+        setNeedsManualRestart(true); // ✅ Au lieu de reload auto
       }
     };
 
     const handleFocus = () => {
       console.log("👁️ Window focus");
 
-      // ✅ AJOUTER : Ignorer si outil dev ouvert
       if (devToolOpenRef.current) {
         console.log("⏸️ Focus ignoré : outil dev ouvert");
         return;
       }
 
       if (wasHiddenRef.current) {
-        // ✅ Retour après blur → reload
-        console.log("🔄 Détection: retour focus → reload");
-        setTimeout(() => {
-          window.location.reload();
-        }, 100);
+        console.log("⏸️ Détection: retour focus → demander relance manuelle");
+        setNeedsManualRestart(true); // ✅ Au lieu de reload auto
       }
     };
     
@@ -992,8 +1049,22 @@ function WebDioramaLoaderInner({
             
             {/* Bouton principal */}
             <button
-              onClick={() => {
-                console.log("🔄 Rechargement complet de la page...");
+              // onClick={() => {
+              //   console.log("🔄 Rechargement complet de la page...");
+              //   window.location.reload();
+              // }}
+              onClick={async () => {
+                console.log("🔄 Nettoyage agressif...");
+                
+                // 1. Clear caches
+                const keys = await caches.keys();
+                await Promise.all(keys.map(k => caches.delete(k)));
+                
+                // 2. Clear IndexedDB
+                const dbs = await window.indexedDB.databases();
+                dbs.forEach(db => window.indexedDB.deleteDatabase(db.name || ''));
+                
+                // 3. Reload
                 window.location.reload();
               }}
               className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 mb-4"
@@ -1014,6 +1085,54 @@ function WebDioramaLoaderInner({
           </div>
         </div>
       </>
+    );
+  }
+
+  // Après le return de webglError
+  if (isSecondaryTab) {
+    return (
+      <div className="fixed inset-0 bg-gradient-to-br from-purple-900 via-black to-blue-900 flex items-center justify-center z-[9999]">
+        <div className="text-center p-8 max-w-md">
+          <div className="text-6xl mb-6">🔗</div>
+          <h2 className="text-2xl font-bold text-white mb-4">
+            {t.multiTab?.title || "Scène déjà ouverte"}
+          </h2>
+          <p className="text-gray-300 mb-6">
+            {t.multiTab?.message || "Cette scène est déjà ouverte dans un autre onglet. Pour éviter les problèmes de mémoire, fermez l'autre onglet ou utilisez celui-ci."}
+          </p>
+          <button
+            onClick={() => {
+              channelRef.current?.postMessage({ type: 'FORCE_CLOSE' });
+              setTimeout(() => setIsSecondaryTab(false), 500);
+            }}
+            className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-full"
+          >
+            {t.multiTab?.forceOpen || "Utiliser cet onglet"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (needsManualRestart) {
+    return (
+      <div className="fixed inset-0 bg-gradient-to-br from-blue-900 via-black to-purple-900 flex items-center justify-center z-[9999]">
+        <div className="text-center p-8 max-w-md">
+          <div className="text-6xl mb-6 animate-pulse">💤</div>
+          <h2 className="text-2xl font-bold text-white mb-4">
+            {t.restart?.title || "Scène en pause"}
+          </h2>
+          <p className="text-gray-300 mb-6">
+            {t.restart?.message || "La scène a été mise en pause pour économiser la mémoire."}
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg"
+          >
+            {t.restart?.button || "⚡ Relancer la scène"}
+          </button>
+        </div>
+      </div>
     );
   }
 

@@ -1,4 +1,6 @@
 "use client";
+import { button } from "framer-motion/client";
+import { title } from "process";
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
 type Lang = "fr" | "en" | "es";
@@ -105,6 +107,16 @@ const translations = {
       checkBrowserParams: "• Vérifiez que WebGL est activé dans les paramètres du navigateur",
       tryAnotherBrowser: "• Essayez un autre navigateur (Chrome, Edge, Safari)",
       updateGPUDriver: "• Mettez à jour vos pilotes graphiques"
+    },
+    multiTab: {
+      title: "Scène déjà ouverte",
+      message: "Cette scène est déjà ouverte dans un autre onglet. Pour éviter les problèmes de mémoire, fermez l'autre onglet ou utilisez celui-ci.",
+      forceOpen: "Utiliser cet onglet"
+    },
+    restart: {
+      title: "Scène en pause",
+      message: "La scène a été mise en pause pour économiser la mémoire",
+      button: "⚡ Relancer la scène"
     }
   },
   en: {
@@ -208,6 +220,16 @@ const translations = {
       checkBrowserParams: "• Check that WebGL is enabled in your browser settings.",
       tryAnotherBrowser: "• Try another browser (Chrome, Edge, Safari)",
       updateGPUDriver: "• Update your graphics drivers"
+    },
+    multiTab: {
+      title: "Scene already open",
+      message: "This scene is already open in another tab. To avoid memory issues, close the other tab or use this one.",
+      forceOpen: "Use this tab"
+    },
+    restart: {
+      title: "Scene paused",
+      message: "The scene has been paused to save memory",
+      button: "⚡Restart scene"
     }
   },
   es: {
@@ -311,6 +333,16 @@ const translations = {
       checkBrowserParams: "• Comprueba que WebGL está activado en la configuración del navegador.",
       tryAnotherBrowser: "• Prueba con otro navegador (Chrome, Edge, Safari).",
       updateGPUDriver: "• Actualiza tus controladores gráficos."
+    },
+    multiTab: {
+      title: "Escena ya abierta",
+      message: "Esta escena ya está abierta en otra pestaña. Para evitar problemas de memoria, cierre la otra pestaña o utilice esta.",
+      forceOpen: "Usar esta pestaña"
+    },
+    restart: {
+      title: "Escena en pausa",
+      message: "La escena se ha puesto en pausa para ahorrar memoria",
+      button: "⚡Reiniciar la escena"
     }
   }
 };

@@ -14,6 +14,7 @@ interface WebGLContextReturn {
   error: 'init' | 'lost' | null;
   isReady: boolean;
   retryInit: () => void;
+  forceCleanup: () => void;
 }
 
 /**
@@ -150,5 +151,15 @@ export function useWebGLContext(
     error,
     isReady,
     retryInit,
+    forceCleanup: () => {  // ✅ NOUVEAU
+      if (rendererRef.current) {
+        rendererRef.current.dispose();
+        rendererRef.current.forceContextLoss();
+        rendererRef.current = null;
+      }
+      hasInitializedRef.current = false;
+      setError(null);
+      setIsReady(false);
+    }
   };
 }
