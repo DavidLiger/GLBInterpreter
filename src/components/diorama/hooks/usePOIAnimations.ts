@@ -9,6 +9,9 @@ export const usePOIAnimations = (
 
   // ────────────── Init Mixers ──────────────
   const initMixers = useCallback((scene: THREE.Object3D) => {
+    console.log('🎭 initMixers appelé');
+    let mixerCount = 0;
+    
     scene.traverse((child) => {
       if (!child.name) return;
 
@@ -17,6 +20,8 @@ export const usePOIAnimations = (
         const armature = child.parent;
         if (armature && !mixerRef.current[armature.name]) {
           mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
+          mixerCount++;
+          console.log('✅ Mixer créé (SkinnedMesh):', armature.name);
         }
       }
       // ✅ CORRIGÉ : Uniquement si morph targets
@@ -27,10 +32,15 @@ export const usePOIAnimations = (
         if (mesh.morphTargetInfluences && mesh.morphTargetInfluences.length > 0) {
           if (!mixerRef.current[child.name]) {
             mixerRef.current[child.name] = new THREE.AnimationMixer(mesh);
+            mixerCount++;
+            console.log('✅ Mixer créé (MorphTargets):', child.name);
           }
         }
       }
     });
+    
+    console.log(`🎭 Total mixers créés: ${mixerCount}`);
+    console.log(`🎭 Total mixers dans ref: ${Object.keys(mixerRef.current).length}`);
   }, []);
 
   // ────────────── Jouer les animations d’un POI ──────────────
