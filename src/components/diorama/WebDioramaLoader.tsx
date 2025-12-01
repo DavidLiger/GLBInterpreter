@@ -387,64 +387,71 @@ function WebDioramaLoaderInner({
 
   useEffect(() => {
     console.log('🎬 VIEWER: Démarrage polling changement scène');
-    let lastCheck = 0; // ✅ Commence à 0 pour détecter les anciennes demandes
+    const processedRequests = new Set<string>(); // ✅ Garder trace des IDs traités
     
     const checkSceneChange = () => {
       const changeRequest = localStorage.getItem('webdiorama-change-scene');
-      console.log('🔍 VIEWER: Check changement scène:', changeRequest);
       
       if (changeRequest) {
         try {
-          const { url, timestamp } = JSON.parse(changeRequest);
-          console.log('🔍 VIEWER: Timestamp demande:', timestamp, 'lastCheck:', lastCheck);
+          const { url, requestId, bookId, dioramaId } = JSON.parse(changeRequest);
           
-          // Si la demande est plus récente que notre dernier check
-          if (timestamp > lastCheck) {
-            console.log('🔄 VIEWER: Changement de scène détecté:', url);
-            
-            // ✅ Nettoyer la demande AVANT de reload
-            localStorage.removeItem('webdiorama-change-scene');
-            
-            // ✅ Cleanup
-            if (performCleanupRef.current) {
-              console.log('🧹 VIEWER: Cleanup avant changement');
-              performCleanupRef.current();
-            }
-            
-            // ✅ Changer de scène
-            setTimeout(() => {
-              console.log('🔄 VIEWER: Redirection vers:', url);
-              window.location.href = url;
-            }, 500);
-            
-            return; // ✅ Arrêter le polling après détection
-          } else {
-            console.log('⏭️ VIEWER: Demande déjà traitée');
+          // ✅ Vérifier si déjà traité
+          if (processedRequests.has(requestId)) {
+            console.log('⏭️ VIEWER: Demande déjà traitée:', requestId);
+            return;
           }
+          
+          console.log('🔄 VIEWER: Nouvelle demande détectée:', requestId, url);
+          
+          // ✅ Vérifier si c'est bien une nouvelle scène
+          const currentUrl = window.location.href;
+          if (currentUrl.includes(`/${bookId}/${dioramaId}`)) {
+            console.log('⏭️ VIEWER: Déjà sur cette scène, ignorer');
+            processedRequests.add(requestId);
+            localStorage.setItem('webdiorama-scene-processed', requestId);
+            return;
+          }
+          
+          // ✅ Marquer comme traité
+          processedRequests.add(requestId);
+          localStorage.setItem('webdiorama-scene-processed', requestId);
+          
+          // ✅ Cleanup
+          if (performCleanupRef.current) {
+            console.log('🧹 VIEWER: Cleanup avant changement');
+            performCleanupRef.current();
+          }
+          
+          // ✅ Changer de scène
+          setTimeout(() => {
+            console.log('🔄 VIEWER: Redirection vers:', url);
+            localStorage.removeItem('webdiorama-change-scene'); // ✅ Nettoyer après traitement
+            window.location.href = url;
+          }, 300);
+          
         } catch (e) {
-          console.error('❌ VIEWER: Erreur parsing changement scène:', e);
+          console.error('❌ VIEWER: Erreur parsing:', e);
         }
       }
-      
-      lastCheck = Date.now();
     };
     
-    // ✅ Check immédiat au mount
+    // ✅ Check immédiat
     checkSceneChange();
     
-    // ✅ Puis toutes les 500ms
-    const pollInterval = setInterval(checkSceneChange, 500);
+    // ✅ Polling rapide
+    const pollInterval = setInterval(checkSceneChange, 200); // ✅ 200ms au lieu de 500ms
     
-    // ✅ Check au retour de focus
+    // ✅ Check au focus
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        console.log('👁️ VIEWER: Retour focus, check changement');
+        console.log('👁️ VIEWER: Retour focus, check immédiat');
         checkSceneChange();
       }
     };
     
     const handleFocus = () => {
-      console.log('👁️ VIEWER: Focus window, check changement');
+      console.log('👁️ VIEWER: Focus, check immédiat');
       checkSceneChange();
     };
     
@@ -452,7 +459,6 @@ function WebDioramaLoaderInner({
     window.addEventListener('focus', handleFocus);
     
     return () => {
-      console.log('🛑 VIEWER: Arrêt polling');
       clearInterval(pollInterval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', handleFocus);

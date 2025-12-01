@@ -31,38 +31,64 @@ export default function ScanLauncher({ params, searchParams }: Props) {
         const existingViewer = localStorage.getItem('webdiorama-viewer-alive');
         
         if (existingViewer) {
-        try {
+            try {
             const { timestamp } = JSON.parse(existingViewer);
             const age = Date.now() - timestamp;
             
             if (age < 3000) {
-            console.log('♻️ Viewer existant détecté, envoi changement de scène');
-            
-            setIsReusingViewer(true);
-            
-            localStorage.setItem('webdiorama-change-scene', JSON.stringify({
-                url: sceneUrl,
-                timestamp: Date.now()
-            }));
-            
-            setStatus('success');
-            
-            // ✅ NOUVEAU : Tenter de fermer l'onglet après 1s
-            setTimeout(() => {
-                console.log('🚪 Tentative fermeture onglet launcher');
-                window.close();
+                console.log('♻️ Viewer existant détecté, envoi changement de scène');
                 
-                // ✅ Fallback si window.close() échoue (après 500ms)
-                setTimeout(() => {
-                console.log('⚠️ Fermeture échouée, redirection vers viewer');
-                // Rediriger vers le viewer au lieu de /scan-success
-                window.location.href = sceneUrl;
-                }, 500);
-            }, 1000);
-            
-            return true;
+                setIsReusingViewer(true);
+                
+                // ✅ NOUVEAU : ID unique + attendre que le viewer confirme
+                const requestId = `${Date.now()}-${Math.random()}`;
+                
+                localStorage.setItem('webdiorama-change-scene', JSON.stringify({
+                url: sceneUrl,
+                timestamp: Date.now(),
+                requestId, // ✅ ID unique
+                bookId: resolvedParams.bookId,
+                dioramaId: resolvedParams.dioramaId
+                }));
+                
+                console.log('📤 Demande envoyée:', requestId, sceneUrl);
+                
+                setStatus('success');
+                
+                // ✅ Attendre confirmation du viewer (max 3s)
+                let checkCount = 0;
+                const checkInterval = setInterval(() => {
+                const processed = localStorage.getItem('webdiorama-scene-processed');
+                
+                if (processed === requestId) {
+                    console.log('✅ Changement confirmé par viewer');
+                    clearInterval(checkInterval);
+                    
+                    setTimeout(() => {
+                    window.close();
+                    setTimeout(() => {
+                        window.location.href = sceneUrl;
+                    }, 500);
+                    }, 500);
+                }
+                
+                checkCount++;
+                if (checkCount > 15) { // 15 * 200ms = 3s
+                    console.warn('⏱️ Timeout confirmation, fermeture quand même');
+                    clearInterval(checkInterval);
+                    
+                    setTimeout(() => {
+                    window.close();
+                    setTimeout(() => {
+                        window.location.href = sceneUrl;
+                    }, 500);
+                    }, 500);
+                }
+                }, 200);
+                
+                return true;
             }
-        } catch {}
+            } catch {}
         }
         return false;
     };
