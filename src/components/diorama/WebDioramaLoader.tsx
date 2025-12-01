@@ -830,6 +830,11 @@ function WebDioramaLoaderInner({
 
     // ✅ Boucle d'animation
     const animate = () => {
+        // ✅ Log toutes les 60 frames (1x par seconde à 60fps)
+      if (animationFrameRef.current && animationFrameRef.current % 60 === 0) {
+        console.log('🎬 RAF actif:', animationFrameRef.current, 'shouldAnimate:', shouldAnimateRef.current);
+      }
+
       // ✅ CRITIQUE : Vérifier le flag EN PREMIER
       if (!shouldAnimateRef.current) {
         console.log('🛑 RAF stoppé par flag');
