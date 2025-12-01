@@ -960,7 +960,6 @@ function WebDioramaLoaderInner({
         return;
       }
       
-      // ✅ NOUVEAU : Ignorer si changement de scène en cours
       if (localStorage.getItem('webdiorama-changing-scene') === 'true') {
         console.log("⏸️ Visibility change ignoré : changement de scène en cours");
         return;
@@ -973,6 +972,7 @@ function WebDioramaLoaderInner({
         performCleanup();
       } else if (!document.hidden && wasHiddenRef.current) {
         console.log("⏸️ Détection: retour onglet → demander relance manuelle");
+        setIsHidden(false); // ✅ RESET isHidden
         setNeedsManualRestart(true);
       }
     };
@@ -985,7 +985,6 @@ function WebDioramaLoaderInner({
         return;
       }
       
-      // ✅ NOUVEAU : Ignorer si changement de scène en cours
       if (localStorage.getItem('webdiorama-changing-scene') === 'true') {
         console.log("⏸️ Focus ignoré : changement de scène en cours");
         return;
@@ -993,6 +992,7 @@ function WebDioramaLoaderInner({
 
       if (wasHiddenRef.current) {
         console.log("⏸️ Détection: retour focus → demander relance manuelle");
+        setIsHidden(false); // ✅ RESET isHidden
         setNeedsManualRestart(true);
       }
     };
