@@ -385,6 +385,25 @@ function WebDioramaLoaderInner({
     return active.icon;
   }, [currentPOI, findPOIRecursively, findParentPOI]);
 
+  // ✅ Nettoyer localStorage à la fermeture
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      console.log('🧹 VIEWER: Nettoyage localStorage avant fermeture');
+      localStorage.removeItem('webdiorama-viewer-alive');
+      localStorage.removeItem('webdiorama-change-scene');
+      localStorage.removeItem('webdiorama-scene-processed');
+      localStorage.removeItem('webdiorama-changing-scene');
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Cleanup aussi au démontage du composant
+      handleBeforeUnload();
+    };
+  }, []);
+
   useEffect(() => {
     console.log('🎬 VIEWER: Démarrage polling changement scène');
     const processedRequests = new Set<string>();

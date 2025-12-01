@@ -25,6 +25,37 @@ export default function ScanLauncher({ params, searchParams }: Props) {
   useEffect(() => {
     if (!mounted || !resolvedParams || !resolvedToken) return;
 
+    // ✅ NOUVEAU : Vérifier la validité du heartbeat
+    const cleanupStaleData = () => {
+      const existingViewer = localStorage.getItem('webdiorama-viewer-alive');
+      
+      if (existingViewer) {
+        try {
+          const { timestamp } = JSON.parse(existingViewer);
+          const age = Date.now() - timestamp;
+          
+          // Si heartbeat > 5s = viewer mort
+          if (age > 5000) {
+            console.log('🧹 LAUNCHER: Viewer zombie détecté, nettoyage');
+            localStorage.removeItem('webdiorama-viewer-alive');
+            localStorage.removeItem('webdiorama-change-scene');
+            localStorage.removeItem('webdiorama-scene-processed');
+            localStorage.removeItem('webdiorama-changing-scene');
+          }
+        } catch {
+          // JSON invalide, nettoyer
+          console.log('🧹 LAUNCHER: Données corrompues, nettoyage');
+          localStorage.removeItem('webdiorama-viewer-alive');
+          localStorage.removeItem('webdiorama-change-scene');
+          localStorage.removeItem('webdiorama-scene-processed');
+          localStorage.removeItem('webdiorama-changing-scene');
+        }
+      }
+    };
+    
+    // ✅ Nettoyer AVANT de vérifier
+    cleanupStaleData();
+
     const sceneUrl = `/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`;
     
     const checkExistingViewer = () => {
