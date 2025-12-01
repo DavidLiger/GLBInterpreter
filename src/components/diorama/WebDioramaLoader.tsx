@@ -459,7 +459,7 @@ function WebDioramaLoaderInner({
     };
     
     checkSceneChange();
-    const pollInterval = setInterval(checkSceneChange, 200);
+    const pollInterval = setInterval(checkSceneChange, 500);
     
     const handleVisibilityChange = () => {
       if (!document.hidden) {
