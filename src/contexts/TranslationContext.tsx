@@ -111,7 +111,8 @@ const translations = {
     multiTab: {
       title: "Scène déjà ouverte",
       message: "Cette scène est déjà ouverte dans un autre onglet. Pour éviter les problèmes de mémoire, fermez l'autre onglet ou utilisez celui-ci.",
-      forceOpen: "Utiliser cet onglet"
+      forceOpen: "Utiliser cet onglet",
+      checking: "Vérification des onglets..."
     },
     restart: {
       title: "Scène en pause",
@@ -224,7 +225,8 @@ const translations = {
     multiTab: {
       title: "Scene already open",
       message: "This scene is already open in another tab. To avoid memory issues, close the other tab or use this one.",
-      forceOpen: "Use this tab"
+      forceOpen: "Use this tab",
+      checking: "Checking tabs..."
     },
     restart: {
       title: "Scene paused",
@@ -337,7 +339,8 @@ const translations = {
     multiTab: {
       title: "Escena ya abierta",
       message: "Esta escena ya está abierta en otra pestaña. Para evitar problemas de memoria, cierre la otra pestaña o utilice esta.",
-      forceOpen: "Usar esta pestaña"
+      forceOpen: "Usar esta pestaña",
+      checking: "Comprobando pestañas..."
     },
     restart: {
       title: "Escena en pausa",

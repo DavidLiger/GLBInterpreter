@@ -288,6 +288,8 @@ function WebDioramaLoaderInner({
   const channelRef = useRef<BroadcastChannel | null>(null);
   const performCleanupRef = useRef<(() => void) | null>(null);
   const [isSecondaryTab, setIsSecondaryTab] = useState(false);
+  const [tabStatus, setTabStatus] = useState<'checking' | 'primary' | 'secondary'>('checking');
+
   // ✅ Hook WebGL simplifié
   const { renderer, error: webglError, isReady: webglReady } = useWebGLContext(containerRef, {
     isMobile: isMobileDevice,
@@ -392,18 +394,32 @@ function WebDioramaLoaderInner({
     const channel = new BroadcastChannel(CHANNEL_NAME);
     channelRef.current = channel;
     
-    // Annoncer présence
-    channel.postMessage({ type: 'TAB_OPENED', timestamp: Date.now() });
+    let isPrimary = true;
     
-    // Écouter les autres onglets
+    // ✅ Demander qui est là AVANT de continuer
+    channel.postMessage({ type: 'WHO_IS_PRIMARY' });
+    
     const handleMessage = (event: MessageEvent) => {
-      if (event.data.type === 'TAB_OPENED') {
-        // Un autre onglet existe déjà
-        console.log('🚨 Onglet secondaire détecté');
-        setIsSecondaryTab(true);
+      if (event.data.type === 'WHO_IS_PRIMARY') {
+        // Quelqu'un d'autre est déjà là
+        console.log('🚨 Onglet primaire détecté');
+        isPrimary = false;
+        channel.postMessage({ type: 'I_AM_SECONDARY' });
+        setTabStatus('secondary');
       }
       
-      // ✅ NOUVEAU : Recevoir l'ordre de se mettre en pause
+      if (event.data.type === 'I_AM_PRIMARY') {
+        console.log('🚨 Je suis secondaire');
+        isPrimary = false;
+        setTabStatus('secondary');
+      }
+      
+      if (event.data.type === 'I_AM_SECONDARY') {
+        console.log('✅ Je suis primaire');
+        isPrimary = true;
+        setTabStatus('primary');
+      }
+      
       if (event.data.type === 'FORCE_PAUSE') {
         console.log('⏸️ Ordre reçu : mise en pause forcée');
         wasHiddenRef.current = true;
@@ -414,6 +430,15 @@ function WebDioramaLoaderInner({
     };
     
     channel.addEventListener('message', handleMessage);
+    
+    // ✅ Après 200ms, si personne n'a répondu = je suis primaire
+    setTimeout(() => {
+      if (isPrimary) {
+        console.log('✅ Aucun autre onglet, je suis primaire');
+        channel.postMessage({ type: 'I_AM_PRIMARY' });
+        setTabStatus('primary');
+      }
+    }, 200);
     
     return () => {
       channel.close();
@@ -1100,8 +1125,18 @@ function WebDioramaLoaderInner({
     );
   }
 
-  // Après le return de webglError
-  if (isSecondaryTab) {
+  if (tabStatus === 'checking') {
+    return (
+      <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+        <div className="text-white text-center">
+          <div className="animate-spin text-4xl mb-4">⚙️</div>
+          <p>{t.multiTab?.checking || "Vérification des onglets..."}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (tabStatus === 'secondary') {
     return (
       <div className="fixed inset-0 bg-gradient-to-br from-purple-900 via-black to-blue-900 flex items-center justify-center z-[9999]">
         <div className="text-center p-8 max-w-md">
@@ -1115,13 +1150,12 @@ function WebDioramaLoaderInner({
           <button
             onClick={() => {
               console.log('🔄 Forcer ouverture → pause des autres onglets');
-              // ✅ Envoyer l'ordre aux autres onglets de se mettre en pause
               channelRef.current?.postMessage({ type: 'FORCE_PAUSE' });
+              channelRef.current?.postMessage({ type: 'I_AM_PRIMARY' });
               
-              // ✅ Attendre que les autres se mettent en pause
               setTimeout(() => {
-                setIsSecondaryTab(false);
-              }, 500);
+                setTabStatus('primary');
+              }, 300);
             }}
             className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-full"
           >
@@ -1131,6 +1165,38 @@ function WebDioramaLoaderInner({
       </div>
     );
   }
+
+  // Après le return de webglError
+  // if (isSecondaryTab) {
+  //   return (
+  //     <div className="fixed inset-0 bg-gradient-to-br from-purple-900 via-black to-blue-900 flex items-center justify-center z-[9999]">
+  //       <div className="text-center p-8 max-w-md">
+  //         <div className="text-6xl mb-6">🔗</div>
+  //         <h2 className="text-2xl font-bold text-white mb-4">
+  //           {t.multiTab?.title || "Scène déjà ouverte"}
+  //         </h2>
+  //         <p className="text-gray-300 mb-6">
+  //           {t.multiTab?.message || "Cette scène est déjà ouverte dans un autre onglet. Pour éviter les problèmes de mémoire, fermez l'autre onglet ou utilisez celui-ci."}
+  //         </p>
+  //         <button
+  //           onClick={() => {
+  //             console.log('🔄 Forcer ouverture → pause des autres onglets');
+  //             // ✅ Envoyer l'ordre aux autres onglets de se mettre en pause
+  //             channelRef.current?.postMessage({ type: 'FORCE_PAUSE' });
+              
+  //             // ✅ Attendre que les autres se mettent en pause
+  //             setTimeout(() => {
+  //               setIsSecondaryTab(false);
+  //             }, 500);
+  //           }}
+  //           className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-full"
+  //         >
+  //           {t.multiTab?.forceOpen || "Utiliser cet onglet"}
+  //         </button>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   if (needsManualRestart) {
     return (
