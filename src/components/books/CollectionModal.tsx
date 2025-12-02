@@ -106,7 +106,7 @@ export default function CollectionModal({ isOpen, onClose, collectionId }: Colle
   return (
     <>
       <div className="fixed inset-0 z-60 bg-black/30 flex justify-end lg:justify-center overflow-hidden" onClick={onClose}>
-        <button onClick={onClose} className="fixed right-3 top-3 text-4xl font-bold text-gray-100 z-50">
+        <button onClick={onClose} className="fixed right-3 top-3 text-4xl font-bold text-gray-100 z-50 cursor-pointer">
           &times;
         </button>
 
@@ -115,17 +115,25 @@ export default function CollectionModal({ isOpen, onClose, collectionId }: Colle
           className="bg-white w-full sm:w-[80%] lg:max-w-[60%] h-full overflow-auto relative"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header sticky */}
-          <div className={`sticky top-0 w-full transition-all duration-300 z-10 ${scrolled ? "h-20" : "h-48"}`}>
-            <img
-              src={getAssetUrl(collectionData?.image || '')}
-              alt={collectionInfo.name}
-              className="absolute inset-0 w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-2">
-              <p className={`text-white font-semibold transition-all duration-300 ${scrolled ? "text-2xl" : "text-3xl"}`}>
-                {collectionInfo.name} {/* ✅ Traduit */}
-              </p>
+          {/* 
+             ✅ CORRECTION ICI : 
+             1. Le conteneur parent est sticky et a un fond blanc (pour cacher le contenu qui passe dessous).
+             2. L'enfant gère la transition de hauteur.
+          */}
+          <div className="sticky top-0 w-full z-20 bg-white shadow-sm">
+            <div className={`relative w-full transition-all duration-300 ${scrolled ? "h-20" : "h-48"}`}>
+              <div className="absolute inset-0 overflow-hidden">
+                <img
+                  src={getAssetUrl(collectionData?.image || '')}
+                  alt={collectionInfo.name}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              </div>
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center p-2">
+                <p className={`text-white font-semibold transition-all duration-300 ${scrolled ? "text-2xl" : "text-3xl"}`}>
+                  {collectionInfo.name}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -134,7 +142,7 @@ export default function CollectionModal({ isOpen, onClose, collectionId }: Colle
             {/* Description */}
             {collectionInfo.description && (
               <div className="text-gray-700 text-lg p-6 bg-gray-50 rounded-xl">
-                {collectionInfo.description} {/* ✅ Traduit */}
+                {collectionInfo.description}
               </div>
             )}
 
@@ -142,12 +150,12 @@ export default function CollectionModal({ isOpen, onClose, collectionId }: Colle
             {collectionBooks.length > 0 && (
               <div className="border-t pt-6">
                 <h3 className="text-2xl font-bold text-center mb-6 text-gray-800">
-                  {collectionInfo.subtitle} 
+                  {collectionInfo.subtitle}
                 </h3>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 justify-items-center">
                   {collectionBooks
-                    .filter((book) => book.dispo === true) // 1. On filtre d'abord
+                    .filter((book) => book.dispo === true)
                     .map((book) => (
                       <div
                         key={book.id}
