@@ -236,25 +236,19 @@ export default function ScanLauncher({ params, searchParams }: Props) {
               Changement de scène...
             </h1>
             <p className="text-gray-300 mb-6">
-              Retournez sur l'onglet de la scène
+              Cliquez pour continuer
             </p>
             <button
               onClick={() => {
-                window.close();
-                
-                setTimeout(() => {
-                  if (!window.closed) {
-                    // ✅ Reconstruire l'URL ici
-                    window.location.href = `/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`;
-                  }
-                }, 500);
+                // ✅ Rediriger directement cette page vers le viewer
+                window.location.href = `/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`;
               }}
               className="px-8 py-4 bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white text-lg font-bold rounded-full shadow-lg transition transform hover:scale-105"
             >
-              OK, compris 👍
+              ▶️ Continuer
             </button>
             <p className="text-sm text-gray-400 mt-4">
-              (La scène change automatiquement)
+              (Le changement de scène est en cours)
             </p>
           </>
         )}
