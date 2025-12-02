@@ -17,8 +17,40 @@ export default function CollectionModal({ isOpen, onClose, collectionId }: Colle
   const [scrolled, setScrolled] = useState(false);
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [isBookModalOpen, setIsBookModalOpen] = useState(false);
+  const lastState = useRef(false);
 
   const isBookModalOpenRef = useRef(false);
+
+    // Bloquer scroll du body et reset hystérésis
+  useEffect(() => {
+    document.body.style.overflow = isOpen ? "hidden" : "";
+    if (!isOpen) {
+      setScrolled(false);
+      lastState.current = false;
+    }
+    return () => { document.body.style.overflow = ""; }
+  }, [isOpen]);
+
+  // Détection du scroll avec hystérésis
+  useEffect(() => {
+    if (!isOpen) return;
+    const modal = document.getElementById("collection-modal-content");
+    if (!modal) return;
+
+    const handleScroll = () => {
+      const scrollTop = modal.scrollTop;
+      if (!lastState.current && scrollTop > 2) {
+        setScrolled(true);
+        lastState.current = true;
+      } else if (lastState.current && scrollTop < 2) {
+        setScrolled(false);
+        lastState.current = false;
+      }
+    };
+
+    modal.addEventListener("scroll", handleScroll);
+    return () => modal.removeEventListener("scroll", handleScroll);
+  }, [isOpen]);
   
   // ✅ Synchroniser le ref avec le state
   useEffect(() => {
