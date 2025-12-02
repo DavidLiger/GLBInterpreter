@@ -281,6 +281,8 @@ function WebDioramaLoaderInner({
   const voluntaryCleanupRef = useRef(false);
   const wasHiddenRef = useRef(false);
   const textureLoader = useMemo(() => new THREE.TextureLoader(), []);
+  const [showClickToContinue, setShowClickToContinue] = useState(false);
+  const pendingSceneChangeRef = useRef<string | null>(null);
   const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
   );
@@ -434,16 +436,20 @@ function WebDioramaLoaderInner({
         }
         
         console.log('🔄 VIEWER: Nouvelle demande détectée:', requestId, url);
-
-        // ✅ AJOUTER : Focus sur cet onglet
-        if (typeof window !== 'undefined' && window.focus) {
-          console.log('👁️ VIEWER: Focus sur cet onglet');
-          window.focus();
-        }
         
         const currentUrl = window.location.href;
         if (currentUrl.includes(`/${bookId}/${dioramaId}`)) {
           console.log('⏭️ VIEWER: Déjà sur cette scène, ignorer');
+          processedRequests.add(requestId);
+          localStorage.setItem('webdiorama-scene-processed', requestId);
+          return;
+        }
+
+        // ✅ Si l'onglet est caché, demander interaction utilisateur
+        if (document.hidden) {
+          console.log('⏸️ VIEWER: Onglet caché, attendre interaction utilisateur');
+          pendingSceneChangeRef.current = url;
+          setShowClickToContinue(true);
           processedRequests.add(requestId);
           localStorage.setItem('webdiorama-scene-processed', requestId);
           return;
@@ -1211,6 +1217,35 @@ function WebDioramaLoaderInner({
       document.body.style.height = "";
     };
   }, [showLoaderOverlay]);
+
+  // ✅ UI "Cliquez pour continuer"
+  if (showClickToContinue && pendingSceneChangeRef.current) {
+    return (
+      <div className="fixed inset-0 bg-gradient-to-br from-purple-900 via-black to-blue-900 flex items-center justify-center z-[9999]">
+        <div className="text-center p-8 max-w-md">
+          <div className="text-6xl mb-6 animate-pulse">🎬</div>
+          <h2 className="text-2xl font-bold text-white mb-4">
+            Nouvelle scène détectée !
+          </h2>
+          <p className="text-gray-300 mb-6">
+            Cliquez pour charger la nouvelle scène
+          </p>
+          <button
+            onClick={() => {
+              const url = pendingSceneChangeRef.current!;
+              console.log('🔄 VIEWER: Redirection vers:', url);
+              localStorage.removeItem('webdiorama-change-scene');
+              sessionStorage.setItem('webdiorama-next-scene', url);
+              window.location.reload();
+            }}
+            className="px-8 py-4 bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white text-lg font-bold rounded-full shadow-lg"
+          >
+            ▶️ Charger la scène
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // ✅ UI d'erreur WebGL - VERSION CORRIGÉE SANS useEffect
   if (webglError && !voluntaryCleanupRef.current) {
