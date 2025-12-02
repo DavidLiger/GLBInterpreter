@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import AmazonButton from "../common/AmazonButton";
 import { getAssetUrl } from "../diorama/lib/assets";
 import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
-import content from "@/content/content.json";
+import { translations } from "@/contexts/HomeTranslationContext";
 
 interface Detail {
   image: string;
@@ -31,9 +31,46 @@ interface BookModalProps {
 }
 
 export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
-  const { t } = useHomeTranslation();
+  const { t, lang } = useHomeTranslation();
   const [scrolled, setScrolled] = useState(false);
+  const [isFallbackLanguage, setIsFallbackLanguage] = useState(false);
+  const [displayBook, setDisplayBook] = useState<Book | null>(null);
   const lastState = useRef(false);
+
+  useEffect(() => {
+    if (!book) {
+      setDisplayBook(null);
+      return;
+    }
+    
+    const currentLangBook = (t.books as any)[book.id];
+    
+    // Si le livre existe dans la langue actuelle
+    if (currentLangBook && currentLangBook.title) {
+      setIsFallbackLanguage(false);
+      setDisplayBook({
+        ...book,
+        ...currentLangBook
+      });
+      return;
+    }
+    
+    // Sinon, fallback vers l'anglais directement depuis translations
+    const englishBook = (translations.en.books as any)[book.id];
+    
+    if (englishBook && englishBook.title) {
+      setIsFallbackLanguage(true);
+      setDisplayBook({
+        ...book,
+        ...englishBook
+      });
+      return;
+    }
+    
+    // Si même pas en anglais, retourner les données de base
+    setIsFallbackLanguage(false);
+    setDisplayBook(book);
+  }, [book, t, lang]);
 
   // Bloquer scroll du body et reset hystérésis
   useEffect(() => {
@@ -66,7 +103,7 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
     return () => modal.removeEventListener("scroll", handleScroll);
   }, [isOpen]);
 
-  // Après les autres useEffect, ajoutez :
+  // Gestion du back button
   useEffect(() => {
     if (isOpen) {
       window.history.pushState({ bookModal: true }, '');
@@ -83,12 +120,7 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
     }
   }, [isOpen, onClose]);
 
-  if (!isOpen || !book) return null;
-
-  const booksWithTranslations = content.books.map(book => ({
-    ...book,
-    ...(t.books as any)[book.id], // Ajoute title, summary, details traduits
-  }));
+  if (!isOpen || !displayBook) return null;
 
   return (
     <div
@@ -107,19 +139,15 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
         className="bg-white w-full sm:w-[80%] lg:max-w-[60%] h-full overflow-auto relative transform transition-transform duration-500"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 
-            NOUVEAU CONTENEUR STICKY 
-            Il englobe le Header (image/titre) ET le Bandeau Bleu 
-        */}
+        {/* CONTENEUR STICKY - Header + Bandeaux */}
         <div className="sticky top-0 w-full z-20 bg-white shadow-sm">
           
-          {/* --- HEADER VISUEL (Image & Titre) --- */}
-          {/* Note: J'ai retiré 'sticky top-0' ici car c'est le parent qui gère ça maintenant */}
+          {/* HEADER VISUEL (Image & Titre) */}
           <div className={`relative w-full transition-all duration-300 ${scrolled ? "h-24" : "h-48"}`}>
             <div className="absolute inset-0 overflow-hidden">
               <img
-                src={getAssetUrl(book.image)}
-                alt={book.title}
+                src={getAssetUrl(displayBook.image)}
+                alt={displayBook.title}
                 className={`absolute inset-0 w-full h-full object-cover transition-transform duration-300`}
               />
             </div>
@@ -136,14 +164,13 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
                   scrolled ? "text-xl text-left max-w-[60%]" : "text-3xl text-center mb-2"
                 }`}
               >
-                {book.title}
+                {displayBook.title}
               </p>
 
-              {book.link && (
+              {displayBook.link && (
                 <div className={scrolled ? "mr-5" : ""}>
                   <AmazonButton
-                    href={book.link}
-                    // Si scrolle : shortTitle (ex: "Acheter"), sinon : title (ex: "Acheter sur Amazon")
+                    href={displayBook.link}
                     label={scrolled ? t.amazonButton.shortTitle : t.amazonButton.title}
                   />
                 </div>
@@ -151,34 +178,42 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
             </div>
           </div>
 
-          {/* --- BANDEAU BLEU (Date de sortie) --- */}
-          {/* Affiche le bandeau uniquement si une date est présente (facultatif) */}
+          {/* BANDEAU VERT (Date de sortie) */}
           <div className="bg-green-600 w-full py-2 px-4 text-center">
             <p className="text-white text-sm font-semibold tracking-wide">
-              {t.bookModal.release}{book.releaseDate || t.bookModal.dateToBeAnnounced} 
+              {t.bookModal.release}{displayBook.releaseDate || t.bookModal.dateToBeAnnounced} 
             </p>
           </div>
+
+          {/* BANDEAU ORANGE (Langue non disponible) */}
+          {isFallbackLanguage && (
+            <div className="bg-orange-500 w-full py-3 px-4 text-center">
+              <p className="text-white text-sm font-semibold">
+                ⚠️ {t.bookModal.notAvailableInLanguage}
+              </p>
+            </div>
+          )}
 
         </div> 
         {/* Fin du conteneur sticky */}
 
         {/* Contenu (Détails) */}
         <div className="mt-6 flex flex-col gap-6 px-4 pb-24">
-          {book.details?.map((detail, idx) => (
+          {displayBook.details?.map((detail, idx) => (
             <div key={idx} className="w-full">
               <img
-                src={getAssetUrl(book.image)}
+                src={getAssetUrl(displayBook.image)}
                 alt={detail.text}
                 className="w-full h-auto object-cover rounded-lg"
               />
               <p className="mt-2 text-center font-medium">{detail.text}</p>
             </div>
           ))}
-          {!book.details && book.summary && (
-            <p className="text-gray-700 text-base">{book.summary}</p>
+          {!displayBook.details && displayBook.summary && (
+            <p className="text-gray-700 text-base">{displayBook.summary}</p>
           )}
         </div>
       </div>
     </div>
-);
+  );
 }

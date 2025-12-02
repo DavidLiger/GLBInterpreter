@@ -7,7 +7,7 @@ import BookModal from "./BookModal";
 import AmazonButton from "../common/AmazonButton";
 import localFont from "next/font/local";
 import { getAssetUrl } from "../diorama/lib/assets";
-import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
+import { useHomeTranslation, translations } from "@/contexts/HomeTranslationContext";
 
 const HandyGeorge = localFont({
   src: "../../../public/fonts/HandyGeorge.ttf",
@@ -56,12 +56,16 @@ export default function BooksSection() {
   };
 
   const booksWithTranslations = content.books.map(book => {
-    const translation = (t.books as any)[book.id];
-    console.log(`📖 Book ${book.id}:`, { book, translation }); // ✅ DEBUG
-    return {
-      ...book,
-      ...translation,
-    };
+    const currentLangBook = (t.books as any)[book.id];
+    
+    // Si traduction existe dans la langue actuelle
+    if (currentLangBook && currentLangBook.title) {
+      return { ...book, ...currentLangBook };
+    }
+    
+    // Sinon fallback vers l'anglais
+    const englishBook = (translations.en.books as any)[book.id];
+    return { ...book, ...(englishBook || { title: 'Untitled', summary: '' }) };
   });
 
   console.log('✅ Books with translations:', booksWithTranslations); // ✅ DEBUG

@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 
 type Lang = "fr" | "en" | "es";
 
-const translations = {
+export const translations = {
   fr: {
     header: {
       titleLine1: "Éditions",
@@ -20,7 +20,9 @@ const translations = {
     },
     bookModal: {
       release: "📅 Sortie prévue le : ",
-      dateToBeAnnounced: "Date à venir"
+      dateToBeAnnounced: "Date à venir",
+      notAvailableInLanguage: "Ce livre n'est pas disponible en français. Changez de langue pour voir les versions disponibles.",
+      changeLanguage: "Changer de langue"
     },
     collectionsSection: {
       title: "Les collections"
@@ -134,7 +136,9 @@ const translations = {
     },
     bookModal: {
       release: "📅 Scheduled release date : ",
-      dateToBeAnnounced: "Date to be announced"
+      dateToBeAnnounced: "Date to be announced",
+      notAvailableInLanguage: "This book is not available in English. Change language to see available versions.",
+      changeLanguage: "Change language"
     },
     collectionsSection: {
       title: "Collections"
@@ -248,7 +252,9 @@ const translations = {
     },
     bookModal: {
       release: "📅 Salida prevista para el : ",
-      dateToBeAnnounced: "Fecha por determinar"
+      dateToBeAnnounced: "Fecha por determinar",
+      notAvailableInLanguage: "Este libro no está disponible en español. Cambie de idioma para ver las versiones disponibles.",
+      changeLanguage: "Cambiar idioma"
     },
     collectionsSection: {
       title: "Las colecciones"
@@ -296,15 +302,15 @@ const translations = {
       }
     },
     books: {
-        "SF-01": {
-          title: "Título del libro de ciencia ficción",
-          summary: "Breve resumen del libro de ciencia ficción...",
-          releaseDate: "",
-          dispo: true,
-          details: [
-            { text: "Naves espaciales en los confines del universo " }
-          ]
-        },
+        // "SF-01": {
+        //   title: "Título del libro de ciencia ficción",
+        //   summary: "Breve resumen del libro de ciencia ficción...",
+        //   releaseDate: "",
+        //   dispo: true,
+        //   details: [
+        //     { text: "Naves espaciales en los confines del universo " }
+        //   ]
+        // },
         "Fantasy-01" : {
           title: "Título del libro fantástico",
           summary: "Resumen rápido...",
@@ -395,7 +401,7 @@ export function HomeTranslationProvider({ children }: { children: ReactNode }) {
   }
   
   return (
-    <HomeTranslationContext.Provider value={{ lang, setLang, t: translations[lang] }}>
+    <HomeTranslationContext.Provider value={{ lang, setLang, t: translations[lang] as any }}>
       {children}
     </HomeTranslationContext.Provider>
   );

@@ -1,4 +1,4 @@
-import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
+import { useHomeTranslation, translations } from "@/contexts/HomeTranslationContext";
 import content from "@/content/content.json";
 import BookModal, { Book } from "./BookModal";
 import { useEffect, useRef, useState } from "react";
@@ -82,13 +82,21 @@ export default function CollectionModal({ isOpen, onClose, collectionId }: Colle
   // ✅ 2. Récupérer l'image depuis content.json
   const collectionData = content.collections.find(c => c.id === collectionId);
   
-  // ✅ 3. Filtrer les livres de cette collection
+  // ✅ MODIFIER la fonction collectionBooks (ligne ~88)
   const collectionBooks = content.books
     .filter(book => book.collection === collectionId)
-    .map(book => ({
-      ...book,
-      ...(t.books as any)[book.id], // ✅ Force le cast
-    }));
+    .map(book => {
+      const currentLangBook = (t.books as any)[book.id];
+      
+      // Si traduction existe dans la langue actuelle
+      if (currentLangBook && currentLangBook.title) {
+        return { ...book, ...currentLangBook };
+      }
+      
+      // Sinon fallback vers l'anglais
+      const englishBook = (translations.en.books as any)[book.id];
+      return { ...book, ...(englishBook || { title: 'Untitled', summary: '' }) };
+    });
 
   const handleBookClick = (book: Book) => {
     setSelectedBook(book);
