@@ -123,17 +123,7 @@ export default function ScanLauncher({ params, searchParams }: Props) {
               
               setStatus('success');
               
-              // ✅ MODIFIÉ : Essayer d'ouvrir pour forcer le focus
-              try {
-                const viewerWindow = window.open('', 'webdiorama-viewer');
-                if (viewerWindow && !viewerWindow.closed) {
-                  console.log('✅ Focus sur viewer existant');
-                  viewerWindow.focus();
-                }
-              } catch (e) {
-                console.warn('⚠️ Impossible de focus le viewer:', e);
-              }
-              
+              // ✅ Juste fermer le launcher
               setTimeout(() => {
                 console.log('🚪 Fermeture launcher après envoi demande');
                 window.close();

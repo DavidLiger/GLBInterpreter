@@ -434,6 +434,12 @@ function WebDioramaLoaderInner({
         }
         
         console.log('🔄 VIEWER: Nouvelle demande détectée:', requestId, url);
+
+        // ✅ AJOUTER : Focus sur cet onglet
+        if (typeof window !== 'undefined' && window.focus) {
+          console.log('👁️ VIEWER: Focus sur cet onglet');
+          window.focus();
+        }
         
         const currentUrl = window.location.href;
         if (currentUrl.includes(`/${bookId}/${dioramaId}`)) {
