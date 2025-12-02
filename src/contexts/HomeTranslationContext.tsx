@@ -11,7 +11,7 @@ const translations = {
       subtitle: "Livres augmentés",
       cta: {
         label: "C'est quoi un livre augmenté ?",
-        shortLabel: "C'est quoi ?"
+        shortLabel: "Livre augmenté ?"
       }
     },
     bookSection: {
@@ -125,7 +125,7 @@ const translations = {
       subtitle: "Augmented Books",
       cta: {
         label: "What is an augmented book?",
-        shortLabel: "What is it?"
+        shortLabel: "Augmented book?"
       }
     },
     bookSection: {
@@ -239,7 +239,7 @@ const translations = {
       subtitle: "Libros aumentados",
       cta: {
         label: "¿Qué es un libro aumentado?",
-        shortLabel: "¿Qué es?"
+        shortLabel: "¿Libro aumentado?"
       }
     },
     bookSection: {
