@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from '@/contexts/TranslationContext';
 import { useEffect, useState } from 'react';
 
 type Props = {
@@ -11,6 +12,7 @@ const COOLDOWN_KEY = 'webdiorama-last-scan';
 const COOLDOWN_DURATION = 5000; // 5 secondes
 
 export default function ScanLauncher({ params, searchParams }: Props) {
+  const { t } = useTranslation(); // ✅ Maintenant c'est OK !
   const [mounted, setMounted] = useState(false);
   const [resolvedParams, setResolvedParams] = useState<{ bookId: string; dioramaId: string } | null>(null);
   const [resolvedToken, setResolvedToken] = useState<string | null>(null);
@@ -30,9 +32,9 @@ export default function ScanLauncher({ params, searchParams }: Props) {
     // ✅ Auto-close après 15s si status est success ou manual-redirect
     if (status === 'success' || status === 'manual-redirect') {
       const autoCloseTimer = setTimeout(() => {
-        console.log('🚪 Auto-fermeture launcher après 15s');
+        console.log('🚪 Auto-fermeture launcher après 8s');
         window.close();
-      }, 15000);
+      }, 8000);
       
       return () => clearTimeout(autoCloseTimer);
     }
@@ -149,7 +151,7 @@ export default function ScanLauncher({ params, searchParams }: Props) {
   if (!mounted || !resolvedParams || !resolvedToken) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-white">Chargement...</div>
+        <div className="text-white">{t.launcher.loading}</div>
       </div>
     );
   }
@@ -161,7 +163,7 @@ export default function ScanLauncher({ params, searchParams }: Props) {
           <>
             <div className="text-6xl mb-6 animate-pulse">🎬</div>
             <h1 className="text-3xl font-bold text-white mb-4">
-              Ouverture de la scène...
+              {t.launcher.sceneOpening}
             </h1>
           </>
         )}
@@ -170,13 +172,13 @@ export default function ScanLauncher({ params, searchParams }: Props) {
           <>
             <div className="text-6xl mb-6 animate-pulse">⏱️</div>
             <h1 className="text-3xl font-bold text-white mb-4">
-              Préparation en cours...
+              {t.launcher.preparing}
             </h1>
             <div className="text-6xl font-bold text-purple-400 mb-4">
               {cooldownRemaining}s
             </div>
             <p className="text-gray-300 mb-2">
-              Optimisation mémoire GPU
+              {t.launcher.optimizing}
             </p>
           </>
         )}
@@ -185,17 +187,17 @@ export default function ScanLauncher({ params, searchParams }: Props) {
           <>
             <div className="text-6xl mb-6">🚫</div>
             <h1 className="text-3xl font-bold text-white mb-4">
-              Action requise
+              {t.launcher.requiredAction}
             </h1>
             <p className="text-gray-300 mb-6">
-              Cliquez ci-dessous pour ouvrir la scène
+              {t.launcher.clickToOpen}
             </p>
             <a
               href={`/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`}
               target="webdiorama-viewer"
               className="inline-block px-8 py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-full font-bold transition"
             >
-              🎬 Ouvrir la scène
+              {t.launcher.openScene}
             </a>
           </>
         )}
@@ -203,14 +205,14 @@ export default function ScanLauncher({ params, searchParams }: Props) {
         {status === 'manual-redirect' && (
           <>
             <div className="text-6xl mb-6 animate-bounce">✅</div>
-            <h1 className="text-3xl font-bold text-white mb-4">
-              Changement de scène en cours
+            <h1 className="text-xl font-bold text-white mb-4">
+              {t.launcher.changing}
             </h1>
-            <p className="text-gray-300 mb-4">
-              Retournez sur l'onglet de la scène 3D
+            <p className="text-xl text-gray-300 mb-4">
+              {t.launcher.redirect}
             </p>
             <p className="text-sm text-gray-400">
-              (Cette page se fermera automatiquement)
+              {t.launcher.autoClose}
             </p>
           </>
         )}
@@ -219,10 +221,10 @@ export default function ScanLauncher({ params, searchParams }: Props) {
           <>
             <div className="text-6xl mb-6 animate-bounce">✅</div>
             <h1 className="text-3xl font-bold text-white mb-4">
-              C'est parti !
+              {t.launcher.letsgo}
             </h1>
             <p className="text-sm text-gray-400 mt-2">
-              (Cette page se fermera automatiquement)
+              {t.launcher.autoClose}
             </p>
           </>
         )}

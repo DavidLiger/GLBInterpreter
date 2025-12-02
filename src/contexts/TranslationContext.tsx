@@ -110,6 +110,19 @@ const translations = {
       title: "Scène en pause",
       message: "La scène a été mise en pause pour économiser la mémoire.",
       button: "⚡ Relancer la scène"
+    },
+    launcher: {
+      loading: "Chargement...",
+      sceneOpening: "Ouverture de la scène...",
+      preparing: "Préparation en cours...",
+      optimizing: "Optimisation mémoire GPU",
+      requiredAction: "Action requise",
+      clickToOpen: "Cliquez ci-dessous pour ouvrir la scène",
+      openScene: "🎬 Ouvrir la scène",
+      changing: "Changement de scène en cours",
+      redirect: "Retournez sur l'onglet de la scène 3D",
+      autoClose: "(Cette page se fermera automatiquement)",
+      letsgo: "C'est parti !"
     }
   },
   en: {
@@ -218,6 +231,19 @@ const translations = {
       title: "Scene on hold",
       message: "The scene has been paused to save memory.",
       button: "⚡ Restart the scene"
+    },
+    launcher: {
+      loading: "Loading..",
+      sceneOpening: "Opening scene...",
+      preparing: "Preparing...",
+      optimizing: "Optimising GPU memory",
+      requiredAction: "Action required",
+      clickToOpen: "Click below to open the scene",
+      openScene: "🎬 Open scene",
+      changing: "Changing scene...",
+      redirect: "Return to the 3D scene tab",
+      autoClose: "(This page will close automatically)",
+      letsgo: "Let's go !"
     }
   },
   es: {
@@ -326,6 +352,19 @@ const translations = {
       title: "Escena en pausa",
       message: "La escena se ha pausado para ahorrar memoria.",
       button: "⚡ Reiniciar la escena"
+    },
+    launcher: {
+      loading: "Cargando...",
+      sceneOpening: "Abrir escena...",
+      preparing: "Preparando...",
+      optimizing: "Optimizando memoria GPU",
+      requiredAction: "Acción requerida",
+      clickToOpen: "Haga clic a continuación para abrir la escena",
+      openScene: "🎬 Abrir la escena",
+      changing: "Cambio de escena en curso",
+      redirect: "Volver a la pestaña de la escena 3D",
+      autoClose: "(Esta página se cerrará automáticamente)",
+      letsgo: "¡Allá vamos!"
     }
   }
 };
