@@ -27,6 +27,18 @@ export default function ScanLauncher({ params, searchParams }: Props) {
   }, [params, searchParams]);
 
   useEffect(() => {
+    // ✅ Auto-close après 15s si status est success ou manual-redirect
+    if (status === 'success' || status === 'manual-redirect') {
+      const autoCloseTimer = setTimeout(() => {
+        console.log('🚪 Auto-fermeture launcher après 15s');
+        window.close();
+      }, 15000);
+      
+      return () => clearTimeout(autoCloseTimer);
+    }
+  }, [status]);
+
+  useEffect(() => {
     if (!mounted || !resolvedParams || !resolvedToken) return;
 
     const url = `/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`;
@@ -191,24 +203,27 @@ export default function ScanLauncher({ params, searchParams }: Props) {
         {status === 'manual-redirect' && (
           <>
             <div className="text-6xl mb-6 animate-bounce">✅</div>
-            <h1 className="text-xl font-bold text-white mb-4">
+            <h1 className="text-3xl font-bold text-white mb-4">
               Changement de scène en cours
             </h1>
-            <p className="text-2xl text-gray-300 mb-4">
+            <p className="text-gray-300 mb-4">
               Retournez sur l'onglet de la scène 3D
             </p>
             <p className="text-sm text-gray-400">
-              (Vous pouvez fermer cette page)
+              (Cette page se fermera automatiquement)
             </p>
           </>
         )}
-        
+
         {status === 'success' && (
           <>
             <div className="text-6xl mb-6 animate-bounce">✅</div>
             <h1 className="text-3xl font-bold text-white mb-4">
               C'est parti !
             </h1>
+            <p className="text-sm text-gray-400 mt-2">
+              (Cette page se fermera automatiquement)
+            </p>
           </>
         )}
       </div>
