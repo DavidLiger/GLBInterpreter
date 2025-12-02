@@ -15,7 +15,7 @@ export default function ScanLauncher({ params, searchParams }: Props) {
   const [mounted, setMounted] = useState(false);
   const [resolvedParams, setResolvedParams] = useState<{ bookId: string; dioramaId: string } | null>(null);
   const [resolvedToken, setResolvedToken] = useState<string | null>(null);
-  const [status, setStatus] = useState<'opening' | 'blocked' | 'success' | 'cooldown'>('opening');
+  const [status, setStatus] = useState<'opening' | 'blocked' | 'success' | 'manual-redirect' | 'cooldown'>('opening');
   const [isReusingViewer, setIsReusingViewer] = useState(false);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
 
@@ -121,13 +121,36 @@ export default function ScanLauncher({ params, searchParams }: Props) {
               
               console.log('📤 Demande envoyée:', requestId, sceneUrl);
               
-              setStatus('success');
-              
-              // ✅ Juste fermer le launcher
-              setTimeout(() => {
-                console.log('🚪 Fermeture launcher après envoi demande');
-                window.close();
-              }, 1000);
+              // ✅ Vérifier si le viewer est au premier plan
+              try {
+                const viewerWindow = window.open('', 'webdiorama-viewer');
+                
+                if (viewerWindow && !viewerWindow.closed) {
+                  // ✅ Tester si le viewer est l'onglet actif
+                  const isViewerFocused = !viewerWindow.document.hidden;
+                  
+                  if (isViewerFocused) {
+                    console.log('✅ Viewer au premier plan, fermeture auto du launcher');
+                    setStatus('success');
+                    
+                    setTimeout(() => {
+                      console.log('🚪 Fermeture launcher');
+                      window.close();
+                    }, 1000);
+                  } else {
+                    console.log('⚠️ Viewer en arrière-plan, afficher bouton manuel');
+                    setStatus('manual-redirect');
+                  }
+                } else {
+                  // Viewer fermé, comportement par défaut
+                  setStatus('success');
+                  setTimeout(() => window.close(), 1000);
+                }
+              } catch (e) {
+                console.warn('⚠️ Impossible de vérifier le viewer:', e);
+                // Fallback : afficher bouton manuel
+                setStatus('manual-redirect');
+              }
               
               return true;
             }
@@ -227,6 +250,35 @@ export default function ScanLauncher({ params, searchParams }: Props) {
             >
               🎬 Ouvrir la scène
             </a>
+          </>
+        )}
+
+        {status === 'manual-redirect' && (
+          <>
+            <div className="text-6xl mb-6 animate-pulse">🎬</div>
+            <h1 className="text-3xl font-bold text-white mb-4">
+              Changement de scène en cours
+            </h1>
+            <p className="text-gray-300 mb-6">
+              La scène est prête dans l'onglet dédié
+            </p>
+            <button
+              onClick={() => {
+                const viewerWindow = window.open('', 'webdiorama-viewer');
+                if (viewerWindow && !viewerWindow.closed) {
+                  viewerWindow.focus();
+                }
+                setTimeout(() => {
+                  window.close();
+                }, 500);
+              }}
+              className="px-8 py-4 bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white text-lg font-bold rounded-full shadow-lg transition"
+            >
+              ▶️ Aller à la scène
+            </button>
+            <p className="text-sm text-gray-400 mt-4">
+              (ou fermez cette page manuellement)
+            </p>
           </>
         )}
         
