@@ -1,6 +1,6 @@
 'use client';
 
-import { useTranslation } from '@/contexts/TranslationContext';
+import { useTranslation, TranslationProvider  } from '@/contexts/TranslationContext';
 import { useEffect, useState } from 'react';
 
 type Props = {
@@ -11,7 +11,7 @@ type Props = {
 const COOLDOWN_KEY = 'webdiorama-last-scan';
 const COOLDOWN_DURATION = 5000; // 5 secondes
 
-export default function ScanLauncher({ params, searchParams }: Props) {
+function ScanLauncherContent({ params, searchParams }: Props) {
   const { t } = useTranslation(); // ✅ Maintenant c'est OK !
   const [mounted, setMounted] = useState(false);
   const [resolvedParams, setResolvedParams] = useState<{ bookId: string; dioramaId: string } | null>(null);
@@ -230,5 +230,14 @@ export default function ScanLauncher({ params, searchParams }: Props) {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ScanLauncherPage(props: Props) {
+  return (
+    // Ajoutez les props nécessaires à votre Provider si besoin (ex: locale)
+    <TranslationProvider> 
+      <ScanLauncherContent {...props} />
+    </TranslationProvider>
   );
 }
