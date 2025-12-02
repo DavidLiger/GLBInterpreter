@@ -191,10 +191,10 @@ export default function ScanLauncher({ params, searchParams }: Props) {
         {status === 'manual-redirect' && (
           <>
             <div className="text-6xl mb-6 animate-bounce">✅</div>
-            <h1 className="text-3xl font-bold text-white mb-4">
+            <h1 className="text-xl font-bold text-white mb-4">
               Changement de scène en cours
             </h1>
-            <p className="text-gray-300 mb-4">
+            <p className="text-2xl text-gray-300 mb-4">
               Retournez sur l'onglet de la scène 3D
             </p>
             <p className="text-sm text-gray-400">
