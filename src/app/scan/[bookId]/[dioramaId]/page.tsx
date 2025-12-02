@@ -101,7 +101,7 @@ export default function ScanLauncher({ params, searchParams }: Props) {
         
         if (existingViewer) {
           try {
-            const { timestamp } = JSON.parse(existingViewer);
+            const { timestamp, isVisible } = JSON.parse(existingViewer);
             const age = Date.now() - timestamp;
             
             if (age < 3000) {
@@ -121,34 +121,17 @@ export default function ScanLauncher({ params, searchParams }: Props) {
               
               console.log('📤 Demande envoyée:', requestId, sceneUrl);
               
-              // ✅ Vérifier si le viewer est au premier plan
-              try {
-                const viewerWindow = window.open('', 'webdiorama-viewer');
+              // ✅ Décider selon isVisible (pas de window.open)
+              if (isVisible) {
+                console.log('✅ Viewer au premier plan, fermeture auto');
+                setStatus('success');
                 
-                if (viewerWindow && !viewerWindow.closed) {
-                  // ✅ Tester si le viewer est l'onglet actif
-                  const isViewerFocused = !viewerWindow.document.hidden;
-                  
-                  if (isViewerFocused) {
-                    console.log('✅ Viewer au premier plan, fermeture auto du launcher');
-                    setStatus('success');
-                    
-                    setTimeout(() => {
-                      console.log('🚪 Fermeture launcher');
-                      window.close();
-                    }, 1000);
-                  } else {
-                    console.log('⚠️ Viewer en arrière-plan, afficher bouton manuel');
-                    setStatus('manual-redirect');
-                  }
-                } else {
-                  // Viewer fermé, comportement par défaut
-                  setStatus('success');
-                  setTimeout(() => window.close(), 1000);
-                }
-              } catch (e) {
-                console.warn('⚠️ Impossible de vérifier le viewer:', e);
-                // Fallback : afficher bouton manuel
+                setTimeout(() => {
+                  console.log('🚪 Fermeture launcher');
+                  window.close();
+                }, 1000);
+              } else {
+                console.log('⚠️ Viewer en arrière-plan, afficher bouton');
                 setStatus('manual-redirect');
               }
               
@@ -264,20 +247,15 @@ export default function ScanLauncher({ params, searchParams }: Props) {
             </p>
             <button
               onClick={() => {
-                const viewerWindow = window.open('', 'webdiorama-viewer');
-                if (viewerWindow && !viewerWindow.closed) {
-                  viewerWindow.focus();
-                }
-                setTimeout(() => {
-                  window.close();
-                }, 500);
+                // ✅ Juste fermer le launcher, l'utilisateur basculera manuellement
+                window.close();
               }}
               className="px-8 py-4 bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white text-lg font-bold rounded-full shadow-lg transition"
             >
-              ▶️ Aller à la scène
+              OK, compris 👍
             </button>
             <p className="text-sm text-gray-400 mt-4">
-              (ou fermez cette page manuellement)
+              Revenez sur l'onglet de la scène
             </p>
           </>
         )}

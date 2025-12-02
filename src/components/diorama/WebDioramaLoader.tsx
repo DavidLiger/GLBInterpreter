@@ -400,6 +400,32 @@ function WebDioramaLoaderInner({
     return active.icon;
   }, [currentPOI, findPOIRecursively, findParentPOI]);
 
+  // ✅ Heartbeat avec info de visibilité
+  useEffect(() => {
+    const updateHeartbeat = () => {
+      localStorage.setItem('webdiorama-viewer-alive', JSON.stringify({
+        timestamp: Date.now(),
+        isVisible: !document.hidden // ✅ Ajouter l'état de visibilité
+      }));
+    };
+    
+    updateHeartbeat();
+    const interval = setInterval(updateHeartbeat, 1000);
+    
+    // ✅ Update aussi lors des changements de visibilité
+    const handleVisibilityChange = () => {
+      updateHeartbeat();
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      localStorage.removeItem('webdiorama-viewer-alive');
+    };
+  }, []);
+
   // ✅ Nettoyer localStorage à la fermeture
   useEffect(() => {
     const handleBeforeUnload = () => {
