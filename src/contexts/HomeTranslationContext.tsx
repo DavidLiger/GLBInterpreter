@@ -18,6 +18,10 @@ export const translations = {
       title: "Les livres",
       detailLink: "En savoir +"
     },
+    bookCover: {
+      publisher: "Éditions Liger",
+      notFinalImage: "Image non contractuelle"
+    },
     bookModal: {
       release: "📅 Sortie prévue le : ",
       dateToBeAnnounced: "Date à venir",
@@ -69,6 +73,24 @@ export const translations = {
         ]
       }
     },
+    bookDetails: {
+      author: "Auteur",
+      description: "Description",
+      pages: "Nombre de pages",
+      format: "Format",
+      isbn13: "ISBN-13",
+      isbn10: "ISBN-10",
+      publicationDate: "Date de parution",
+      publisher: "Éditeur",
+      language: "Langue",
+      price: "Prix",
+      binding: "Reliure",
+      weight: "Poids",
+      ean: "EAN",
+      targetAge: "Âge recommandé",
+      genre: "Genre",
+      collection: "Collection"
+    },
     books: {
         "SF-01": {
           title: "Titre du Livre SF",
@@ -76,7 +98,21 @@ export const translations = {
           releaseDate: "",
           dispo: true,
           details: [
-            { text: "Des vaisseaux spatiaux aux confins de l'univers " }
+            { text: "Des vaisseaux spatiaux aux confins de l'univers ",
+              author: "Jules Verne",
+              description: "Une exploration fascinante des confins de l'univers...",
+              pages: "320",
+              format: "14 x 21 cm",
+              isbn13: "978-2-XXXXX-XXX-X",
+              isbn10: "2-XXXXX-XXX-X",
+              language: "Français",
+              price: "19,90 €",
+              binding: "Broché",
+              weight: "450 g",
+              ean: "9782XXXXXXXXX",
+              targetAge: "12 ans et +",
+              genre: "Science-Fiction"
+            }
           ]
         },
         "Fantasy-01" : {
@@ -85,7 +121,21 @@ export const translations = {
           releaseDate: "",
           dispo: true,
           details: [
-            { text: "Des forêts enchantées et des créatures mythiques" }
+            { text: "Des forêts enchantées et des créatures mythiques",
+              author: "Jules Verne",
+              description: "Une exploration fascinante des confins de l'univers...",
+              pages: "320",
+              format: "14 x 21 cm",
+              isbn13: "978-2-XXXXX-XXX-X",
+              isbn10: "2-XXXXX-XXX-X",
+              language: "Français",
+              price: "19,90 €",
+              binding: "Broché",
+              weight: "450 g",
+              ean: "9782XXXXXXXXX",
+              targetAge: "12 ans et +",
+              genre: "Science-Fiction"
+            }
           ]
         },
         "Fantasy-02" : {
@@ -94,7 +144,21 @@ export const translations = {
           releaseDate: "",
           dispo: true,
           details: [
-            { text: "Des quêtes épiques et des sortilèges puissants" }
+            { text: "Des quêtes épiques et des sortilèges puissants",
+              author: "Jules Verne",
+              description: "Une exploration fascinante des confins de l'univers...",
+              pages: "320",
+              format: "14 x 21 cm",
+              isbn13: "978-2-XXXXX-XXX-X",
+              isbn10: "2-XXXXX-XXX-X",
+              language: "Français",
+              price: "19,90 €",
+              binding: "Broché",
+              weight: "450 g",
+              ean: "9782XXXXXXXXX",
+              targetAge: "12 ans et +",
+              genre: "Science-Fiction" 
+            }
           ]
         },
         "Fantasy-03" : {
@@ -103,7 +167,21 @@ export const translations = {
           releaseDate: "",
           dispo: true,
           details: [
-            { text: "Des forêts enchantées et des créatures mythiques" }
+            { text: "Des forêts enchantées et des créatures mythiques",
+              author: "Jules Verne",
+              description: "Une exploration fascinante des confins de l'univers...",
+              pages: "320",
+              format: "14 x 21 cm",
+              isbn13: "978-2-XXXXX-XXX-X",
+              isbn10: "2-XXXXX-XXX-X",
+              language: "Français",
+              price: "19,90 €",
+              binding: "Broché",
+              weight: "450 g",
+              ean: "9782XXXXXXXXX",
+              targetAge: "12 ans et +",
+              genre: "Science-Fiction" 
+            }
           ]
         },
         "Polar-01": {
@@ -112,7 +190,21 @@ export const translations = {
           releaseDate: "Premier semestre 2026",
           dispo: true,
           details: [
-            { text: "Des scènes de crime minutieusement reconstituées" }
+            { text: "Des scènes de crime minutieusement reconstituées",
+              author: "Jules Verne",
+              description: "Une exploration fascinante des confins de l'univers...",
+              pages: "320",
+              format: "14 x 21 cm",
+              isbn13: "978-2-XXXXX-XXX-X",
+              isbn10: "2-XXXXX-XXX-X",
+              language: "Français",
+              price: "19,90 €",
+              binding: "Broché",
+              weight: "450 g",
+              ean: "9782XXXXXXXXX",
+              targetAge: "12 ans et +",
+              genre: "Science-Fiction" 
+            }
           ]
         }
     },
@@ -133,6 +225,10 @@ export const translations = {
     bookSection: {
       title: "The Books",
       detailLink: "Learn more"
+    },
+    bookCover: {
+      publisher: "Éditions Liger",
+      notFinalImage: "Not final cover"
     },
     bookModal: {
       release: "📅 Scheduled release date : ",
@@ -185,6 +281,24 @@ export const translations = {
         ]
       }
     },
+    bookDetails: {
+      author: "Author",
+      description: "Description",
+      pages: "Number of pages",
+      format: "Format",
+      isbn13: "ISBN-13",
+      isbn10: "ISBN-10",
+      publicationDate: "Publication date",
+      publisher: "Publisher",
+      language: "Language",
+      price: "Price",
+      binding: "Binding",
+      weight: "Weight",
+      ean: "EAN",
+      targetAge: "Recommended age",
+      genre: "Genre",
+      collection: "Collection"
+    },
     books: {
         "SF-01": {
           title: "Title of SF Book",
@@ -192,7 +306,21 @@ export const translations = {
           releaseDate: "",
           dispo: true,
           details: [
-            { text: "Spaceships at the edge of the universe " }
+            { text: "Spaceships at the edge of the universe ",
+              author: "Jules Verne",
+              description: "A fascinating exploration of the outer reaches of the universe..",
+              pages: "320",
+              format: "14 x 21 cm",
+              isbn13: "978-2-XXXXX-XXX-X",
+              isbn10: "2-XXXXX-XXX-X",
+              language: "English",
+              price: "19,90 €",
+              binding: "Paperback",
+              weight: "450 g",
+              ean: "9782XXXXXXXXX",
+              targetAge: "12 years and older",
+              genre: "Science Fiction"
+            }
           ]
         },
         "Fantasy-01" : {
@@ -201,7 +329,21 @@ export const translations = {
           releaseDate: "",
           dispo: true,
           details: [
-            { text: "Enchanted forests and mythical creatures" }
+            { text: "Enchanted forests and mythical creatures",
+              author: "Jules Verne",
+              description: "A fascinating exploration of the outer reaches of the universe..",
+              pages: "320",
+              format: "14 x 21 cm",
+              isbn13: "978-2-XXXXX-XXX-X",
+              isbn10: "2-XXXXX-XXX-X",
+              language: "English",
+              price: "19,90 €",
+              binding: "Paperback",
+              weight: "450 g",
+              ean: "9782XXXXXXXXX",
+              targetAge: "12 years and older",
+              genre: "Science Fiction"
+            }
           ]
         },
         "Fantasy-02" : {
@@ -210,7 +352,21 @@ export const translations = {
           releaseDate: "",
           dispo: true,
           details: [
-            { text: "Epic quests and powerful spells" }
+            { text: "Epic quests and powerful spells",
+              author: "Jules Verne",
+              description: "A fascinating exploration of the outer reaches of the universe..",
+              pages: "320",
+              format: "14 x 21 cm",
+              isbn13: "978-2-XXXXX-XXX-X",
+              isbn10: "2-XXXXX-XXX-X",
+              language: "English",
+              price: "19,90 €",
+              binding: "Paperback",
+              weight: "450 g",
+              ean: "9782XXXXXXXXX",
+              targetAge: "12 years and older",
+              genre: "Science Fiction"
+            }
           ]
         },
         "Fantasy-03" : {
@@ -219,7 +375,21 @@ export const translations = {
           releaseDate: "",
           dispo: false,
           details: [
-            { text: "Enchanted forests and mythical creatures" }
+            { text: "Enchanted forests and mythical creatures",
+              author: "Jules Verne",
+              description: "A fascinating exploration of the outer reaches of the universe..",
+              pages: "320",
+              format: "14 x 21 cm",
+              isbn13: "978-2-XXXXX-XXX-X",
+              isbn10: "2-XXXXX-XXX-X",
+              language: "English",
+              price: "19,90 €",
+              binding: "Paperback",
+              weight: "450 g",
+              ean: "9782XXXXXXXXX",
+              targetAge: "12 years and older",
+              genre: "Science Fiction"
+            }
           ]
         },
         "Polar-01": {
@@ -228,7 +398,21 @@ export const translations = {
           releaseDate: "First half of 2026",
           dispo: true,
           details: [
-            { text: "Meticulously reconstructed crime scenes" }
+            { text: "Meticulously reconstructed crime scenes",
+              author: "Jules Verne",
+              description: "A fascinating exploration of the outer reaches of the universe..",
+              pages: "320",
+              format: "14 x 21 cm",
+              isbn13: "978-2-XXXXX-XXX-X",
+              isbn10: "2-XXXXX-XXX-X",
+              language: "English",
+              price: "19,90 €",
+              binding: "Paperback",
+              weight: "450 g",
+              ean: "9782XXXXXXXXX",
+              targetAge: "12 years and older",
+              genre: "Science Fiction"
+            }
           ]
         }
     },
@@ -249,6 +433,10 @@ export const translations = {
     bookSection: {
       title: "Los libros",
       detailLink: "Saber más"
+    },
+    bookCover: {
+      publisher: "Éditions Liger",
+      notFinalImage: "Imagen no contractual"
     },
     bookModal: {
       release: "📅 Salida prevista para el : ",
@@ -301,6 +489,24 @@ export const translations = {
         ]
       }
     },
+    bookDetails: {
+      author: "Autor",
+      description: "Descripción",
+      pages: "Número de páginas",
+      format: "Formato",
+      isbn13: "ISBN-13",
+      isbn10: "ISBN-10",
+      publicationDate: "Fecha de publicación",
+      publisher: "Editorial",
+      language: "Idioma",
+      price: "Precio",
+      binding: "Encuadernación",
+      weight: "Peso",
+      ean: "EAN",
+      targetAge: "Edad recomendada",
+      genre: "Género",
+      collection: "Colección"
+    },
     books: {
         // "SF-01": {
         //   title: "Título del libro de ciencia ficción",
@@ -317,7 +523,21 @@ export const translations = {
           releaseDate: "",
           dispo: true,
           details: [
-            { text: "Bosques encantados y criaturas míticas"}
+            { text: "Bosques encantados y criaturas míticas",
+              author: "Jules Verne",
+              description: "Una fascinante exploración de los confines del universo...",
+              pages: "320",
+              format: "14 x 21 cm",
+              isbn13: "978-2-XXXXX-XXX-X",
+              isbn10: "2-XXXXX-XXX-X",
+              language: "Español",
+              price: "19,90 €",
+              binding: "Broché",
+              weight: "450 g",
+              ean: "9782XXXXXXXXX",
+              targetAge: "12 years and older",
+              genre: "Cienca Ficcion"
+            }
           ]
         },
         "Fantasy-02" : {
@@ -326,7 +546,21 @@ export const translations = {
           releaseDate: "",
           dispo: true,
           details: [
-            { text: "Misiones épicas y hechizos poderosos"}
+            { text: "Misiones épicas y hechizos poderosos",
+              author: "Jules Verne",
+              description: "Una fascinante exploración de los confines del universo...",
+              pages: "320",
+              format: "14 x 21 cm",
+              isbn13: "978-2-XXXXX-XXX-X",
+              isbn10: "2-XXXXX-XXX-X",
+              language: "Español",
+              price: "19,90 €",
+              binding: "Broché",
+              weight: "450 g",
+              ean: "9782XXXXXXXXX",
+              targetAge: "12 years and older",
+              genre: "Cienca Ficcion"
+            }
           ]
         },
         "Fantasy-03" : {
@@ -335,7 +569,21 @@ export const translations = {
           releaseDate: "",
           dispo: true,
           details: [
-            { text: "Bosques encantados y criaturas míticas"}
+            { text: "Bosques encantados y criaturas míticas",
+              author: "Jules Verne",
+              description: "Una fascinante exploración de los confines del universo...",
+              pages: "320",
+              format: "14 x 21 cm",
+              isbn13: "978-2-XXXXX-XXX-X",
+              isbn10: "2-XXXXX-XXX-X",
+              language: "Español",
+              price: "19,90 €",
+              binding: "Broché",
+              weight: "450 g",
+              ean: "9782XXXXXXXXX",
+              targetAge: "12 years and older",
+              genre: "Cienca Ficcion"
+            }
           ]
         },
         "Polar-01": {
@@ -344,7 +592,21 @@ export const translations = {
           releaseDate: "Primer semestre de 2026",
           dispo: true,
           details: [
-            { text: "Escenas del crimen minuciosamente reconstituidas " }
+            { text: "Escenas del crimen minuciosamente reconstituidas ",
+              author: "Jules Verne",
+              description: "Una fascinante exploración de los confines del universo...",
+              pages: "320",
+              format: "14 x 21 cm",
+              isbn13: "978-2-XXXXX-XXX-X",
+              isbn10: "2-XXXXX-XXX-X",
+              language: "Español",
+              price: "19,90 €",
+              binding: "Broché",
+              weight: "450 g",
+              ean: "9782XXXXXXXXX",
+              targetAge: "12 years and older",
+              genre: "Cienca Ficcion"
+            }
           ]
         }
     },

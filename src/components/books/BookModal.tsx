@@ -5,6 +5,8 @@ import AmazonButton from "../common/AmazonButton";
 import { getAssetUrl } from "../diorama/lib/assets";
 import { useHomeTranslation } from "@/contexts/HomeTranslationContext";
 import { translations } from "@/contexts/HomeTranslationContext";
+import BookCover from "./BookCover";
+import BookDetailsCard from "./BookDetailsCard";
 
 interface Detail {
   image: string;
@@ -36,6 +38,7 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
   const [isFallbackLanguage, setIsFallbackLanguage] = useState(false);
   const [displayBook, setDisplayBook] = useState<Book | null>(null);
   const lastState = useRef(false);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!book) {
@@ -82,26 +85,33 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
     return () => { document.body.style.overflow = ""; }
   }, [isOpen]);
 
-  // Détection du scroll avec hystérésis
+// Détection du scroll avec hystérésis
   useEffect(() => {
-    if (!isOpen) return;
-    const modal = document.getElementById("book-modal-content");
-    if (!modal) return;
-
+    // On vérifie isOpen, la ref, ET displayBook (pour être sûr que le DOM est là)
+    if (!isOpen || !modalRef.current || !displayBook) return;
+    
+    const modal = modalRef.current;
+    
     const handleScroll = () => {
       const scrollTop = modal.scrollTop;
-      if (!lastState.current && scrollTop > 2) {
+      
+      // Seuil de 20px comme dans votre code
+      if (!lastState.current && scrollTop > 20) {
         setScrolled(true);
         lastState.current = true;
-      } else if (lastState.current && scrollTop < 2) {
+      } else if (lastState.current && scrollTop < 20) {
         setScrolled(false);
         lastState.current = false;
       }
     };
 
     modal.addEventListener("scroll", handleScroll);
+    
+    // Nettoyage
     return () => modal.removeEventListener("scroll", handleScroll);
-  }, [isOpen]);
+    
+    // ✅ AJOUT DE displayBook ICI
+  }, [isOpen, displayBook]);
 
   // Gestion du back button
   useEffect(() => {
@@ -135,20 +145,21 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
       </button>
 
       <div
+        ref={modalRef}
         id="book-modal-content"
-        className="bg-white w-full sm:w-[80%] lg:max-w-[60%] h-full overflow-auto relative transform transition-transform duration-500"
+        className="bg-white w-full sm:w-[80%] lg:max-w-[60%] h-full overflow-auto relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* CONTENEUR STICKY - Header + Bandeaux */}
-        <div className="sticky top-0 w-full z-20 bg-white shadow-sm">
+        <div className="sticky top-0 w-full z-30 bg-white shadow-sm">
           
           {/* HEADER VISUEL (Image & Titre) */}
-          <div className={`relative w-full transition-all duration-300 ${scrolled ? "h-24" : "h-48"}`}>
+          <div className={`relative w-full transition-all duration-300 ${scrolled ? "h-24" : "h-64"}`}>
             <div className="absolute inset-0 overflow-hidden">
               <img
                 src={getAssetUrl(displayBook.image)}
                 alt={displayBook.title}
-                className={`absolute inset-0 w-full h-full object-cover transition-transform duration-300`}
+                className="absolute inset-0 w-full h-full object-cover"
               />
             </div>
             
@@ -156,12 +167,12 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
               className={`absolute inset-0 bg-black/50 flex transition-all duration-300 ${
                 scrolled
                   ? "flex-row justify-between items-center px-5"
-                  : "flex-col justify-center items-center p-2 gap-2"
+                  : "flex-col justify-center items-center p-4 gap-3"
               }`}
             >
               <p
                 className={`text-white font-semibold transition-all duration-300 ${
-                  scrolled ? "text-xl text-left max-w-[60%]" : "text-3xl text-center mb-2"
+                  scrolled ? "text-xl text-left max-w-[60%]" : "text-3xl text-center"
                 }`}
               >
                 {displayBook.title}
@@ -193,22 +204,39 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
               </p>
             </div>
           )}
-
-        </div> 
+        </div>
         {/* Fin du conteneur sticky */}
 
         {/* Contenu (Détails) */}
-        <div className="mt-6 flex flex-col gap-6 px-4 pb-24">
+        <div className="mt-6 flex flex-col gap-8 px-4 pb-24">
           {displayBook.details?.map((detail, idx) => (
-            <div key={idx} className="w-full">
-              <img
-                src={getAssetUrl(displayBook.image)}
-                alt={detail.text}
-                className="w-full h-auto object-cover rounded-lg"
+            <div key={idx} className="w-full space-y-6">
+              {/* Couverture du livre */}
+              <BookCover
+                image={displayBook.image}
+                title={displayBook.title}
+                publisherText={t.bookCover.publisher}
+                disclaimerText={t.bookCover.notFinalImage}
               />
-              <p className="mt-2 text-center font-medium">{detail.text}</p>
+              
+              {/* Fiche professionnelle */}
+              <BookDetailsCard
+                detail={detail}
+                labels={t.bookDetails}
+                collectionName={t.collections[displayBook.collection as keyof typeof t.collections]?.name || ''}
+                publisherName={t.bookCover.publisher}
+              />
+              {displayBook.link && (
+                <div className={scrolled ? "mr-5" : ""}>
+                  <AmazonButton
+                    href={displayBook.link}
+                    label={scrolled ? t.amazonButton.shortTitle : t.amazonButton.title}
+                  />
+                </div>
+              )}
             </div>
           ))}
+          
           {!displayBook.details && displayBook.summary && (
             <p className="text-gray-700 text-base">{displayBook.summary}</p>
           )}
