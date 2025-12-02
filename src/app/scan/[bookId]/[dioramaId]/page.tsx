@@ -18,6 +18,7 @@ export default function ScanLauncher({ params, searchParams }: Props) {
   const [status, setStatus] = useState<'opening' | 'blocked' | 'success' | 'manual-redirect' | 'cooldown'>('opening');
   const [isReusingViewer, setIsReusingViewer] = useState(false);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
+  const [sceneUrl, setSceneUrl] = useState<string>('');
 
   // Résoudre les params async
   useEffect(() => {
@@ -31,8 +32,9 @@ export default function ScanLauncher({ params, searchParams }: Props) {
   useEffect(() => {
     if (!mounted || !resolvedParams || !resolvedToken) return;
 
-    const sceneUrl = `/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`;
-    
+    const url = `/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`;
+    setSceneUrl(url);
+
     // ✅ Vérifier le cooldown
     const lastScan = localStorage.getItem(COOLDOWN_KEY);
     if (lastScan) {
@@ -101,7 +103,7 @@ export default function ScanLauncher({ params, searchParams }: Props) {
         
         if (existingViewer) {
           try {
-            const { timestamp, isVisible } = JSON.parse(existingViewer);
+            const { timestamp } = JSON.parse(existingViewer);
             const age = Date.now() - timestamp;
             
             if (age < 3000) {
@@ -121,19 +123,8 @@ export default function ScanLauncher({ params, searchParams }: Props) {
               
               console.log('📤 Demande envoyée:', requestId, sceneUrl);
               
-              // ✅ Décider selon isVisible (pas de window.open)
-              if (isVisible) {
-                console.log('✅ Viewer au premier plan, fermeture auto');
-                setStatus('success');
-                
-                setTimeout(() => {
-                  console.log('🚪 Fermeture launcher');
-                  window.close();
-                }, 1000);
-              } else {
-                console.log('⚠️ Viewer en arrière-plan, afficher bouton');
-                setStatus('manual-redirect');
-              }
+              // ✅ TOUJOURS afficher le bouton manuel
+              setStatus('manual-redirect');
               
               return true;
             }
@@ -236,27 +227,22 @@ export default function ScanLauncher({ params, searchParams }: Props) {
           </>
         )}
 
-        {status === 'manual-redirect' && (
+        {status === 'manual-redirect' && sceneUrl && (
           <>
-            <div className="text-6xl mb-6 animate-pulse">🎬</div>
+            <div className="text-6xl mb-6 animate-bounce">✅</div>
             <h1 className="text-3xl font-bold text-white mb-4">
-              Changement de scène en cours
+              Changement de scène...
             </h1>
             <p className="text-gray-300 mb-6">
-              La scène est prête dans l'onglet dédié
+              Cliquez pour retourner sur la scène
             </p>
-            <button
-              onClick={() => {
-                // ✅ Juste fermer le launcher, l'utilisateur basculera manuellement
-                window.close();
-              }}
-              className="px-8 py-4 bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white text-lg font-bold rounded-full shadow-lg transition"
+            <a
+              href={sceneUrl}
+              target="webdiorama-viewer"
+              className="inline-block px-8 py-4 bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white text-lg font-bold rounded-full shadow-lg transition transform hover:scale-105"
             >
-              OK, compris 👍
-            </button>
-            <p className="text-sm text-gray-400 mt-4">
-              Revenez sur l'onglet de la scène
-            </p>
+              ▶️ Aller à la scène
+            </a>
           </>
         )}
         
