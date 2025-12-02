@@ -113,15 +113,16 @@ export default function ScanLauncher({ params, searchParams }: Props) {
               
               const requestId = `${Date.now()}-${Math.random()}`;
               
+              // ✅ Utiliser 'url' (variable locale) au lieu de 'sceneUrl' (state)
               localStorage.setItem('webdiorama-change-scene', JSON.stringify({
-                url: sceneUrl,
+                url: url, // ✅ Variable locale du useEffect
                 timestamp: Date.now(),
                 requestId,
                 bookId: resolvedParams.bookId,
                 dioramaId: resolvedParams.dioramaId
               }));
               
-              console.log('📤 Demande envoyée:', requestId, sceneUrl);
+              console.log('📤 Demande envoyée:', requestId, url);
               
               // ✅ TOUJOURS afficher le bouton manuel
               setStatus('manual-redirect');
