@@ -18,7 +18,7 @@ export default function ScanLauncher({ params, searchParams }: Props) {
   const [status, setStatus] = useState<'opening' | 'blocked' | 'success' | 'manual-redirect' | 'cooldown'>('opening');
   const [isReusingViewer, setIsReusingViewer] = useState(false);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
-  const [sceneUrl, setSceneUrl] = useState<string>('');
+  // const [sceneUrl, setSceneUrl] = useState<string>('');
 
   // Résoudre les params async
   useEffect(() => {
@@ -33,7 +33,7 @@ export default function ScanLauncher({ params, searchParams }: Props) {
     if (!mounted || !resolvedParams || !resolvedToken) return;
 
     const url = `/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`;
-    setSceneUrl(url);
+    // setSceneUrl(url);
 
     // ✅ Vérifier le cooldown
     const lastScan = localStorage.getItem(COOLDOWN_KEY);
@@ -143,7 +143,8 @@ export default function ScanLauncher({ params, searchParams }: Props) {
         
         console.log('🆕 Création nouveau viewer');
         
-        const viewer = window.open(sceneUrl, 'webdiorama-viewer');
+        // ✅ Utiliser 'url' au lieu de 'sceneUrl'
+        const viewer = window.open(url, 'webdiorama-viewer');
         
         if (viewer) {
           viewer.focus();
@@ -228,7 +229,7 @@ export default function ScanLauncher({ params, searchParams }: Props) {
           </>
         )}
 
-        {status === 'manual-redirect' && sceneUrl && (
+        {status === 'manual-redirect' && resolvedParams && resolvedToken && (
           <>
             <div className="text-6xl mb-6 animate-bounce">✅</div>
             <h1 className="text-3xl font-bold text-white mb-4">
@@ -239,15 +240,12 @@ export default function ScanLauncher({ params, searchParams }: Props) {
             </p>
             <button
               onClick={() => {
-                // ✅ Juste fermer cette page
-                // L'utilisateur basculera manuellement sur le viewer
                 window.close();
                 
-                // ✅ Si window.close() échoue, rediriger après 500ms
                 setTimeout(() => {
                   if (!window.closed) {
-                    // Fallback : rediriger cette page vers le viewer
-                    window.location.href = sceneUrl;
+                    // ✅ Reconstruire l'URL ici
+                    window.location.href = `/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`;
                   }
                 }, 500);
               }}
