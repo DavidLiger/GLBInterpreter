@@ -234,15 +234,29 @@ export default function ScanLauncher({ params, searchParams }: Props) {
               Changement de scène...
             </h1>
             <p className="text-gray-300 mb-6">
-              Cliquez pour retourner sur la scène
+              Retournez sur l'onglet de la scène
             </p>
-            <a
-              href={sceneUrl}
-              target="webdiorama-viewer"
-              className="inline-block px-8 py-4 bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white text-lg font-bold rounded-full shadow-lg transition transform hover:scale-105"
+            <button
+              onClick={() => {
+                // ✅ Juste fermer cette page
+                // L'utilisateur basculera manuellement sur le viewer
+                window.close();
+                
+                // ✅ Si window.close() échoue, rediriger après 500ms
+                setTimeout(() => {
+                  if (!window.closed) {
+                    // Fallback : rediriger cette page vers le viewer
+                    window.location.href = sceneUrl;
+                  }
+                }, 500);
+              }}
+              className="px-8 py-4 bg-gradient-to-r from-purple-500 to-blue-600 hover:from-purple-600 hover:to-blue-700 text-white text-lg font-bold rounded-full shadow-lg transition transform hover:scale-105"
             >
-              ▶️ Aller à la scène
-            </a>
+              OK, compris 👍
+            </button>
+            <p className="text-sm text-gray-400 mt-4">
+              (La scène change automatiquement)
+            </p>
           </>
         )}
         
