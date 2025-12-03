@@ -46,11 +46,11 @@ export default function CollectionsSection({ title }: CollectionsSectionProps) {
         <h2 className={`${HandyGeorge.className} text-4xl font-bold text-center mb-8 tracking-tighter`}>
           {t.collectionsSection.title}
         </h2>
-        <div
-          ref={containerRef}
-          className={`flex flex-col items-center space-y-6 md:flex-row md:space-x-8 md:space-y-0 overflow-x-auto md:overflow-y-hidden p-4
-                      ${isOverflowing ? "justify-start" : "justify-center"}`}
-        >
+          <div
+            ref={containerRef}
+            className={`flex flex-col items-center space-y-6 md:flex-row md:space-x-8 md:space-y-0 overflow-x-hidden md:overflow-x-auto p-4
+                        ${isOverflowing ? "md:justify-start" : "md:justify-center"}`}
+          >
           {/* ✅ Utiliser content.json + traductions */}
           {content.collections.map((collection) => {
             const collectionInfo = t.collections[collection.id as CollectionId];
