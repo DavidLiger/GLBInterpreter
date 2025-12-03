@@ -17,6 +17,14 @@ export const metadata: Metadata = {
   description: 'Découvrez nos livres augmentés : plongez dans des scènes 3D immersives accessibles via QR code. Explorez les décors, rencontrez les personnages et vivez une nouvelle dimension de lecture.',
   keywords: ['livres augmentés', 'lecture interactive', 'scènes 3D', 'QR code', 'livres numériques', 'édition'],
   authors: [{ name: 'Éditions Liger' }],
+    robots: { // ✅ AJOUTER
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+    },
+  },
   openGraph: {
     title: 'Éditions Liger - Livres Augmentés',
     description: 'Plongez dans des univers 3D immersifs : explorez les décors, rencontrez les personnages animés et vivez votre lecture comme jamais.',

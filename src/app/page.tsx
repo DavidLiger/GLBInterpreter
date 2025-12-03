@@ -12,30 +12,48 @@ import { useState } from "react";
 
 export default function Home() {
   const [headerScrolled, setHeaderScrolled] = useState(false);
+    const jsonLd = {
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      name: 'Éditions Liger',
+      url: 'https://editions-liger.com',
+      logo: 'https://editions-liger.com/images/logo.png',
+      description: 'Maison d\'édition spécialisée dans les livres augmentés avec expériences 3D immersives',
+      sameAs: [
+        'https://www.instagram.com/editionsliger',
+        'https://www.facebook.com/editionsliger'
+      ]
+    };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-300 text-gray-900">
-      <HomeTranslationProvider>
-        <HeaderV2 
-          header={content.header}
-          howItWorks={content.howItWorks}
-          onScrollChange={setHeaderScrolled} // ✅ Passer le callback
-        />
-        
-        {/* ✅ Afficher seulement quand pas scrolled */}
-        {!headerScrolled && <HomeLanguageSelector />}
-        
-        <main className="pt-48">
-          <BooksSection />
-          <CollectionsSection 
-            title={content.collectionsSection.title}
-            // collections={content.collections}
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <div className="min-h-screen flex flex-col bg-gray-300 text-gray-900">
+        <HomeTranslationProvider>
+          <HeaderV2 
+            header={content.header}
+            howItWorks={content.howItWorks}
+            onScrollChange={setHeaderScrolled} // ✅ Passer le callback
           />
-          <Copyright />
-        </main>
-        
-        <Footer />
-      </HomeTranslationProvider>
-    </div>
+          
+          {/* ✅ Afficher seulement quand pas scrolled */}
+          {!headerScrolled && <HomeLanguageSelector />}
+          
+          <main className="pt-48">
+            <BooksSection />
+            <CollectionsSection 
+              title={content.collectionsSection.title}
+              // collections={content.collections}
+            />
+            <Copyright />
+          </main>
+          
+          <Footer />
+        </HomeTranslationProvider>
+      </div>
+    </>
   );
 }
