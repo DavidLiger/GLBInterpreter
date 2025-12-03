@@ -47,6 +47,9 @@ export const metadata: Metadata = {
     description: 'Plongez dans des univers 3D immersifs accessibles via QR code.',
     images: ['https://editions-liger.com/images/og-image.jpg'],
   },
+  verification: { // ✅ AJOUTER si tu as les codes
+    google: '8Sk2F3GTjwe8UF0wSPb0xFGGUmZm1-y3b0MW2cPfeZ8',
+  }
 }
 
 export default function RootLayout({
