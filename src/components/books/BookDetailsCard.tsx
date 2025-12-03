@@ -20,6 +20,12 @@ export default function BookDetailsCard({ detail, labels, collectionName, publis
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-6 border border-gray-200">
+      {/* Note additionnelle */}
+      {detail.text && (
+        <div className="bg-indigo-50 rounded-lg p-4 border-l-4 border-indigo-600 mb-4">
+          <p className="text-gray-700 italic text-sm">{detail.text}</p>
+        </div>
+      )}
       {/* Description */}
       {detail.description && (
         <div className="mb-6">
@@ -70,12 +76,7 @@ export default function BookDetailsCard({ detail, labels, collectionName, publis
         </div>
       </div>
 
-      {/* Note additionnelle */}
-      {detail.text && (
-        <div className="bg-indigo-50 rounded-lg p-4 border-l-4 border-indigo-600">
-          <p className="text-gray-700 italic text-sm">{detail.text}</p>
-        </div>
-      )}
+
     </div>
   );
 }

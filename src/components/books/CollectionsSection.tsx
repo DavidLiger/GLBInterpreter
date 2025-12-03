@@ -48,7 +48,7 @@ export default function CollectionsSection({ title }: CollectionsSectionProps) {
         </h2>
         <div
           ref={containerRef}
-          className={`flex flex-col items-center space-y-6 md:flex-row md:space-x-8 md:space-y-0 overflow-x-auto md:overflow-x-auto 
+          className={`flex flex-col items-center space-y-6 md:flex-row md:space-x-8 md:space-y-0 overflow-x-auto md:overflow-y-hidden p-4
                       ${isOverflowing ? "justify-start" : "justify-center"}`}
         >
           {/* ✅ Utiliser content.json + traductions */}

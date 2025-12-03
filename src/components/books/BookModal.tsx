@@ -23,7 +23,7 @@ export interface Book {
   releaseDate: string;
   title: string;
   summary: string;
-  details?: Array<{ text: string; image?: string }>;
+  details?: Array<{ text: string; image?: string; coverImage?: string }>;
 }
 
 interface BookModalProps {
@@ -217,6 +217,7 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
                 title={displayBook.title}
                 publisherText={t.bookCover.publisher}
                 disclaimerText={t.bookCover.notFinalImage}
+                coverImage={detail.coverImage}
               />
               
               {/* Fiche professionnelle */}
@@ -227,19 +228,19 @@ export default function BookModal({ isOpen, onClose, book }: BookModalProps) {
                 publisherName={t.bookCover.publisher}
               />
               {displayBook.link && (
-                <div className={scrolled ? "mr-5" : ""}>
+                <div className={`flex justify-center `}>
                   <AmazonButton
                     href={displayBook.link}
-                    label={scrolled ? t.amazonButton.shortTitle : t.amazonButton.title}
+                    label={t.amazonButton.title}
                   />
                 </div>
               )}
             </div>
           ))}
           
-          {!displayBook.details && displayBook.summary && (
+          {/* {!displayBook.details && displayBook.summary && (
             <p className="text-gray-700 text-base">{displayBook.summary}</p>
-          )}
+          )} */}
         </div>
       </div>
     </div>

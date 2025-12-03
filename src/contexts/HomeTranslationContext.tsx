@@ -191,6 +191,7 @@ export const translations = {
           dispo: true,
           details: [
             { text: "Des scènes de crime minutieusement reconstituées",
+              coverImage: "policier-detail2.jpg",
               author: "Jules Verne",
               description: "Une exploration fascinante des confins de l'univers...",
               pages: "320",
@@ -399,6 +400,7 @@ export const translations = {
           dispo: true,
           details: [
             { text: "Meticulously reconstructed crime scenes",
+              coverImage: "policier-detail2.jpg",
               author: "Jules Verne",
               description: "A fascinating exploration of the outer reaches of the universe..",
               pages: "320",
@@ -593,6 +595,7 @@ export const translations = {
           dispo: true,
           details: [
             { text: "Escenas del crimen minuciosamente reconstituidas ",
+              coverImage: "policier-detail2.jpg",
               author: "Jules Verne",
               description: "Una fascinante exploración de los confines del universo...",
               pages: "320",

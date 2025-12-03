@@ -7,9 +7,23 @@ interface BookCoverProps {
   title: string;
   publisherText: string;
   disclaimerText: string;
+  coverImage?: string;
 }
 
-export default function BookCover({ image, title, publisherText, disclaimerText }: BookCoverProps) {
+export default function BookCover({ image, title, publisherText, disclaimerText, coverImage }: BookCoverProps) {
+  // ✅ Si on a une vraie couverture, l'afficher directement
+  if (coverImage) {
+    return (
+      <div className="relative w-full aspect-[2/3] bg-white shadow-2xl overflow-hidden rounded-lg">
+        <img
+          src={getAssetUrl(coverImage)}
+          alt={title}
+          className="w-full h-full object-cover"
+        />
+      </div>
+    );
+  }
+  
   return (
     <div className="relative w-full aspect-[2/3] bg-white shadow-2xl overflow-hidden rounded-lg">
       {/* Titre en haut */}
