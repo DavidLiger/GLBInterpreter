@@ -1,8 +1,9 @@
 // "use client";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { POI } from "@/types/diorama";
 import { useTranslation } from "@/contexts/TranslationContext";
+import ExperienceModal from "./ExperienceModal";
 
 interface POIBreadcrumbsProps {
   currentPOI: string | null;
@@ -12,6 +13,7 @@ interface POIBreadcrumbsProps {
   configPOIs: POI[];
   isPortrait: boolean;
   viewportHeight: number;
+  experienceStarted?: boolean;
 }
 
 export default function POIBreadcrumbs({
@@ -22,6 +24,7 @@ export default function POIBreadcrumbs({
   configPOIs,
   isPortrait,
   viewportHeight,
+  experienceStarted = true,
 }: POIBreadcrumbsProps) {
   const { lang } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -30,8 +33,19 @@ export default function POIBreadcrumbs({
   const activePOI = currentPOI ? findPOIRecursively(currentPOI) : null;
   const parent = activePOI ? findParentPOI(activePOI.id) : null;
 
+  const [selectedPOI, setSelectedPOI] = useState<string | null>(null);
+  const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
+
   // ── Construire la liste des breadcrumbs
   const breadcrumbList: { poi: POI; type: "parent" | "active" | "sibling" | "child" }[] = [];
+
+    // ✅ NOUVEAU : Ouvrir automatiquement au démarrage en mode folio
+  useEffect(() => {
+    if (isFolioMode && currentPOI && !selectedPOI && experienceStarted) {
+      console.log('🎬 Ouverture auto modal pour POI:', currentPOI);
+      setSelectedPOI(currentPOI);
+    }
+  }, [isFolioMode, currentPOI, selectedPOI, experienceStarted]);
 
   if (!activePOI) {
     // 🔹 Aucun actif → afficher tous les POIs racine
@@ -133,7 +147,15 @@ export default function POIBreadcrumbs({
               <motion.button
                 ref={item.type === "active" ? activeRef : null}
                 key={`btn-${item.poi.id}`}
-                onClick={() => item.type !== "active" && goToPOI(item.poi)}
+                onClick={() => {
+                  if (item.type !== "active") {
+                    goToPOI(item.poi);
+                  }
+                  // ✅ Ouvrir la modal en mode folio
+                  if (isFolioMode) {
+                    setSelectedPOI(item.poi.id);
+                  }
+                }}
                 disabled={item.type === "active"}
                 className={`flex flex-col items-center justify-center px-1 py-2 rounded-lg transition ${
                   item.type === "active"
@@ -162,6 +184,15 @@ export default function POIBreadcrumbs({
         })}
       </AnimatePresence>
     </div>
+    {/* ✅ Modal expérience */}
+      {isFolioMode && (
+        <ExperienceModal
+          poiId={selectedPOI || ''}
+          isOpen={!!selectedPOI}
+          onClose={() => setSelectedPOI(null)}
+          baseUrl="https://webdiorama-proxy.david-liger-pro.workers.dev/assets/folio/content"
+        />
+      )}
     </>
   );
 }

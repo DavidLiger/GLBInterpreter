@@ -293,6 +293,7 @@ function WebDioramaLoaderInner({
   const voluntaryCleanupRef = useRef(false);
   const wasHiddenRef = useRef(false);
   const textureLoader = useMemo(() => new THREE.TextureLoader(), []);
+  const [experienceStarted, setExperienceStarted] = useState(false);
   const [showClickToContinue, setShowClickToContinue] = useState(false);
   const pendingSceneChangeRef = useRef<string | null>(null);
   const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
@@ -1389,6 +1390,7 @@ function WebDioramaLoaderInner({
                     if (muted) toggleMute(); // Active ambient
                     setShowLoaderOverlay(false);
                   }
+                  setExperienceStarted(true);
                 }}
               />
             )}
@@ -1423,6 +1425,7 @@ function WebDioramaLoaderInner({
             configPOIs={config.pois}
             isPortrait={isPortrait}
             viewportHeight={viewportHeight}
+            experienceStarted={experienceStarted} 
           />
 
           {process.env.NODE_ENV === "development" && composerRef.current && (
