@@ -115,7 +115,7 @@ export default function ExperienceModal({
           transform: 'translateZ(0)',
         }}
         className={`
-          fixed right-4 top-22 z-[100]
+          fixed right-4 top-24 z-[100]
           bg-gradient-to-br from-gray-900/95 via-black/95 to-gray-900/95
           backdrop-blur-xl
           border border-white/10
@@ -152,13 +152,13 @@ export default function ExperienceModal({
               {expanded ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
             </button>
 
-            <button
+            {/* <button
               onClick={onClose}
               className="p-2 hover:bg-white/10 rounded-lg transition text-white"
               aria-label="Fermer"
             >
               <X size={20} />
-            </button>
+            </button> */}
           </div>
         </div>
 
@@ -170,13 +170,13 @@ export default function ExperienceModal({
         )}
 
         {/* Indicateur en mode réduit */}
-        {!expanded && (
+        {/* {!expanded && (
           <div className="p-3 text-center border-t border-white/10">
             <p className="text-gray-400 text-xs">
               Cliquez sur ⤢ pour voir les détails
             </p>
           </div>
-        )}
+        )} */}
       </motion.div>
     </AnimatePresence>
   );
