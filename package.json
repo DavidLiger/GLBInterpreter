@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "export-configs": "ts-node scripts/export-configs.ts"
@@ -19,10 +19,10 @@
     "glob": "^11.0.3",
     "idb": "^8.0.3",
     "lucide-react": "^0.542.0",
-    "next": "15.5.2",
+    "next": "^16.0.7",
     "qrcode.react": "^4.2.0",
-    "react": "19.1.0",
-    "react-dom": "19.1.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
     "react-zoom-pan-pinch": "^3.7.0",
     "three": "^0.180.0"
   },
