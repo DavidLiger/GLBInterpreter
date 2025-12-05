@@ -83,6 +83,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   const [checkingCache, setCheckingCache] = useState(true);
   const [testKey, setTestKey] = useState(0);
   const [isPreparingAfterTest, setIsPreparingAfterTest] = useState(false);
+  const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
   const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
   );
@@ -108,7 +109,18 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // ✅ MODIFIÉ : Skip le check cache en mode folio
   useEffect(() => {
+    if (isFolioMode) {
+      // ✅ Mode portfolio : chargement direct sans cache
+      console.log("📂 Mode portfolio : assets en streaming");
+      setCheckingCache(false);
+      setShowDownloadModal(false);
+      setAssetsReady(true); // ✅ Direct
+      return;
+    }
+
+    // Mode livre : logique existante
     const checkCacheStatus = async () => {
       const cached = await isBookFullyCached(bookId);
       
@@ -116,13 +128,13 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
         console.log("✅ Assets en cache, lancement direct");
         setCheckingCache(false);
         setShowDownloadModal(false);
-        setIsInitializing(true); // ✅ Afficher "Préparation..."
+        setIsInitializing(true);
         
         console.log("⏳ Pause 2s pour libérer mémoire...");
         setTimeout(() => {
           console.log("✅ Mémoire libérée, lancement scène...");
           setAssetsReady(true);
-          setIsInitializing(false); // ✅ Masquer APRÈS
+          setIsInitializing(false);
         }, 3000);
       } else {
         console.log("📦 Assets manquants, afficher modal");
@@ -132,7 +144,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
     };
     
     checkCacheStatus();
-  }, [bookId]);
+  }, [bookId, isFolioMode]);
 
   const handleRetest = () => {
     setTestKey(prev => prev + 1);
@@ -141,7 +153,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   return (
     <>
       {/* ✅ Écran de vérification cache */}
-      {checkingCache && (
+      {isFolioMode && checkingCache && (
         <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
           <div className="text-white text-center">
             <div className="animate-spin text-4xl mb-4">⚙️</div>
@@ -193,7 +205,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
             </div>
           )}
 
-          {showDownloadModal && !assetsReady && (
+          {!isFolioMode && showDownloadModal && !assetsReady && (
             <BookDownloadModal
               bookId={bookId}
               config={config}
@@ -230,7 +242,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
             </div>
           )}
 
-          {!assetsReady && !showDownloadModal && !checkingCache && !isInitializing && (
+          {!isFolioMode && !assetsReady && !showDownloadModal && !checkingCache && !isInitializing && (
             <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
               <div className="text-center">
                 <div className="text-6xl mb-6">📦</div>
@@ -283,6 +295,7 @@ function WebDioramaLoaderInner({
   const textureLoader = useMemo(() => new THREE.TextureLoader(), []);
   const [showClickToContinue, setShowClickToContinue] = useState(false);
   const pendingSceneChangeRef = useRef<string | null>(null);
+  const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
   const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
   );
@@ -1383,8 +1396,9 @@ function WebDioramaLoaderInner({
 
           {showRotateHint && <RotateHint show={true} />}
 
-          <DownloadTooltip bookId={bookId} isPortrait={isPortrait} variant="scene" />
-
+          {!isFolioMode && (
+            <DownloadTooltip bookId={bookId} isPortrait={isPortrait} variant="scene" />
+          )}
           <div className="absolute top-2 right-2 z-50 flex flex-row gap-2 items-end">
             <InfoButton onClick={() => setShowInfoModal(true)} />
           </div>
