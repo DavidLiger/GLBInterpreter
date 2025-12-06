@@ -48,6 +48,8 @@ import GLBOptimizer from "./ui/GLBOptimizer";
 import SpritesheetGenerator from "./ui/SpritesheetGenerator";
 import { applySpritesheets } from "./rendering/applySpritesheet";
 import { SpritesheetAnimator } from "./rendering/SpritesheetAnimator";
+import CVButton from "./ui/CVButton";
+import CVModal from "./ui/CVModal";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -296,6 +298,7 @@ function WebDioramaLoaderInner({
   const [experienceStarted, setExperienceStarted] = useState(false);
   const [showClickToContinue, setShowClickToContinue] = useState(false);
   const pendingSceneChangeRef = useRef<string | null>(null);
+  const [showCVModal, setShowCVModal] = useState(false);
   const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
   const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
@@ -1401,6 +1404,22 @@ function WebDioramaLoaderInner({
           {!isFolioMode && (
             <DownloadTooltip bookId={bookId} isPortrait={isPortrait} variant="scene" />
           )}
+
+          {/* ✅ NOUVEAU : Bouton CV (seulement en mode folio) */}
+          {isFolioMode && (
+            <CVButton onClick={() => setShowCVModal(true)} />
+          )}
+
+          {/* ✅ NOUVEAU : Modal CV */}
+          {isFolioMode && (
+            <CVModal
+              isOpen={showCVModal}
+              onClose={() => setShowCVModal(false)}
+              cvHtmlUrl="https://webdiorama-proxy.david-liger-pro.workers.dev/assets/folio/cv/Cv_david_liger.html"
+              cvPdfUrl="https://webdiorama-proxy.david-liger-pro.workers.dev/assets/folio/cv/Cv_david_liger.pdf"
+            />
+          )}
+
           <div className="absolute top-2 right-2 z-50 flex flex-row gap-2 items-end">
             <InfoButton onClick={() => setShowInfoModal(true)} />
           </div>

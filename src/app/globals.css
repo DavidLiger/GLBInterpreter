@@ -48,4 +48,9 @@ body {
   z-index: 50;
 }
 
+/* Support safe-area pour iOS */
+.safe-area-bottom {
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+}
+
 
