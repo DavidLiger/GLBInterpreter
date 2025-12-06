@@ -21,7 +21,12 @@ const nextConfig: NextConfig = {
   },
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
-  }
+  },
+  // ✅ AJOUTER : Force webpack (nécessaire pour Serwist)
+  webpack: (config, { isServer }) => {
+    // Configuration webpack nécessaire pour Serwist
+    return config;
+  },
 };
 
 export default withSerwist(nextConfig);
