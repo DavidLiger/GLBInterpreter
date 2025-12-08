@@ -56,6 +56,11 @@ const BullstandRegular = localFont({
   variable: "--font-Bullstand-Regular",
 });
 
+const HandyGeorge = localFont({
+  src: "../../../public/fonts/HandyGeorge.ttf",
+  variable: "--font-HandyGeorge",
+});
+
 export default function WebDioramaLoader({ config, bookId }: { config: DioramaConfig3D; bookId: string }) {
   const [mounted, setMounted] = useState(false); // ✅ NOUVEAU
 
@@ -1394,7 +1399,7 @@ function WebDioramaLoaderInner({
                 isLoaded={isLoaded}
                 sceneName={config.name[lang]}
                 loaderImage={config.loaderImage}
-                fontClassName={BullstandRegular.className}
+                fontClassName={HandyGeorge.className}
                 autoplay={autoplay}
                 bookId={bookId}
                 // assetLoadingStatus={

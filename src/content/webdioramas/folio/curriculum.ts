@@ -3,7 +3,7 @@ import type { DioramaConfig3DWithPostProcessing } from "@/types/diorama";
 const BASE_URL = process.env.NEXT_PUBLIC_ASSET_BASE_URL || "";
 
 export const curriculum: DioramaConfig3DWithPostProcessing = {
-  glb: `${BASE_URL}/models/street.glb`,
+  glb: `${BASE_URL}/models/work-planets.glb`,
   loaderImage: `${BASE_URL}/icons/dioramas/test_street/street-preview.png`,
   autoplay: true, // ← Mode tutoriel automatique ou pas
   deviceTester: {
@@ -13,35 +13,35 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
     minGPUTier: 1,
   },
   name: {
-    fr: "La place du village",
-    en: "The Village Square",
-    es: "La plaza del pueblo"
+    fr: "David Liger",
+    en: "David Liger",
+    es: "David Liger"
   },
-  postProcessing: {
-    bloom: {
-      enabled: false,
-      strength: 0.2,
-      radius: 0.5,
-      threshold: 1.0,
-    },
-    ssao: {
-      enabled: false,
-      kernelRadius: 32,
-      minDistance: 0.001,
-      maxDistance: 0.15,
-    },
-    dof: {
-      enabled: false, // Activé dynamiquement selon le POI
-      focus: 5.0,
-      aperture: 0.02,
-      maxblur: 0.015,
-    },
-    toneMapping: {
-      enabled: false,
-      exposure: 1.3,
-      type: "Linear",
-    },
-  },
+//   postProcessing: {
+//     bloom: {
+//       enabled: false,
+//       strength: 0.2,
+//       radius: 0.5,
+//       threshold: 1.0,
+//     },
+//     ssao: {
+//       enabled: false,
+//       kernelRadius: 32,
+//       minDistance: 0.001,
+//       maxDistance: 0.15,
+//     },
+//     dof: {
+//       enabled: false, // Activé dynamiquement selon le POI
+//       focus: 5.0,
+//       aperture: 0.02,
+//       maxblur: 0.015,
+//     },
+//     toneMapping: {
+//       enabled: false,
+//       exposure: 1.3,
+//       type: "Linear",
+//     },
+//   },
   emissiveObjects: [ // fait partie du postprocessing
     // { name: "bulb_01", color: 0xfff2cc, intensity: 2.5 },
     // { name: "bulb_02", color: 0xfff2cc, intensity: 2.0 },
@@ -52,23 +52,54 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
     {
       id: "start",
       label: {
-        fr: "Vue initiale",
-        en: "Initial View",
-        es: "Vista inicial"
+        fr: "Chez David",
+        en: "At David's",
+        es: "En casa de David"
       },
       emptyName: "start",
       icon: `${BASE_URL}/icons/dioramas/test_street/start.png`,
       ambientSound: `${BASE_URL}/sounds/aquatic_ambience.mp3`,
       sceneSound: `${BASE_URL}/sounds/goofy_Ahh_trap_short.mp3`,
-      zoom: 0.5, // règlages de la cmera sur ce POI (jusqu'à enableZoom)
+      zoom: 0.5, // règlages de la camera sur ce POI (jusqu'à enableZoom)
       lookAxis: "x",
-      minDistance: 1,
-      maxDistance: 20,
-      minPolarAngle: 0,
-      maxPolarAngle: 1.57,
-      minAzimuthAngle: -3.14,
-      maxAzimuthAngle: 3.14,
+      minDistance: 2.2,
+      maxDistance: 4,
+      minPolarAngle: 0.3,
+      maxPolarAngle: 1.12,
+      minAzimuthAngle: 2.24,
+      maxAzimuthAngle: -0.2,
       enableZoom: true,
+      children: [ // POIs enfant
+        {
+          id: "david_00",
+          label: {
+            fr: "çà bosse...",
+            en: "It's working...",
+            es: "¡Vamos allá!"
+          },
+          emptyName: "david_00",
+          icon: `${BASE_URL}/icons/dioramas/test_street/apartment.png`,
+          ambientSound: `${BASE_URL}/sounds/tv_background.mp3`,
+          zoom: 0.2,
+          lookAxis: "x",
+          minDistance: 0.45,
+          maxDistance: 1.1,
+          minPolarAngle: 1,
+          maxPolarAngle: 1.27,
+          minAzimuthAngle: 1.14,
+          maxAzimuthAngle: 4.14,
+          enableZoom: true,
+          elements: [
+            {
+              name: "Suzanne",
+              type: "mesh",
+              clipName: "monkeyFly",
+              autoplay: false,
+              loop: false
+            }
+          ]
+        }
+      ],
       elements: [ // elements posssedant une animation dans le glb
         {
           name: "Armature",
@@ -77,55 +108,6 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           autoplay: false,
           loop: false
         },
-        {
-          name: "ArmatureDonutCycle",
-          type: "armature",
-          clipName: "Action",
-          autoplay: false,
-          loop: false
-        },
-        {
-          name: "donutCycle",
-          type: "armature",
-          clipName: "Action_001",
-          autoplay: false,
-          loop: false
-        },
-        {
-          name: "DuckArmature_001", // les noms d'armature et d'actions (clipName) doivent tous avoir des _ et non des .
-          type: "armature",
-          clipName: "Duck_Walk",
-          autoplay: false,
-          loop: false
-        },
-        {
-          name: "Armature_Velo_001",
-          type: "armature",
-          clipName: "velo_riding",
-          autoplay: false,
-          loop: false
-        },
-        {
-          name: "donutCycle_002",
-          type: "armature",
-          clipName: "perso-riding-velo",
-          autoplay: false,
-          loop: false
-        },
-        {
-          name: "Armature_Car",
-          type: "armature",
-          clipName: "car_driving",
-          autoplay: false,
-          loop: false
-        },
-        {
-          name: "Armature_driver",
-          type: "armature",
-          clipName: "char_drive_car",
-          autoplay: false,
-          loop: false
-        }
       ],
       dialogue: {
         characters: [
@@ -186,7 +168,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         { point: "start_01", target: "start_01_track", time: 3.0, duration: 3.0, zoom: 0.3 },
         { point: "start_02", target: "start_02_track", time: 8.0, duration: 4.0, zoom: 0.8 }
       ],
-      dofConfig: { // focus et blur autour (à utiliser sur des cènes fixes)
+      dofConfig: { // focus et blur autour (à utiliser sur des scènes fixes)
         focus: 8.0,
         aperture: 0.015,
         maxblur: 0.01,
@@ -392,16 +374,16 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
   lights: [ // règlages des lumières
     {
       type: "ambient",
-      color: 0xffe0cc,
-      intensity: 0.6,
+      color: 0xccfffd,
+      intensity: 0.8,
     },
     {
       type: "spot",
-      emptyName: "spot_01",
+      emptyName: "spot_01", // pointe vers spot_01_target (ajout de _target derrière le nom du emptyname)
       color: 0xfff2cc,
-      intensity: 0.8,
+      intensity: 1.5,
       distance: 10,
-      angle: Math.PI / 4,
+      angle: Math.PI / 2,
       penumbra: 0.3,
     },
     {
