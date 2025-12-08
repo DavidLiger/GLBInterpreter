@@ -8,7 +8,7 @@ export type WebDioramaConfigEntry = {
 };
 
 const webdioramas: Record<string, WebDioramaConfigEntry> = {
-  street: { 
+  curriculum: { 
     token: "abcd1234", 
     config: curriculum, 
     // redirectUrl: "/webgame/1/quiz?t=quiz1234" // permet de rédiriger vers un jeu

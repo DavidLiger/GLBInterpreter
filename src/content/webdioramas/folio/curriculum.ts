@@ -144,7 +144,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           {
             time: 0.5,
             text: {
-              fr: "Salut ! Bienvenue dans le diorama man.",
+              fr: "Salut ! Bienvenue dans le diorama ma poule.",
               en: "Hi! Welcome to the diorama.",
               es: "¡Hola! Bienvenido al diorama."
             },
