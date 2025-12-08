@@ -22,9 +22,11 @@ const nextConfig: NextConfig = {
   compiler: {
     removeConsole: process.env.NODE_ENV === 'production',
   },
-  // ✅ AJOUTER : Force webpack (nécessaire pour Serwist)
+  // ✅ AJOUTER cette ligne pour supprimer l'erreur Turbopack
+  turbopack: {},
+  
+  // Force webpack (nécessaire pour Serwist)
   webpack: (config, { isServer }) => {
-    // Configuration webpack nécessaire pour Serwist
     return config;
   },
 };

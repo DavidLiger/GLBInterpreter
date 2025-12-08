@@ -300,6 +300,7 @@ function WebDioramaLoaderInner({
   const pendingSceneChangeRef = useRef<string | null>(null);
   const [showCVModal, setShowCVModal] = useState(false);
   const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
+  const isDevMode = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
   const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
   );
@@ -1018,6 +1019,10 @@ function WebDioramaLoaderInner({
   // ✅ Puis modifiez le useEffect de cleanup :
   useEffect(() => {
     const performCleanup = () => {
+      if (isDevMode) {
+        console.log("🔧 DEV MODE: Cleanup désactivé");
+        return;
+      }
       // ✅ AJOUTER : Ne pas cleanup si outil dev ouvert
       if (devToolOpenRef.current) {
         console.log("⏸️ Cleanup ignoré : outil dev ouvert");
@@ -1133,6 +1138,11 @@ function WebDioramaLoaderInner({
     
     const handleVisibilityChange = () => {
       console.log("👁️ Visibility changed:", document.hidden ? "HIDDEN" : "VISIBLE");
+
+      if (isDevMode) {
+        console.log("🔧 DEV MODE: Visibility change ignoré");
+        return;
+      }
       
       if (devToolOpenRef.current) {
         console.log("⏸️ Visibility change ignoré : outil dev ouvert");
@@ -1158,6 +1168,11 @@ function WebDioramaLoaderInner({
     const handleFocus = () => {
       console.log("👁️ Window focus");
 
+      if (isDevMode) {
+        console.log("🔧 DEV MODE: Focus ignoré");
+        return;
+      }
+
       if (devToolOpenRef.current) {
         console.log("⏸️ Focus ignoré : outil dev ouvert");
         return;
@@ -1177,6 +1192,11 @@ function WebDioramaLoaderInner({
     const handleBlur = () => {
       console.log("👁️ Window blur");
 
+      if (isDevMode) {
+        console.log("🔧 DEV MODE: Blur ignoré");
+        return;
+      }
+
       // ✅ AJOUTER : Ignorer si outil dev ouvert
       if (devToolOpenRef.current) {
         console.log("⏸️ Blur ignoré : outil dev ouvert");
@@ -1192,6 +1212,11 @@ function WebDioramaLoaderInner({
     
     const handlePageHide = () => {
       console.log("👁️ Page hide");
+
+      if (isDevMode) {
+        console.log("🔧 DEV MODE: PageHide ignoré");
+        return;
+      }
 
       // ✅ AJOUTER : Ignorer si outil dev ouvert
       if (devToolOpenRef.current) {
@@ -1352,6 +1377,12 @@ function WebDioramaLoaderInner({
       }}
       className="bg-black"
     >
+          {/* ✅ NOUVEAU : Badge mode dev */}
+          {isDevMode && (
+            <div className="fixed top-2 left-2 z-[200] px-3 py-1 bg-yellow-500 text-black text-xs font-bold rounded-full shadow-lg">
+              🔧 DEV MODE
+            </div>
+          )}
 
           {/* LoaderOverlay et le reste... */}
           <AnimatePresence>
