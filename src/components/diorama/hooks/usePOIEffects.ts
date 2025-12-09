@@ -10,7 +10,7 @@ export const usePOIEffects = (
 ) => {
   useEffect(() => {
     // ✅ Vérification stricte
-    if (!poi?.effects?.enabled) return;
+    if (!scene || !poi?.effects?.enabled) return;
 
     const group = new THREE.Group();
     scene.add(group);
