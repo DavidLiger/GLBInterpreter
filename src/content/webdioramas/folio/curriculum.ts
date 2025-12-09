@@ -278,14 +278,115 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           }
         ]
       },
-      cameraPath: [ // pour le déplacement automatisé de la caméra durant l'animation
-        { point: "start_01", target: "start_01_track", time: 3.0, duration: 3.0, zoom: 0.3 },
-        { point: "start_02", target: "start_02_track", time: 8.0, duration: 4.0, zoom: 0.8 }
+      effects: {
+        enabled: true,
+        skybox: {
+          intensity: 0.8,
+          tint: "#ffd9b3",
+          texture: `${BASE_URL}/images/dioramas/work-planets/space_hdr_texture_of_stars.webp`,
+        }
+      }
+    },
+    {
+      id: "work_planet-02",
+      label: {
+        fr: "En stage...",
+        en: "On work placement...",
+        es: "En prácticas..."
+      },
+      emptyName: "work_planet-02",
+      icon: `${BASE_URL}/icons/village.webp`,
+      ambientSound: `${BASE_URL}/sounds/aquatic_ambience.mp3`,
+      sceneSound: `${BASE_URL}/sounds/goofy_Ahh_trap_short.mp3`,
+      zoom: 0.5, // règlages de la camera sur ce POI (jusqu'à enableZoom)
+      lookAxis: "x",
+      minDistance: 2.2,
+      maxDistance: 4,
+      minPolarAngle: 0.3,
+      maxPolarAngle: 1.42,
+      minAzimuthAngle: -1.24,
+      maxAzimuthAngle: -2,
+      enableZoom: true,
+      children: [ // POIs enfant
+        {
+          id: "david_02",
+          label: {
+            fr: "çà bosse...",
+            en: "It's working...",
+            es: "¡Vamos allá!"
+          },
+          emptyName: "david_02",
+          icon: `${BASE_URL}/icons/nerd-icon.webp`,
+          ambientSound: `${BASE_URL}/sounds/tv_background.mp3`,
+          zoom: 0.2,
+          lookAxis: "x",
+          minDistance: 0.45,
+          maxDistance: 1.1,
+          minPolarAngle: 1,
+          maxPolarAngle: 1.27,
+          minAzimuthAngle: -0.64,
+          maxAzimuthAngle: 1.84,
+          enableZoom: true
+        }
       ],
-      dofConfig: { // focus et blur autour (à utiliser sur des scènes fixes)
-        focus: 8.0,
-        aperture: 0.015,
-        maxblur: 0.01,
+      elements: [ // elements posssedant une animation dans le glb
+        {
+          name: "clouds_02",
+          type: "mesh",
+          clipName: "clouds_02_Action",
+          autoplay: false,
+          loop: false
+        },
+      ],
+      dialogue: {
+        characters: [
+          { 
+            id: "nerd", 
+            name: { fr: "David", en: "David", es: "David" }, 
+            image: `${BASE_URL}/icons/nerd-icon.webp` 
+          }
+        ],
+        lines: [
+          {
+            time: 0.5,
+            text: {
+              fr: "Salut ! Bienvenue dans le diorama mon poulet.",
+              en: "Hi! Welcome to the diorama.",
+              es: "¡Hola! Bienvenido al diorama."
+            },
+            characterId: "nerd"
+          },
+          {
+            time: 3.0,
+            text: [
+              {
+                fr: "Ici, tu peux explorer la scène en 3D.",
+                en: "Here, you can explore the 3D scene.",
+                es: "Aquí puedes explorar la escena 3D."
+              },
+              {
+                fr: "Tu peux zoomer, tourner la caméra, et cliquer sur les points d'intérêt.",
+                en: "You can zoom in, rotate the camera, and click on points of interest.",
+                es: "Puedes ampliar la imagen, girar la cámara y hacer clic en los puntos de interés."
+              },
+              {
+                fr: "Amuse-toi bien !",
+                en: "Have fun!",
+                es: "¡Que te diviertas!"
+              }
+            ],
+            characterId: "nerd"
+          },
+          {
+            time: 12.5,
+            text: {
+                fr: "Allons voir ce qu’il se passe plus loin !",
+                en: "Let's go and see what's happening further on!",
+                es: "¡Vamos a ver qué pasa más allá!"
+              },
+            characterId: "nerd"
+          }
+        ]
       },
       effects: {
         enabled: true,
@@ -351,9 +452,9 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
       type: "spot",
       emptyName: "spot_03",
       color: 0xfff2cc,
-      intensity: 0.05,
+      intensity: 1.5,
       distance: 8,
-      angle: Math.PI / 3.5,
+      angle: Math.PI / 2,
       penumbra: 0.5,
     },
     {
