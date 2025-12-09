@@ -147,6 +147,7 @@ export default function POIBreadcrumbs({
               <motion.button
                 ref={item.type === "active" ? activeRef : null}
                 key={`btn-${item.poi.id}`}
+                title={item.poi.label[lang]}
                 onClick={() => {
                   if (item.type !== "active") {
                     goToPOI(item.poi);
