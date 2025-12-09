@@ -4,7 +4,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_ASSET_BASE_URL || "";
 
 export const curriculum: DioramaConfig3DWithPostProcessing = {
   glb: `${BASE_URL}/models/work-planets.glb`,
-  loaderImage: `${BASE_URL}/icons/dioramas/test_street/street-preview.png`,
+  loaderImage: `${BASE_URL}/images/dioramas/work-planets/preview.webp`,
   autoplay: true, // ← Mode tutoriel automatique ou pas
   deviceTester: {
     enabled: false,
@@ -57,15 +57,15 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         es: "En casa de David"
       },
       emptyName: "start",
-      icon: `${BASE_URL}/icons/dioramas/test_street/start.png`,
+      icon: `${BASE_URL}/icons/mountain.webp`,
       ambientSound: `${BASE_URL}/sounds/aquatic_ambience.mp3`,
       sceneSound: `${BASE_URL}/sounds/goofy_Ahh_trap_short.mp3`,
       zoom: 0.5, // règlages de la camera sur ce POI (jusqu'à enableZoom)
       lookAxis: "x",
-      minDistance: 2.2,
+      minDistance: 2.4,
       maxDistance: 4,
-      minPolarAngle: 0.3,
-      maxPolarAngle: 1.12,
+      minPolarAngle: 0.1,
+      maxPolarAngle: 1.32,
       minAzimuthAngle: 2.24,
       maxAzimuthAngle: -0.2,
       enableZoom: true,
@@ -78,11 +78,11 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
             es: "¡Vamos allá!"
           },
           emptyName: "david_00",
-          icon: `${BASE_URL}/icons/dioramas/test_street/apartment.png`,
+          icon: `${BASE_URL}/icons/nerd-icon.webp`,
           ambientSound: `${BASE_URL}/sounds/tv_background.mp3`,
           zoom: 0.2,
           lookAxis: "x",
-          minDistance: 0.45,
+          minDistance: 0.55,
           maxDistance: 1.1,
           minPolarAngle: 1,
           maxPolarAngle: 1.27,
@@ -102,9 +102,9 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
       ],
       elements: [ // elements posssedant une animation dans le glb
         {
-          name: "Armature",
-          type: "armature",
-          clipName: "walk",
+          name: "clouds_00",
+          type: "mesh",
+          clipName: "clouds_00_Action",
           autoplay: false,
           loop: false
         },
@@ -112,14 +112,9 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
       dialogue: {
         characters: [
           { 
-            id: "hero", 
-            name: { fr: "Alex", en: "Alex", es: "Alex" }, 
-            image: `${BASE_URL}/images/dioramas/test_street/characters/icone-elf.png` 
-          },
-          { 
-            id: "guide", 
-            name: { fr: "Luna", en: "Luna", es: "Luna" }, 
-            image: `${BASE_URL}/images/dioramas/test_street/characters/icone-goblin.png` 
+            id: "nerd", 
+            name: { fr: "David", en: "David", es: "David" }, 
+            image: `${BASE_URL}/icons/nerd-icon.webp` 
           }
         ],
         lines: [
@@ -130,7 +125,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               en: "Hi! Welcome to the diorama.",
               es: "¡Hola! Bienvenido al diorama."
             },
-            characterId: "hero"
+            characterId: "nerd"
           },
           {
             time: 3.0,
@@ -151,7 +146,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
                 es: "¡Que te diviertas!"
               }
             ],
-            characterId: "guide"
+            characterId: "nerd"
           },
           {
             time: 12.5,
@@ -160,7 +155,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
                 en: "Let's go and see what's happening further on!",
                 es: "¡Vamos a ver qué pasa más allá!"
               },
-            characterId: "hero"
+            characterId: "nerd"
           }
         ]
       },
@@ -174,175 +169,132 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         maxblur: 0.01,
       },
       effects: {
-        enabled: false,
-        particles: {
-          type: "leaves", 
-          intensity: 0.6,
-          color: "#ffcc66",
-          area: [5, 3, 5],
-          texture: `${BASE_URL}/images/textures/leaf.png`,
-        },
+        enabled: true,
         skybox: {
           intensity: 0.8,
           tint: "#ffd9b3",
-          texture: `${BASE_URL}/images/hdr/city.png`,
-        },
-        lighting: {
-          temperature: 3200,
-          ambientIntensity: 0.7
+          texture: `${BASE_URL}/images/dioramas/work-planets/space_hdr_texture_of_stars.webp`,
         }
       }
     },
     {
-      id: "window",
+      id: "work_planet-01",
       label: {
-        fr: "Fenêtre appartement",
-        en: "Apartment window",
-        es: "Ventana de apartamento"
+        fr: "À l'école...",
+        en: "At school...",
+        es: "En la escuela..."
       },
-      emptyName: "window",
-      icon: `${BASE_URL}/icons/dioramas/test_street/window.png`,
-      ambientSound: `${BASE_URL}/sounds/kids_playing.mp3`,
-      zoom: 0.2,
+      emptyName: "work_planet-01",
+      icon: `${BASE_URL}/icons/school.webp`,
+      ambientSound: `${BASE_URL}/sounds/aquatic_ambience.mp3`,
+      sceneSound: `${BASE_URL}/sounds/goofy_Ahh_trap_short.mp3`,
+      zoom: 0.5, // règlages de la camera sur ce POI (jusqu'à enableZoom)
       lookAxis: "x",
-      minDistance: 0.05,
-      maxDistance: 0.1,
-      minPolarAngle: 1,
-      maxPolarAngle: 1.57,
-      minAzimuthAngle: 1.14,
-      maxAzimuthAngle: 2.14,
+      minDistance: 2.2,
+      maxDistance: 4,
+      minPolarAngle: 0.3,
+      maxPolarAngle: 1.42,
+      minAzimuthAngle: -1.24,
+      maxAzimuthAngle: -2,
       enableZoom: true,
-      elements: [
-        {
-          name: "ArmatureAppart",
-          type: "armature",
-          clipName: "walkAppart",
-          autoplay: false,
-          loop: false,
-        },
-        {
-          name: "Suzanne",
-          type: "mesh",
-          clipName: "monkeyFly",
-          autoplay: false,
-          loop: false
-        }
-      ],
       children: [ // POIs enfant
         {
-          id: "apartment",
+          id: "david_01",
           label: {
-            fr: "Appartement",
-            en: "Apartment",
-            es: "Apartamento"
+            fr: "çà bosse...",
+            en: "It's working...",
+            es: "¡Vamos allá!"
           },
-          emptyName: "apartment",
-          icon: `${BASE_URL}/icons/dioramas/test_street/apartment.png`,
+          emptyName: "david_01",
+          icon: `${BASE_URL}/icons/nerd-icon.webp`,
           ambientSound: `${BASE_URL}/sounds/tv_background.mp3`,
           zoom: 0.2,
           lookAxis: "x",
-          minDistance: 0.01,
-          maxDistance: 0.05,
+          minDistance: 0.45,
+          maxDistance: 1.1,
           minPolarAngle: 1,
-          maxPolarAngle: 1.57,
-          minAzimuthAngle: 1.14,
-          maxAzimuthAngle: 2.14,
-          enableZoom: true,
-          elements: [
-            {
-              name: "Suzanne",
-              type: "mesh",
-              clipName: "monkeyFly",
-              autoplay: false,
-              loop: false
-            }
-          ],
-          children: [
-            {
-              id: "coffre",
-              label: {
-                fr: "Coffre",
-                en: "Chest",
-                es: "Cofre"
-              },
-              emptyName: "coffre",
-              icon: `${BASE_URL}/icons/dioramas/test_street/coffre.png`,
-              ambientSound: `${BASE_URL}/sounds/snoring_guy.mp3`,
-              zoom: 0.05,
-              lookAxis: "x",
-              minDistance: 0.01,
-              maxDistance: 0.05,
-              minPolarAngle: 1,
-              maxPolarAngle: 1.57,
-              minAzimuthAngle: 1.14,
-              maxAzimuthAngle: 2.14,
-              enableZoom: true,
-            },
-          ],
-        },
-        {
-          id: "door",
-          label: {
-                fr: "Porte",
-                en: "Door",
-                es: "Puerta"
-              },
-          emptyName: "door",
-          icon: `${BASE_URL}/icons/dioramas/test_street/apartment.png`,
-          ambientSound: `${BASE_URL}/sounds/tv_background.mp3`,
-          zoom: 0.2,
-          lookAxis: "x",
-          minDistance: 0.01,
-          maxDistance: 0.05,
-          minPolarAngle: 1,
-          maxPolarAngle: 1.57,
-          minAzimuthAngle: 1.14,
-          maxAzimuthAngle: 2.14,
-          enableZoom: true,
+          maxPolarAngle: 1.27,
+          minAzimuthAngle: -0.64,
+          maxAzimuthAngle: 1.84,
+          enableZoom: true
         }
       ],
-      dofConfig: {
-        focus: 0.08,
-        aperture: 0.04,
-        maxblur: 0.02,
-      },
-    },
-    {
-      id: "window2",
-      label: {
-        fr: "Fenêtre appartement 2",
-        en: "Apartment window 2",
-        es: "Ventana de apartamento 2"
-      },
-      emptyName: "window2",
-      icon: `${BASE_URL}/icons/dioramas/test_street/window.png`,
-      ambientSound: `${BASE_URL}/sounds/kids_playing.mp3`,
-      sceneSound: `${BASE_URL}/sounds/bonjour_exuberant.mp3`,
-      zoom: 0.2,
-      lookAxis: "x",
-      minDistance: 0.05,
-      maxDistance: 0.1,
-      minPolarAngle: 1,
-      maxPolarAngle: 1.57,
-      minAzimuthAngle: 3.14,
-      maxAzimuthAngle: 4.14,
-      enableZoom: true,
-      elements: [
+      elements: [ // elements posssedant une animation dans le glb
         {
-          name: "ArmatureRecoiffage",
-          type: "armature",
-          clipName: "recoiffageMain",
+          name: "clouds_01",
+          type: "mesh",
+          clipName: "clouds_01_Action",
           autoplay: false,
           loop: false
         },
-        {
-          name: "Character_Salesman_Male_01012",
-          type: "mesh",
-          clipName: "bonjour_exuberant_blendshape_data.001",
-          autoplay: false,
-          loop: false
+      ],
+      dialogue: {
+        characters: [
+          { 
+            id: "nerd", 
+            name: { fr: "David", en: "David", es: "David" }, 
+            image: `${BASE_URL}/icons/nerd-icon.webp` 
+          }
+        ],
+        lines: [
+          {
+            time: 0.5,
+            text: {
+              fr: "Salut ! Bienvenue dans le diorama mon poulet.",
+              en: "Hi! Welcome to the diorama.",
+              es: "¡Hola! Bienvenido al diorama."
+            },
+            characterId: "nerd"
+          },
+          {
+            time: 3.0,
+            text: [
+              {
+                fr: "Ici, tu peux explorer la scène en 3D.",
+                en: "Here, you can explore the 3D scene.",
+                es: "Aquí puedes explorar la escena 3D."
+              },
+              {
+                fr: "Tu peux zoomer, tourner la caméra, et cliquer sur les points d'intérêt.",
+                en: "You can zoom in, rotate the camera, and click on points of interest.",
+                es: "Puedes ampliar la imagen, girar la cámara y hacer clic en los puntos de interés."
+              },
+              {
+                fr: "Amuse-toi bien !",
+                en: "Have fun!",
+                es: "¡Que te diviertas!"
+              }
+            ],
+            characterId: "nerd"
+          },
+          {
+            time: 12.5,
+            text: {
+                fr: "Allons voir ce qu’il se passe plus loin !",
+                en: "Let's go and see what's happening further on!",
+                es: "¡Vamos a ver qué pasa más allá!"
+              },
+            characterId: "nerd"
+          }
+        ]
+      },
+      cameraPath: [ // pour le déplacement automatisé de la caméra durant l'animation
+        { point: "start_01", target: "start_01_track", time: 3.0, duration: 3.0, zoom: 0.3 },
+        { point: "start_02", target: "start_02_track", time: 8.0, duration: 4.0, zoom: 0.8 }
+      ],
+      dofConfig: { // focus et blur autour (à utiliser sur des scènes fixes)
+        focus: 8.0,
+        aperture: 0.015,
+        maxblur: 0.01,
+      },
+      effects: {
+        enabled: true,
+        skybox: {
+          intensity: 0.8,
+          tint: "#ffd9b3",
+          texture: `${BASE_URL}/images/dioramas/work-planets/space_hdr_texture_of_stars.webp`,
         }
-      ]
+      }
     },
   ],
   videos: [ // pour les videostextures
@@ -374,8 +326,8 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
   lights: [ // règlages des lumières
     {
       type: "ambient",
-      color: 0xccfffd,
-      intensity: 0.8,
+      color: 0xffffff,
+      intensity: 0.6,
     },
     {
       type: "spot",
@@ -389,6 +341,60 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
     {
       type: "spot",
       emptyName: "spot_02",
+      color: 0xfff2cc,
+      intensity: 1.5,
+      distance: 8,
+      angle: Math.PI / 2,
+      penumbra: 0.5,
+    },
+    {
+      type: "spot",
+      emptyName: "spot_03",
+      color: 0xfff2cc,
+      intensity: 0.05,
+      distance: 8,
+      angle: Math.PI / 3.5,
+      penumbra: 0.5,
+    },
+    {
+      type: "spot",
+      emptyName: "spot_04",
+      color: 0xfff2cc,
+      intensity: 0.05,
+      distance: 8,
+      angle: Math.PI / 3.5,
+      penumbra: 0.5,
+    },
+    {
+      type: "spot",
+      emptyName: "spot_05",
+      color: 0xfff2cc,
+      intensity: 0.05,
+      distance: 8,
+      angle: Math.PI / 3.5,
+      penumbra: 0.5,
+    },
+    {
+      type: "spot",
+      emptyName: "spot_06",
+      color: 0xfff2cc,
+      intensity: 0.05,
+      distance: 8,
+      angle: Math.PI / 3.5,
+      penumbra: 0.5,
+    },
+    {
+      type: "spot",
+      emptyName: "spot_07",
+      color: 0xfff2cc,
+      intensity: 0.05,
+      distance: 8,
+      angle: Math.PI / 3.5,
+      penumbra: 0.5,
+    },
+    {
+      type: "spot",
+      emptyName: "spot_08",
       color: 0xfff2cc,
       intensity: 0.05,
       distance: 8,

@@ -170,7 +170,7 @@ export default function POIBreadcrumbs({
                   <img
                     src={item.poi.icon}
                     alt={item.poi.label[lang]}
-                    className={`w-6 h-6 object-contain ${
+                    className={`w-10 h-10 object-contain ${
                       item.type === "active" ? "opacity-100" : "opacity-80"
                     }`}
                   />
@@ -191,6 +191,7 @@ export default function POIBreadcrumbs({
           isOpen={!!selectedPOI}
           onClose={() => setSelectedPOI(null)}
           baseUrl="https://webdiorama-proxy.david-liger-pro.workers.dev/assets/folio/content"
+          isPortrait={isPortrait}
         />
       )}
     </>

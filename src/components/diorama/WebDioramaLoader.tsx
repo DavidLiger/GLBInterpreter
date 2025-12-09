@@ -902,9 +902,9 @@ function WebDioramaLoaderInner({
             }
           });
           
-          console.log('📊 Scène:', { meshCount, textureCount, materialCount });
-          console.log('📊 Mixers:', Object.keys(mixerRef.current).length);
-          console.log('📊 Videos:', videoElementsRef.current.length);
+          // console.log('📊 Scène:', { meshCount, textureCount, materialCount });
+          // console.log('📊 Mixers:', Object.keys(mixerRef.current).length);
+          // console.log('📊 Videos:', videoElementsRef.current.length);
         }
         
         // ✅ Mémoire GPU (si disponible)

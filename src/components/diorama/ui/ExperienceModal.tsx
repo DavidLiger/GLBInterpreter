@@ -13,6 +13,7 @@ interface ExperienceModalProps {
   isOpen: boolean;
   onClose: () => void;
   baseUrl: "https://webdiorama-proxy.david-liger-pro.workers.dev/assets/folio/content"
+  isPortrait: boolean;
 }
 
 export default function ExperienceModal({
@@ -20,6 +21,7 @@ export default function ExperienceModal({
   isOpen,
   onClose,
   baseUrl,
+  isPortrait,
 }: ExperienceModalProps) {
   const [expanded, setExpanded] = useState(false);
   const [content, setContent] = useState<ExperienceContent | null>(null);
@@ -96,14 +98,37 @@ export default function ExperienceModal({
 
   if (!isOpen) return null;
 
+    // ✅ NOUVEAU : Configurations responsive
+  const positionClasses = isPortrait
+    ? "right-4 top-24" // Portrait : à droite
+    : "top-2 left-1/2 -translate-x-1/2"; // Paysage : en haut centré
+
+  const animations = isPortrait
+    ? {
+        initial: { x: 400, opacity: 0 },
+        animate: { x: 0, opacity: 1 },
+        exit: { x: 400, opacity: 0 },
+      }
+    : {
+        initial: { y: -100, opacity: 0 },
+        animate: { y: 0, opacity: 1 },
+        exit: { y: -100, opacity: 0 },
+      };
+
+  const sizeClasses = expanded
+    ? isPortrait
+      ? "w-[90vw] max-w-3xl h-[calc(90vh-5rem)]"
+      : "w-[90vw] max-w-4xl h-[85vh]"
+    : "w-80";
+
   return (
-    <AnimatePresence mode="wait"> {/* ✅ mode="wait" pour attendre la sortie */}
+    <AnimatePresence mode="wait">
       <motion.div
-        key={poiId} 
-        initial={{ x: 400, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
-        exit={{ x: 400, opacity: 0 }} 
-        transition={{ 
+        key={poiId}
+        initial={animations.initial}
+        animate={animations.animate}
+        exit={animations.exit}
+        transition={{
           type: "tween",
           duration: 0.3,
           ease: [0.25, 0.1, 0.25, 1],
@@ -115,7 +140,7 @@ export default function ExperienceModal({
           transform: 'translateZ(0)',
         }}
         className={`
-          fixed right-4 top-24 z-[100]
+          fixed ${positionClasses} z-[100]
           bg-gradient-to-br from-gray-900/95 via-black/95 to-gray-900/95
           backdrop-blur-xl
           border border-white/10
@@ -123,7 +148,7 @@ export default function ExperienceModal({
           shadow-2xl
           overflow-hidden
           transition-all duration-300
-          ${expanded ? 'w-[90vw] max-w-3xl h-[calc(90vh-5rem)]' : 'w-80'}
+          ${sizeClasses}
         `}
       >
         {/* Header - TOUJOURS visible */}
@@ -151,32 +176,17 @@ export default function ExperienceModal({
             >
               {expanded ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
             </button>
-
-            {/* <button
-              onClick={onClose}
-              className="p-2 hover:bg-white/10 rounded-lg transition text-white"
-              aria-label="Fermer"
-            >
-              <X size={20} />
-            </button> */}
           </div>
         </div>
 
         {/* Contenu SEULEMENT si expanded */}
         {expanded && (
-          <div className="overflow-y-auto h-[calc(90vh-9rem)]">
+          <div className={`overflow-y-auto ${
+            isPortrait ? 'h-[calc(90vh-9rem)]' : 'h-[calc(85vh-5rem)]'
+          }`}>
             {renderTemplate()}
           </div>
         )}
-
-        {/* Indicateur en mode réduit */}
-        {/* {!expanded && (
-          <div className="p-3 text-center border-t border-white/10">
-            <p className="text-gray-400 text-xs">
-              Cliquez sur ⤢ pour voir les détails
-            </p>
-          </div>
-        )} */}
       </motion.div>
     </AnimatePresence>
   );
