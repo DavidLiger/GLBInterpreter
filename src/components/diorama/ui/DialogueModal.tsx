@@ -37,6 +37,7 @@ export default function DialogueModal({
   const { lang } = useTranslation();
   const [currentLine, setCurrentLine] = useState<DialogueLine | null>(null);
   const [currentCharacter, setCurrentCharacter] = useState<DialogueCharacter | null>(null);
+  const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
   
 
   // 🔹 Trouve la ligne actuelle selon le temps
@@ -84,7 +85,7 @@ export default function DialogueModal({
  if (!currentLine || !isPlaying || !currentText) return null;
 
   // 🧱 Layout selon orientation
-  const containerClass = isPortrait
+  const containerClass = (isPortrait || isFolioMode)
     ? `
         absolute bottom-14 left-1/2 -translate-x-1/2 z-40 
         bg-black/60 text-white rounded-4xl px-3 py-2 

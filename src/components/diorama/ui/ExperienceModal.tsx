@@ -101,8 +101,8 @@ export default function ExperienceModal({
     // ✅ NOUVEAU : Configurations responsive
   const positionClasses = isPortrait
     ? "right-4 top-24" // Portrait : à droite
-    // : "top-2 left-1/2 -translate-x-1/2"; // Paysage : en haut centré
-    : "top-16 right-4";
+    : "top-2 left-1/2 -translate-x-1/2"; // Paysage : en haut centré
+    // : "top-16 right-4";
 
   const animations = isPortrait
     ? {
@@ -153,15 +153,15 @@ export default function ExperienceModal({
         `}
       >
         {/* Header - TOUJOURS visible */}
-        <div className="flex items-center justify-between p-4 border-b border-white/10 bg-white/5">
+        <div className="flex items-center justify-between p-2 border-b border-white/10 bg-white/5">
           <div className="flex-1 min-w-0">
             {content && (
               <>
-                <h3 className="text-white font-bold text-lg truncate">
+                <h3 className="text-white font-bold text-md truncate">
                   {content.title}
                 </h3>
                 {content.subtitle && (
-                  <p className="text-gray-400 text-sm truncate">
+                  <p className="text-gray-400 text-xs truncate">
                     {content.subtitle}
                   </p>
                 )}
