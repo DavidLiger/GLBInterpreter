@@ -917,7 +917,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
       maxDistance: 4,
       minPolarAngle: 0.8,
       maxPolarAngle: 1.42,
-      minAzimuthAngle: 0.44,
+      minAzimuthAngle: 1.44,
       maxAzimuthAngle: -1.24,
       enableZoom: true,
       children: [ // POIs enfant
