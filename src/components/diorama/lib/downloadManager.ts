@@ -228,18 +228,39 @@ class DownloadManager {
   }
 
     // ✅ AJOUTER cette méthode dans la classe
+// ✅ AMÉLIORER cette méthode avec plus de logs
   async getAssetByUrl(url: string): Promise<Blob | null> {
-    // Chercher la task qui correspond à cette URL
+    console.log("🔍 Recherche asset par URL:", url);
+    
     const allTasks = await this.db.getAll('tasks');
-    const task = allTasks.find(t => t.url === url && t.status === 'completed');
+    console.log(`📦 ${allTasks.length} tasks en base`, allTasks.map(t => ({ 
+      id: t.id, 
+      url: t.url, 
+      status: t.status 
+    })));
+    
+    const task = allTasks.find(t => {
+      const match = t.url === url && t.status === 'completed';
+      if (t.url === url) {
+        console.log(`🔎 Trouvé task avec URL correspondante: ${t.id}, status: ${t.status}`);
+      }
+      return match;
+    });
     
     if (!task) {
-      console.log(`📦 Asset non trouvé en cache: ${url}`);
+      console.log(`❌ Asset non trouvé en cache: ${url}`);
+      console.log("📋 URLs en cache:", allTasks.map(t => t.url));
       return null;
     }
 
     console.log(`✅ Asset trouvé en cache: ${task.id}`);
     const chunks = await this.db.get('chunks', task.id);
+    
+    if (!chunks) {
+      console.error(`❌ Chunks introuvables pour ${task.id}`);
+      return null;
+    }
+    
     return new Blob(chunks.data as BlobPart[]);
   }
 }

@@ -107,9 +107,9 @@ const instructions = [
             val = val.replace(/(\/assets\/\d+)\/assets\/\d+/g, '$1');
 
             // Ajoute cache-buster sur les .glb
-            if (val.endsWith('.glb')) {
-            val += '?v=${Date.now()}';
-            }
+            // if (val.endsWith('.glb')) {
+            // val += '?v=${Date.now()}';
+            // }
 
             return val;
         }

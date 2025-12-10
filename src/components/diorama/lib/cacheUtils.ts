@@ -20,9 +20,9 @@ export function applyCacheBustersToConfig(
   const processedConfig = { ...config };
   
   // Ajouter cache buster au GLB
-  if (processedConfig.glb) {
-    processedConfig.glb = addCacheBuster(processedConfig.glb)!;
-  }
+  // if (processedConfig.glb) {
+  //   processedConfig.glb = addCacheBuster(processedConfig.glb)!;
+  // }
   
   // Ajouter cache buster à l'image de loader
   if (processedConfig.loaderImage) {
