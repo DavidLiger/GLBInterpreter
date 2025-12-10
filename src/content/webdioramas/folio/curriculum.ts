@@ -437,7 +437,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
       sceneSound: `${BASE_URL}/sounds/Digital_Galaxy/Neon_Soul_Systems.mp3`,
       zoom: 0.5, // règlages de la camera sur ce POI (jusqu'à enableZoom)
       lookAxis: "x",
-      minDistance: 2.2,
+      minDistance: 1.8,
       maxDistance: 4,
       minPolarAngle: 0.9,
       maxPolarAngle: 1.62,
