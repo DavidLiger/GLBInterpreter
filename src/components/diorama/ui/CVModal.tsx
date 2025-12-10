@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Download, Maximize2, Minimize2 } from "lucide-react";
+import { X, Download } from "lucide-react";
 
 interface CVModalProps {
   isOpen: boolean;
@@ -21,7 +21,6 @@ export default function CVModal({
   const [cvHtmlContent, setCvHtmlContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // ✅ Charger le HTML depuis R2
   useEffect(() => {
     if (!isOpen || !cvHtmlUrl) return;
 
@@ -76,16 +75,25 @@ export default function CVModal({
           transition={{ type: "spring", damping: 25 }}
           onClick={(e) => e.stopPropagation()}
           className={`
-            bg-white rounded-2xl shadow-2xl overflow-hidden
+            bg-white rounded-2xl shadow-2xl
             flex flex-col
             ${isFullscreen 
               ? 'w-full h-full max-w-full max-h-full' 
               : 'w-full max-w-4xl h-[90vh]'
             }
           `}
+          style={{ overflow: 'hidden' }}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-purple-600 to-blue-600 text-white flex-shrink-0">
+          {/* ✅ Header - Styles forcés avec !important */}
+          <div 
+            className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-purple-600 to-blue-600 text-white"
+            style={{
+              flexShrink: 0,
+              minHeight: '80px',
+              maxHeight: '80px',
+              height: '80px',
+            }}
+          >
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -94,12 +102,16 @@ export default function CVModal({
                 </svg>
               </div>
               <div>
-                <h2 className="text-xl font-bold">Curriculum Vitae</h2>
+                {/* ✅ Mobile : CV | Desktop : Curriculum Vitae */}
+                <h2 className="text-xl font-bold">
+                  <span className="md:hidden">CV</span>
+                  <span className="hidden md:inline">Curriculum Vitae</span>
+                </h2>
                 <p className="text-sm text-white/80">David Liger - Tech Lead Full-Stack</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-4">
               <button
                 onClick={handleDownload}
                 className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition text-sm font-medium"
@@ -108,17 +120,9 @@ export default function CVModal({
                 <span className="hidden md:inline">Télécharger PDF</span>
               </button>
 
-              {/* <button
-                onClick={() => setIsFullscreen(!isFullscreen)}
-                className="p-2 hover:bg-white/20 rounded-lg transition"
-                aria-label={isFullscreen ? "Réduire" : "Plein écran"}
-              >
-                {isFullscreen ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
-              </button> */}
-
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-white/20 rounded-lg transition"
+                className="p-2 hover:bg-white/20 rounded-lg transition mr-2"
                 aria-label="Fermer"
               >
                 <X size={20} />
@@ -126,8 +130,16 @@ export default function CVModal({
             </div>
           </div>
 
-          {/* Contenu CV */}
-          <div className="flex-1 overflow-auto bg-gray-100">
+          {/* ✅ Contenu CV - Utiliser iframe avec srcdoc pour isolation TOTALE */}
+          <div 
+            className="bg-gray-100"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              overflow: 'hidden',
+              position: 'relative',
+            }}
+          >
             {loading ? (
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">
@@ -136,20 +148,50 @@ export default function CVModal({
                 </div>
               </div>
             ) : cvHtmlContent ? (
-              // ✅ Afficher le HTML directement dans un div
-              <div 
-                className="cv-container"
-                dangerouslySetInnerHTML={{ __html: cvHtmlContent }}
+              // ✅ Utiliser iframe avec srcdoc pour isolation complète
+              <iframe
+                srcDoc={`
+                  <!DOCTYPE html>
+                  <html>
+                    <head>
+                      <meta charset="UTF-8">
+                      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                      <style>
+                        body {
+                          margin: 0;
+                          padding: 16px;
+                          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                          background: #f3f4f6;
+                          overflow-y: auto;
+                        }
+                        @media (min-width: 768px) {
+                          body {
+                            padding: 32px;
+                          }
+                        }
+                      </style>
+                    </head>
+                    <body>
+                      ${cvHtmlContent}
+                    </body>
+                  </html>
+                `}
+                className="w-full h-full border-0"
+                title="CV David Liger"
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  height: '100%',
+                  border: 'none',
+                }}
               />
             ) : cvHtmlUrl ? (
-              // Fallback : iframe si le fetch a échoué
               <iframe
                 src={cvHtmlUrl}
                 className="w-full h-full border-0"
                 title="CV David Liger"
               />
             ) : (
-              // Afficher directement le PDF
               <iframe
                 src={cvPdfUrl}
                 className="w-full h-full border-0"
@@ -158,19 +200,26 @@ export default function CVModal({
             )}
           </div>
 
-        {/* Footer mobile - PROPRE ET SPACIEUX */}
-        {/* Footer mobile - VERSION AÉRÉE */}
-        <div className="md:hidden bg-white border-t border-gray-200 shadow-lg">
-        <div className="px-6 py-8 pb-safe">
-            <button
-            onClick={handleDownload}
-            className="w-full flex items-center justify-center gap-3 px-8 py-5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-2xl font-bold shadow-xl hover:shadow-2xl transition-all text-lg"
-            >
-            <Download size={24} />
-            Télécharger le CV
-            </button>
-        </div>
-        </div>
+          {/* ✅ Footer mobile - Styles forcés */}
+          <div 
+            className="md:hidden bg-white border-t border-gray-200 shadow-lg"
+            style={{
+              flexShrink: 0,
+              minHeight: '120px',
+              maxHeight: '120px',
+              height: '120px',
+            }}
+          >
+            <div className="px-6 py-8 pb-safe" style={{ height: '100%', display: 'flex', alignItems: 'center' }}>
+              <button
+                onClick={handleDownload}
+                className="w-full flex items-center justify-center gap-3 px-8 py-5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-2xl font-bold shadow-xl hover:shadow-2xl transition-all text-lg"
+              >
+                <Download size={24} />
+                Télécharger le CV
+              </button>
+            </div>
+          </div>
         </motion.div>
       </motion.div>
     </AnimatePresence>
