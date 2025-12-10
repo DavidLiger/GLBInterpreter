@@ -226,6 +226,22 @@ class DownloadManager {
     const chunks = await this.db.get('chunks', taskId);
     return new Blob(chunks.data as BlobPart[]);
   }
+
+    // ✅ AJOUTER cette méthode dans la classe
+  async getAssetByUrl(url: string): Promise<Blob | null> {
+    // Chercher la task qui correspond à cette URL
+    const allTasks = await this.db.getAll('tasks');
+    const task = allTasks.find(t => t.url === url && t.status === 'completed');
+    
+    if (!task) {
+      console.log(`📦 Asset non trouvé en cache: ${url}`);
+      return null;
+    }
+
+    console.log(`✅ Asset trouvé en cache: ${task.id}`);
+    const chunks = await this.db.get('chunks', task.id);
+    return new Blob(chunks.data as BlobPart[]);
+  }
 }
 
 /**
@@ -375,3 +391,100 @@ export async function isBookFullyCached(bookId: string): Promise<boolean> {
 }
 
 export const downloadManager = new DownloadManager();
+
+export async function getAssetFromCache(bookId: string, url: string): Promise<Blob | null> {
+  await downloadManager.init();
+  return await downloadManager.getAssetByUrl(url);
+}
+
+// src/components/diorama/lib/downloadManager.ts
+
+// ✅ AJOUTER à la fin du fichier
+
+interface DownloadOptions {
+  onProgress?: (progress: number) => void;
+  onComplete?: () => void;
+  onError?: (err: Error) => void;
+}
+
+/**
+ * Télécharger tous les assets d'un livre en arrière-plan
+ */
+export async function downloadAllAssets(
+  bookId: string, 
+  config: any,
+  options?: DownloadOptions
+): Promise<void> {
+  await downloadManager.init();
+
+  try {
+    const manifest = await getBookManifest(bookId);
+    
+    if (manifest.length === 0) {
+      console.warn("⚠️ Manifest vide");
+      options?.onError?.(new Error("Manifest vide"));
+      return;
+    }
+
+    console.log(`📦 Début téléchargement ${manifest.length} assets...`);
+
+    let completed = 0;
+    let totalDownloaded = 0;
+    const totalSize = manifest.reduce((sum, asset) => sum + asset.size, 0);
+
+    // ✅ Télécharger en parallèle (5 à la fois)
+    const batchSize = 5;
+    for (let i = 0; i < manifest.length; i += batchSize) {
+      const batch = manifest.slice(i, i + batchSize);
+      
+      await Promise.allSettled(
+        batch.map(async (asset) => {
+          try {
+            // Vérifier si déjà en cache
+            const cached = await downloadManager.isAssetCached(asset.taskId);
+            if (cached) {
+              console.log(`⏭️ Skip ${asset.taskId} (déjà en cache)`);
+              completed++;
+              totalDownloaded += asset.size;
+              
+              const progress = (totalDownloaded / totalSize) * 100;
+              options?.onProgress?.(progress);
+              return;
+            }
+
+            // Télécharger
+            await downloadManager.downloadAsset(
+              asset.taskId,
+              asset.url,
+              asset.type,
+              (prog) => {
+                // Progress individuel
+                const assetProgress = (prog.progress / 100) * asset.size;
+                const globalProgress = ((totalDownloaded + assetProgress) / totalSize) * 100;
+                options?.onProgress?.(globalProgress);
+              }
+            );
+
+            completed++;
+            totalDownloaded += asset.size;
+            
+            const progress = (totalDownloaded / totalSize) * 100;
+            console.log(`✅ ${asset.taskId} (${completed}/${manifest.length}) - ${Math.round(progress)}%`);
+            options?.onProgress?.(progress);
+
+          } catch (err) {
+            console.error(`❌ Échec ${asset.taskId}:`, err);
+            // Continue avec les autres
+          }
+        })
+      );
+    }
+
+    console.log(`✅ Téléchargement terminé: ${completed}/${manifest.length} assets`);
+    options?.onComplete?.();
+
+  } catch (err) {
+    console.error("❌ Erreur downloadAllAssets:", err);
+    options?.onError?.(err as Error);
+  }
+}

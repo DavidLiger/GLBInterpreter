@@ -40,7 +40,7 @@ import { useWebGLContext } from "./hooks/useWebGLContext";
 // import { useAssetPreloader } from "./hooks/useAssetPreloader";
 import { disposeScene, logSceneStats } from "./utils/webglHelpers";
 import BookDownloadModal from "./ui/BookDownloadModal";
-import { isBookFullyCached } from "./lib/downloadManager";
+import { isBookFullyCached, getAssetFromCache, downloadAllAssets } from "./lib/downloadManager";
 import useUnifiedAudio from "./hooks/useUnifiedAudio";
 import DeviceTester from "./ui/DeviceTester";
 import SceneAnalyzer from "./ui/SceneAnalyzer";
@@ -116,18 +116,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // ✅ MODIFIÉ : Skip le check cache en mode folio
   useEffect(() => {
-    if (isFolioMode) {
-      // ✅ Mode portfolio : chargement direct sans cache
-      console.log("📂 Mode portfolio : assets en streaming");
-      setCheckingCache(false);
-      setShowDownloadModal(false);
-      setAssetsReady(true); // ✅ Direct
-      return;
-    }
-
-    // Mode livre : logique existante
     const checkCacheStatus = async () => {
       const cached = await isBookFullyCached(bookId);
       
@@ -151,7 +140,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
     };
     
     checkCacheStatus();
-  }, [bookId, isFolioMode]);
+  }, [bookId]);
 
   const handleRetest = () => {
     setTestKey(prev => prev + 1);
@@ -160,7 +149,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   return (
     <>
       {/* ✅ Écran de vérification cache */}
-      {isFolioMode && checkingCache && (
+      {checkingCache && (
         <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
           <div className="text-white text-center">
             <div className="animate-spin text-4xl mb-4">⚙️</div>
@@ -206,13 +195,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
       {/* ✅ Le reste seulement si pas de device tester */}
       {!showDeviceTester && (
         <>
-          {checkingCache && (
-            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-              {/* ... */}
-            </div>
-          )}
-
-          {!isFolioMode && showDownloadModal && !assetsReady && (
+          {showDownloadModal && !assetsReady && (
             <BookDownloadModal
               bookId={bookId}
               config={config}
@@ -235,6 +218,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
                 }, 2000);
               }}
               onCancel={() => setShowDownloadModal(false)}
+              isFolioMode={isFolioMode}
             />
           )}
 
@@ -249,7 +233,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
             </div>
           )}
 
-          {!isFolioMode && !assetsReady && !showDownloadModal && !checkingCache && !isInitializing && (
+          {!assetsReady && !showDownloadModal && !checkingCache && !isInitializing && (
             <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
               <div className="text-center">
                 <div className="text-6xl mb-6">📦</div>
@@ -773,113 +757,148 @@ function WebDioramaLoaderInner({
     controlsRef.current = controls;
 
     // Chargement GLB
-    const loader = new GLTFLoader();
-    loader.load(
-      config.glb,
-      async (gltf: GLTF) => {
-        scene.add(gltf.scene);
-        scene.userData.gltfAnimations = gltf.animations;
+    const loadGLB = async () => {
+      const loader = new GLTFLoader();
       
-        // ✅ AJOUTER : Mettre à jour le state pour l'analyzer
-        setLoadedScene(scene);
+      let glbUrl = config.glb;
+      let objectUrl: string | null = null;
 
-        // Frustum culling + bounding boxes
-        gltf.scene.traverse((child: any) => {
-          if (child.isMesh) {
-            child.frustumCulled = false;
-            if (child.geometry && !child.geometry.boundingBox) {
-              child.geometry.computeBoundingBox();
-              child.geometry.computeBoundingSphere();
-            }
-          }
-        });
-
-        // Populate empty refs + mixers
-        gltf.scene.traverse((child) => {
-          if (!child.name) return;
-          emptyRefs.current[child.name] = child;
-
-          if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
-            const skinned = child as THREE.SkinnedMesh;
-            const armature = skinned.skeleton?.bones?.[0]?.parent;
-            if (armature && !mixerRef.current[armature.name]) {
-              mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
-            } else if (!mixerRef.current[skinned.name]) {
-              mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
-            }
-          } else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
-            mixerRef.current[child.name] = new THREE.AnimationMixer(child);
-          } else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
-            if (!mixerRef.current[child.name]) {
-              mixerRef.current[child.name] = new THREE.AnimationMixer(child);
-            }
-          }
-        });
-
-        initMixers(gltf.scene);
-        applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
-        applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
-
-        // Post-processing (délai pour stabilité)
-        setTimeout(() => {
-          if (!isMobileDevice) {
-            composerRef.current = setupPostProcessing(renderer, scene, camera, ppConfig);
-          }
-
-          if (configWithPP.emissiveObjects) {
-            setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
-          }
-        }, 100);
-
-        setTimeout(() => {
-          applySpritesheets(
-            gltf.scene, 
-            emptyRefs.current, 
-            config.videos,
-            spritesheetAnimatorRef.current // ✅ Passer l'animator
-          );
-          applyVideoTextures(
-            gltf.scene, 
-            emptyRefs.current, 
-            (config as DioramaConfig3DWithVideos).videos,
-            videoElementsRef
-          );
-        }, 3000);
-
-        setLoadingProgress(70);
-
-        // ✅ Précharger les assets du POI start
-        const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
-
-        setLoadingProgress(100);
-
-        // Position caméra sur start POI
-        const startObj = emptyRefs.current[startPOI?.emptyName || ""];
-        if (startObj && startPOI) {
-          moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
-          playPOIAnimations(startPOI, gltf.animations);
-        }
-
-        // Log stats (dev)
-        logSceneStats(scene, renderer);
-
-        setIsLoaded(true);
-      },
-      (xhr) => {
-        if (xhr.total === 0 || !xhr.lengthComputable) {
+      try {
+        // ✅ Essayer de charger depuis le cache
+        console.log("📦 Tentative chargement depuis cache...");
+        const cachedBlob = await getAssetFromCache(bookId, config.glb);
+        
+        if (cachedBlob) {
+          console.log("✅ GLB trouvé en cache, création Blob URL");
+          objectUrl = URL.createObjectURL(cachedBlob);
+          glbUrl = objectUrl;
+          
+          // ✅ Progress instantané à 70% car déjà en cache
           setLoadingProgress(70);
-          return;
+        } else {
+          console.log("📥 GLB non trouvé en cache, chargement depuis R2");
         }
-        const progress = (xhr.loaded / xhr.total) * 70;
-        setLoadingProgress(Math.floor(progress));
-      },
-      (error) => {
-        console.error("Erreur chargement GLB:", error);
-        setIsLoaded(true);
+      } catch (err) {
+        console.warn("⚠️ Erreur accès cache, chargement depuis R2:", err);
       }
-    );
 
-    // ✅ Boucle d'animation
+      loader.load(
+        glbUrl,
+        async (gltf: GLTF) => {
+          // ✅ Nettoyer l'object URL si créé
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+          }
+
+          scene.add(gltf.scene);
+          scene.userData.gltfAnimations = gltf.animations;
+        
+          setLoadedScene(scene);
+
+          // Frustum culling + bounding boxes
+          gltf.scene.traverse((child: any) => {
+            if (child.isMesh) {
+              child.frustumCulled = false;
+              if (child.geometry && !child.geometry.boundingBox) {
+                child.geometry.computeBoundingBox();
+                child.geometry.computeBoundingSphere();
+              }
+            }
+          });
+
+          // Populate empty refs + mixers
+          gltf.scene.traverse((child) => {
+            if (!child.name) return;
+            emptyRefs.current[child.name] = child;
+
+            if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
+              const skinned = child as THREE.SkinnedMesh;
+              const armature = skinned.skeleton?.bones?.[0]?.parent;
+              if (armature && !mixerRef.current[armature.name]) {
+                mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
+              } else if (!mixerRef.current[skinned.name]) {
+                mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
+              }
+            } else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
+              mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+            } else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
+              if (!mixerRef.current[child.name]) {
+                mixerRef.current[child.name] = new THREE.AnimationMixer(child);
+              }
+            }
+          });
+
+          initMixers(gltf.scene);
+          applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
+          applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
+
+          // Post-processing
+          setTimeout(() => {
+            if (!isMobileDevice) {
+              composerRef.current = setupPostProcessing(renderer, scene, camera, ppConfig);
+            }
+
+            if (configWithPP.emissiveObjects) {
+              setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
+            }
+          }, 100);
+
+          setTimeout(() => {
+            applySpritesheets(
+              gltf.scene, 
+              emptyRefs.current, 
+              config.videos,
+              spritesheetAnimatorRef.current
+            );
+            applyVideoTextures(
+              gltf.scene, 
+              emptyRefs.current, 
+              (config as DioramaConfig3DWithVideos).videos,
+              videoElementsRef
+            );
+          }, 3000);
+
+          setLoadingProgress(70);
+
+          const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
+          setLoadingProgress(100);
+
+          const startObj = emptyRefs.current[startPOI?.emptyName || ""];
+          if (startObj && startPOI) {
+            moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
+            playPOIAnimations(startPOI, gltf.animations);
+          }
+
+          logSceneStats(scene, renderer);
+          setIsLoaded(true);
+        },
+        (xhr) => {
+          // ✅ MODIFIÉ : Ne pas afficher progress si déjà en cache
+          if (objectUrl) {
+            // Déjà en cache, skip progress
+            return;
+          }
+          
+          if (xhr.total === 0 || !xhr.lengthComputable) {
+            setLoadingProgress(70);
+            return;
+          }
+          const progress = (xhr.loaded / xhr.total) * 70;
+          setLoadingProgress(Math.floor(progress));
+        },
+        (error) => {
+          console.error("Erreur chargement GLB:", error);
+          if (objectUrl) {
+            URL.revokeObjectURL(objectUrl);
+          }
+          setIsLoaded(true);
+        }
+      );
+    };
+
+    loadGLB();
+
+    // ✅ Reste de la boucle d'animation inchangé...
     const animate = () => {
       // ✅ Log toutes les 300 frames (5s à 60fps)
       if (animationFrameRef.current && animationFrameRef.current % 300 === 0) {
@@ -969,7 +988,7 @@ function WebDioramaLoaderInner({
       disposeScene(sceneRef.current);
       sceneRef.current = null;
     };
-  }, [renderer, webglReady, config.glb]);
+  }, [renderer, webglReady, config.glb, bookId]);
 
   // ✅ Nettoyage périodique du renderer pour éviter accumulation
   useEffect(() => {

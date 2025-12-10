@@ -11,9 +11,16 @@ interface BookDownloadModalProps {
   config: DioramaConfig3D;
   onComplete: () => void;
   onCancel?: () => void;
+  isFolioMode?: boolean; 
 }
 
-export default function BookDownloadModal({ bookId, config, onComplete, onCancel }: BookDownloadModalProps) {
+export default function BookDownloadModal({ 
+  bookId, 
+  config, 
+  onComplete, 
+  onCancel, 
+  isFolioMode = false, 
+}: BookDownloadModalProps) {
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -183,21 +190,27 @@ export default function BookDownloadModal({ bookId, config, onComplete, onCancel
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.9, y: 20 }}
           >
+            {/* ✅ MODIFIÉ : Titre selon le mode */}
             <h2 className="text-2xl font-bold text-white mb-4">
-              {isDemo 
-                ? (t.bookDownload?.demoTitle || "📦 Téléchargement de la démo")
-                : (t.bookDownload?.modalTitle || "📦 Téléchargement du livre")}
+              {isFolioMode
+                ? "📂 Expérience interactive"
+                : isDemo 
+                  ? (t.bookDownload?.demoTitle || "📦 Téléchargement de la démo")
+                  : (t.bookDownload?.modalTitle || "📦 Téléchargement du livre")}
             </h2>
 
             {!downloading && !error && (
               <>
+                {/* ✅ MODIFIÉ : Message selon le mode */}
                 <p className="text-gray-300 mb-6 text-sm">
-                  {isDemo
-                    ? (t.bookDownload?.demoMessage || "Téléchargez la démo pour découvrir les WebDioramas")
-                    : (t.bookDownload?.modalMessage || "Télécharger toutes les scènes du livre pour une utilisation hors ligne")}
+                  {isFolioMode
+                    ? "Cette expérience 3D interactive nécessite le téléchargement d'assets pour fonctionner de manière optimale. Les données seront mises en cache pour les prochaines visites."
+                    : isDemo
+                      ? (t.bookDownload?.demoMessage || "Téléchargez la démo pour découvrir les WebDioramas")
+                      : (t.bookDownload?.modalMessage || "Télécharger toutes les scènes du livre pour une utilisation hors ligne")}
                 </p>
 
-                {/* ✅ Infos de stockage */}
+                {/* Infos de stockage */}
                 {storageInfo && (
                   <div className={`rounded-lg p-3 mb-4 text-sm ${
                     storageWarning === 'critical' 
@@ -225,7 +238,6 @@ export default function BookDownloadModal({ bookId, config, onComplete, onCancel
                       {t.bookDownload?.requiredSpace || "Requis:"} {(totalSize / 1024 / 1024).toFixed(0)} MB
                     </p>
 
-                    {/* ✅ Avertissement espace critique */}
                     {storageWarning === 'critical' && (
                       <p className="text-red-300 text-xs mt-2 font-medium">
                         {t.bookDownload?.criticalStorage || "⚠️ Espace insuffisant ! Libérez de l'espace avant de continuer."}
@@ -243,14 +255,17 @@ export default function BookDownloadModal({ bookId, config, onComplete, onCancel
                 <div className="flex gap-3">
                   <button
                     onClick={startDownload}
-                    disabled={storageWarning === 'critical'} // ✅ Bloquer si critique
+                    disabled={storageWarning === 'critical'}
                     className={`flex-1 font-bold py-3 rounded-full transition ${
                       storageWarning === 'critical'
                         ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
                         : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white'
                     }`}
                   >
-                    {t.bookDownload?.download}
+                    {/* ✅ MODIFIÉ : Texte bouton selon le mode */}
+                    {isFolioMode 
+                      ? "📥 Télécharger" 
+                      : t.bookDownload?.download}
                   </button>
                   <button
                     onClick={() => {
@@ -259,9 +274,17 @@ export default function BookDownloadModal({ bookId, config, onComplete, onCancel
                     }}
                     className="px-6 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-full transition"
                   >
-                    {t.bookDownload?.cancel}
+                    {/* ✅ MODIFIÉ : En folio, "Plus tard" au lieu de "Annuler" */}
+                    {isFolioMode ? "⏭️ Plus tard" : t.bookDownload?.cancel}
                   </button>
                 </div>
+
+                {/* ✅ NOUVEAU : Note en mode folio */}
+                {isFolioMode && (
+                  <p className="text-gray-500 text-xs mt-4 text-center">
+                    💡 L'expérience fonctionnera en streaming sans téléchargement, mais sera plus lente.
+                  </p>
+                )}
               </>
             )}
 
@@ -310,10 +333,13 @@ export default function BookDownloadModal({ bookId, config, onComplete, onCancel
                     {t.bookDownload?.retry}
                   </button>
                   <button
-                    onClick={() => setIsOpen(false)}
+                    onClick={() => {
+                      setIsOpen(false);
+                      onCancel?.();
+                    }}
                     className="px-6 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-full transition"
                   >
-                    {t.bookDownload?.close}
+                    {isFolioMode ? "⏭️ Continuer" : t.bookDownload?.close}
                   </button>
                 </div>
               </>
