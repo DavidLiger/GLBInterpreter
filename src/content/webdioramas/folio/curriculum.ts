@@ -791,9 +791,9 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
     {
       id: "work_planet-06",
       label: {
-        fr: "L'usage de l'eau...",
-        en: "Water usage...",
-        es: "El uso del agua..."
+        fr: "Eaux usées...",
+        en: "Wastewater...",
+        es: "Aguas residuales..."
       },
       emptyName: "work_planet-06",
       icon: `${BASE_URL}/icons/hangar.webp`,
@@ -910,9 +910,9 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
     {
       id: "work_planet-07",
       label: {
-        fr: "Graines de soja...",
-        en: "Soybeans...",
-        es: "Semillas de soja..."
+        fr: "Soja en masse...",
+        en: "Soybeans in bulk...",
+        es: "Soja a granel..."
       },
       emptyName: "work_planet-07",
       icon: `${BASE_URL}/icons/silos.webp`,
