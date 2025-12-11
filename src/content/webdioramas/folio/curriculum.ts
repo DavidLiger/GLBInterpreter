@@ -43,7 +43,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
 //     },
 //   },
   emissiveObjects: [ // fait partie du postprocessing
-    { name: "screen-monitor-actual", color: 0xfff2cc, intensity: 2.5 },
+    { name: "screen-monitor-actual", color: 0xfff2cc, intensity: 0.3 },
     // { name: "bulb_02", color: 0xfff2cc, intensity: 2.0 },
     // { name: "TVScreen", color: 0x4488ff, intensity: 0.1 },
     // { name: "TVScreen2", color: 0x4488ff, intensity: 0.2 },
