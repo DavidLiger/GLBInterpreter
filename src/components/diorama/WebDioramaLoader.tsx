@@ -1464,9 +1464,9 @@ function WebDioramaLoaderInner({
           )}
 
           {/* ✅ NOUVEAU : Bouton CV (seulement en mode folio) */}
-          {/* {isFolioMode && (
+          {isFolioMode && (
             <CVButton onClick={() => setShowCVModal(true)} />
-          )} */}
+          )}
 
           {/* ✅ NOUVEAU : Modal CV */}
           {isFolioMode && (
@@ -1510,7 +1510,7 @@ function WebDioramaLoaderInner({
             experienceStarted={experienceStarted} 
           />
 
-          {/* {process.env.NODE_ENV === "development" && composerRef.current && (
+          {process.env.NODE_ENV === "development" && composerRef.current && (
             <PostProcessingControls
               composer={composerRef.current}
               onUpdate={(type, values) => {
@@ -1562,7 +1562,7 @@ function WebDioramaLoaderInner({
             <SpritesheetGenerator 
               onOpenChange={setDevToolOpen} 
             />
-          )} */}
+          )}
 
           {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
             <POIPlayer

@@ -11,7 +11,7 @@ export default function CVButton({ onClick }: CVButtonProps) {
   return (
     <button
       onClick={onClick}
-      className="fixed right-4 bottom-28 z-[90] w-16 h-16 bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-full shadow-lg transition-all duration-200 hover:scale-110 active:scale-95 flex flex-col items-center justify-center gap-0.5 p-2"
+      className="fixed right-4 bottom-70 z-[90] w-16 h-16 bg-gradient-to-br from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-full shadow-lg transition-all duration-200 hover:scale-110 active:scale-95 flex flex-col items-center justify-center gap-0.5 p-2"
       aria-label="Voir mon CV"
       title="Voir mon CV"
     >
