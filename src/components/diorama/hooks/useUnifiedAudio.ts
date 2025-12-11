@@ -27,7 +27,7 @@ export default function useUnifiedAudio({
   const sceneAudioRef = useRef<HTMLAudioElement | null>(null);
   const allAudiosRef = useRef<HTMLAudioElement[]>([]);
   const [muted, setMuted] = useState(false);
-  const [volume, setVolume] = useState(0.7);
+  const [volume, setVolume] = useState(0.3);
   const [startSoundReady, setStartSoundReady] = useState(false);
   const previousPOIRef = useRef<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
