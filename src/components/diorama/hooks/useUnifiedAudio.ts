@@ -27,6 +27,7 @@ export default function useUnifiedAudio({
   const sceneAudioRef = useRef<HTMLAudioElement | null>(null);
   const allAudiosRef = useRef<HTMLAudioElement[]>([]);
   const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(0.7);
   const [startSoundReady, setStartSoundReady] = useState(false);
   const previousPOIRef = useRef<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
@@ -61,31 +62,26 @@ export default function useUnifiedAudio({
     // 2. FONCTION HELPER pour créer/récupérer audio
     // ══════════════════════════════════════
     const getOrCreateAmbientAudio = useCallback((poiId: string, audioUrl: string) => {
-    // Si existe déjà et src correct, retourner
-    if (ambientAudioRefs.current[poiId]) {
+        if (ambientAudioRefs.current[poiId]) {
         const existing = ambientAudioRefs.current[poiId];
         if (existing.src === audioUrl || existing.src.endsWith(audioUrl)) {
-        console.log("♻️ [AMBIENT] Audio existant réutilisé:", poiId);
-        return existing;
+            return existing;
         } else {
-        // Src invalide, recréer
-        console.log("🔄 [AMBIENT] Src corrompu, recréation:", poiId);
-        existing.pause();
-        existing.src = '';
+            existing.pause();
+            existing.src = '';
         }
-    }
-    
-    // Créer nouveau
-    console.log("🆕 [AMBIENT] Création audio:", poiId, audioUrl);
-    const audio = new Audio();
-    audio.src = audioUrl;
-    audio.loop = true;
-    audio.muted = true;
-    audio.preload = "auto";
-    ambientAudioRefs.current[poiId] = audio;
-    allAudiosRef.current.push(audio);
-    return audio;
-    }, []);
+        }
+        
+        const audio = new Audio();
+        audio.src = audioUrl;
+        audio.loop = true;
+        audio.muted = muted;
+        audio.volume = volume; // ✅ NOUVEAU : Appliquer le volume
+        audio.preload = "auto";
+        ambientAudioRefs.current[poiId] = audio;
+        allAudiosRef.current.push(audio);
+        return audio;
+    }, [muted, volume]); 
 
     // ══════════════════════════════════════
     // 3. GESTION AMBIENT (avec création lazy)
@@ -265,10 +261,35 @@ export default function useUnifiedAudio({
         isTransitioning // ✅ AJOUTÉ
     ]);
 
+    // ✅ NOUVEAU : Appliquer le volume à tous les audios
+    const applyVolumeToAll = useCallback((vol: number) => {
+        Object.values(ambientAudioRefs.current).forEach(audio => {
+        audio.volume = vol;
+        });
+        
+        if (sceneAudioRef.current) {
+        sceneAudioRef.current.volume = vol;
+        }
+    }, []);
+
+    // ✅ NOUVEAU : Setter de volume
+    const setAudioVolume = useCallback((vol: number) => {
+        const clampedVolume = Math.max(0, Math.min(1, vol));
+        setVolume(clampedVolume);
+        applyVolumeToAll(clampedVolume);
+        
+        // ✅ Si volume = 0, considérer comme muted
+        if (clampedVolume === 0 && !muted) {
+        setMuted(true);
+        } else if (clampedVolume > 0 && muted) {
+        setMuted(false);
+        }
+    }, [muted, applyVolumeToAll]);
+
   // ══════════════════════════════════════
   // 4. TOGGLE MUTE GLOBAL
   // ══════════════════════════════════════
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => {
     setMuted(prev => {
       const next = !prev;
       
@@ -290,7 +311,7 @@ export default function useUnifiedAudio({
 
       return next;
     });
-  };
+  }, [currentPOI, audioState.isPlaying]);
 
     // ══════════════════════════════════════
     // 5. SEEK AUDIO (synchronisation externe)
@@ -381,7 +402,9 @@ export default function useUnifiedAudio({
     // ══════════════════════════════════════
     return {
         muted,
+        volume,
         toggleMute,
+        setAudioVolume,
         startSoundReady,
         enableAudio,
         seekSceneAudio, // ✅ AJOUTER

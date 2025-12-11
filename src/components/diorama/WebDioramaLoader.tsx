@@ -11,6 +11,7 @@ import localFont from "next/font/local";
 import type { DioramaConfig3D, DioramaConfig3DWithVideos } from "@/types/diorama";
 import usePOIAudio from "./audio/usePOIAudio";
 import SoundButton from "./audio/SoundButton";
+import VolumeControl from "./audio/VolumeControl"; 
 import { usePOINavigation } from "./hooks/usePOINavigation";
 import LoaderOverlay from "./ui/LoaderOverlay";
 import FullscreenButton from "./ui/FullscreenButton";
@@ -378,7 +379,9 @@ function WebDioramaLoaderInner({
   // ✅ Hook audio unifié (remplace usePOIAudio)
   const { 
     muted, 
+    volume,
     toggleMute, 
+    setAudioVolume,
     startSoundReady,  
     enableAudio,
     cleanup: cleanupAudio,
@@ -1461,9 +1464,9 @@ function WebDioramaLoaderInner({
           )}
 
           {/* ✅ NOUVEAU : Bouton CV (seulement en mode folio) */}
-          {isFolioMode && (
+          {/* {isFolioMode && (
             <CVButton onClick={() => setShowCVModal(true)} />
-          )}
+          )} */}
 
           {/* ✅ NOUVEAU : Modal CV */}
           {isFolioMode && (
@@ -1485,7 +1488,12 @@ function WebDioramaLoaderInner({
             )}
             <AnimatePresence>
               {startSoundReady && (
-                <SoundButton muted={muted} onToggle={toggleMute} />
+                <VolumeControl
+                  volume={volume}
+                  muted={muted}
+                  onVolumeChange={setAudioVolume}
+                  onToggleMute={toggleMute}
+                />
               )}
             </AnimatePresence>
             <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
@@ -1502,7 +1510,7 @@ function WebDioramaLoaderInner({
             experienceStarted={experienceStarted} 
           />
 
-          {process.env.NODE_ENV === "development" && composerRef.current && (
+          {/* {process.env.NODE_ENV === "development" && composerRef.current && (
             <PostProcessingControls
               composer={composerRef.current}
               onUpdate={(type, values) => {
@@ -1554,7 +1562,7 @@ function WebDioramaLoaderInner({
             <SpritesheetGenerator 
               onOpenChange={setDevToolOpen} 
             />
-          )}
+          )} */}
 
           {currentPoi && currentPoi.elements && currentPoi.elements.length > 0 && (
             <POIPlayer
