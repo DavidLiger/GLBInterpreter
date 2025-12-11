@@ -197,6 +197,7 @@ export default function useUnifiedAudio({
                 const audio = new Audio(audioState.currentSceneSound);
                 audio.loop = false;
                 audio.muted = muted;
+                audio.volume = volume;
                 sceneAudioRef.current = audio;
                 allAudiosRef.current.push(audio);
                 
@@ -215,6 +216,7 @@ export default function useUnifiedAudio({
                 audio.load();
             } else if (sceneAudioRef.current.paused) {
                 console.log("▶️ [SCENE] Resume scene audio depuis:", sceneAudioRef.current.currentTime);
+                sceneAudioRef.current.volume = volume;
                 sceneAudioRef.current.play().catch(() => {});
             }
         }
@@ -256,6 +258,7 @@ export default function useUnifiedAudio({
         audioState.currentTime,
         currentPOI,
         muted,
+        volume,
         pois,
         getOrCreateAmbientAudio,
         isTransitioning // ✅ AJOUTÉ
