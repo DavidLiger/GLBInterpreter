@@ -287,56 +287,51 @@ export default function useUnifiedAudio({
     ]);
 
     // ✅ NOUVEAU : Appliquer le volume à tous les audios
-    const applyVolumeToAll = useCallback((vol: number) => {
+    const applyVolumeToAll = useCallback((vol: number, shouldMute: boolean) => {
         Object.values(ambientAudioRefs.current).forEach(audio => {
-        audio.volume = vol;
+            audio.volume = vol;
+            audio.muted = shouldMute; // ✅ Appliquer muted aussi
         });
         
         if (sceneAudioRef.current) {
-        sceneAudioRef.current.volume = vol;
+            sceneAudioRef.current.volume = vol;
+            sceneAudioRef.current.muted = shouldMute; // ✅ Appliquer muted aussi
         }
     }, []);
 
     // ✅ NOUVEAU : Setter de volume
     const setAudioVolume = useCallback((vol: number) => {
         const clampedVolume = Math.max(0, Math.min(1, vol));
-        setVolume(clampedVolume);
-        applyVolumeToAll(clampedVolume);
+        const shouldBeMuted = clampedVolume === 0;
         
-        // ✅ Si volume = 0, considérer comme muted
-        if (clampedVolume === 0 && !muted) {
-        setMuted(true);
-        } else if (clampedVolume > 0 && muted) {
-        setMuted(false);
-        }
-    }, [muted, applyVolumeToAll]);
+        setVolume(clampedVolume);
+        setMuted(shouldBeMuted);
+        
+        // ✅ Appliquer volume ET muted ensemble
+        applyVolumeToAll(clampedVolume, shouldBeMuted);
+    }, [applyVolumeToAll]);
 
   // ══════════════════════════════════════
   // 4. TOGGLE MUTE GLOBAL
   // ══════════════════════════════════════
-  const toggleMute = useCallback(() => {
-    setMuted(prev => {
-      const next = !prev;
-      
-      Object.values(ambientAudioRefs.current).forEach(a => {
-        a.muted = next;
-      });
-      
-      if (sceneAudioRef.current) {
-        sceneAudioRef.current.muted = next;
-      }
+    const toggleMute = useCallback(() => {
+        setMuted(prev => {
+            const next = !prev;
+            
+            // ✅ Utiliser applyVolumeToAll pour appliquer partout
+            applyVolumeToAll(volume, next);
 
-      if (!next && currentPOI && !audioState.isPlaying) {
-        const ambient = ambientAudioRefs.current[currentPOI];
-        if (ambient) {
-          ambient.muted = false;
-          ambient.play().catch(() => {});
-        }
-      }
+            if (!next && currentPOI && !audioState.isPlaying) {
+                const ambient = ambientAudioRefs.current[currentPOI];
+                if (ambient) {
+                    ambient.muted = false;
+                    ambient.play().catch(() => {});
+                }
+            }
 
-      return next;
-    });
-  }, [currentPOI, audioState.isPlaying]);
+            return next;
+        });
+    }, [currentPOI, audioState.isPlaying, volume, applyVolumeToAll]);
 
     // ══════════════════════════════════════
     // 5. SEEK AUDIO (synchronisation externe)
