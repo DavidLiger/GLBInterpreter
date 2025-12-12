@@ -31,6 +31,7 @@ export default function useUnifiedAudio({
   const [startSoundReady, setStartSoundReady] = useState(false);
   const previousPOIRef = useRef<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
+  const playPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
 
     // ══════════════════════════════════════
     // 1. CRÉATION LAZY DES AUDIOS (au lieu de preload)
@@ -96,7 +97,6 @@ export default function useUnifiedAudio({
             isTransitioning
         });
         
-        // ✅ VÉRIFIER LA TRANSITION EN PREMIER
         if (isTransitioning) {
             console.log("⏸️ [AMBIENT] Transition en cours, skip");
             return;
@@ -107,49 +107,67 @@ export default function useUnifiedAudio({
             return;
         }
 
-        // ✅ CHANGEMENT DE POI détecté
         const poiHasChanged = previousPOIRef.current !== currentPOI;
+        const isScenePlaying = audioState.isPlaying && !audioState.isEnded;
         
-        // Arrêter ancien POI
+        console.log("🎵 [AMBIENT] isScenePlaying:", isScenePlaying);
+        
+        // ✅ Arrêter ancien POI avec gestion de la promesse
         if (previousPOIRef.current && poiHasChanged) {
             const oldAmbient = ambientAudioRefs.current[previousPOIRef.current];
             if (oldAmbient) {
                 console.log("⏹️ [AMBIENT] Stop ancien:", previousPOIRef.current);
-                oldAmbient.pause();
-                oldAmbient.currentTime = 0;
+                
+                const oldPromise = playPromisesRef.current.get(previousPOIRef.current);
+                if (oldPromise) {
+                    oldPromise
+                        .then(() => {
+                            oldAmbient.pause();
+                            oldAmbient.currentTime = 0;
+                        })
+                        .catch(() => {
+                            oldAmbient.pause();
+                            oldAmbient.currentTime = 0;
+                        })
+                        .finally(() => {
+                            playPromisesRef.current.delete(previousPOIRef.current!);
+                        });
+                } else {
+                    oldAmbient.pause();
+                    oldAmbient.currentTime = 0;
+                }
             }
         }
-
-        const isScenePlaying = audioState.isPlaying && !audioState.isEnded;
-        console.log("🎵 [AMBIENT] isScenePlaying:", isScenePlaying);
         
-        // ✅ NOUVEAU : Démarrer l'ambient SOIT si pas de scène, SOIT si POI vient de changer
-        const shouldStartAmbient = !isScenePlaying || poiHasChanged;
+        // ✅ SIMPLIFIÉ : Si scène en cours, NE JAMAIS jouer l'ambient
+        if (isScenePlaying) {
+            console.log("⏸️ [AMBIENT] Scène en cours, skip ambient");
+            previousPOIRef.current = currentPOI;
+            return;
+        }
         
-        if (shouldStartAmbient) {
-            // ✅ Trouver l'URL dans la config
-            const poi = pois.find(p => p.id === currentPOI) || 
-                        findPOIRecursively(pois, currentPOI);
+        // ✅ Sinon, jouer l'ambient du POI actuel
+        const poi = pois.find(p => p.id === currentPOI) || 
+                    findPOIRecursively(pois, currentPOI);
+        
+        if (poi?.ambientSound) {
+            const ambient = getOrCreateAmbientAudio(currentPOI, poi.ambientSound);
             
-            if (poi?.ambientSound) {
-                const ambient = getOrCreateAmbientAudio(currentPOI, poi.ambientSound);
-                
-                // ✅ Si scène en cours sur ce POI, juste préparer l'audio sans jouer
-                if (isScenePlaying && !poiHasChanged) {
-                    console.log("⏸️ [AMBIENT] Scène en cours sur ce POI, pas de lecture ambient");
-                } else {
-                    console.log("▶️ [AMBIENT] Play:", currentPOI, "src:", ambient.src, "muted:", muted);
-                    ambient.muted = muted;
-                    ambient.play()
-                        .catch((err) => {
-                            console.error("❌ [AMBIENT] Erreur play:", err);
-                        });
-                }
-            } else {
-                console.warn("⚠️ [AMBIENT] Pas d'ambientSound pour POI:", currentPOI);
-            }
+            console.log("▶️ [AMBIENT] Play:", currentPOI, "muted:", muted);
+            ambient.muted = muted;
+            
+            // ✅ Stocker la promesse
+            const playPromise = ambient.play()
+                .catch((err) => {
+                    console.error("❌ [AMBIENT] Erreur play:", err);
+                })
+                .finally(() => {
+                    playPromisesRef.current.delete(currentPOI);
+                });
+            
+            playPromisesRef.current.set(currentPOI, playPromise);
         } else {
-            console.log("⏸️ [AMBIENT] Scène en cours, pas de lecture ambient");
+            console.warn("⚠️ [AMBIENT] Pas d'ambientSound pour POI:", currentPOI);
         }
 
         previousPOIRef.current = currentPOI;
