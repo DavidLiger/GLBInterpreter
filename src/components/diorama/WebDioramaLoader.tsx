@@ -287,6 +287,7 @@ function WebDioramaLoaderInner({
     stopAllAnimations, 
     updateMixers, 
     cleanup: cleanupMixers,
+    startAnimationWithSkip,
   } = usePOIAnimations(emptyRefs);
   const clock = useRef(new THREE.Clock());
   const hasAutoUnmutedRef = useRef(false);
@@ -378,6 +379,7 @@ function WebDioramaLoaderInner({
     animations: sceneRef.current?.userData?.gltfAnimations || [],
     mixerRef: mixerRef.current,
     actionsRef,
+    startAnimationWithSkip,
     startPlaceholders,// ✅ NOUVEAU
     muted: false, // ✅ On gère mute dans useUnifiedAudio maintenant
     emptyRefs,

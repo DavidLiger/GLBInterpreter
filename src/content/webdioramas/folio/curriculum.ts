@@ -109,7 +109,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               autoplay: true,
               loop: false,
               placeholderMesh: "perso_david_00_placeholder",
-              transitionFrames: 8
+              transitionFrames: 25
             }
           ],
           dialogue: {

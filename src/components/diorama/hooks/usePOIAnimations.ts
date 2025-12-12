@@ -165,6 +165,7 @@ export const usePOIAnimations = (
     startPlaceholders, // ✅ NOUVEAU
     stopAllAnimations, 
     updateMixers, 
-    cleanup
+    cleanup,
+    startAnimationWithSkip: placeholderSwap.startAnimationWithSkip,
   };
 };

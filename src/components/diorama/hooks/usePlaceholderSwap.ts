@@ -1,167 +1,156 @@
-import { useRef, useCallback } from 'react';
-import * as THREE from 'three';
+import { useCallback, useRef } from "react";
+import * as THREE from "three";
 
-interface PlaceholderSwapConfig {
+interface PlaceholderSwapProps {
   emptyRefs: React.RefObject<Record<string, THREE.Object3D>>;
-  transitionFrames?: number; // Défaut: 5 frames
+  transitionFrames?: number;
 }
 
-interface SwapState {
-  placeholder: THREE.Object3D;
+interface PlaceholderInfo {
   animated: THREE.Object3D;
-  isAnimating: boolean;
-  swapTimeoutId?: NodeJS.Timeout;
-  reverseTimeoutId?: NodeJS.Timeout;
+  meshRef: THREE.Object3D;
 }
 
-export function usePlaceholderSwap({ 
-  emptyRefs, 
-  transitionFrames = 5 
-}: PlaceholderSwapConfig) {
-  const activeSwapsRef = useRef<Map<string, SwapState>>(new Map());
+export const usePlaceholderSwap = ({
+  emptyRefs,
+  transitionFrames = 5,
+}: PlaceholderSwapProps) => {
+  
+  // ✅ Map pour stocker les infos de chaque placeholder
+  const placeholders = useRef<Map<string, PlaceholderInfo>>(new Map());
+  const swapTimeouts = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
-  // ✅ Initialiser un placeholder (caché par défaut, placeholder visible)
-  const initPlaceholder = useCallback((
-    animatedMeshName: string, 
-    placeholderMeshName: string
-  ) => {
-    if (!emptyRefs.current) return;
-
-    const animated = emptyRefs.current[animatedMeshName];
-    const placeholder = emptyRefs.current[placeholderMeshName];
+  // Initialiser un placeholder
+  const initPlaceholder = useCallback((animatedName: string, placeholderName: string) => {
+    const animated = emptyRefs.current?.[animatedName];
+    const placeholder = emptyRefs.current?.[placeholderName];
 
     if (!animated || !placeholder) {
-      console.warn(
-        `⚠️ Placeholder setup failed: animated="${animatedMeshName}" placeholder="${placeholderMeshName}"`,
-        `animated=${!!animated}, placeholder=${!!placeholder}`
-      );
+      console.warn(`⚠️ Objets non trouvés: ${animatedName} ou ${placeholderName}`);
       return;
     }
 
-    // État initial : placeholder visible, animé caché
-    animated.visible = false;
-    placeholder.visible = true;
-
-    activeSwapsRef.current.set(animatedMeshName, {
-      placeholder,
+    // Stocker dans la Map
+    placeholders.current.set(animatedName, {
       animated,
-      isAnimating: false,
+      meshRef: placeholder
     });
 
-    console.log(`✅ Placeholder initialisé: ${animatedMeshName} -> ${placeholderMeshName}`);
+    // État initial
+    animated.visible = false;
+    placeholder.visible = true;
+    
+    console.log(`✅ Placeholder initialisé: ${animatedName} -> ${placeholderName}`);
   }, [emptyRefs]);
 
-  // ✅ Démarrer l'animation (swap après X frames)
-  const startAnimation = useCallback((
+  // ✅ NOUVELLE FONCTION : Swap avec skip de frames
+  const startAnimationWithSkip = useCallback((
     animatedMeshName: string,
-    customTransitionFrames?: number
+    action: THREE.AnimationAction,
+    mixer: THREE.AnimationMixer,
+    framesToSkip: number = 5
   ) => {
-    const swap = activeSwapsRef.current.get(animatedMeshName);
-    if (!swap) {
+    const placeholder = placeholders.current.get(animatedMeshName);
+    if (!placeholder) {
       console.warn(`⚠️ Pas de placeholder configuré pour: ${animatedMeshName}`);
       return;
     }
 
-    // Nettoyer les timeouts existants
-    if (swap.swapTimeoutId) clearTimeout(swap.swapTimeoutId);
-    if (swap.reverseTimeoutId) clearTimeout(swap.reverseTimeoutId);
+    const { animated, meshRef } = placeholder;
+    
+    // ✅ Avancer l'animation AVANT de rendre visible
+    const timeToSkip = framesToSkip / 60;
+    action.time = timeToSkip;
+    mixer.update(0); // Forcer l'application de la pose
+    
+    console.log(`⏩ Animation avancée de ${framesToSkip} frames (${timeToSkip.toFixed(3)}s) pour ${animatedMeshName}`);
+    
+    // ✅ Swapper immédiatement (l'animation est déjà dans la bonne pose)
+    animated.visible = true;
+    meshRef.visible = false;
+    
+    console.log(`✅ Swap immédiat: ${animatedMeshName} visible, placeholder caché`);
+  }, []);
 
-    swap.isAnimating = true;
+  // Fonction startAnimation classique (gardée pour compatibilité)
+  const startAnimation = useCallback((animatedMeshName: string, customFrames?: number) => {
+    const placeholder = placeholders.current.get(animatedMeshName);
+    if (!placeholder) {
+      console.warn(`⚠️ Pas de placeholder configuré pour: ${animatedMeshName}`);
+      return;
+    }
 
-    // ✅ Calculer le délai en millisecondes (60 FPS)
-    const frames = customTransitionFrames ?? transitionFrames;
+    const frames = customFrames ?? transitionFrames;
     const delayMs = (frames / 60) * 1000;
-
-    console.log(`🎬 Animation start: swap dans ${frames} frames (${delayMs}ms)`);
-
-    const timeoutId = setTimeout(() => {
-      if (swap.isAnimating) {
-        swap.animated.visible = true;
-        swap.placeholder.visible = false;
-        console.log(`🔄 Swap: placeholder OFF, animated ON (${animatedMeshName})`);
-      }
+    
+    const timeout = setTimeout(() => {
+      placeholder.animated.visible = true;
+      placeholder.meshRef.visible = false;
+      swapTimeouts.current.delete(animatedMeshName);
     }, delayMs);
-
-    swap.swapTimeoutId = timeoutId;
+    
+    swapTimeouts.current.set(animatedMeshName, timeout);
   }, [transitionFrames]);
 
-  // ✅ Préparer le swap inverse (appelé avant la fin de l'animation)
   const prepareStopAnimation = useCallback((
     animatedMeshName: string,
     animationDuration: number,
     customTransitionFrames?: number
   ) => {
-    const swap = activeSwapsRef.current.get(animatedMeshName);
-    if (!swap) return;
+    const placeholder = placeholders.current.get(animatedMeshName);
+    if (!placeholder) return;
 
-    // Nettoyer timeout existant
-    if (swap.reverseTimeoutId) clearTimeout(swap.reverseTimeoutId);
-
-    // ✅ Calculer quand faire le swap inverse (X frames avant la fin)
     const frames = customTransitionFrames ?? transitionFrames;
-    const delayMs = ((frames / 60) * 1000);
-    const swapTimeMs = Math.max(0, (animationDuration * 1000) - delayMs);
+    const swapBackTime = animationDuration - (frames / 60);
+    const delayMs = Math.max(0, swapBackTime * 1000);
 
-    console.log(
-      `🛑 Animation stopping: swap inverse dans ${swapTimeMs}ms ` +
-      `(${frames} frames avant la fin de ${animationDuration}s)`
-    );
+    const timeout = setTimeout(() => {
+      placeholder.animated.visible = false;
+      placeholder.meshRef.visible = true;
+    }, delayMs);
 
-    const timeoutId = setTimeout(() => {
-      swap.animated.visible = false;
-      swap.placeholder.visible = true;
-      swap.isAnimating = false;
-      console.log(`🔄 Swap inverse: animated OFF, placeholder ON (${animatedMeshName})`);
-    }, swapTimeMs);
-
-    swap.reverseTimeoutId = timeoutId;
+    swapTimeouts.current.set(`${animatedMeshName}_stop`, timeout);
   }, [transitionFrames]);
 
-  // ✅ Reset immédiat (pour changement de POI)
   const resetPlaceholder = useCallback((animatedMeshName: string) => {
-    const swap = activeSwapsRef.current.get(animatedMeshName);
-    if (!swap) return;
+    const placeholder = placeholders.current.get(animatedMeshName);
+    if (!placeholder) return;
 
-    // Nettoyer les timeouts
-    if (swap.swapTimeoutId) clearTimeout(swap.swapTimeoutId);
-    if (swap.reverseTimeoutId) clearTimeout(swap.reverseTimeoutId);
-
-    // Reset visibilité
-    swap.animated.visible = false;
-    swap.placeholder.visible = true;
-    swap.isAnimating = false;
+    placeholder.animated.visible = false;
+    placeholder.meshRef.visible = true;
     
-    console.log(`🔄 Reset placeholder: ${animatedMeshName}`);
+    const timeout = swapTimeouts.current.get(animatedMeshName);
+    if (timeout) {
+      clearTimeout(timeout);
+      swapTimeouts.current.delete(animatedMeshName);
+    }
   }, []);
 
-  // ✅ Reset tous les placeholders
   const resetAll = useCallback(() => {
-    console.log(`🔄 Reset ALL placeholders (${activeSwapsRef.current.size})`);
-    activeSwapsRef.current.forEach((swap, name) => {
-      if (swap.swapTimeoutId) clearTimeout(swap.swapTimeoutId);
-      if (swap.reverseTimeoutId) clearTimeout(swap.reverseTimeoutId);
-      swap.animated.visible = false;
-      swap.placeholder.visible = true;
-      swap.isAnimating = false;
+    console.log(`🔄 Reset ALL placeholders (${placeholders.current.size})`);
+    
+    placeholders.current.forEach((placeholder, name) => {
+      placeholder.animated.visible = false;
+      placeholder.meshRef.visible = true;
     });
+
+    swapTimeouts.current.forEach(timeout => clearTimeout(timeout));
+    swapTimeouts.current.clear();
   }, []);
 
-  // ✅ Cleanup complet
   const cleanup = useCallback(() => {
-    console.log('🧹 Cleanup placeholders:', activeSwapsRef.current.size);
-    activeSwapsRef.current.forEach((swap) => {
-      if (swap.swapTimeoutId) clearTimeout(swap.swapTimeoutId);
-      if (swap.reverseTimeoutId) clearTimeout(swap.reverseTimeoutId);
-    });
-    activeSwapsRef.current.clear();
+    swapTimeouts.current.forEach(timeout => clearTimeout(timeout));
+    swapTimeouts.current.clear();
+    placeholders.current.clear();
   }, []);
 
   return {
     initPlaceholder,
     startAnimation,
+    startAnimationWithSkip, // ✅ Exporté
     prepareStopAnimation,
     resetPlaceholder,
     resetAll,
-    cleanup,
+    cleanup
   };
-}
+};

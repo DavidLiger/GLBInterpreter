@@ -25,6 +25,12 @@ type UsePOIScenePlayerProps = {
   controlsRef?: React.RefObject<OrbitControls | null>;
   cameraRef?: React.RefObject<THREE.PerspectiveCamera | null>;
   startPlaceholderAnimation?: (name: string, frames?: number) => void;
+  startAnimationWithSkip?: (
+    animatedMeshName: string,
+    action: THREE.AnimationAction,
+    mixer: THREE.AnimationMixer,
+    framesToSkip: number
+  ) => void;
   prepareStopAnimation?: (name: string, duration: number, frames?: number) => void;
 };
 
@@ -37,6 +43,7 @@ export const usePOIScenePlayer = ({
   fadeDuration = 0.15,
   startPlaceholderAnimation, // ✅ NOUVEAU
   startPlaceholders,
+  startAnimationWithSkip,
   prepareStopAnimation,
   // muted = false,
   findParentPOI,
@@ -135,36 +142,59 @@ export const usePOIScenePlayer = ({
 
     const actions: THREE.AnimationAction[] = [];
     
-    // ✅ UTILISER les actions déjà préparées au lieu de les recréer
-  poi.elements?.forEach(el => {
+    poi.elements?.forEach(el => {
     const action = actionsRef.current.get(el.name);
     if (!action) {
       console.warn(`⚠️ Action non préparée pour: ${el.name}`);
       return;
     }
 
+    // Reset et configure l'action
     action.reset();
     action.setLoop(el.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
     action.clampWhenFinished = true;
     action.fadeIn(fadeDuration);
     
+    // Positionner au temps de départ si reprise
     if (startTime > 0) {
       action.time = Math.min(startTime, action.getClip().duration);
     }
     
+    // ✅ JOUER D'ABORD
     action.play();
     actions.push(action);
+    
+    // ✅ PUIS avancer et swapper (APRÈS play)
+    // ✅ PUIS avancer et swapper (APRÈS quelques frames)
+    if (el.placeholderMesh && el.transitionFrames) {
+      const animated = emptyRefs?.current?.[el.name];
+      const placeholder = emptyRefs?.current?.[el.placeholderMesh];
+      
+      if (animated && placeholder) {
+        // Rester caché pendant X frames
+        animated.visible = false;
+        placeholder.visible = true;
+        
+        // Swapper après le délai
+        const delayMs = (el.transitionFrames / 60) * 1000;
+        setTimeout(() => {
+          animated.visible = true;
+          placeholder.visible = false;
+          console.log(`✅ Swap après ${el.transitionFrames} frames: ${el.name} visible`);
+        }, delayMs);
+        
+        // Préparer le swap inverse si non-looping
+        if (!el.loop && prepareStopAnimation) {
+          prepareStopAnimation(el.name, action.getClip().duration, el.transitionFrames);
+        }
+      }
+    }
   });
 
-  if (actions.length === 0) {
-    console.warn(`⚠️ Aucune action à jouer pour POI: ${poi.id}`);
-    return;
-  }
-
-  // ✅ Déclencher TOUS les placeholders du POI en une seule fois
-  if (startPlaceholders) {
-    startPlaceholders(poi);
-  }
+    if (actions.length === 0) {
+      console.warn(`⚠️ Aucune action à jouer pour POI: ${poi.id}`);
+      return;
+    }
 
     const maxDuration = Math.max(...actions.map(a => a.getClip().duration));
     setDuration(maxDuration);
@@ -172,13 +202,12 @@ export const usePOIScenePlayer = ({
     setIsPlaying(true);
     setIsPaused(false);
 
-    // Si pause + seek, reprendre là où on s'était arrêté
     if (!forceReplay && lastSeekTimeRef.current > 0) {
       actions.forEach(a => {
         a.time = Math.min(lastSeekTimeRef.current, a.getClip().duration);
       });
     }
-  }, [poi, actionsRef, fadeDuration, startPlaceholders, resetSceneStable, findParentPOI, startPlaceholderAnimation, prepareStopAnimation]);
+  }, [poi, actionsRef, mixerRef, fadeDuration, resetSceneStable, findParentPOI, startAnimationWithSkip, prepareStopAnimation]);
 
   // 🔹 Replay depuis le début
   const replayScene = useCallback(() => {
