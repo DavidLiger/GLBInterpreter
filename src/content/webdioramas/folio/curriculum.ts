@@ -103,13 +103,101 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           enableZoom: true,
           elements: [
             {
-              name: "Suzanne",
-              type: "mesh",
-              clipName: "monkeyFly",
+              name: "perso_david_00",
+              type: "armature",
+              clipName: "perso_david_00_action",
               autoplay: false,
               loop: false
             }
           ],
+          dialogue: {
+            characters: [
+              { 
+                id: "nerd", 
+                name: { fr: "David", en: "David", es: "David" }, 
+                image: `${BASE_URL}/icons/nerd-icon.webp` 
+              }
+            ],
+            lines: [
+              {
+                time: 0.1,
+                text: {
+                  fr: "Bonjour et bienvenue dans mon folio",
+                  en: "Hello and welcome to my portfolio",
+                  es: "Hola y bienvenidos a mi portafolio"
+                },
+                characterId: "nerd"
+              },
+              {
+                time: 2.0,
+                text: [
+                  {
+                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
+                    en: "You can travel through the galaxy of my experiences",
+                    es: "Puedes moverte por la galaxia de mis experiencias"
+                  },
+                  {
+                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
+                    en: "using the button bar at the top or left of this screen",
+                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 8.5,
+                text: {
+                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
+                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
+                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 12.5,
+                text: [
+                  {
+                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
+                    en: "At each stage of my journey, a window will appear at the top of the screen",
+                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
+                  },
+                  {
+                    fr: "et vous permettra d'accéder à plus de précisions",
+                    en: "and will allow you to access more details",
+                    es: "y le permitirá acceder a más detalles"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 19,
+                text: {
+                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
+                    en: "Let's go and see what's happening further on!",
+                    es: "¡Vamos a ver qué pasa más allá!"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 23,
+                text: {
+                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
+                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
+                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 28,
+                text: {
+                    fr: "Bonne balade et belle journée !",
+                    en: "Have a nice walk and a lovely day!",
+                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
+                  },
+                characterId: "nerd"
+              }
+            ]
+          },
           effects: {
             enabled: true,
             skybox: {
@@ -127,7 +215,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           clipName: "clouds_00_Action",
           autoplay: false,
           loop: false
-        },
+        }
       ],
       dialogue: {
         characters: [
@@ -139,41 +227,79 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         ],
         lines: [
           {
-            time: 0.5,
+            time: 0.1,
             text: {
-              fr: "Salut ! Bienvenue dans le diorama ma poule.",
-              en: "Hi! Welcome to the diorama.",
-              es: "¡Hola! Bienvenido al diorama."
+              fr: "Bonjour et bienvenue dans mon folio",
+              en: "Hello and welcome to my portfolio",
+              es: "Hola y bienvenidos a mi portafolio"
             },
             characterId: "nerd"
           },
           {
-            time: 3.0,
+            time: 2.0,
             text: [
               {
-                fr: "Ici, tu peux explorer la scène en 3D.",
-                en: "Here, you can explore the 3D scene.",
-                es: "Aquí puedes explorar la escena 3D."
+                fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
+                en: "You can travel through the galaxy of my experiences",
+                es: "Puedes moverte por la galaxia de mis experiencias"
               },
               {
-                fr: "Tu peux zoomer, tourner la caméra, et cliquer sur les points d'intérêt.",
-                en: "You can zoom in, rotate the camera, and click on points of interest.",
-                es: "Puedes ampliar la imagen, girar la cámara y hacer clic en los puntos de interés."
-              },
-              {
-                fr: "Amuse-toi bien !",
-                en: "Have fun!",
-                es: "¡Que te diviertas!"
+                fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
+                en: "using the button bar at the top or left of this screen",
+                es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
               }
             ],
             characterId: "nerd"
           },
           {
-            time: 12.5,
+            time: 8.5,
             text: {
-                fr: "Allons voir ce qu’il se passe plus loin !",
+                fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
+                en: "For each planet, a ‘It's working’ button will give you more details about my missions",
+                es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
+              },
+            characterId: "nerd"
+          },
+          {
+            time: 12.5,
+            text: [
+              {
+                fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
+                en: "At each stage of my journey, a window will appear at the top of the screen",
+                es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
+              },
+              {
+                fr: "et vous permettra d'accéder à plus de précisions",
+                en: "and will allow you to access more details",
+                es: "y le permitirá acceder a más detalles"
+              }
+            ],
+            characterId: "nerd"
+          },
+          {
+            time: 19,
+            text: {
+                fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
                 en: "Let's go and see what's happening further on!",
                 es: "¡Vamos a ver qué pasa más allá!"
+              },
+            characterId: "nerd"
+          },
+          {
+            time: 23,
+            text: {
+                fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
+                en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
+                es: "Encontrará mi CV haciendo clic en el botón de la derecha"
+              },
+            characterId: "nerd"
+          },
+          {
+            time: 28,
+            text: {
+                fr: "Bonne balade et belle journée !",
+                en: "Have a nice walk and a lovely day!",
+                es: "¡Que disfrutes del paseo y que tengas un buen día!"
               },
             characterId: "nerd"
           }
@@ -238,6 +364,103 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           minAzimuthAngle: -1.14,
           maxAzimuthAngle: 1.94,
           enableZoom: true,
+          elements: [
+            {
+              name: "perso_david_01",
+              type: "armature",
+              clipName: "perso_david_01_action",
+              autoplay: false,
+              loop: false
+            }
+          ],
+          dialogue: {
+            characters: [
+              { 
+                id: "nerd", 
+                name: { fr: "David", en: "David", es: "David" }, 
+                image: `${BASE_URL}/icons/nerd-icon.webp` 
+              }
+            ],
+            lines: [
+              {
+                time: 0.1,
+                text: {
+                  fr: "Bonjour et bienvenue dans mon folio",
+                  en: "Hello and welcome to my portfolio",
+                  es: "Hola y bienvenidos a mi portafolio"
+                },
+                characterId: "nerd"
+              },
+              {
+                time: 2.0,
+                text: [
+                  {
+                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
+                    en: "You can travel through the galaxy of my experiences",
+                    es: "Puedes moverte por la galaxia de mis experiencias"
+                  },
+                  {
+                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
+                    en: "using the button bar at the top or left of this screen",
+                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 8.5,
+                text: {
+                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
+                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
+                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 12.5,
+                text: [
+                  {
+                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
+                    en: "At each stage of my journey, a window will appear at the top of the screen",
+                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
+                  },
+                  {
+                    fr: "et vous permettra d'accéder à plus de précisions",
+                    en: "and will allow you to access more details",
+                    es: "y le permitirá acceder a más detalles"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 19,
+                text: {
+                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
+                    en: "Let's go and see what's happening further on!",
+                    es: "¡Vamos a ver qué pasa más allá!"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 23,
+                text: {
+                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
+                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
+                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 28,
+                text: {
+                    fr: "Bonne balade et belle journée !",
+                    en: "Have a nice walk and a lovely day!",
+                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
+                  },
+                characterId: "nerd"
+              }
+            ]
+          },
           effects: {
             enabled: true,
             skybox: {
@@ -357,6 +580,103 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           minAzimuthAngle: -0.64,
           maxAzimuthAngle: 2.84,
           enableZoom: true,
+          elements: [
+            {
+              name: "perso_david_02",
+              type: "armature",
+              clipName: "perso_david_02_action",
+              autoplay: false,
+              loop: false
+            }
+          ],
+          dialogue: {
+            characters: [
+              { 
+                id: "nerd", 
+                name: { fr: "David", en: "David", es: "David" }, 
+                image: `${BASE_URL}/icons/nerd-icon.webp` 
+              }
+            ],
+            lines: [
+              {
+                time: 0.1,
+                text: {
+                  fr: "Bonjour et bienvenue dans mon folio",
+                  en: "Hello and welcome to my portfolio",
+                  es: "Hola y bienvenidos a mi portafolio"
+                },
+                characterId: "nerd"
+              },
+              {
+                time: 2.0,
+                text: [
+                  {
+                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
+                    en: "You can travel through the galaxy of my experiences",
+                    es: "Puedes moverte por la galaxia de mis experiencias"
+                  },
+                  {
+                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
+                    en: "using the button bar at the top or left of this screen",
+                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 8.5,
+                text: {
+                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
+                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
+                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 12.5,
+                text: [
+                  {
+                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
+                    en: "At each stage of my journey, a window will appear at the top of the screen",
+                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
+                  },
+                  {
+                    fr: "et vous permettra d'accéder à plus de précisions",
+                    en: "and will allow you to access more details",
+                    es: "y le permitirá acceder a más detalles"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 19,
+                text: {
+                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
+                    en: "Let's go and see what's happening further on!",
+                    es: "¡Vamos a ver qué pasa más allá!"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 23,
+                text: {
+                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
+                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
+                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 28,
+                text: {
+                    fr: "Bonne balade et belle journée !",
+                    en: "Have a nice walk and a lovely day!",
+                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
+                  },
+                characterId: "nerd"
+              }
+            ]
+          },
           effects: {
             enabled: true,
             skybox: {
@@ -476,6 +796,103 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           minAzimuthAngle: -2.24,
           maxAzimuthAngle: 1.54,
           enableZoom: true,
+          elements: [
+            {
+              name: "perso_david_03",
+              type: "armature",
+              clipName: "perso_david_03_action",
+              autoplay: false,
+              loop: false
+            }
+          ],
+          dialogue: {
+            characters: [
+              { 
+                id: "nerd", 
+                name: { fr: "David", en: "David", es: "David" }, 
+                image: `${BASE_URL}/icons/nerd-icon.webp` 
+              }
+            ],
+            lines: [
+              {
+                time: 0.1,
+                text: {
+                  fr: "Bonjour et bienvenue dans mon folio",
+                  en: "Hello and welcome to my portfolio",
+                  es: "Hola y bienvenidos a mi portafolio"
+                },
+                characterId: "nerd"
+              },
+              {
+                time: 2.0,
+                text: [
+                  {
+                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
+                    en: "You can travel through the galaxy of my experiences",
+                    es: "Puedes moverte por la galaxia de mis experiencias"
+                  },
+                  {
+                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
+                    en: "using the button bar at the top or left of this screen",
+                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 8.5,
+                text: {
+                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
+                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
+                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 12.5,
+                text: [
+                  {
+                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
+                    en: "At each stage of my journey, a window will appear at the top of the screen",
+                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
+                  },
+                  {
+                    fr: "et vous permettra d'accéder à plus de précisions",
+                    en: "and will allow you to access more details",
+                    es: "y le permitirá acceder a más detalles"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 19,
+                text: {
+                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
+                    en: "Let's go and see what's happening further on!",
+                    es: "¡Vamos a ver qué pasa más allá!"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 23,
+                text: {
+                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
+                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
+                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 28,
+                text: {
+                    fr: "Bonne balade et belle journée !",
+                    en: "Have a nice walk and a lovely day!",
+                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
+                  },
+                characterId: "nerd"
+              }
+            ]
+          },
           effects: {
             enabled: true,
             skybox: {
@@ -595,6 +1012,103 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           minAzimuthAngle: -2.84,
           maxAzimuthAngle: 0.64,
           enableZoom: true,
+          elements: [
+            {
+              name: "perso_david_04",
+              type: "armature",
+              clipName: "perso_david_04_action",
+              autoplay: false,
+              loop: false
+            }
+          ],
+          dialogue: {
+            characters: [
+              { 
+                id: "nerd", 
+                name: { fr: "David", en: "David", es: "David" }, 
+                image: `${BASE_URL}/icons/nerd-icon.webp` 
+              }
+            ],
+            lines: [
+              {
+                time: 0.1,
+                text: {
+                  fr: "Bonjour et bienvenue dans mon folio",
+                  en: "Hello and welcome to my portfolio",
+                  es: "Hola y bienvenidos a mi portafolio"
+                },
+                characterId: "nerd"
+              },
+              {
+                time: 2.0,
+                text: [
+                  {
+                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
+                    en: "You can travel through the galaxy of my experiences",
+                    es: "Puedes moverte por la galaxia de mis experiencias"
+                  },
+                  {
+                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
+                    en: "using the button bar at the top or left of this screen",
+                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 8.5,
+                text: {
+                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
+                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
+                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 12.5,
+                text: [
+                  {
+                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
+                    en: "At each stage of my journey, a window will appear at the top of the screen",
+                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
+                  },
+                  {
+                    fr: "et vous permettra d'accéder à plus de précisions",
+                    en: "and will allow you to access more details",
+                    es: "y le permitirá acceder a más detalles"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 19,
+                text: {
+                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
+                    en: "Let's go and see what's happening further on!",
+                    es: "¡Vamos a ver qué pasa más allá!"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 23,
+                text: {
+                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
+                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
+                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 28,
+                text: {
+                    fr: "Bonne balade et belle journée !",
+                    en: "Have a nice walk and a lovely day!",
+                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
+                  },
+                characterId: "nerd"
+              }
+            ]
+          },
           effects: {
             enabled: true,
             skybox: {
@@ -714,6 +1228,103 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           minAzimuthAngle: -3.64,
           maxAzimuthAngle: -0.44,
           enableZoom: true,
+          elements: [
+            {
+              name: "perso_david_05",
+              type: "armature",
+              clipName: "perso_david_05_action",
+              autoplay: false,
+              loop: false
+            }
+          ],
+          dialogue: {
+            characters: [
+              { 
+                id: "nerd", 
+                name: { fr: "David", en: "David", es: "David" }, 
+                image: `${BASE_URL}/icons/nerd-icon.webp` 
+              }
+            ],
+            lines: [
+              {
+                time: 0.1,
+                text: {
+                  fr: "Bonjour et bienvenue dans mon folio",
+                  en: "Hello and welcome to my portfolio",
+                  es: "Hola y bienvenidos a mi portafolio"
+                },
+                characterId: "nerd"
+              },
+              {
+                time: 2.0,
+                text: [
+                  {
+                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
+                    en: "You can travel through the galaxy of my experiences",
+                    es: "Puedes moverte por la galaxia de mis experiencias"
+                  },
+                  {
+                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
+                    en: "using the button bar at the top or left of this screen",
+                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 8.5,
+                text: {
+                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
+                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
+                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 12.5,
+                text: [
+                  {
+                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
+                    en: "At each stage of my journey, a window will appear at the top of the screen",
+                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
+                  },
+                  {
+                    fr: "et vous permettra d'accéder à plus de précisions",
+                    en: "and will allow you to access more details",
+                    es: "y le permitirá acceder a más detalles"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 19,
+                text: {
+                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
+                    en: "Let's go and see what's happening further on!",
+                    es: "¡Vamos a ver qué pasa más allá!"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 23,
+                text: {
+                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
+                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
+                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 28,
+                text: {
+                    fr: "Bonne balade et belle journée !",
+                    en: "Have a nice walk and a lovely day!",
+                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
+                  },
+                characterId: "nerd"
+              }
+            ]
+          },
           effects: {
             enabled: true,
             skybox: {
@@ -833,6 +1444,103 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           minAzimuthAngle: 0.64,
           maxAzimuthAngle: 3.84,
           enableZoom: true,
+          elements: [
+            {
+              name: "perso_david_06",
+              type: "armature",
+              clipName: "perso_david_06_action",
+              autoplay: false,
+              loop: false
+            }
+          ],
+          dialogue: {
+            characters: [
+              { 
+                id: "nerd", 
+                name: { fr: "David", en: "David", es: "David" }, 
+                image: `${BASE_URL}/icons/nerd-icon.webp` 
+              }
+            ],
+            lines: [
+              {
+                time: 0.1,
+                text: {
+                  fr: "Bonjour et bienvenue dans mon folio",
+                  en: "Hello and welcome to my portfolio",
+                  es: "Hola y bienvenidos a mi portafolio"
+                },
+                characterId: "nerd"
+              },
+              {
+                time: 2.0,
+                text: [
+                  {
+                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
+                    en: "You can travel through the galaxy of my experiences",
+                    es: "Puedes moverte por la galaxia de mis experiencias"
+                  },
+                  {
+                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
+                    en: "using the button bar at the top or left of this screen",
+                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 8.5,
+                text: {
+                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
+                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
+                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 12.5,
+                text: [
+                  {
+                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
+                    en: "At each stage of my journey, a window will appear at the top of the screen",
+                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
+                  },
+                  {
+                    fr: "et vous permettra d'accéder à plus de précisions",
+                    en: "and will allow you to access more details",
+                    es: "y le permitirá acceder a más detalles"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 19,
+                text: {
+                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
+                    en: "Let's go and see what's happening further on!",
+                    es: "¡Vamos a ver qué pasa más allá!"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 23,
+                text: {
+                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
+                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
+                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 28,
+                text: {
+                    fr: "Bonne balade et belle journée !",
+                    en: "Have a nice walk and a lovely day!",
+                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
+                  },
+                characterId: "nerd"
+              }
+            ]
+          },
           effects: {
             enabled: true,
             skybox: {
@@ -952,6 +1660,103 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           minAzimuthAngle: 0.64,
           maxAzimuthAngle: 4.44,
           enableZoom: true,
+          elements: [
+            {
+              name: "perso_david_07",
+              type: "armature",
+              clipName: "perso_david_07_action",
+              autoplay: false,
+              loop: false
+            }
+          ],
+          dialogue: {
+            characters: [
+              { 
+                id: "nerd", 
+                name: { fr: "David", en: "David", es: "David" }, 
+                image: `${BASE_URL}/icons/nerd-icon.webp` 
+              }
+            ],
+            lines: [
+              {
+                time: 0.1,
+                text: {
+                  fr: "Bonjour et bienvenue dans mon folio",
+                  en: "Hello and welcome to my portfolio",
+                  es: "Hola y bienvenidos a mi portafolio"
+                },
+                characterId: "nerd"
+              },
+              {
+                time: 2.0,
+                text: [
+                  {
+                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
+                    en: "You can travel through the galaxy of my experiences",
+                    es: "Puedes moverte por la galaxia de mis experiencias"
+                  },
+                  {
+                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
+                    en: "using the button bar at the top or left of this screen",
+                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 8.5,
+                text: {
+                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
+                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
+                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 12.5,
+                text: [
+                  {
+                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
+                    en: "At each stage of my journey, a window will appear at the top of the screen",
+                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
+                  },
+                  {
+                    fr: "et vous permettra d'accéder à plus de précisions",
+                    en: "and will allow you to access more details",
+                    es: "y le permitirá acceder a más detalles"
+                  }
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 19,
+                text: {
+                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
+                    en: "Let's go and see what's happening further on!",
+                    es: "¡Vamos a ver qué pasa más allá!"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 23,
+                text: {
+                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
+                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
+                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 28,
+                text: {
+                    fr: "Bonne balade et belle journée !",
+                    en: "Have a nice walk and a lovely day!",
+                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
+                  },
+                characterId: "nerd"
+              }
+            ]
+          },
           effects: {
             enabled: true,
             skybox: {
