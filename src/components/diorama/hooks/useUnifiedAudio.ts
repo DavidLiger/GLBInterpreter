@@ -198,8 +198,8 @@ export default function useUnifiedAudio({
     }, [currentPOI]);
 
   // ══════════════════════════════════════
-  // 3. GESTION SCENE SOUND (sync avec player)
-  // ══════════════════════════════════════
+    // 3. GESTION SCENE SOUND (sync avec player)
+    // ══════════════════════════════════════
 
     useEffect(() => {
         const isScenePlaying = audioState.isPlaying && !audioState.isEnded;
@@ -210,7 +210,27 @@ export default function useUnifiedAudio({
                 audio.pause();
             });
 
-            if (!sceneAudioRef.current || sceneAudioRef.current.src !== audioState.currentSceneSound) {
+            // ✅ Si l'audio existe déjà avec le même src, juste faire un seek
+            if (sceneAudioRef.current && sceneAudioRef.current.src === audioState.currentSceneSound) {
+                const seekTime = audioState.currentTime || 0;
+                
+                if (sceneAudioRef.current.paused) {
+                    console.log("▶️ [SCENE] Resume scene audio depuis:", seekTime);
+                    sceneAudioRef.current.currentTime = Math.min(seekTime, sceneAudioRef.current.duration || 0);
+                    sceneAudioRef.current.volume = volume;
+                    sceneAudioRef.current.muted = muted;
+                    sceneAudioRef.current.play().catch(() => {});
+                } else {
+                    // ✅ Audio déjà en lecture, juste repositionner si besoin
+                    const timeDiff = Math.abs(sceneAudioRef.current.currentTime - seekTime);
+                    if (timeDiff > 0.5) { // Seuil de 500ms pour éviter micro-adjustments
+                        console.log("⏩ [SCENE] Repositionnement audio à:", seekTime);
+                        sceneAudioRef.current.currentTime = Math.min(seekTime, sceneAudioRef.current.duration || 0);
+                    }
+                }
+            } 
+            // ✅ Sinon, créer un nouvel audio
+            else {
                 if (sceneAudioRef.current) {
                     sceneAudioRef.current.pause();
                     sceneAudioRef.current.src = '';
@@ -227,7 +247,7 @@ export default function useUnifiedAudio({
                     const seekTime = audioState.currentTime || 0;
                     
                     if (seekTime > 0) {
-                        console.log("⏩ [SCENE] Repositionnement audio à:", seekTime);
+                        console.log("⏩ [SCENE] Repositionnement audio initial à:", seekTime);
                         audio.currentTime = Math.min(seekTime, audio.duration);
                     }
                     
@@ -236,10 +256,6 @@ export default function useUnifiedAudio({
                 }, { once: true });
                 
                 audio.load();
-            } else if (sceneAudioRef.current.paused) {
-                console.log("▶️ [SCENE] Resume scene audio depuis:", sceneAudioRef.current.currentTime);
-                sceneAudioRef.current.volume = volume;
-                sceneAudioRef.current.play().catch(() => {});
             }
         }
         // ─── Pause scène ───
@@ -249,7 +265,7 @@ export default function useUnifiedAudio({
                 sceneAudioRef.current.pause();
             }
         }
-        // ─── Fin de scène ─── ✅ BLOQUER SI TRANSITION
+        // ─── Fin de scène ───
         else if (audioState.isEnded && !isTransitioning) {
             console.log("🏁 [SCENE] Fin détectée");
             
@@ -283,7 +299,7 @@ export default function useUnifiedAudio({
         volume,
         pois,
         getOrCreateAmbientAudio,
-        isTransitioning // ✅ AJOUTÉ
+        isTransitioning
     ]);
 
     // ✅ NOUVEAU : Appliquer le volume à tous les audios
