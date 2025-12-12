@@ -106,8 +106,10 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               name: "perso_david_00",
               type: "armature",
               clipName: "perso_david_00_action",
-              autoplay: false,
-              loop: false
+              autoplay: true,
+              loop: false,
+              placeholderMesh: "perso_david_00_placeholder",
+              transitionFrames: 8
             }
           ],
           dialogue: {

@@ -51,6 +51,7 @@ import { applySpritesheets } from "./rendering/applySpritesheet";
 import { SpritesheetAnimator } from "./rendering/SpritesheetAnimator";
 import CVButton from "./ui/CVButton";
 import CVModal from "./ui/CVModal";
+import { usePlaceholderSwap } from "./hooks/usePlaceholderSwap";
 
 const BullstandRegular = localFont({
   src: "../../../public/fonts/Bullstand-Regular.ttf",
@@ -277,8 +278,16 @@ function WebDioramaLoaderInner({
   const emptyRefs = useRef<Record<string, THREE.Object3D>>({});
   const animationFrameRef = useRef<number | undefined>(undefined);
   const videoElementsRef = useRef<HTMLVideoElement[]>([]);
-  const { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers, cleanup: cleanupMixers } =
-    usePOIAnimations(emptyRefs);
+  const { 
+    mixerRef, 
+    actionsRef,
+    initMixers, 
+    prepareActions, 
+    startPlaceholders, // ✅ Fonction pour déclencher les swaps
+    stopAllAnimations, 
+    updateMixers, 
+    cleanup: cleanupMixers,
+  } = usePOIAnimations(emptyRefs);
   const clock = useRef(new THREE.Clock());
   const hasAutoUnmutedRef = useRef(false);
   const composerRef = useRef<ReturnType<typeof setupPostProcessing> | null>(null);
@@ -368,6 +377,8 @@ function WebDioramaLoaderInner({
     poi: currentPoi,
     animations: sceneRef.current?.userData?.gltfAnimations || [],
     mixerRef: mixerRef.current,
+    actionsRef,
+    startPlaceholders,// ✅ NOUVEAU
     muted: false, // ✅ On gère mute dans useUnifiedAudio maintenant
     emptyRefs,
     controlsRef,
@@ -695,7 +706,7 @@ function WebDioramaLoaderInner({
 
     const poi = findPOIById(config.pois as POIWithElements[], currentPOI);
     if (poi && sceneRef.current?.userData?.gltfAnimations) {
-      playPOIAnimations(poi, sceneRef.current.userData.gltfAnimations);
+      prepareActions(poi, sceneRef.current.userData.gltfAnimations);
     }
   }, [currentPOI]);
 
@@ -832,6 +843,33 @@ function WebDioramaLoaderInner({
           });
 
           initMixers(gltf.scene);
+
+          // ✅ NOUVEAU : Initialiser TOUS les placeholders au chargement
+          console.log('🎭 Initialisation de tous les placeholders...');
+          const initAllPlaceholders = (pois: POIWithElements[]) => {
+            pois.forEach(poi => {
+              poi.elements?.forEach(el => {
+                if (el.placeholderMesh) {
+                  const animated = emptyRefs.current[el.name];
+                  const placeholder = emptyRefs.current[el.placeholderMesh];
+                  
+                  if (animated && placeholder) {
+                    animated.visible = false;
+                    placeholder.visible = true;
+                    console.log(`👻 Init placeholder: ${el.name} caché, ${el.placeholderMesh} visible`);
+                  }
+                }
+              });
+              
+              // Récursif pour les children
+              if (poi.children) {
+                initAllPlaceholders(poi.children as POIWithElements[]);
+              }
+            });
+          };
+          
+          initAllPlaceholders(config.pois as POIWithElements[]);
+
           applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
           applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
 
@@ -869,7 +907,7 @@ function WebDioramaLoaderInner({
           const startObj = emptyRefs.current[startPOI?.emptyName || ""];
           if (startObj && startPOI) {
             moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
-            playPOIAnimations(startPOI, gltf.animations);
+            prepareActions(startPOI, gltf.animations);
           }
 
           logSceneStats(scene, renderer);

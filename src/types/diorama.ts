@@ -7,6 +7,8 @@ export type AnimatedElement = {
   clipName: string;  // Nom du clip à jouer
   autoplay: boolean; 
   loop: boolean;
+  placeholderMesh?: string; // ✅ NOUVEAU : nom du mesh placeholder
+  transitionFrames?: number;
   facialSpritesheets?: Array<{
     meshName: string;
     src: string;

@@ -7,9 +7,11 @@ type UsePOIScenePlayerProps = {
   poi?: POIWithElements | null;
   animations: THREE.AnimationClip[];
   mixerRef: Record<string, THREE.AnimationMixer>;
+  actionsRef: React.MutableRefObject<Map<string, THREE.AnimationAction>>; 
   // ambientAudioRefs?: Record<string, HTMLAudioElement>;
   fadeDuration?: number;
   muted?: boolean;
+  startPlaceholders?: (poi: POIWithElements) => void;
   // onSceneStart?: (poiId: string, sceneSound?: string) => void;
   // onSceneEnd?: (poiId: string) => void;
 
@@ -22,14 +24,20 @@ type UsePOIScenePlayerProps = {
   findParentPOI?: (childId: string) => POIWithElements | null;
   controlsRef?: React.RefObject<OrbitControls | null>;
   cameraRef?: React.RefObject<THREE.PerspectiveCamera | null>;
+  startPlaceholderAnimation?: (name: string, frames?: number) => void;
+  prepareStopAnimation?: (name: string, duration: number, frames?: number) => void;
 };
 
 export const usePOIScenePlayer = ({
   poi,
   animations,
   mixerRef,
+  actionsRef, 
   // ambientAudioRefs = {},
   fadeDuration = 0.15,
+  startPlaceholderAnimation, // ✅ NOUVEAU
+  startPlaceholders,
+  prepareStopAnimation,
   // muted = false,
   findParentPOI,
   emptyRefs, 
@@ -126,41 +134,51 @@ export const usePOIScenePlayer = ({
     setIsEnded(false);
 
     const actions: THREE.AnimationAction[] = [];
-    poi.elements?.forEach(el => {
-      const mixer = mixerRef[el.name];
-      if (!mixer) return;
-      const clip = animations.find(a => a.name.toLowerCase() === el.clipName.toLowerCase());
-      if (!clip) return;
+    
+    // ✅ UTILISER les actions déjà préparées au lieu de les recréer
+  poi.elements?.forEach(el => {
+    const action = actionsRef.current.get(el.name);
+    if (!action) {
+      console.warn(`⚠️ Action non préparée pour: ${el.name}`);
+      return;
+    }
 
-      const action = mixer.clipAction(clip);
-      action.reset();
-      action.setLoop(el.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
-      action.clampWhenFinished = true;
-      action.fadeIn(fadeDuration);
-      // ✅ Positionner au temps de départ
-      if (startTime > 0) {
-        action.time = Math.min(startTime, clip.duration);
-      }
-      action.play();
-      actions.push(action);
-    });
+    action.reset();
+    action.setLoop(el.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+    action.clampWhenFinished = true;
+    action.fadeIn(fadeDuration);
+    
+    if (startTime > 0) {
+      action.time = Math.min(startTime, action.getClip().duration);
+    }
+    
+    action.play();
+    actions.push(action);
+  });
 
-    const maxDuration = actions.length > 0 ? Math.max(...actions.map(a => a.getClip().duration)) : duration;
+  if (actions.length === 0) {
+    console.warn(`⚠️ Aucune action à jouer pour POI: ${poi.id}`);
+    return;
+  }
+
+  // ✅ Déclencher TOUS les placeholders du POI en une seule fois
+  if (startPlaceholders) {
+    startPlaceholders(poi);
+  }
+
+    const maxDuration = Math.max(...actions.map(a => a.getClip().duration));
     setDuration(maxDuration);
     activeActionsRef.current = actions;
     setIsPlaying(true);
     setIsPaused(false);
 
-    // 🔹 Si pause + seek, reprendre là où on s'était arrêté
+    // Si pause + seek, reprendre là où on s'était arrêté
     if (!forceReplay && lastSeekTimeRef.current > 0) {
       actions.forEach(a => {
         a.time = Math.min(lastSeekTimeRef.current, a.getClip().duration);
       });
     }
-
-    // 🔹 Son de la scène
-    
-  }, [poi, mixerRef, animations, fadeDuration, resetSceneStable, findParentPOI, duration]);
+  }, [poi, actionsRef, fadeDuration, startPlaceholders, resetSceneStable, findParentPOI, startPlaceholderAnimation, prepareStopAnimation]);
 
   // 🔹 Replay depuis le début
   const replayScene = useCallback(() => {
@@ -170,6 +188,21 @@ export const usePOIScenePlayer = ({
   const stopScene = useCallback(() => {
     activeActionsRef.current.forEach(a => a.stop());
     activeActionsRef.current = [];
+
+    if (poi?.elements) {
+      poi.elements.forEach(el => {
+        if (el.placeholderMesh) {
+          const animated = emptyRefs?.current?.[el.name];
+          const placeholder = emptyRefs?.current?.[el.placeholderMesh];
+          
+          if (animated && placeholder) {
+            animated.visible = false;
+            placeholder.visible = true;
+            console.log(`🔄 Reset placeholder: ${el.name}`);
+          }
+        }
+      });
+    }
     
     lastSeekTimeRef.current = 0;
     setProgress(0);

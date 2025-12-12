@@ -1,29 +1,37 @@
 import { useRef, useCallback } from "react";
 import * as THREE from "three";
-import type { POIWithElements } from "@/types/diorama";
+import type { POIWithElements, AnimatedElement } from "@/types/diorama";
+import { usePlaceholderSwap } from "./usePlaceholderSwap";
 
 export const usePOIAnimations = (
   emptyRefs: React.RefObject<Record<string, THREE.Object3D>>
 ) => {
   const mixerRef = useRef<Record<string, THREE.AnimationMixer>>({});
+  const actionsRef = useRef<Map<string, THREE.AnimationAction>>(new Map());
+  const activeActionsRef = useRef<Map<string, THREE.AnimationAction>>(new Map());
+
+  // ✅ Hook placeholder
+  const placeholderSwap = usePlaceholderSwap({ 
+    emptyRefs,
+    transitionFrames: 5
+  });
 
   // ────────────── Init Mixers ──────────────
   const initMixers = useCallback((scene: THREE.Object3D) => {
     console.log('🎭 initMixers appelé');
     
-    // ✅ RESET COMPLET au début
     console.log('🧹 Reset mixers existants:', Object.keys(mixerRef.current).length);
     Object.values(mixerRef.current).forEach(mixer => {
       mixer.stopAllAction();
     });
-    mixerRef.current = {}; // ✅ Vider AVANT de recréer
+    mixerRef.current = {};
+    activeActionsRef.current.clear();
     
     let mixerCount = 0;
     
     scene.traverse((child) => {
       if (!child.name) return;
 
-      // SkinnedMesh → mixer sur parent Armature
       if (child.type === "SkinnedMesh" && child.parent) {
         const armature = child.parent;
         if (armature && !mixerRef.current[armature.name]) {
@@ -32,11 +40,9 @@ export const usePOIAnimations = (
           console.log('✅ Mixer créé (SkinnedMesh):', armature.name);
         }
       }
-      // ✅ CORRIGÉ : Uniquement si morph targets
       else if (child.type === "Mesh") {
         const mesh = child as THREE.Mesh;
         
-        // ✅ SEULEMENT si le mesh a des morph targets
         if (mesh.morphTargetInfluences && mesh.morphTargetInfluences.length > 0) {
           if (!mixerRef.current[child.name]) {
             mixerRef.current[child.name] = new THREE.AnimationMixer(mesh);
@@ -51,12 +57,20 @@ export const usePOIAnimations = (
     console.log(`🎭 Total mixers dans ref: ${Object.keys(mixerRef.current).length}`);
   }, []);
 
-  // ────────────── Jouer les animations d’un POI ──────────────
-  const playPOIAnimations = useCallback(
+  // ────────────── PRÉPARER les actions (SANS jouer) ──────────────
+  const prepareActions = useCallback(
     (poi: POIWithElements, animations: THREE.AnimationClip[]) => {
+      console.log(`🎬 prepareActions pour POI: ${poi.id}`);
+      
       poi.elements?.forEach((el) => {
         const target = emptyRefs.current[el.name];
         if (!target) return console.warn(`⚠️ Objet non trouvé : ${el.name}`);
+
+        // ✅ Initialiser placeholder si configuré
+        if (el.placeholderMesh) {
+          console.log(`🎭 Init placeholder pour: ${el.name} -> ${el.placeholderMesh}`);
+          placeholderSwap.initPlaceholder(el.name, el.placeholderMesh);
+        }
 
         // Trouver un mixer existant ou créer
         let mixer = mixerRef.current[target.name];
@@ -71,36 +85,86 @@ export const usePOIAnimations = (
         );
         if (!clip) return console.warn(`⚠️ Clip non trouvé : ${el.clipName}`);
 
-        // Jouer l’action
+        // ✅ Créer l'action et la STOCKER dans actionsRef
         const action = mixer.clipAction(clip);
         action.reset();
         action.setLoop(el.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
-        if (el.autoplay) action.play();
+        action.clampWhenFinished = true;
+        
+        // ✅ CLEF IMPORTANTE : Stocker avec el.name, PAS clip.name
+        actionsRef.current.set(el.name, action);
+        
+        console.log(`✅ Action préparée (pas jouée): ${el.name} -> ${clip.name}`);
       });
     },
-    [emptyRefs]
+    [emptyRefs, placeholderSwap]
+  );
+
+  // ────────────── Démarrer les swaps de placeholders ──────────────
+  const startPlaceholders = useCallback(
+    (poi: POIWithElements) => {
+      console.log(`🎭 startPlaceholders pour POI: ${poi.id}`);
+      
+      poi.elements?.forEach((el) => {
+        if (el.placeholderMesh) {
+          const action = actionsRef.current.get(el.name);
+          if (!action) return;
+          
+          console.log(`🎭 Start placeholder swap: ${el.name}`);
+          placeholderSwap.startAnimation(el.name, el.transitionFrames);
+          
+          // Si non-looping, préparer le swap inverse
+          if (!el.loop) {
+            const duration = action.getClip().duration;
+            placeholderSwap.prepareStopAnimation(el.name, duration, el.transitionFrames);
+          }
+        }
+      });
+    },
+    [placeholderSwap]
   );
 
   // ────────────── Stopper toutes les animations ──────────────
   const stopAllAnimations = useCallback(() => {
+    console.log('🛑 Stop all animations');
+    
+    placeholderSwap.resetAll();
+
     Object.values(mixerRef.current).forEach((mixer) => {
       mixer.stopAllAction();
     });
-  }, []);
+    
+    activeActionsRef.current.clear();
+    actionsRef.current.clear(); // ✅ Vider aussi les actions préparées
+  }, [placeholderSwap]);
 
   // ────────────── Update pour animate() ──────────────
   const updateMixers = useCallback((delta: number) => {
     Object.values(mixerRef.current).forEach((m) => m.update(delta));
   }, []);
 
+  // ────────────── Cleanup complet ──────────────
   const cleanup = useCallback(() => {
     console.log('🧹 Cleanup mixers:', Object.keys(mixerRef.current).length);
+    
+    placeholderSwap.cleanup();
+    
     Object.values(mixerRef.current).forEach(mixer => {
       mixer.stopAllAction();
-      // Les mixers Three.js n'ont pas de dispose(), juste les vider suffit
     });
     mixerRef.current = {};
-  }, []);
+    activeActionsRef.current.clear();
+    actionsRef.current.clear();
+  }, [placeholderSwap]);
 
-  return { mixerRef, initMixers, playPOIAnimations, stopAllAnimations, updateMixers, cleanup };
+  return { 
+    mixerRef, 
+    actionsRef, // ✅ Exposé
+    initMixers, 
+    prepareActions, // ✅ Renommé depuis playPOIAnimations
+    startPlaceholders, // ✅ NOUVEAU
+    stopAllAnimations, 
+    updateMixers, 
+    cleanup
+  };
 };
