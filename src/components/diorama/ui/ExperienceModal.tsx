@@ -100,7 +100,7 @@ export default function ExperienceModal({
 
     // ✅ NOUVEAU : Configurations responsive
   const positionClasses = isPortrait
-    ? "right-4 top-24" // Portrait : à droite
+    ? "right-4 top-28" // Portrait : à droite
     : "top-2 left-1/2 -translate-x-1/2"; // Paysage : en haut centré
     // : "top-16 right-4";
 
