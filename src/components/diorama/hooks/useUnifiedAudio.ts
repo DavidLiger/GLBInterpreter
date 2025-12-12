@@ -107,49 +107,53 @@ export default function useUnifiedAudio({
             return;
         }
 
-        const isScenePlaying = audioState.isPlaying && !audioState.isEnded;
-        console.log("🎵 [AMBIENT] isScenePlaying:", isScenePlaying);
+        // ✅ CHANGEMENT DE POI détecté
+        const poiHasChanged = previousPOIRef.current !== currentPOI;
         
         // Arrêter ancien POI
-        if (previousPOIRef.current && previousPOIRef.current !== currentPOI) {
+        if (previousPOIRef.current && poiHasChanged) {
             const oldAmbient = ambientAudioRefs.current[previousPOIRef.current];
             if (oldAmbient) {
-            console.log("⏹️ [AMBIENT] Stop ancien:", previousPOIRef.current);
-            oldAmbient.pause();
-            oldAmbient.currentTime = 0;
+                console.log("⏹️ [AMBIENT] Stop ancien:", previousPOIRef.current);
+                oldAmbient.pause();
+                oldAmbient.currentTime = 0;
             }
         }
 
-        // Play nouveau POI (sauf si scène en cours)
-        if (!isScenePlaying) {
+        const isScenePlaying = audioState.isPlaying && !audioState.isEnded;
+        console.log("🎵 [AMBIENT] isScenePlaying:", isScenePlaying);
+        
+        // ✅ NOUVEAU : Démarrer l'ambient SOIT si pas de scène, SOIT si POI vient de changer
+        const shouldStartAmbient = !isScenePlaying || poiHasChanged;
+        
+        if (shouldStartAmbient) {
             // ✅ Trouver l'URL dans la config
             const poi = pois.find(p => p.id === currentPOI) || 
                         findPOIRecursively(pois, currentPOI);
             
             if (poi?.ambientSound) {
-            const ambient = getOrCreateAmbientAudio(currentPOI, poi.ambientSound);
-            console.log("▶️ [AMBIENT] Play:", currentPOI, "src:", ambient.src, "muted:", muted);
-            ambient.muted = muted;
-            ambient.play()
-                // .then(() => console.log("✅ [AMBIENT] Lecture démarrée"))
-                .catch((err) => {
-                console.error("❌ [AMBIENT] Erreur play:", err);
-                console.log("🔍 [AMBIENT] Audio state:", {
-                    src: ambient.src,
-                    readyState: ambient.readyState,
-                    networkState: ambient.networkState,
-                    error: ambient.error
-                });
-                });
+                const ambient = getOrCreateAmbientAudio(currentPOI, poi.ambientSound);
+                
+                // ✅ Si scène en cours sur ce POI, juste préparer l'audio sans jouer
+                if (isScenePlaying && !poiHasChanged) {
+                    console.log("⏸️ [AMBIENT] Scène en cours sur ce POI, pas de lecture ambient");
+                } else {
+                    console.log("▶️ [AMBIENT] Play:", currentPOI, "src:", ambient.src, "muted:", muted);
+                    ambient.muted = muted;
+                    ambient.play()
+                        .catch((err) => {
+                            console.error("❌ [AMBIENT] Erreur play:", err);
+                        });
+                }
             } else {
-            console.warn("⚠️ [AMBIENT] Pas d'ambientSound pour POI:", currentPOI);
+                console.warn("⚠️ [AMBIENT] Pas d'ambientSound pour POI:", currentPOI);
             }
         } else {
             console.log("⏸️ [AMBIENT] Scène en cours, pas de lecture ambient");
         }
 
         previousPOIRef.current = currentPOI;
-    }, [currentPOI, muted, startSoundReady, audioState.isPlaying, audioState.isEnded, pois, getOrCreateAmbientAudio]);
+    }, [currentPOI, muted, startSoundReady, audioState.isPlaying, audioState.isEnded, pois, getOrCreateAmbientAudio, isTransitioning]);
 
     // Helper pour trouver POI récursivement
     function findPOIRecursively(poisList: POI[], id: string): POI | null {
