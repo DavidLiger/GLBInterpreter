@@ -401,77 +401,58 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               {
                 time: 0.1,
                 text: {
-                  fr: "Bonjour et bienvenue dans mon folio",
-                  en: "Hello and welcome to my portfolio",
-                  es: "Hola y bienvenidos a mi portafolio"
+                  fr: "À l’ENI école informatique j’ai obtenu un Bac+2 de Développeur Web et Web Mobile",
+                  en: "At ENI computer school, I obtained a two-year degree in Web and Mobile Web Development",
+                  es: "En la escuela de informática ENI obtuve un título de dos años como desarrollador web y web móvil"
                 },
                 characterId: "nerd"
               },
               {
-                time: 2.0,
+                time: 5.0,
                 text: [
                   {
-                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
-                    en: "You can travel through the galaxy of my experiences",
-                    es: "Puedes moverte por la galaxia de mis experiencias"
+                    fr: "Cette formation m’a permis d’acquérir des bases solides en programmation",
+                    en: "This training course enabled me to acquire a solid foundation in programming",
+                    es: "Esta formación me ha permitido adquirir una base sólida en programación"
                   },
                   {
-                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
-                    en: "using the button bar at the top or left of this screen",
-                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
+                    fr: "en conception d’interfaces",
+                    en: "in interface design",
+                    es: "en diseño de interfaces"
+                  },
+                  {
+                    fr: "et en développement full-stack",
+                    en: "and full-stack development",
+                    es: "y desarrollo full-stack"
                   }
                 ],
                 characterId: "nerd"
               },
               {
-                time: 8.5,
+                time: 12.0,
                 text: {
-                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
-                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
-                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
+                    fr: "J’ai ensuite poursuivi à MyDigitalSchool",
+                    en: "I then continued at MyDigitalSchool",
+                    es: "Después continué en MyDigitalSchool"
                   },
                 characterId: "nerd"
               },
               {
-                time: 12.5,
-                text: [
+                time: 15.0,
+                text: 
                   {
-                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
-                    en: "At each stage of my journey, a window will appear at the top of the screen",
-                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
-                  },
-                  {
-                    fr: "et vous permettra d'accéder à plus de précisions",
-                    en: "and will allow you to access more details",
-                    es: "y le permitirá acceder a más detalles"
-                  }
-                ],
-                characterId: "nerd"
-              },
-              {
-                time: 19,
-                text: {
-                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
-                    en: "Let's go and see what's happening further on!",
-                    es: "¡Vamos a ver qué pasa más allá!"
+                    fr: "où j’ai obtenu un Bac+3 de Concepteur-Développeur d’Applications",
+                    en: "where I obtained a Bachelor's degree in Application Design and Development",
+                    es: "donde obtuve un título universitario de tres años como diseñador y desarrollador de aplicaciones"
                   },
                 characterId: "nerd"
               },
               {
-                time: 23,
+                time: 19.0,
                 text: {
-                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
-                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
-                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
-                  },
-                characterId: "nerd"
-              },
-              {
-                time: 28,
-                text: {
-                    fr: "Bonne balade et belle journée !",
-                    en: "Have a nice walk and a lovely day!",
-                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
+                    fr: "avec un apprentissage orienté projets concrets et technologies modernes",
+                    en: "with project-based learning focused on real-world applications and modern technologies",
+                    es: "con un aprendizaje orientado a proyectos concretos y tecnologías modernas"
                   },
                 characterId: "nerd"
               }
@@ -506,11 +487,11 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         ],
         lines: [
           {
-            time: 0.5,
+            time: 0.1,
             text: {
-              fr: "Salut ! Bienvenue dans le diorama mon poulet.",
-              en: "Hi! Welcome to the diorama.",
-              es: "¡Hola! Bienvenido al diorama."
+              fr: "L’ENI école informatique forme aux métiers du développement",
+              en: "ENI computer school provides training in development professions",
+              es: "La escuela informática ENI imparte formación en profesiones relacionadas con el desarrollo"
             },
             characterId: "nerd"
           },
@@ -518,29 +499,38 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
             time: 3.0,
             text: [
               {
-                fr: "Ici, tu peux explorer la scène en 3D.",
-                en: "Here, you can explore the 3D scene.",
-                es: "Aquí puedes explorar la escena 3D."
+                fr: "et des technologies numériques",
+                en: "and digital technologies",
+                es: "y tecnologías digitales"
               },
               {
-                fr: "Tu peux zoomer, tourner la caméra, et cliquer sur les points d'intérêt.",
-                en: "You can zoom in, rotate the camera, and click on points of interest.",
-                es: "Puedes ampliar la imagen, girar la cámara y hacer clic en los puntos de interés."
+                fr: "Son enseignement est orienté pratique",
+                en: "His teaching is practice-oriented",
+                es: "Su enseñanza está orientada a la práctica."
               },
               {
-                fr: "Amuse-toi bien !",
-                en: "Have fun!",
-                es: "¡Que te diviertas!"
+                fr: "avec un fort ancrage technique",
+                en: "with a strong technical foundation",
+                es: "con un sólido arraigo técnico"
               }
             ],
             characterId: "nerd"
           },
           {
-            time: 12.5,
+            time: 9.0,
             text: {
-                fr: "Allons voir ce qu’il se passe plus loin !",
-                en: "Let's go and see what's happening further on!",
-                es: "¡Vamos a ver qué pasa más allá!"
+                fr: "MyDigitalSchool est une école du digital",
+                en: "MyDigitalSchool is a digital school",
+                es: "MyDigitalSchool es una escuela digital"
+              },
+            characterId: "nerd"
+          },
+          {
+            time: 12.0,
+            text: {
+                fr: "proposant des formations web, design et marketing numérique",
+                en: "offering training in web, design and digital marketing",
+                es: "que ofrece formación en web, diseño y marketing digital"
               },
             characterId: "nerd"
           }
@@ -726,39 +716,48 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           {
             time: 0.5,
             text: {
-              fr: "Salut ! Bienvenue dans le diorama mon poulet.",
-              en: "Hi! Welcome to the diorama.",
-              es: "¡Hola! Bienvenido al diorama."
+              fr: "Terre de Pixels est une agence de communication basée dans le Maine-et-Loire",
+              en: "Terre de Pixels is a communications agency based in Maine-et-Loire",
+              es: "Terre de Pixels es una agencia de comunicación con sede en Maine-et-Loire"
             },
             characterId: "nerd"
           },
           {
-            time: 3.0,
+            time: 4.5,
             text: [
               {
-                fr: "Ici, tu peux explorer la scène en 3D.",
-                en: "Here, you can explore the 3D scene.",
-                es: "Aquí puedes explorar la escena 3D."
+                fr: "Elle conçoit des supports graphiques",
+                en: "She designs graphic materials",
+                es: "Diseña soportes gráficos"
               },
               {
-                fr: "Tu peux zoomer, tourner la caméra, et cliquer sur les points d'intérêt.",
-                en: "You can zoom in, rotate the camera, and click on points of interest.",
-                es: "Puedes ampliar la imagen, girar la cámara y hacer clic en los puntos de interés."
+                fr: "des contenus vidéo",
+                en: "video content",
+                es: "contenidos de vídeo"
               },
               {
-                fr: "Amuse-toi bien !",
-                en: "Have fun!",
-                es: "¡Que te diviertas!"
+                fr: "et des solutions web sur-mesure",
+                en: "and tailor-made web solutions",
+                es: "y soluciones web a medida"
               }
             ],
             characterId: "nerd"
           },
           {
-            time: 12.5,
+            time: 10.5,
             text: {
-                fr: "Allons voir ce qu’il se passe plus loin !",
-                en: "Let's go and see what's happening further on!",
-                es: "¡Vamos a ver qué pasa más allá!"
+                fr: "Son ambition : accompagner chaque entreprise",
+                en: "His ambition: to support every company",
+                es: "Su ambición: acompañar a cada empresa"
+              },
+            characterId: "nerd"
+          },
+          {
+            time: 13.0,
+            text: {
+                fr: "pour renforcer sa visibilité et son image",
+                en: "to enhance its visibility and image",
+                es: "para reforzar su visibilidad y su imagen"
               },
             characterId: "nerd"
           }
@@ -943,38 +942,49 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         lines: [
           {
             time: 0.5,
-            text: {
-              fr: "Salut ! Bienvenue dans le diorama mon poulet.",
-              en: "Hi! Welcome to the diorama.",
-              es: "¡Hola! Bienvenido al diorama."
-            },
-            characterId: "nerd"
-          },
-          {
-            time: 3.0,
             text: [
               {
-                fr: "Ici, tu peux explorer la scène en 3D.",
-                en: "Here, you can explore the 3D scene.",
-                es: "Aquí puedes explorar la escena 3D."
+                fr: "Actual est un groupe français spécialisé dans l’emploi",
+                en: "Hi! Welcome to the diorama.",
+                es: "¡Hola! Bienvenido al diorama."
               },
               {
-                fr: "Tu peux zoomer, tourner la caméra, et cliquer sur les points d'intérêt.",
-                en: "You can zoom in, rotate the camera, and click on points of interest.",
-                es: "Puedes ampliar la imagen, girar la cámara y hacer clic en los puntos de interés."
-              },
-              {
-                fr: "Amuse-toi bien !",
-                en: "Have fun!",
-                es: "¡Que te diviertas!"
+                fr: "l’intérim et l’accompagnement des talents",
+                en: "Hi! Welcome to the diorama.",
+                es: "¡Hola! Bienvenido al diorama."
               }
             ],
             characterId: "nerd"
           },
           {
+            time: 5.0,
+            text: [
+              {
+                fr: "Il propose un large ensemble de services RH",
+                en: "Here, you can explore the 3D scene.",
+                es: "Aquí puedes explorar la escena 3D."
+              },
+              {
+                fr: "destinés aux entreprises comme aux candidats",
+                en: "You can zoom in, rotate the camera, and click on points of interest.",
+                es: "Puedes ampliar la imagen, girar la cámara y hacer clic en los puntos de interés."
+              }
+            ],
+            characterId: "nerd"
+          },
+          {
+            time: 10.0,
+            text: {
+                fr: "Son objectif est simple",
+                en: "Let's go and see what's happening further on!",
+                es: "¡Vamos a ver qué pasa más allá!"
+              },
+            characterId: "nerd"
+          },
+          {
             time: 12.5,
             text: {
-                fr: "Allons voir ce qu’il se passe plus loin !",
+                fr: "faciliter l’accès à un emploi durable sur tout le territoire",
                 en: "Let's go and see what's happening further on!",
                 es: "¡Vamos a ver qué pasa más allá!"
               },

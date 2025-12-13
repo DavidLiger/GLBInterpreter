@@ -1627,8 +1627,12 @@ function WebDioramaLoaderInner({
           )}
 
           {currentPoi && currentPoi.dialogue && showDialogue && (
-            <DialogueModal 
-              dialogue={currentPoi.dialogue} progress={progress} isPlaying={isPlaying} isPortrait={isPortrait} />
+            <DialogueModal
+              key={currentPoi.id} 
+              dialogue={currentPoi.dialogue} 
+              progress={progress} 
+              isPlaying={isPlaying} 
+              isPortrait={isPortrait} />
           )}
 
           <InfoModal
