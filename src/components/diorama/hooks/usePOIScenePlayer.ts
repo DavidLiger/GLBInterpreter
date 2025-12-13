@@ -268,18 +268,23 @@ export const usePOIScenePlayer = ({
 
   // 🔹 Seek
   const seekScene = useCallback((time: number) => {
+    console.log("🎯 [seekScene] Début, time:", time, "isPlaying:", isPlaying, "isPaused:", isPaused); // ✅ LOG
+    
     const clampedTime = Math.min(time, duration);
     lastSeekTimeRef.current = clampedTime;
 
     activeActionsRef.current.forEach(a => {
       const clipDuration = a.getClip().duration;
       a.time = Math.min(clampedTime, clipDuration);
+      console.log("🎯 [seekScene] Action time set to:", a.time); // ✅ LOG
       a.paused = !isPlaying || isPaused;
       if (isPlaying && !isPaused) a.play();
     });
 
     setProgress(clampedTime);
     setIsEnded(clampedTime >= duration);
+    
+    console.log("✅ [seekScene] Terminé, progress set to:", clampedTime); // ✅ LOG
   }, [duration, isPlaying, isPaused]);
 
   function normalizeCameraPath(poi: POIWithElements) {
@@ -416,6 +421,8 @@ useEffect(() => {
       }
     }
   }
+
+  lastSeekTimeRef.current = t;
 
   if (t >= durationRef.current) { // ✅ durationRef
     setIsPlaying(false);

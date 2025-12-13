@@ -64,25 +64,25 @@ export default function useUnifiedAudio({
     // ══════════════════════════════════════
     const getOrCreateAmbientAudio = useCallback((poiId: string, audioUrl: string) => {
         if (ambientAudioRefs.current[poiId]) {
-        const existing = ambientAudioRefs.current[poiId];
-        if (existing.src === audioUrl || existing.src.endsWith(audioUrl)) {
-            return existing;
-        } else {
-            existing.pause();
-            existing.src = '';
-        }
+            const existing = ambientAudioRefs.current[poiId];
+            if (existing.src === audioUrl || existing.src.endsWith(audioUrl)) {
+                return existing;
+            } else {
+                existing.pause();
+                existing.src = '';
+            }
         }
         
         const audio = new Audio();
         audio.src = audioUrl;
         audio.loop = true;
-        audio.muted = muted;
-        audio.volume = volume; // ✅ NOUVEAU : Appliquer le volume
+        audio.muted = false;  // ✅ Valeur fixe
+        audio.volume = 0.3;   // ✅ Valeur fixe
         audio.preload = "auto";
         ambientAudioRefs.current[poiId] = audio;
         allAudiosRef.current.push(audio);
         return audio;
-    }, [muted, volume]); 
+    }, []); // ✅ AUCUNE dépendance !
 
     // ══════════════════════════════════════
     // 3. GESTION AMBIENT (avec création lazy)
@@ -155,6 +155,7 @@ export default function useUnifiedAudio({
             
             console.log("▶️ [AMBIENT] Play:", currentPOI, "muted:", muted);
             ambient.muted = muted;
+            ambient.volume = volume;
             
             // ✅ Stocker la promesse
             const playPromise = ambient.play()
@@ -197,10 +198,11 @@ export default function useUnifiedAudio({
     }
     }, [currentPOI]);
 
-  // ══════════════════════════════════════
+    // ══════════════════════════════════════
     // 3. GESTION SCENE SOUND (sync avec player)
     // ══════════════════════════════════════
 
+    // ✅ useEffect pour CRÉER/PLAY/PAUSE uniquement (PAS de volume/mute/seek ici)
     useEffect(() => {
         const isScenePlaying = audioState.isPlaying && !audioState.isEnded;
         
@@ -210,67 +212,76 @@ export default function useUnifiedAudio({
                 audio.pause();
             });
 
-            // ✅ Si l'audio existe déjà avec le même src, juste faire un seek
-            if (sceneAudioRef.current && sceneAudioRef.current.src === audioState.currentSceneSound) {
-                const seekTime = audioState.currentTime || 0;
-                
+            // Si l'audio existe déjà ET c'est le même src
+            if (sceneAudioRef.current && sceneAudioRef.current.src.includes(audioState.currentSceneSound)) {
                 if (sceneAudioRef.current.paused) {
-                    console.log("▶️ [SCENE] Resume scene audio depuis:", seekTime);
-                    sceneAudioRef.current.currentTime = Math.min(seekTime, sceneAudioRef.current.duration || 0);
-                    sceneAudioRef.current.volume = volume;
-                    sceneAudioRef.current.muted = muted;
+                    console.log("▶️ [SCENE] Resume");
                     sceneAudioRef.current.play().catch(() => {});
-                } else {
-                    // ✅ Audio déjà en lecture, juste repositionner si besoin
-                    const timeDiff = Math.abs(sceneAudioRef.current.currentTime - seekTime);
-                    if (timeDiff > 0.5) { // Seuil de 500ms pour éviter micro-adjustments
-                        console.log("⏩ [SCENE] Repositionnement audio à:", seekTime);
-                        sceneAudioRef.current.currentTime = Math.min(seekTime, sceneAudioRef.current.duration || 0);
-                    }
                 }
-            } 
-            // ✅ Sinon, créer un nouvel audio
-            else {
-                if (sceneAudioRef.current) {
-                    sceneAudioRef.current.pause();
-                    sceneAudioRef.current.src = '';
-                }
-
-                const audio = new Audio(audioState.currentSceneSound);
-                audio.loop = false;
-                audio.muted = muted;
-                audio.volume = volume;
-                sceneAudioRef.current = audio;
-                allAudiosRef.current.push(audio);
-                
-                audio.addEventListener('loadedmetadata', () => {
-                    const seekTime = audioState.currentTime || 0;
-                    
-                    if (seekTime > 0) {
-                        console.log("⏩ [SCENE] Repositionnement audio initial à:", seekTime);
-                        audio.currentTime = Math.min(seekTime, audio.duration);
-                    }
-                    
-                    console.log("▶️ [SCENE] Play scene audio depuis:", audio.currentTime);
-                    audio.play().catch(() => {});
-                }, { once: true });
-                
-                audio.load();
+                return; // ✅ NE PAS recréer
             }
+            
+            // Sinon, créer nouvel audio
+            console.log("🆕 [SCENE] Création nouvel audio");
+
+            if (sceneAudioRef.current) {
+                sceneAudioRef.current.pause();
+                sceneAudioRef.current.src = '';
+            }
+
+            const audio = new Audio();  // ✅ PAS d'URL ici
+            audio.loop = false;
+            audio.muted = muted;
+            audio.volume = volume;
+            sceneAudioRef.current = audio;
+            allAudiosRef.current.push(audio);
+
+            // ✅ CHARGER DEPUIS CACHE
+            (async () => {
+                try {
+                    const { getAssetFromCache } = await import('@/components/diorama/lib/downloadManager');
+                    const bookId = 'folio';
+                    
+                    const cachedBlob = await getAssetFromCache(bookId, audioState.currentSceneSound!);
+                    
+                    if (cachedBlob) {
+                        console.log("✅ [SCENE] Chargé depuis cache (Blob URL)");
+                        const blobUrl = URL.createObjectURL(cachedBlob);
+                        audio.src = blobUrl;
+                    } else {
+                        console.log("⚠️ [SCENE] Pas en cache, URL directe");
+                        audio.src = audioState.currentSceneSound!;
+                    }
+                    
+                    audio.load();
+                    
+                    audio.addEventListener('loadedmetadata', () => {
+                        console.log("▶️ [SCENE] Métadonnées chargées, play");
+                        audio.play().catch(() => {});
+                    }, { once: true });
+                    
+                } catch (error) {
+                    console.error("❌ Erreur cache:", error);
+                    audio.src = audioState.currentSceneSound!;
+                    audio.load();
+                    audio.addEventListener('loadedmetadata', () => {
+                        audio.play().catch(() => {});
+                    }, { once: true });
+                }
+            })();
         }
         // ─── Pause scène ───
         else if (audioState.isPaused && sceneAudioRef.current) {
             if (!sceneAudioRef.current.paused) {
-                console.log("⏸️ [SCENE] Pause scene audio");
+                console.log("⏸️ [SCENE] Pause");
                 sceneAudioRef.current.pause();
             }
         }
         // ─── Fin de scène ───
         else if (audioState.isEnded && !isTransitioning) {
-            console.log("🏁 [SCENE] Fin détectée");
+            console.log("🏁 [SCENE] Fin");
             
             if (sceneAudioRef.current) {
-                console.log("⏹️ [SCENE] Stop scene audio");
                 sceneAudioRef.current.pause();
                 sceneAudioRef.current.currentTime = 0;
                 sceneAudioRef.current = null;
@@ -282,9 +293,11 @@ export default function useUnifiedAudio({
                 
                 if (poi?.ambientSound) {
                     const ambient = getOrCreateAmbientAudio(currentPOI, poi.ambientSound);
-                    console.log("▶️ [AMBIENT] Relance après scène:", currentPOI);
                     ambient.muted = muted;
-                    ambient.play().catch(() => {});
+                    ambient.volume = volume; // ✅ AJOUTER
+                    if (ambient.paused) {
+                        ambient.play().catch(() => {});
+                    }
                 }
             }
         }
@@ -292,15 +305,20 @@ export default function useUnifiedAudio({
         audioState.isPlaying, 
         audioState.isPaused, 
         audioState.isEnded, 
-        audioState.currentSceneSound,
-        audioState.currentTime,
+        audioState.currentSceneSound, // ✅ SEULEMENT ces deps !
         currentPOI,
-        muted,
-        volume,
         pois,
         getOrCreateAmbientAudio,
         isTransitioning
-    ]);
+    ]); // ✅ RETIRER: volume, muted, currentTime
+
+    // ✅ useEffect séparé pour VOLUME et MUTE
+    useEffect(() => {
+        if (sceneAudioRef.current) {
+            sceneAudioRef.current.volume = volume;
+            sceneAudioRef.current.muted = muted;
+        }
+    }, [volume, muted]);
 
     // ✅ NOUVEAU : Appliquer le volume à tous les audios
     const applyVolumeToAll = useCallback((vol: number, shouldMute: boolean) => {
@@ -353,20 +371,22 @@ export default function useUnifiedAudio({
     // 5. SEEK AUDIO (synchronisation externe)
     // ══════════════════════════════════════
     const seekSceneAudio = useCallback((time: number) => {
-    if (!sceneAudioRef.current) return;
-    
-    const audio = sceneAudioRef.current;
-    
-    // Attendre que l'audio soit prêt
-    const applySeek = () => {
-        audio.currentTime = Math.min(time, audio.duration || 0);
-    };
-    
-    if (audio.readyState >= 1 && !isNaN(audio.duration)) {
-        applySeek();
-    } else {
-        audio.addEventListener('loadedmetadata', applySeek, { once: true });
-    }
+        if (!sceneAudioRef.current) return;
+        
+        const audio = sceneAudioRef.current;
+        
+        console.log("🎯 [SEEK] Seek à:", time, "readyState:", audio.readyState);
+        
+        const applySeek = () => {
+            audio.currentTime = Math.min(time, audio.duration || 0);
+            console.log("✅ [SEEK] Appliqué, currentTime:", audio.currentTime);
+        };
+        
+        if (audio.readyState >= 2) { // HAVE_CURRENT_DATA
+            applySeek();
+        } else {
+            audio.addEventListener('canplay', applySeek, { once: true });
+        }
     }, []);
 
     // ══════════════════════════════════════

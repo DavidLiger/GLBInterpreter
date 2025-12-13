@@ -32,6 +32,7 @@ export default function POIPlayer({
     const rect = progressBarRef.current.getBoundingClientRect();
     const x = clientX - rect.left;
     const newTime = Math.min(Math.max(0, (x / rect.width) * duration), duration);
+    console.log("🎯 [POIPlayer] handleSeek appelé, newTime:", newTime); // ✅ LOG
     onSeek(newTime);
   };
 
