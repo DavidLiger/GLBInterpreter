@@ -836,77 +836,65 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               {
                 time: 0.1,
                 text: {
-                  fr: "Bonjour et bienvenue dans mon folio",
-                  en: "Hello and welcome to my portfolio",
-                  es: "Hola y bienvenidos a mi portafolio"
+                  fr: "Actual est un acteur majeur des ressources humaines en France",
+                  en: "Actual is a major player in human resources in France",
+                  es: "Actual es una empresa líder en recursos humanos en Francia"
                 },
                 characterId: "nerd"
               },
               {
-                time: 2.0,
-                text: [
+                time: 3.0,
+                text: 
                   {
-                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
-                    en: "You can travel through the galaxy of my experiences",
-                    es: "Puedes moverte por la galaxia de mis experiencias"
+                    fr: "spécialisé dans l’emploi et l’accompagnement",
+                    en: "specialising in employment and support",
+                    es: "especializado en empleo y acompañamiento"
                   },
+                characterId: "nerd"
+              },
+              {
+                time: 6.0,
+                text: {
+                    fr: "J’ai participé à la modernisation d’un SaaS de gestion RH",
+                    en: "I participated in the modernisation of an HR management SaaS solution",
+                    es: "Participé en la modernización de un SaaS de gestión de recursos humanos"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 9.0,
+                text: 
                   {
-                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
-                    en: "using the button bar at the top or left of this screen",
-                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
-                  }
-                ],
-                characterId: "nerd"
-              },
-              {
-                time: 8.5,
-                text: {
-                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
-                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
-                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
+                    fr: "et au développement d’applications full-stack dédiées aux tests et outils internes",
+                    en: "and the development of full-stack applications dedicated to internal testing and tools",
+                    es: "y al desarrollo de aplicaciones full-stack dedicadas a pruebas y herramientas internas"
                   },
                 characterId: "nerd"
               },
               {
-                time: 12.5,
-                text: [
-                  {
-                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
-                    en: "At each stage of my journey, a window will appear at the top of the screen",
-                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
-                  },
-                  {
-                    fr: "et vous permettra d'accéder à plus de précisions",
-                    en: "and will allow you to access more details",
-                    es: "y le permitirá acceder a más detalles"
-                  }
-                ],
-                characterId: "nerd"
-              },
-              {
-                time: 19,
+                time: 13.0,
                 text: {
-                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
-                    en: "Let's go and see what's happening further on!",
-                    es: "¡Vamos a ver qué pasa más allá!"
+                    fr: "Je réalisais aussi l’optimisation de bases de données",
+                    en: "I also carried out database optimisation",
+                    es: "También me encargaba de la optimización de bases de datos"
                   },
                 characterId: "nerd"
               },
               {
-                time: 23,
+                time: 16.0,
                 text: {
-                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
-                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
-                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
+                    fr: "la maintenance",
+                    en: "maintenance",
+                    es: "el mantenimiento"
                   },
                 characterId: "nerd"
               },
               {
-                time: 28,
+                time: 17.5,
                 text: {
-                    fr: "Bonne balade et belle journée !",
-                    en: "Have a nice walk and a lovely day!",
-                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
+                    fr: "et l’analyse technique des besoins",
+                    en: "and technical analysis of requirements",
+                    es: "y el análisis técnico de las necesidades"
                   },
                 characterId: "nerd"
               }
@@ -945,39 +933,39 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
             text: [
               {
                 fr: "Actual est un groupe français spécialisé dans l’emploi",
-                en: "Hi! Welcome to the diorama.",
-                es: "¡Hola! Bienvenido al diorama."
+                en: "Actual is a French group specialising in employment",
+                es: "Actual es un grupo francés especializado en empleo"
               },
               {
                 fr: "l’intérim et l’accompagnement des talents",
-                en: "Hi! Welcome to the diorama.",
-                es: "¡Hola! Bienvenido al diorama."
+                en: "la gestión temporal y el acompañamiento de talentos",
+                es: "temporary staffing and talent support"
               }
             ],
             characterId: "nerd"
           },
           {
-            time: 5.0,
+            time: 5.5,
             text: [
               {
                 fr: "Il propose un large ensemble de services RH",
-                en: "Here, you can explore the 3D scene.",
-                es: "Aquí puedes explorar la escena 3D."
+                en: "It offers a wide range of HR services",
+                es: "Ofrece una amplia gama de servicios de recursos humanos"
               },
               {
                 fr: "destinés aux entreprises comme aux candidats",
-                en: "You can zoom in, rotate the camera, and click on points of interest.",
-                es: "Puedes ampliar la imagen, girar la cámara y hacer clic en los puntos de interés."
+                en: "intended for companies and candidates alike",
+                es: "destinados tanto a empresas como a candidatos"
               }
             ],
             characterId: "nerd"
           },
           {
-            time: 10.0,
+            time: 10.5,
             text: {
                 fr: "Son objectif est simple",
-                en: "Let's go and see what's happening further on!",
-                es: "¡Vamos a ver qué pasa más allá!"
+                en: "His objective is straightforward",
+                es: "Su objetivo es sencillo"
               },
             characterId: "nerd"
           },
@@ -985,8 +973,8 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
             time: 12.5,
             text: {
                 fr: "faciliter l’accès à un emploi durable sur tout le territoire",
-                en: "Let's go and see what's happening further on!",
-                es: "¡Vamos a ver qué pasa más allá!"
+                en: "facilitate access to sustainable employment throughout the country",
+                es: "facilitar el acceso a un empleo sostenible en todo el territorio"
               },
             characterId: "nerd"
           }
@@ -1065,77 +1053,70 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               {
                 time: 0.1,
                 text: {
-                  fr: "Bonjour et bienvenue dans mon folio",
-                  en: "Hello and welcome to my portfolio",
-                  es: "Hola y bienvenidos a mi portafolio"
+                  fr: "DL Studio Web est une agence orientée web 3D",
+                  en: "DL Studio Web is a 3D web-oriented agency",
+                  es: "DL Studio Web es una agencia especializada en web 3D"
                 },
                 characterId: "nerd"
               },
               {
-                time: 2.0,
+                time: 3.0,
+                text: {
+                  fr: "dédiée à la création d’expériences interactives",
+                  en: "dedicated to creating interactive experiences",
+                  es: "dedicada a la creación de experiencias interactivas"
+                },
+                characterId: "nerd"
+              },
+              {
+                time: 6.5,
                 text: [
                   {
-                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
-                    en: "You can travel through the galaxy of my experiences",
-                    es: "Puedes moverte por la galaxia de mis experiencias"
+                    fr: "J’y ai développé des applications full-stack",
+                    en: "I developed full-stack applications there",
+                    es: "Allí desarrollé aplicaciones full-stack"
                   },
                   {
-                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
-                    en: "using the button bar at the top or left of this screen",
-                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
+                    fr: "et expérimenté autour de Three.js et WebGL",
+                    en: "and experienced with Three.js and WebGL",
+                    es: "y con experiencia en Three.js y WebGL"
                   }
                 ],
                 characterId: "nerd"
               },
               {
-                time: 8.5,
+                time: 12.0,
                 text: {
-                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
-                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
-                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
+                    fr: "incluant la création d’un framework interne pour le rendu 3D",
+                    en: "including the creation of an internal framework for 3D rendering",
+                    es: "incluyendo la creación de un marco interno para el renderizado 3D"
                   },
                 characterId: "nerd"
               },
               {
-                time: 12.5,
-                text: [
-                  {
-                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
-                    en: "At each stage of my journey, a window will appear at the top of the screen",
-                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
-                  },
-                  {
-                    fr: "et vous permettra d'accéder à plus de précisions",
-                    en: "and will allow you to access more details",
-                    es: "y le permitirá acceder a más detalles"
-                  }
-                ],
-                characterId: "nerd"
-              },
-              {
-                time: 19,
+                time: 15.5,
                 text: {
-                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
-                    en: "Let's go and see what's happening further on!",
-                    es: "¡Vamos a ver qué pasa más allá!"
+                    fr: "Je gérais également l’activité",
+                    en: "I also managed the business",
+                    es: "También gestionaba la actividad"
                   },
                 characterId: "nerd"
               },
               {
-                time: 23,
+                time: 17.5,
                 text: {
-                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
-                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
-                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
+                    fr: "la communication",
+                    en: "communication",
+                    es: "la comunicación"
                   },
                 characterId: "nerd"
               },
               {
-                time: 28,
+                time: 19.0,
                 text: {
-                    fr: "Bonne balade et belle journée !",
-                    en: "Have a nice walk and a lovely day!",
-                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
+                    fr: "et la promotion de l’agence",
+                    en: "and the promotion of the agency",
+                    es: "y la promoción de la agencia"
                   },
                 characterId: "nerd"
               }
@@ -1172,39 +1153,36 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           {
             time: 0.5,
             text: {
-              fr: "Salut ! Bienvenue dans le diorama mon poulet.",
-              en: "Hi! Welcome to the diorama.",
-              es: "¡Hola! Bienvenido al diorama."
+              fr: "DL Studio Web est une entreprise que j'ai fondé en 2022",
+              en: "DL Studio Web is a company I founded in 2022",
+              es: "DL Studio Web es una empresa que fundé en 2022"
             },
             characterId: "nerd"
           },
           {
-            time: 3.0,
-            text: [
-              {
-                fr: "Ici, tu peux explorer la scène en 3D.",
-                en: "Here, you can explore the 3D scene.",
-                es: "Aquí puedes explorar la escena 3D."
-              },
-              {
-                fr: "Tu peux zoomer, tourner la caméra, et cliquer sur les points d'intérêt.",
-                en: "You can zoom in, rotate the camera, and click on points of interest.",
-                es: "Puedes ampliar la imagen, girar la cámara y hacer clic en los puntos de interés."
-              },
-              {
-                fr: "Amuse-toi bien !",
-                en: "Have fun!",
-                es: "¡Que te diviertas!"
-              }
-            ],
+            time: 3.5,
+            text: {
+              fr: "afin de proposer aux acteurs économiques locaux",
+              en: "in order to offer local economic players",
+              es: "con el fin de ofrecer a los agentes económicos locales"
+            },
             characterId: "nerd"
           },
           {
-            time: 12.5,
+            time: 5.5,
             text: {
-                fr: "Allons voir ce qu’il se passe plus loin !",
-                en: "Let's go and see what's happening further on!",
-                es: "¡Vamos a ver qué pasa más allá!"
+                fr: "des prestation de communication originales",
+                en: "original communication services",
+                es: "servicios de comunicación originales"
+              },
+            characterId: "nerd"
+          },
+          {
+            time:8.0,
+            text: {
+                fr: "et décalées grâce à des sites web en 3D",
+                en: "and offset thanks to 3D websites",
+                es: "y desplazadas gracias a sitios web en 3D"
               },
             characterId: "nerd"
           }
@@ -1283,77 +1261,85 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               {
                 time: 0.1,
                 text: {
-                  fr: "Bonjour et bienvenue dans mon folio",
-                  en: "Hello and welcome to my portfolio",
-                  es: "Hola y bienvenidos a mi portafolio"
+                  fr: "909 développe des solutions digitales variées pour ses clients",
+                  en: "909 develops a variety of digital solutions for its clients",
+                  es: "909 desarrolla diversas soluciones digitales para sus clientes"
                 },
                 characterId: "nerd"
               },
               {
-                time: 2.0,
-                text: [
-                  {
-                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
-                    en: "You can travel through the galaxy of my experiences",
-                    es: "Puedes moverte por la galaxia de mis experiencias"
-                  },
-                  {
-                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
-                    en: "using the button bar at the top or left of this screen",
-                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
-                  }
-                ],
-                characterId: "nerd"
-              },
-              {
-                time: 8.5,
+                time: 3.5,
                 text: {
-                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
-                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
-                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
-                  },
+                  fr: "allant des ERP aux plateformes e-commerce",
+                  en: "ranging from ERP systems to e-commerce platforms",
+                  es: "desde ERP hasta plataformas de comercio electrónico"
+                },
                 characterId: "nerd"
               },
               {
-                time: 12.5,
-                text: [
+                time: 6.0,
+                text: 
                   {
-                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
-                    en: "At each stage of my journey, a window will appear at the top of the screen",
-                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
+                    fr: "J’y ai encadré une équipe tout en concevant et maintenant",
+                    en: "I managed a team there while designing and maintaining",
+                    es: "Allí dirigí un equipo mientras diseñaba y mantenía"
                   },
+                characterId: "nerd"
+              },
+              {
+                time: 9.0,
+                text: 
                   {
-                    fr: "et vous permettra d'accéder à plus de précisions",
-                    en: "and will allow you to access more details",
-                    es: "y le permitirá acceder a más detalles"
-                  }
-                ],
-                characterId: "nerd"
-              },
-              {
-                time: 19,
-                text: {
-                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
-                    en: "Let's go and see what's happening further on!",
-                    es: "¡Vamos a ver qué pasa más allá!"
+                    fr: "des applications web en MERN et LAMP",
+                    en: "MERN and LAMP web applications",
+                    es: "aplicaciones web en MERN y LAMP"
                   },
                 characterId: "nerd"
               },
               {
-                time: 23,
-                text: {
-                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
-                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
-                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
+                time: 11.0,
+                text: 
+                  {
+                    fr: "ainsi que des applications mobiles",
+                    en: "as well as mobile applications",
+                    es: "así como aplicaciones móviles"
                   },
                 characterId: "nerd"
               },
               {
-                time: 28,
+                time: 13.5,
+                text: 
+                  {
+                    fr: "Je m’occupais du DevOps",
+                    en: "I was in charge of DevOps",
+                    es: "Me encargaba de DevOps"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 15.0,
                 text: {
-                    fr: "Bonne balade et belle journée !",
-                    en: "Have a nice walk and a lovely day!",
-                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
+                    fr: "de la gestion serveur",
+                    en: "server management",
+                    es: "de la gestión del servidor"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 16.5,
+                text: {
+                    fr: "du ticketing",
+                    en: "ticketing",
+                    es: "de la venta de entradas"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 17.5,
+                text: {
+                    fr: "et de la revue de code pour garantir la qualité des livrables",
+                    en: "and code review to ensure the quality of deliverables",
+                    es: "y revisión del código para garantizar la calidad de los entregables"
                   },
                 characterId: "nerd"
               }
@@ -1388,41 +1374,68 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         ],
         lines: [
           {
-            time: 0.5,
+            time: 0.1,
             text: {
-              fr: "Salut ! Bienvenue dans le diorama mon poulet.",
-              en: "Hi! Welcome to the diorama.",
-              es: "¡Hola! Bienvenido al diorama."
+              fr: "Itancia est un groupe spécialisé dans les technologies de communication",
+              en: "Itancia is a group specialising in communication technologies",
+              es: "Itancia es un grupo especializado en tecnologías de la comunicación"
             },
             characterId: "nerd"
           },
           {
-            time: 3.0,
+            time: 5.0,
             text: [
               {
-                fr: "Ici, tu peux explorer la scène en 3D.",
-                en: "Here, you can explore the 3D scene.",
-                es: "Aquí puedes explorar la escena 3D."
+                fr: "Il propose des services de distribution",
+                en: "It offers distribution services",
+                es: "Ofrece servicios de distribución"
               },
               {
-                fr: "Tu peux zoomer, tourner la caméra, et cliquer sur les points d'intérêt.",
-                en: "You can zoom in, rotate the camera, and click on points of interest.",
-                es: "Puedes ampliar la imagen, girar la cámara y hacer clic en los puntos de interés."
+                fr: "de reconditionnement",
+                en: "reconditioning",
+                es: "de reacondicionamiento"
               },
               {
-                fr: "Amuse-toi bien !",
-                en: "Have fun!",
-                es: "¡Que te diviertas!"
+                fr: "et de logistique écoresponsable",
+                en: "and environmentally responsible logistics",
+                es: "y logística ecológica"
               }
             ],
             characterId: "nerd"
           },
           {
-            time: 12.5,
+            time: 11.5,
             text: {
-                fr: "Allons voir ce qu’il se passe plus loin !",
-                en: "Let's go and see what's happening further on!",
-                es: "¡Vamos a ver qué pasa más allá!"
+                fr: "Itancia accompagne ses clients",
+                en: "Itancia supports its customers",
+                es: "Itancia acompaña a sus clientes"
+              },
+            characterId: "nerd"
+          },
+          {
+            time: 13.0,
+            text: {
+                fr: "dans tous leurs projets IT et télécom",
+                en: "in all their IT and telecommunications projects",
+                es: "en todos sus proyectos de TI y telecomunicaciones"
+              },
+            characterId: "nerd"
+          },
+          {
+            time: 16.0,
+            text: {
+                fr: "909 était une entreprise de ce groupe",
+                en: "909 was a company in this group",
+                es: "909 era una empresa de este grupo"
+              },
+            characterId: "nerd"
+          },
+          {
+            time: 19.0,
+            text: {
+                fr: "dont l'activité était dédié au service après-vente",
+                en: "whose activity was dedicated to after-sales service",
+                es: "cuya actividad se dedicaba al servicio posventa"
               },
             characterId: "nerd"
           }
@@ -1501,78 +1514,73 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               {
                 time: 0.1,
                 text: {
-                  fr: "Bonjour et bienvenue dans mon folio",
-                  en: "Hello and welcome to my portfolio",
-                  es: "Hola y bienvenidos a mi portafolio"
+                  fr: "Biotrade est une entreprise dédiée au traitement de l’eau pour les professionnels",
+                  en: "Biotrade is a company dedicated to water treatment for professionals",
+                  es: "Biotrade es una empresa dedicada al tratamiento del agua para profesionaleso"
                 },
                 characterId: "nerd"
               },
               {
-                time: 2.0,
-                text: [
-                  {
-                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
-                    en: "You can travel through the galaxy of my experiences",
-                    es: "Puedes moverte por la galaxia de mis experiencias"
-                  },
-                  {
-                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
-                    en: "using the button bar at the top or left of this screen",
-                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
-                  }
-                ],
-                characterId: "nerd"
-              },
-              {
-                time: 8.5,
+                time: 3.5,
                 text: {
-                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
-                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
-                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
-                  },
+                  fr: "avec des solutions techniques adaptées aux usages industriels",
+                  en: "with technical solutions tailored to industrial applications",
+                  es: "con soluciones técnicas adaptadas a los usos industriales"
+                },
                 characterId: "nerd"
               },
               {
-                time: 12.5,
-                text: [
-                  {
-                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
-                    en: "At each stage of my journey, a window will appear at the top of the screen",
-                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
-                  },
-                  {
-                    fr: "et vous permettra d'accéder à plus de précisions",
-                    en: "and will allow you to access more details",
-                    es: "y le permitirá acceder a más detalles"
-                  }
-                ],
-                characterId: "nerd"
-              },
-              {
-                time: 19,
+                time: 7.0,
                 text: {
-                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
-                    en: "Let's go and see what's happening further on!",
-                    es: "¡Vamos a ver qué pasa más allá!"
-                  },
+                  fr: "J’y ai conçu et développé un SaaS complet de GMAO en Symfony,",
+                  en: "I designed and developed a complete CMMS SaaS solution in Symfony,",
+                  es: "Allí diseñé y desarrollé un completo SaaS de GMAO en Symfony,"
+                },
                 characterId: "nerd"
               },
               {
-                time: 23,
+                time: 11.0,
                 text: {
-                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
-                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
-                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
-                  },
+                  fr: "React, Next et MariaDB",
+                  en: "React, Next and MariaDB",
+                  es: "React, Next y MariaDB"
+                },
                 characterId: "nerd"
               },
               {
-                time: 28,
+                time: 13.5,
                 text: {
-                    fr: "Bonne balade et belle journée !",
-                    en: "Have a nice walk and a lovely day!",
-                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
-                  },
+                  fr: "dans un cadre agile avec Jira",
+                  en: "in an agile environment with Jira",
+                  es: "en un entorno ágil con Jira"
+                },
+                characterId: "nerd"
+              },
+              {
+                time: 15.0,
+                text: {
+                  fr: "Je gérais le versioning",
+                  en: "I managed versioning",
+                  es: "Me encargaba de la gestión de versiones"
+                },
+                characterId: "nerd"
+              },
+              {
+                time: 17.0,
+                text: {
+                  fr: "les déploiements continus",
+                  en: "continuous deployments",
+                  es: "los despliegues continuos"
+                },
+                characterId: "nerd"
+              },
+              {
+                time: 18.5,
+                text: {
+                  fr: "et l’ensemble des bonnes pratiques nécessaires à un produit fiable et évolutif",
+                  en: "and all the best practices necessary for a reliable and scalable product",
+                  es: "y todas las buenas prácticas necesarias para obtener un producto fiable y evolutivo"
+                },
                 characterId: "nerd"
               }
             ]
@@ -1606,41 +1614,58 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         ],
         lines: [
           {
-            time: 0.5,
+            time: 0.1,
             text: {
-              fr: "Salut ! Bienvenue dans le diorama mon poulet.",
-              en: "Hi! Welcome to the diorama.",
-              es: "¡Hola! Bienvenido al diorama."
+              fr: "Biotrade est une société dédiée au traitement de l’eau",
+              en: "Biotrade is a company dedicated to water treatment",
+              es: "Biotrade es una empresa dedicada al tratamiento del agua"
             },
             characterId: "nerd"
           },
           {
             time: 3.0,
-            text: [
+            text: 
               {
-                fr: "Ici, tu peux explorer la scène en 3D.",
-                en: "Here, you can explore the 3D scene.",
-                es: "Aquí puedes explorar la escena 3D."
+                fr: "pour des usages professionnels",
+                en: "for professional use",
+                es: "para uso profesional"
               },
-              {
-                fr: "Tu peux zoomer, tourner la caméra, et cliquer sur les points d'intérêt.",
-                en: "You can zoom in, rotate the camera, and click on points of interest.",
-                es: "Puedes ampliar la imagen, girar la cámara y hacer clic en los puntos de interés."
-              },
-              {
-                fr: "Amuse-toi bien !",
-                en: "Have fun!",
-                es: "¡Que te diviertas!"
-              }
-            ],
             characterId: "nerd"
           },
           {
-            time: 12.5,
+            time: 5.0,
+            text: 
+              {
+                fr: "Elle conçoit des solutions techniques adaptées aux secteurs industriels",
+                en: "It designs technical solutions tailored to industrial sectors",
+                es: "Diseña soluciones técnicas adaptadas a los sectores industriales"
+              },
+            characterId: "nerd"
+          },
+          {
+            time: 8.0,
             text: {
-                fr: "Allons voir ce qu’il se passe plus loin !",
-                en: "Let's go and see what's happening further on!",
-                es: "¡Vamos a ver qué pasa más allá!"
+                fr: "et environnementaux",
+                en: "and environmental",
+                es: "y medioambientales"
+              },
+            characterId: "nerd"
+          },
+          {
+            time: 10.5,
+            text: {
+                fr: "Son engagement : offrir des installations performantes",
+                en: "His commitment: to provide high-performance facilities",
+                es: "Su compromiso: ofrecer instalaciones eficientes"
+              },
+            characterId: "nerd"
+          },
+          {
+            time: 13.0,
+            text: {
+                fr: "et durables",
+                en: "and sustainable",
+                es: "y duraderos"
               },
             characterId: "nerd"
           }
@@ -1719,78 +1744,55 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               {
                 time: 0.1,
                 text: {
-                  fr: "Bonjour et bienvenue dans mon folio",
-                  en: "Hello and welcome to my portfolio",
-                  es: "Hola y bienvenidos a mi portafolio"
+                  fr: "Les Silos du Touch sont spécialisés dans la filière du soja alimentaire",
+                  en: "Les Silos du Touch specialises in the edible soybean sector",
+                  es: "Les Silos du Touch se especializan en el sector de la soja alimentaria"
                 },
                 characterId: "nerd"
               },
               {
-                time: 2.0,
-                text: [
-                  {
-                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
-                    en: "You can travel through the galaxy of my experiences",
-                    es: "Puedes moverte por la galaxia de mis experiencias"
-                  },
-                  {
-                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
-                    en: "using the button bar at the top or left of this screen",
-                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
-                  }
-                ],
-                characterId: "nerd"
-              },
-              {
-                time: 8.5,
+                time: 4.0,
                 text: {
-                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
-                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
-                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
-                  },
+                  fr: "et gèrent stockage, tri et distribution",
+                  en: "and manage storage, sorting and distribution",
+                  es: "y gestionan el almacenamiento, la clasificación y la distribución"
+                },
                 characterId: "nerd"
               },
               {
-                time: 12.5,
-                text: [
-                  {
-                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
-                    en: "At each stage of my journey, a window will appear at the top of the screen",
-                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
-                  },
-                  {
-                    fr: "et vous permettra d'accéder à plus de précisions",
-                    en: "and will allow you to access more details",
-                    es: "y le permitirá acceder a más detalles"
-                  }
-                ],
-                characterId: "nerd"
-              },
-              {
-                time: 19,
+                time: 7.0,
                 text: {
-                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
-                    en: "Let's go and see what's happening further on!",
-                    es: "¡Vamos a ver qué pasa más allá!"
-                  },
+                  fr: "J’y assure la maintenance et l’évolution d’un ERP sous Dolibarr",
+                  en: "I am responsible for the maintenance and development of an ERP system using Dolibarr",
+                  es: "Me encargo del mantenimiento y la evolución de un ERP bajo Dolibarr"
+                },
                 characterId: "nerd"
               },
               {
-                time: 23,
+                time: 10.0,
                 text: {
-                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
-                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
-                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
-                  },
+                  fr: "tout en développant de nouvelles fonctionnalités en PHP",
+                  en: "while developing new features in PHP",
+                  es: "al tiempo que se desarrollan nuevas funcionalidades en PHP"
+                },
                 characterId: "nerd"
               },
               {
-                time: 28,
+                time: 13.0,
                 text: {
-                    fr: "Bonne balade et belle journée !",
-                    en: "Have a nice walk and a lovely day!",
-                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
-                  },
+                  fr: "J’optimise également des applications internes en Slim et Vue.js",
+                  en: "I also optimise internal applications in Slim and Vue.js",
+                  es: "También optimizo aplicaciones internas en Slim y Vue.js"
+                },
+                characterId: "nerd"
+              },
+              {
+                time: 17.0,
+                text: {
+                  fr: "pour améliorer les outils métiers au quotidien",
+                  en: "to improve everyday business tools",
+                  es: "para mejorar las herramientas profesionales en el día a día"
+                },
                 characterId: "nerd"
               }
             ]
@@ -1826,39 +1828,48 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
           {
             time: 0.5,
             text: {
-              fr: "Salut ! Bienvenue dans le diorama mon poulet.",
-              en: "Hi! Welcome to the diorama.",
-              es: "¡Hola! Bienvenido al diorama."
+              fr: "Les Silos du Touch travaillent autour du soja alimentaire",
+              en: "Les Silos du Touch works with edible soybeans",
+              es: "Les Silos du Touch trabaja con soja alimentaria"
             },
             characterId: "nerd"
           },
           {
-            time: 3.0,
+            time: 3.5,
             text: [
               {
-                fr: "Ici, tu peux explorer la scène en 3D.",
-                en: "Here, you can explore the 3D scene.",
-                es: "Aquí puedes explorar la escena 3D."
+                fr: "Ils assurent le stockage",
+                en: "They provide storage",
+                es: "Se encargan del almacenamiento"
               },
               {
-                fr: "Tu peux zoomer, tourner la caméra, et cliquer sur les points d'intérêt.",
-                en: "You can zoom in, rotate the camera, and click on points of interest.",
-                es: "Puedes ampliar la imagen, girar la cámara y hacer clic en los puntos de interés."
+                fr: "le tri",
+                en: "sorting",
+                es: "la clasificación"
               },
               {
-                fr: "Amuse-toi bien !",
-                en: "Have fun!",
-                es: "¡Que te diviertas!"
+                fr: "et la valorisation de la production locale",
+                en: "and promoting local production",
+                es: "y la valorización de la producción local"
               }
             ],
             characterId: "nerd"
           },
           {
-            time: 12.5,
+            time: 9.0,
             text: {
-                fr: "Allons voir ce qu’il se passe plus loin !",
-                en: "Let's go and see what's happening further on!",
-                es: "¡Vamos a ver qué pasa más allá!"
+                fr: "L’entreprise accompagne les agriculteurs",
+                en: "The company supports farmers",
+                es: "La empresa acompaña a los agricultores"
+              },
+            characterId: "nerd"
+          },
+          {
+            time: 11.5,
+            text: {
+                fr: "pour développer une filière de qualité",
+                en: "to develop a quality sector",
+                es: "para desarrollar un sector de calidad"
               },
             characterId: "nerd"
           }
