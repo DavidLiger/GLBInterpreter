@@ -124,77 +124,89 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               {
                 time: 0.1,
                 text: {
-                  fr: "Bonjour et bienvenue dans mon folio",
-                  en: "Hello and welcome to my portfolio",
-                  es: "Hola y bienvenidos a mi portafolio"
+                  fr: "WebDioramaLoader est un projet personnel",
+                  en: "WebDioramaLoader is a personal project",
+                  es: "WebDioramaLoader es un proyecto personal"
                 },
                 characterId: "nerd"
               },
               {
-                time: 2.0,
+                time: 3.0,
                 text: [
                   {
-                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
-                    en: "You can travel through the galaxy of my experiences",
-                    es: "Puedes moverte por la galaxia de mis experiencias"
+                    fr: "c'est un framework de visualisation 3D pour le web",
+                    en: "It is a 3D visualisation framework for the web",
+                    es: "Es un marco de visualización 3D para la web"
                   },
                   {
-                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
-                    en: "using the button bar at the top or left of this screen",
-                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
+                    fr: "créant des expériences narratives immersives",
+                    en: "creating immersive narrative experiences",
+                    es: "creando experiencias narrativas inmersivas"
                   }
                 ],
                 characterId: "nerd"
               },
               {
-                time: 8.5,
+                time: 8.0,
                 text: {
-                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
-                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
-                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
+                    fr: "Développé en Next.js et Three.js",
+                    en: "Developed in Next.js and Three.js",
+                    es: "Desarrollado en Next.js y Three.j"
                   },
                 characterId: "nerd"
               },
               {
-                time: 12.5,
+                time: 11.0,
                 text: [
                   {
-                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
-                    en: "At each stage of my journey, a window will appear at the top of the screen",
-                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
+                    fr: "il offre une navigation par points d'intérêt",
+                    en: "it offers navigation by points of interest",
+                    es: "Ofrece navegación por puntos de interés"
                   },
                   {
-                    fr: "et vous permettra d'accéder à plus de précisions",
-                    en: "and will allow you to access more details",
-                    es: "y le permitirá acceder a más detalles"
-                  }
+                    fr: "des transitions caméra fluides",
+                    en: "smooth camera transitions",
+                    es: "transiciones fluidas de cámaras"
+                  },
+                  {
+                    fr: "et un système audio avancé",
+                    en: "and an advanced audio system",
+                    es: "y un sistema de audio avanzado"
+                  },
                 ],
                 characterId: "nerd"
               },
               {
-                time: 19,
+                time: 18.0,
+                text: [
+                  {
+                    fr: "Le framework intègre : post-processing WebGL",
+                    en: "The framework integrates: WebGL post-processing",
+                    es: "El marco integra: posprocesamiento WebGL"
+                  },
+                  {
+                    fr: "stockage des assets en cache pour usage hors ligne",
+                    en: "caching assets for offline use",
+                    es: "almacenamiento de activos en caché para uso sin conexión"
+                  },
+                ],
+                characterId: "nerd"
+              },
+              {
+                time: 23.0,
                 text: {
-                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
-                    en: "Let's go and see what's happening further on!",
-                    es: "¡Vamos a ver qué pasa más allá!"
+                    fr: "et supporte l'animation 2D, via des spritesheets et des vidéos",
+                    en: "and supports 2D animation via spritesheets and videoss",
+                    es: "y admite animación 2D, a través de hojas de sprites y vídeos."
                   },
                 characterId: "nerd"
               },
               {
-                time: 23,
+                time: 27.0,
                 text: {
-                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
-                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
-                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
-                  },
-                characterId: "nerd"
-              },
-              {
-                time: 28,
-                text: {
-                    fr: "Bonne balade et belle journée !",
-                    en: "Have a nice walk and a lovely day!",
-                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
+                    fr: "avec un système de dialogue interactifs",
+                    en: "with an interactive dialogue system",
+                    es: "con un sistema de diálogo interactivo"
                   },
                 characterId: "nerd"
               }
@@ -263,7 +275,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
             characterId: "nerd"
           },
           {
-            time: 12.5,
+            time: 13.5,
             text: [
               {
                 fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
@@ -279,7 +291,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
             characterId: "nerd"
           },
           {
-            time: 19,
+            time: 20,
             text: {
                 fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
                 en: "Let's go and see what's happening further on!",
