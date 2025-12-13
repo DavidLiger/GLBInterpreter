@@ -372,7 +372,9 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               type: "armature",
               clipName: "perso_david_01_action",
               autoplay: false,
-              loop: false
+              loop: false,
+              placeholderMesh: "perso_david_01_placeholder",
+              transitionFrames: 8
             }
           ],
           dialogue: {
@@ -588,7 +590,9 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               type: "armature",
               clipName: "perso_david_02_action",
               autoplay: false,
-              loop: false
+              loop: false,
+              placeholderMesh: "perso_david_02_placeholder",
+              transitionFrames: 8
             }
           ],
           dialogue: {
@@ -804,7 +808,9 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               type: "armature",
               clipName: "perso_david_03_action",
               autoplay: false,
-              loop: false
+              loop: false,
+              placeholderMesh: "perso_david_03_placeholder",
+              transitionFrames: 8
             }
           ],
           dialogue: {
@@ -1020,7 +1026,9 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               type: "armature",
               clipName: "perso_david_04_action",
               autoplay: false,
-              loop: false
+              loop: false,
+              placeholderMesh: "perso_david_04_placeholder",
+              transitionFrames: 8
             }
           ],
           dialogue: {
@@ -1236,7 +1244,9 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               type: "armature",
               clipName: "perso_david_05_action",
               autoplay: false,
-              loop: false
+              loop: false,
+              placeholderMesh: "perso_david_05_placeholder",
+              transitionFrames: 8
             }
           ],
           dialogue: {
@@ -1452,7 +1462,9 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               type: "armature",
               clipName: "perso_david_06_action",
               autoplay: false,
-              loop: false
+              loop: false,
+              placeholderMesh: "perso_david_06_placeholder",
+              transitionFrames: 8
             }
           ],
           dialogue: {
@@ -1668,7 +1680,9 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               type: "armature",
               clipName: "perso_david_07_action",
               autoplay: false,
-              loop: false
+              loop: false,
+              placeholderMesh: "perso_david_07_placeholder",
+              transitionFrames: 8
             }
           ],
           dialogue: {
