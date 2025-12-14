@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Maximize2, Minimize2, ExternalLink, Calendar, Code, Award } from "lucide-react";
 import type { ExperienceContent } from "@/types/experience";
@@ -28,10 +28,17 @@ export default function ExperienceModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
+  const lastLoadedPOIRef = useRef<string | null>(null);
 
   // 🔄 Charger le contenu depuis R2
   useEffect(() => {
     if (!isOpen || !poiId) return;
+    
+    // ✅ CRITIQUE : Ne charger que si différent du dernier
+    if (lastLoadedPOIRef.current === poiId) {
+      console.log("♻️ Contenu déjà chargé pour:", poiId);
+      return;
+    }
 
     const fetchContent = async () => {
       setLoading(true);
@@ -42,17 +49,14 @@ export default function ExperienceModal({
         console.log("📥 Chargement expérience:", url);
 
         const response = await fetch(url);
-        // ✅ Si 404, fermer silencieusement la modal
-        if (response.status === 404) {
-          console.log("ℹ️ Pas de contenu d'expérience pour:", poiId);
-          onClose(); // Fermer la modal
-          return;
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
         }
-
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const data = await response.json();
         setContent(data);
+        lastLoadedPOIRef.current = poiId; // ✅ Mémoriser
       } catch (err) {
         console.error("❌ Erreur chargement expérience:", err);
         setError("Impossible de charger l'expérience");
@@ -62,14 +66,14 @@ export default function ExperienceModal({
     };
 
     fetchContent();
-  }, [isOpen, poiId, baseUrl, onClose]);
+  }, [isOpen, poiId, baseUrl]);
 
-  // ✅ Reset expanded quand on change de POI
+  // ✅ Reset expanded quand on change de POI (pas quand isOpen change)
   useEffect(() => {
-    if (isOpen) {
+    if (poiId !== lastLoadedPOIRef.current) {
       setExpanded(false);
     }
-  }, [poiId, isOpen]);
+  }, [poiId]);
 
   // 🎨 Rendu selon le template
   const renderTemplate = () => {
