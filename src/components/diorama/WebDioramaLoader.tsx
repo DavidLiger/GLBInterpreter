@@ -365,6 +365,7 @@ function WebDioramaLoaderInner({
   const performCleanupRef = useRef<(() => void) | null>(null);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
+  const [autoplayEnabled, setAutoplayEnabled] = useState(true);
 
   usePOIEffects(sceneRef.current!, currentPoi, textureLoader);
 
@@ -387,6 +388,8 @@ function WebDioramaLoaderInner({
     moveCameraToPOI,
     moveCameraDuringAnimation,
     goToPOI,
+    autoplayEnabled,
+    experienceStarted, 
   });
 
   // ✅ Hook audio unifié (remplace usePOIAudio)
@@ -1623,6 +1626,8 @@ function WebDioramaLoaderInner({
               }}
               onStop={stopScene}
               isPortrait={isPortrait}
+              autoplayEnabled={autoplayEnabled} // ✅ NOUVEAU
+              onToggleAutoplay={() => setAutoplayEnabled(prev => !prev)} 
             />
           )}
 

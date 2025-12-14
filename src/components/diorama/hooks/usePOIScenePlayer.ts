@@ -5,6 +5,8 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 
 type UsePOIScenePlayerProps = {
   poi?: POIWithElements | null;
+  autoplayEnabled?: boolean;
+  experienceStarted?: boolean;
   animations: THREE.AnimationClip[];
   mixerRef: Record<string, THREE.AnimationMixer>;
   actionsRef: React.MutableRefObject<Map<string, THREE.AnimationAction>>; 
@@ -36,6 +38,8 @@ type UsePOIScenePlayerProps = {
 
 export const usePOIScenePlayer = ({
   poi,
+  autoplayEnabled = true, 
+  experienceStarted = false,
   animations,
   mixerRef,
   actionsRef, 
@@ -210,32 +214,47 @@ export const usePOIScenePlayer = ({
     }
   }, [poi, actionsRef, mixerRef, fadeDuration, resetSceneStable, findParentPOI, startAnimationWithSkip, prepareStopAnimation]);
 
-    // ✅ NOUVEAU : Auto-lancer si POI a autoplay
+  // ✅ NOUVEAU : Auto-lancer si POI a autoplay
   useEffect(() => {
-    if (!poi || !poi.autoplay) return;
+    if (!poi || !autoplayEnabled || !experienceStarted) { // ✅ AJOUTER experienceStarted
+      console.log("⏭️ [AUTOPLAY] Conditions non remplies:", { 
+        poi: !!poi, 
+        autoplayEnabled, 
+        experienceStarted 
+      });
+      return;
+    }
     
-    // ✅ Vérifier qu'on ne l'a pas déjà lancé pour ce POI
+    // Vérifier qu'on ne l'a pas déjà lancé pour ce POI
     if (hasAutoplayedRef.current.has(poi.id)) {
       console.log("⏭️ [AUTOPLAY] Déjà joué pour:", poi.id);
       return;
     }
     
-    // ✅ Vérifier que c'est un parent (pas un enfant)
+    // Vérifier que c'est un parent (pas un enfant)
     const isParent = !findParentPOI?.(poi.id);
     if (!isParent) {
       console.log("⏭️ [AUTOPLAY] Ignoré (POI enfant):", poi.id);
       return;
     }
     
-    // ✅ Délai pour laisser la caméra se positionner
+    // Délai pour laisser la caméra se positionner
     console.log("🎬 [AUTOPLAY] Lancement automatique pour:", poi.id);
     const timer = setTimeout(() => {
       playScene();
       hasAutoplayedRef.current.add(poi.id);
-    }, 1000); // 1 seconde après l'arrivée sur le POI
+    }, 1000);
     
     return () => clearTimeout(timer);
-  }, [poi, playScene, findParentPOI]);
+  }, [poi, autoplayEnabled, experienceStarted, playScene, findParentPOI]); // ✅ Ajouter autoplayEnabled aux deps
+
+  // ✅ NOUVEAU : Reset hasAutoplayedRef quand on désactive/réactive
+  useEffect(() => {
+    if (!autoplayEnabled) {
+      // Si on désactive, on peut reset pour permettre re-autoplay plus tard
+      hasAutoplayedRef.current.clear();
+    }
+  }, [autoplayEnabled]);
 
   // 🔹 Replay depuis le début
   const replayScene = useCallback(() => {
