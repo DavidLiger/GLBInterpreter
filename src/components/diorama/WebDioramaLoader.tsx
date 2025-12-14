@@ -1551,6 +1551,7 @@ function WebDioramaLoaderInner({
             isPortrait={isPortrait}
             viewportHeight={viewportHeight}
             experienceStarted={experienceStarted} 
+            bookId={bookId}
           />
 
           {process.env.NODE_ENV === "development" && composerRef.current && (

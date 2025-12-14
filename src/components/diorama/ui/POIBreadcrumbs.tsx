@@ -4,6 +4,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import type { POI } from "@/types/diorama";
 import { useTranslation } from "@/contexts/TranslationContext";
 import ExperienceModal from "./ExperienceModal";
+import { usePOIContentCheck } from "../hooks/usePOIContentCheck";
+
+interface ContentManifest {
+  poisWithContent: string[];
+}
 
 interface POIBreadcrumbsProps {
   currentPOI: string | null;
@@ -14,6 +19,7 @@ interface POIBreadcrumbsProps {
   isPortrait: boolean;
   viewportHeight: number;
   experienceStarted?: boolean;
+  bookId: string;
 }
 
 export default function POIBreadcrumbs({
@@ -25,6 +31,7 @@ export default function POIBreadcrumbs({
   isPortrait,
   viewportHeight,
   experienceStarted = true,
+  bookId,
 }: POIBreadcrumbsProps) {
   const { lang } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -36,55 +43,42 @@ export default function POIBreadcrumbs({
   const [selectedPOI, setSelectedPOI] = useState<string | null>(null);
   const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
 
-  const [poisWithContent, setPoisWithContent] = useState<Set<string>>(new Set());
-  const [contentChecked, setContentChecked] = useState(false);
+    // ✅ UTILISER le hook
+  const { poisWithContent, contentChecked, hasPOIContent } = usePOIContentCheck({ 
+    sceneId: bookId 
+  });
 
   // ── Construire la liste des breadcrumbs
   const breadcrumbList: { poi: POI; type: "parent" | "active" | "sibling" | "child" }[] = [];
 
-  useEffect(() => {
-    if (!isFolioMode) return;
+  // useEffect(() => {
+  //   if (!isFolioMode) return;
 
-    const checkAllPOIs = async () => {
-      const baseUrl = "https://webdiorama-proxy.david-liger-pro.workers.dev/assets/folio/content";
-      const allPOIs = getAllPOIIds(configPOIs);
+  //   const loadManifest = async () => {
+  //     const baseUrl = "https://webdiorama-proxy.david-liger-pro.workers.dev/assets/folio/content";
       
-      console.log('🔍 Vérification contenu pour', allPOIs.length, 'POIs...');
-      
-      const checks = allPOIs.map(async (poiId) => {
-        try {
-          const response = await fetch(`${baseUrl}/${poiId}.json`, { method: 'HEAD' });
-          return response.ok ? poiId : null;
-        } catch {
-          return null;
-        }
-      });
+  //     try {
+  //       const response = await fetch(`${baseUrl}/manifest.json`);
+        
+  //       if (response.ok) {
+  //         const manifest = await response.json() as ContentManifest; // ✅ Type explicite
+  //         const available = new Set<string>(manifest.poisWithContent || []); // ✅ Type explicite
+  //         console.log('✅ POIs avec contenu:', Array.from(available));
+  //         setPoisWithContent(available);
+  //       } else {
+  //         console.warn('⚠️ Manifest introuvable, aucun POI avec contenu');
+  //         setPoisWithContent(new Set<string>()); // ✅ Type explicite
+  //       }
+  //     } catch (err) {
+  //       console.warn('⚠️ Erreur chargement manifest:', err);
+  //       setPoisWithContent(new Set<string>()); // ✅ Type explicite
+  //     } finally {
+  //       setContentChecked(true);
+  //     }
+  //   };
 
-      const results = await Promise.all(checks);
-      const available = new Set(results.filter(Boolean) as string[]);
-      
-      console.log('✅ POIs avec contenu:', Array.from(available));
-      setPoisWithContent(available);
-      setContentChecked(true);
-    };
-
-    checkAllPOIs();
-  }, [isFolioMode, configPOIs]);
-
-  // ✅ HELPER : Récupérer tous les IDs de POI récursivement
-  const getAllPOIIds = (pois: POI[]): string[] => {
-    const ids: string[] = [];
-    const traverse = (poiList: POI[]) => {
-      poiList.forEach(poi => {
-        ids.push(poi.id);
-        if (poi.children) {
-          traverse(poi.children);
-        }
-      });
-    };
-    traverse(pois);
-    return ids;
-  };
+  //   loadManifest();
+  // }, [isFolioMode]);
 
     // ✅ NOUVEAU : Ouvrir automatiquement au démarrage en mode folio
   useEffect(() => {
