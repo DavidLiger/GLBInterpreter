@@ -609,77 +609,58 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
               {
                 time: 0.1,
                 text: {
-                  fr: "Bonjour et bienvenue dans mon folio",
-                  en: "Hello and welcome to my portfolio",
-                  es: "Hola y bienvenidos a mi portafolio"
+                  fr: "Terre de Pixels est une agence de communication multimédia",
+                  en: "Terre de Pixels is a multimedia communications agency",
+                  es: "Terre de Pixels es una agencia de comunicación multimedia"
                 },
                 characterId: "nerd"
               },
               {
-                time: 2.0,
-                text: [
+                time: 3.0,
+                text: 
                   {
-                    fr: "Vous pouvez vous déplacer dans la galaxie de mes expériences",
-                    en: "You can travel through the galaxy of my experiences",
-                    es: "Puedes moverte por la galaxia de mis experiencias"
+                    fr: "créative et orientée production web",
+                    en: "creative and web production-oriented",
+                    es: "creativa y orientada a la producción web"
                   },
-                  {
-                    fr: "en utilisant la barre de boutons situé en haut ou à gauche de cet écran",
-                    en: "using the button bar at the top or left of this screen",
-                    es: "utilizando la barra de botones situada en la parte superior o izquierda de esta pantalla"
-                  }
-                ],
                 characterId: "nerd"
               },
               {
-                time: 8.5,
-                text: {
-                    fr: "Pour chaque planète un bouton \"ça bosse\", vous donnera plus de précisions sur mes missions",
-                    en: "For each planet, a ‘It's working’ button will give you more details about my missions",
-                    es: "Para cada planeta, un botón «ça bosse» (funciona) le dará más detalles sobre mis misiones"
+                time: 6.0,
+                text: 
+                  {
+                    fr: "J’y ai développé un plugin PHP pour la gestion du temps de travail sur WordPress",
+                    en: "I developed a PHP plugin for managing working hours on WordPress",
+                    es: "Desarrollé un plugin PHP para la gestión del tiempo de trabajo en WordPress"
+                  },
+                characterId: "nerd"
+              },
+              {
+                time: 10.0,
+                text: 
+                  {
+                    fr: "et conçu plusieurs interfaces utilisateurs",
+                    en: "and designed several user interfaces",
+                    es: "y diseñado varias interfaces de usuario"
                   },
                 characterId: "nerd"
               },
               {
                 time: 12.5,
-                text: [
+                text: 
                   {
-                    fr: "À chaque étape de mon parcours, une fenêtre apparaîtra en haut de l'écran",
-                    en: "At each stage of my journey, a window will appear at the top of the screen",
-                    es: "En cada etapa de mi recorrido, aparecerá una ventana en la parte superior de la pantalla"
-                  },
-                  {
-                    fr: "et vous permettra d'accéder à plus de précisions",
-                    en: "and will allow you to access more details",
-                    es: "y le permitirá acceder a más detalles"
-                  }
-                ],
-                characterId: "nerd"
-              },
-              {
-                time: 19,
-                text: {
-                    fr: "Vous trouverez mon CV en cliquant sur le bouton à droite",
-                    en: "Let's go and see what's happening further on!",
-                    es: "¡Vamos a ver qué pasa más allá!"
+                    fr: "Je mettais en place une gestion des données en temps réel",
+                    en: "I was setting up real-time data management",
+                    es: "Estaba implementando un sistema de gestión de datos en tiempo real"
                   },
                 characterId: "nerd"
               },
               {
-                time: 23,
+                time: 15.0,
                 text: {
-                    fr: "Enfin vous trouverez plus d'informations en cliquant sur le bouton \"i\" en haut à droite",
-                    en: "Finally, you can find more information by clicking on the ‘i’ button at the top right",
-                    es: "Encontrará mi CV haciendo clic en el botón de la derecha"
-                  },
-                characterId: "nerd"
-              },
-              {
-                time: 28,
-                text: {
-                    fr: "Bonne balade et belle journée !",
-                    en: "Have a nice walk and a lovely day!",
-                    es: "¡Que disfrutes del paseo y que tengas un buen día!"
+                    fr: "pour répondre aux besoins de l’agence",
+                    en: "to meet the agency's needs",
+                    es: "para satisfacer las necesidades de la agencia"
                   },
                 characterId: "nerd"
               }

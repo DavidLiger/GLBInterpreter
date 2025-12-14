@@ -36,16 +36,74 @@ export default function POIBreadcrumbs({
   const [selectedPOI, setSelectedPOI] = useState<string | null>(null);
   const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
 
+  const [poisWithContent, setPoisWithContent] = useState<Set<string>>(new Set());
+  const [contentChecked, setContentChecked] = useState(false);
+
   // ── Construire la liste des breadcrumbs
   const breadcrumbList: { poi: POI; type: "parent" | "active" | "sibling" | "child" }[] = [];
 
+  useEffect(() => {
+    if (!isFolioMode) return;
+
+    const checkAllPOIs = async () => {
+      const baseUrl = "https://webdiorama-proxy.david-liger-pro.workers.dev/assets/folio/content";
+      const allPOIs = getAllPOIIds(configPOIs);
+      
+      console.log('🔍 Vérification contenu pour', allPOIs.length, 'POIs...');
+      
+      const checks = allPOIs.map(async (poiId) => {
+        try {
+          const response = await fetch(`${baseUrl}/${poiId}.json`, { method: 'HEAD' });
+          return response.ok ? poiId : null;
+        } catch {
+          return null;
+        }
+      });
+
+      const results = await Promise.all(checks);
+      const available = new Set(results.filter(Boolean) as string[]);
+      
+      console.log('✅ POIs avec contenu:', Array.from(available));
+      setPoisWithContent(available);
+      setContentChecked(true);
+    };
+
+    checkAllPOIs();
+  }, [isFolioMode, configPOIs]);
+
+  // ✅ HELPER : Récupérer tous les IDs de POI récursivement
+  const getAllPOIIds = (pois: POI[]): string[] => {
+    const ids: string[] = [];
+    const traverse = (poiList: POI[]) => {
+      poiList.forEach(poi => {
+        ids.push(poi.id);
+        if (poi.children) {
+          traverse(poi.children);
+        }
+      });
+    };
+    traverse(pois);
+    return ids;
+  };
+
     // ✅ NOUVEAU : Ouvrir automatiquement au démarrage en mode folio
   useEffect(() => {
-    if (isFolioMode && currentPOI && !selectedPOI && experienceStarted) {
-      console.log('🎬 Ouverture auto modal pour POI:', currentPOI);
+    // ✅ ATTENDRE que la vérification soit terminée
+    if (!contentChecked) return;
+    
+    if (!isFolioMode || !currentPOI || !experienceStarted) return;
+    
+    // ✅ SI le POI a du contenu → ouvrir
+    if (poisWithContent.has(currentPOI)) {
+      console.log('🎬 POI a du contenu, ouvrir modal:', currentPOI);
       setSelectedPOI(currentPOI);
+    } else {
+      // ✅ SINON → fermer/ne rien faire
+      console.log('❌ POI sans contenu, PAS de modal:', currentPOI);
+      setSelectedPOI(null);
     }
-  }, [isFolioMode, currentPOI, selectedPOI, experienceStarted]);
+  }, [contentChecked, isFolioMode, currentPOI, experienceStarted, poisWithContent]);
+
 
   if (!activePOI) {
     // 🔹 Aucun actif → afficher tous les POIs racine
@@ -140,6 +198,8 @@ export default function POIBreadcrumbs({
             else separator = "|";
           }
 
+          const hasContent = poisWithContent.has(item.poi.id);
+
           return (
             <React.Fragment key={`${item.poi.id}-${item.type}`}>
               {separator && <span className={separatorClass}>{separator}</span>}
@@ -152,8 +212,9 @@ export default function POIBreadcrumbs({
                   if (item.type !== "active") {
                     goToPOI(item.poi);
                   }
-                  // ✅ Ouvrir la modal en mode folio
-                  if (isFolioMode) {
+                  
+                  // ✅ Ouvrir modal SEULEMENT si contenu vérifié ET existant
+                  if (isFolioMode && contentChecked && poisWithContent.has(item.poi.id)) {
                     setSelectedPOI(item.poi.id);
                   }
                 }}
@@ -162,7 +223,7 @@ export default function POIBreadcrumbs({
                   item.type === "active"
                     ? "bg-white/20 text-white cursor-default"
                     : "hover:bg-white/10 text-white/80 hover:text-white"
-                }`}
+                } relative`}
                 initial={{ opacity: 0, y: -5 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -5 }}
@@ -186,15 +247,15 @@ export default function POIBreadcrumbs({
       </AnimatePresence>
     </div>
     {/* ✅ Modal expérience */}
-      {isFolioMode && (
-        <ExperienceModal
-          poiId={selectedPOI || ''}
-          isOpen={!!selectedPOI}
-          onClose={() => setSelectedPOI(null)}
-          baseUrl="https://webdiorama-proxy.david-liger-pro.workers.dev/assets/folio/content"
-          isPortrait={isPortrait}
-        />
-      )}
+    {isFolioMode && selectedPOI && poisWithContent.has(selectedPOI) ? (
+      <ExperienceModal
+        poiId={selectedPOI}
+        isOpen={true}
+        onClose={() => setSelectedPOI(null)}
+        baseUrl="https://webdiorama-proxy.david-liger-pro.workers.dev/assets/folio/content"
+        isPortrait={isPortrait}
+      />
+    ) : null}
     </>
   );
 }

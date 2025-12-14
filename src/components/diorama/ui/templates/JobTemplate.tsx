@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Briefcase, Calendar, MapPin, TrendingUp, Users } from "lucide-react";
+import { Briefcase, Calendar, MapPin, TrendingUp, Users, ExternalLink } from "lucide-react";
 import type { ExperienceContent } from "@/types/experience";
 
 interface JobTemplateProps {
@@ -23,9 +23,26 @@ export default function JobTemplate({ content, expanded }: JobTemplateProps) {
             />
           )}
           <div className="flex-1">
-            <h4 className="text-white font-bold text-lg">
-              {content.company.name}
-            </h4>
+            {/* ✅ Nom cliquable si URL disponible */}
+            {content.company.url ? (
+              <a
+                href={content.company.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white font-bold text-lg hover:text-blue-400 transition inline-flex items-center gap-2 group"
+              >
+                {content.company.name}
+                <ExternalLink 
+                  size={16} 
+                  className="opacity-0 group-hover:opacity-100 transition" 
+                />
+              </a>
+            ) : (
+              <h4 className="text-white font-bold text-lg">
+                {content.company.name}
+              </h4>
+            )}
+            
             {content.period && (
               <div className="flex items-center gap-2 text-sm text-gray-400 mt-1">
                 <Calendar size={14} />
