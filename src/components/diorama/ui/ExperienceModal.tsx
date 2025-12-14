@@ -195,33 +195,6 @@ export default function ExperienceModal({
             {renderTemplate()}
           </div>
         )}
-
-        {/* ✅ AJOUTER : Styles scrollbar */}
-        <style jsx global>{`
-          .experience-modal .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-          }
-
-          .experience-modal .custom-scrollbar::-webkit-scrollbar-track {
-            background: transparent;
-          }
-
-          .experience-modal .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 3px;
-            transition: background 0.2s;
-          }
-
-          .experience-modal .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: rgba(255, 255, 255, 0.2);
-          }
-
-          /* Firefox */
-          .experience-modal .custom-scrollbar {
-            scrollbar-width: thin;
-            scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
-          }
-        `}</style>
       </motion.div>
     </AnimatePresence>
   );
