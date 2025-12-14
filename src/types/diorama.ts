@@ -75,6 +75,7 @@ export type POI = {
   id: string;
   label: TranslatedString;
   emptyName: string;
+  autoplay?: boolean;
   icon?: string;
   ambientSound?: string;
   sceneSound?: string;  

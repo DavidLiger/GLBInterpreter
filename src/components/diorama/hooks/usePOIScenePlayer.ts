@@ -75,6 +75,7 @@ export const usePOIScenePlayer = ({
   const frameCountRef = useRef(0);
   const audioProgressRef = useRef(0);
   const activePOIIdRef = useRef<string | null>(null);
+  const hasAutoplayedRef = useRef<Set<string>>(new Set());
 
   // 🔹 Reset stable de la scène
   const resetSceneStable = useCallback(() => {
@@ -208,6 +209,33 @@ export const usePOIScenePlayer = ({
       });
     }
   }, [poi, actionsRef, mixerRef, fadeDuration, resetSceneStable, findParentPOI, startAnimationWithSkip, prepareStopAnimation]);
+
+    // ✅ NOUVEAU : Auto-lancer si POI a autoplay
+  useEffect(() => {
+    if (!poi || !poi.autoplay) return;
+    
+    // ✅ Vérifier qu'on ne l'a pas déjà lancé pour ce POI
+    if (hasAutoplayedRef.current.has(poi.id)) {
+      console.log("⏭️ [AUTOPLAY] Déjà joué pour:", poi.id);
+      return;
+    }
+    
+    // ✅ Vérifier que c'est un parent (pas un enfant)
+    const isParent = !findParentPOI?.(poi.id);
+    if (!isParent) {
+      console.log("⏭️ [AUTOPLAY] Ignoré (POI enfant):", poi.id);
+      return;
+    }
+    
+    // ✅ Délai pour laisser la caméra se positionner
+    console.log("🎬 [AUTOPLAY] Lancement automatique pour:", poi.id);
+    const timer = setTimeout(() => {
+      playScene();
+      hasAutoplayedRef.current.add(poi.id);
+    }, 1000); // 1 seconde après l'arrivée sur le POI
+    
+    return () => clearTimeout(timer);
+  }, [poi, playScene, findParentPOI]);
 
   // 🔹 Replay depuis le début
   const replayScene = useCallback(() => {

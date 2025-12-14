@@ -89,6 +89,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
             es: "¡Vamos allá!"
           },
           emptyName: "david_00",
+          autoplay: true,
           icon: `${BASE_URL}/icons/nerd-icon.webp`,
           ambientSound: `${BASE_URL}/sounds/Decode_The_Matrix/Decrypt_the_Night.mp3`,
           sceneSound: `${BASE_URL}/sounds/voices/voix-POI-david_00.mp3`,
@@ -345,6 +346,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         es: "En la escuela..."
       },
       emptyName: "work_planet-01",
+      autoplay: true,
       icon: `${BASE_URL}/icons/school.webp`,
       ambientSound: `${BASE_URL}/sounds/Digital_Galaxy/Analog_Lovers.mp3`,
       sceneSound: `${BASE_URL}/sounds/voices/voix-POI-work_planet-01.mp3`,
@@ -366,6 +368,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
             es: "¡Vamos allá!"
           },
           emptyName: "david_01",
+          autoplay: true,
           icon: `${BASE_URL}/icons/nerd-icon.webp`,
           ambientSound: `${BASE_URL}/sounds/Decode_The_Matrix/Mainframe_Pulse.mp3`,
           sceneSound: `${BASE_URL}/sounds/voices/voix-POI-david_01.mp3`,
@@ -553,6 +556,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         es: "En prácticas..."
       },
       emptyName: "work_planet-02",
+      autoplay: true,
       icon: `${BASE_URL}/icons/village.webp`,
       ambientSound: `${BASE_URL}/sounds/Digital_Galaxy/Smooth_by_Design.mp3`,
       sceneSound: `${BASE_URL}/sounds/voices/voix-POI-work_planet-02.mp3`,
@@ -574,6 +578,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
             es: "¡Vamos allá!"
           },
           emptyName: "david_02",
+          autoplay: true,
           icon: `${BASE_URL}/icons/nerd-icon.webp`,
           ambientSound: `${BASE_URL}/sounds/Decode_The_Matrix/Quantum_Access.mp3`,
           sceneSound: `${BASE_URL}/sounds/voices/voix-POI-david_02.mp3`,
@@ -761,6 +766,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         es: "Trabajo temporal..."
       },
       emptyName: "work_planet-03",
+      autoplay: true,
       icon: `${BASE_URL}/icons/buildings-icon.webp`,
       ambientSound: `${BASE_URL}/sounds/Digital_Galaxy/Midnight_Hardware.mp3`,
       sceneSound: `${BASE_URL}/sounds/voices/voix-POI-work_planet-03.mp3`,
@@ -782,6 +788,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
             es: "¡Vamos allá!"
           },
           emptyName: "david_03",
+          autoplay: true,
           icon: `${BASE_URL}/icons/nerd-icon.webp`,
           ambientSound: `${BASE_URL}/sounds/Decode_The_Matrix/Shadow_Firewall.mp3`,
           sceneSound: `${BASE_URL}/sounds/voices/voix-POI-david_03.mp3`,
@@ -978,6 +985,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         es: "Estudio web 3D..."
       },
       emptyName: "work_planet-04",
+      autoplay: true,
       icon: `${BASE_URL}/icons/village_2.webp`,
       ambientSound: `${BASE_URL}/sounds/Digital_Galaxy/Velvet_Circuits.mp3`,
       sceneSound: `${BASE_URL}/sounds/voices/voix-POI-work_planet-04.mp3`,
@@ -999,6 +1007,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
             es: "¡Vamos allá!"
           },
           emptyName: "david_04",
+          autoplay: true,
           icon: `${BASE_URL}/icons/nerd-icon.webp`,
           ambientSound: `${BASE_URL}/sounds/Decode_The_Matrix/Override_the_Core.mp3`,
           sceneSound: `${BASE_URL}/sounds/voices/voix-POI-david_04.mp3`,
@@ -1186,6 +1195,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         es: "Reacondicionemos..."
       },
       emptyName: "work_planet-05",
+      autoplay: true,
       icon: `${BASE_URL}/icons/factory.webp`,
       ambientSound: `${BASE_URL}/sounds/Digital_Galaxy/Afterglow_Funk.mp3`,
       sceneSound: `${BASE_URL}/sounds/voices/voix-POI-work_planet-05.mp3`,
@@ -1207,6 +1217,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
             es: "¡Vamos allá!"
           },
           emptyName: "david_05",
+          autoplay: true,
           icon: `${BASE_URL}/icons/nerd-icon.webp`,
           ambientSound: `${BASE_URL}/sounds/Decode_The_Matrix/Inject_The_Code.mp3`,
           sceneSound: `${BASE_URL}/sounds/voices/voix-POI-david_05.mp3`,
@@ -1439,6 +1450,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         es: "Aguas residuales..."
       },
       emptyName: "work_planet-06",
+      autoplay: true,
       icon: `${BASE_URL}/icons/hangar.webp`,
       ambientSound: `${BASE_URL}/sounds/Digital_Galaxy/Chill_Deluxe.mp3`,
       sceneSound: `${BASE_URL}/sounds/voices/voix-POI-work_planet-06.mp3`,
@@ -1460,6 +1472,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
             es: "¡Vamos allá!"
           },
           emptyName: "david_06",
+          autoplay: true,
           icon: `${BASE_URL}/icons/nerd-icon.webp`,
           ambientSound: `${BASE_URL}/sounds/Decode_The_Matrix/Neon_Encryption.mp3`,
           sceneSound: `${BASE_URL}/sounds/voices/voix-POI-david_06.mp3`,
@@ -1669,6 +1682,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
         es: "Soja a granel..."
       },
       emptyName: "work_planet-07",
+      autoplay: true,
       icon: `${BASE_URL}/icons/silos.webp`,
       ambientSound: `${BASE_URL}/sounds/Digital_Galaxy/Plastic_Emotions.mp3`,
       sceneSound: `${BASE_URL}/sounds/voices/voix-POI-work_planet-07.mp3`,
@@ -1690,6 +1704,7 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
             es: "¡Vamos allá!"
           },
           emptyName: "david_07",
+          autoplay: true,
           icon: `${BASE_URL}/icons/nerd-icon.webp`,
           ambientSound: `${BASE_URL}/sounds/Decode_The_Matrix/Bypass_Reality.mp3`,
           sceneSound: `${BASE_URL}/sounds/voices/voix-POI-david_07.mp3`,
