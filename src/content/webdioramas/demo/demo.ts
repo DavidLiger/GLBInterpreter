@@ -3,7 +3,7 @@ import type { DioramaConfig3DWithPostProcessing } from "@/types/diorama";
 const BASE_URL = process.env.NEXT_PUBLIC_ASSET_BASE_URL || "";
 
 export const demo: DioramaConfig3DWithPostProcessing = {
-  glb: `${BASE_URL}/models/work-planets.glb`,
+  glb: `${BASE_URL}/models/demo.glb`,
   loaderImage: `${BASE_URL}/images/preview.webp`,
   autoplay: true, // ← Mode tutoriel automatique ou pas
   deviceTester: {
@@ -74,11 +74,11 @@ export const demo: DioramaConfig3DWithPostProcessing = {
       zoom: 0.5, // règlages de la camera sur ce POI (jusqu'à enableZoom)
       lookAxis: "x",
       minDistance: 2.4,
-      maxDistance: 4,
-      minPolarAngle: 0.1,
-      maxPolarAngle: 1.32,
-      minAzimuthAngle: 2.24,
-      maxAzimuthAngle: -0.2,
+      maxDistance: 8,
+      minPolarAngle: 0.7,
+      maxPolarAngle: 1.36,
+      minAzimuthAngle: 4.24,
+      maxAzimuthAngle: -2.4,
       enableZoom: true,
       children: [ // POIs enfant
         {
@@ -1911,7 +1911,7 @@ export const demo: DioramaConfig3DWithPostProcessing = {
     {
       type: "ambient",
       color: 0xffffff,
-      intensity: 0.6,
+      intensity: 1.6,
     },
     {
       type: "spot",
