@@ -20,7 +20,7 @@
     "title": "C'est quoi un livre augmenté ?",
     "image": "how-it-works-demo.jpg",
     "text": "Nos livres augmentés vous offrent une expérience unique : en scannant un QR code présent dans le livre, vous accédez à des scènes 3D immersives qui donnent vie à l'histoire.\n\nDécouvrez des univers en réalité augmentée, explorez les décors, et plongez dans une nouvelle dimension de lecture.\n\nEssayez notre démo interactive pour découvrir la magie des livres augmentés !",
-    "demoUrl": "https://editions-liger.com/scan/9999/street?t=abcd1234"
+    "demoUrl": "https://editions-liger.com/scan/demo/demo?t=abcd1234"
   },
   "amazonButton": {
     "title": "Acheter sur Amazon"
