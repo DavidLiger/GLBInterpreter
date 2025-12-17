@@ -353,11 +353,11 @@ export const demo: DioramaConfig3DWithPostProcessing = {
       zoom: 0.5, // règlages de la camera sur ce POI (jusqu'à enableZoom)
       lookAxis: "x",
       minDistance: 2.2,
-      maxDistance: 4,
-      minPolarAngle: 0.6,
+      maxDistance: 3.8,
+      minPolarAngle: 0.7,
       maxPolarAngle: 1.42,
-      minAzimuthAngle: -1.24,
-      maxAzimuthAngle: -1.8,
+      minAzimuthAngle: -2.44,
+      maxAzimuthAngle: 1.2,
       enableZoom: true,
       children: [ // POIs enfant
         {
@@ -1962,10 +1962,10 @@ export const demo: DioramaConfig3DWithPostProcessing = {
       type: "spot",
       emptyName: "spot_poi_Alice",
       color: 0xfff2cc,
-      intensity: 5,
-      distance: 28,
+      intensity: 15,
+      distance: 100,
       angle: Math.PI / 2,
-      penumbra: 0.1,
+      penumbra: 0.5,
     },
     {
       type: "spot",
