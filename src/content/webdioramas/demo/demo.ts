@@ -63,7 +63,7 @@ export const demo: DioramaConfig3DWithPostProcessing = {
     {
       id: "start",
       label: {
-        fr: "Chez David",
+        fr: "Bienvenue",
         en: "At David's",
         es: "En casa de David"
       },
@@ -341,7 +341,7 @@ export const demo: DioramaConfig3DWithPostProcessing = {
     {
       id: "poi_Alice",
       label: {
-        fr: "À l'école...",
+        fr: "L'heure du thé",
         en: "At school...",
         es: "En la escuela..."
       },
@@ -549,13 +549,13 @@ export const demo: DioramaConfig3DWithPostProcessing = {
       }
     },
     {
-      id: "work_planet-02",
+      id: "poi_Treasure_Island",
       label: {
-        fr: "En stage...",
+        fr: "À la plage",
         en: "On work placement...",
         es: "En prácticas..."
       },
-      emptyName: "work_planet-02",
+      emptyName: "poi_Treasure_Island",
       autoplay: true,
       icon: `${BASE_URL}/icons/village.webp`,
       ambientSound: `${BASE_URL}/sounds/Digital_Galaxy/Smooth_by_Design.mp3`,
