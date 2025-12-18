@@ -761,21 +761,21 @@ export const demo: DioramaConfig3DWithPostProcessing = {
     {
       id: "poi_Abyss",
       label: {
-        fr: "À la plage",
+        fr: "Au fond",
         en: "On work placement...",
         es: "En prácticas..."
       },
       emptyName: "poi_Abyss",
       autoplay: true,
-      icon: `${BASE_URL}/icons/blue-anchor.webp`,
+      icon: `${BASE_URL}/icons/hublot.webp`,
       ambientSound: `${BASE_URL}/sounds/Digital_Galaxy/Smooth_by_Design.mp3`,
       sceneSound: `${BASE_URL}/sounds/voices/voix-POI-work_planet-02.mp3`,
       zoom: 0.5, // règlages de la camera sur ce POI (jusqu'à enableZoom)
       lookAxis: "z",
-      minDistance: 2.6,
-      maxDistance: 4.4,
+      minDistance: 2.2,
+      maxDistance: 3.8,
       minPolarAngle: 1.1,
-      maxPolarAngle: 1.52,
+      maxPolarAngle: 1.32,
       minAzimuthAngle: 0.24,
       maxAzimuthAngle: 4,
       enableZoom: true,
