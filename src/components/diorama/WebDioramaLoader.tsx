@@ -363,6 +363,7 @@ function WebDioramaLoaderInner({
   const shouldAnimateRef = useRef(true); 
   const spritesheetAnimatorRef = useRef<SpritesheetAnimator | null>(null);
   const performCleanupRef = useRef<(() => void) | null>(null);
+  const waitForSceneAudioRef = useRef<(() => Promise<void>) | null>(null);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
   const [autoplayEnabled, setAutoplayEnabled] = useState(true);
@@ -370,7 +371,7 @@ function WebDioramaLoaderInner({
   usePOIEffects(sceneRef.current!, currentPoi, textureLoader);
 
   const { 
-    isPlaying, isPaused, isEnded, progress, duration, 
+    isPlaying, isPaused, isEnded, isWaitingAudio, progress, duration, 
     audioProgress,
     togglePlayPause, seekScene, stopScene,
     currentSceneSound, // ✅ NOUVEAU
@@ -390,6 +391,7 @@ function WebDioramaLoaderInner({
     goToPOI,
     autoplayEnabled,
     experienceStarted, 
+    waitForSceneAudioRef,
   });
 
   // ✅ Hook audio unifié (remplace usePOIAudio)
@@ -402,7 +404,9 @@ function WebDioramaLoaderInner({
     enableAudio,
     cleanup: cleanupAudio,
     seekSceneAudio,
-    prepareForPOIChange
+    prepareForPOIChange,
+    preloadSceneAudio, // ✅ NOUVEAU
+    waitForSceneAudio,
   } = useUnifiedAudio({
     pois: config.pois,
     currentPOI,
@@ -414,6 +418,20 @@ function WebDioramaLoaderInner({
       currentTime: audioProgress.current,
     }
   });
+
+  useEffect(() => {
+    waitForSceneAudioRef.current = waitForSceneAudio;
+  }, [waitForSceneAudio]);
+
+  useEffect(() => {
+    if (!currentPoi?.sceneSound || !experienceStarted || !startSoundReady) return;
+    
+    console.log("🎬 POI avec scène détecté, préchargement audio...");
+    preloadSceneAudio(currentPoi.sceneSound).catch(err => {
+      console.error("❌ Échec préchargement:", err);
+    });
+  }, [currentPoi?.id, currentPoi?.sceneSound, experienceStarted, startSoundReady, preloadSceneAudio]);
+
 
   const activePOIIcon = React.useMemo(() => {
     if (!currentPOI) return undefined;
@@ -1613,6 +1631,7 @@ function WebDioramaLoaderInner({
               isPlaying={isPlaying}
               isPaused={isPaused}
               isEnded={isEnded}
+              isWaitingAudio={isWaitingAudio}
               progress={progress}
               duration={duration}
               onTogglePlayPause={() => {

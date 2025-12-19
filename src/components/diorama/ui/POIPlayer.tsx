@@ -5,6 +5,7 @@ type Props = {
   isPlaying: boolean;
   isPaused: boolean;
   isEnded: boolean;
+  isWaitingAudio?: boolean;
   progress: number;
   duration: number;
   onTogglePlayPause: () => void;
@@ -19,6 +20,7 @@ export default function POIPlayer({
   isPlaying,
   isPaused,
   isEnded,
+  isWaitingAudio = false,
   progress,
   duration,
   onTogglePlayPause,
@@ -85,6 +87,13 @@ export default function POIPlayer({
   const progressPercent = duration > 0 ? (progress / duration) * 100 : 0;
 
   const renderControlButton = () => {
+    if (isWaitingAudio) {
+      return (
+        <div className="w-6 h-6 flex items-center justify-center">
+          <div className="animate-spin text-lg">⚙️</div>
+        </div>
+      );
+    }
     if (isEnded) {
       return (
         <button onClick={onTogglePlayPause}>

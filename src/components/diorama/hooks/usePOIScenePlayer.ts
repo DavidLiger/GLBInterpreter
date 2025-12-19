@@ -34,6 +34,7 @@ type UsePOIScenePlayerProps = {
     framesToSkip: number
   ) => void;
   prepareStopAnimation?: (name: string, duration: number, frames?: number) => void;
+  waitForSceneAudioRef?: React.RefObject<(() => Promise<void>) | null>; // ✅ Ref au lieu de fonction directe
 };
 
 export const usePOIScenePlayer = ({
@@ -55,13 +56,15 @@ export const usePOIScenePlayer = ({
   controlsRef,
   moveCameraToPOI,
   moveCameraDuringAnimation,
-  cameraRef
+  cameraRef,
+  waitForSceneAudioRef,
 }: UsePOIScenePlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(1); // Durée initiale par défaut
   const [isEnded, setIsEnded] = useState(false);
+  const [isWaitingAudio, setIsWaitingAudio] = useState(false);
   // const [sceneMuted, setSceneMuted] = useState(false);
 
   const activeActionsRef = useRef<THREE.AnimationAction[]>([]);
@@ -131,10 +134,25 @@ export const usePOIScenePlayer = ({
   }, [poi, animations]);
 
   // 🔹 Play scene (pause / resume / seek aware)
-  const playScene = useCallback((forceReplay = false) => {
+  const playScene = useCallback(async (forceReplay = false) => {
     if (!poi) return;
     const isParent = !findParentPOI?.(poi.id);
     if (!isParent) return;
+
+    // ✅ AJOUTER : Attendre l'audio si sceneSound
+    if (poi.sceneSound && waitForSceneAudioRef?.current) {
+      console.log("⏳ [PLAYER] Attente audio prêt...");
+      setIsWaitingAudio(true);
+      
+      try {
+        await waitForSceneAudioRef.current(); // ✅ Appeler via le ref
+        console.log("✅ [PLAYER] Audio prêt, lancement animations");
+      } catch (err) {
+        console.error("❌ [PLAYER] Échec audio:", err);
+      } finally {
+        setIsWaitingAudio(false);
+      }
+    }
 
     triggeredCameraSteps.current.clear();
 
@@ -212,7 +230,7 @@ export const usePOIScenePlayer = ({
         a.time = Math.min(lastSeekTimeRef.current, a.getClip().duration);
       });
     }
-  }, [poi, actionsRef, mixerRef, fadeDuration, resetSceneStable, findParentPOI, startAnimationWithSkip, prepareStopAnimation]);
+  }, [poi, actionsRef, mixerRef, fadeDuration, resetSceneStable, findParentPOI, startAnimationWithSkip, prepareStopAnimation, waitForSceneAudioRef]);
 
   // ✅ NOUVEAU : Auto-lancer si POI a autoplay
   useEffect(() => {
@@ -514,6 +532,7 @@ const cleanup = useCallback(() => {
     isPlaying,
     isPaused,
     isEnded,
+    isWaitingAudio,
     progress,
     duration,
     audioProgress: audioProgressRef, 

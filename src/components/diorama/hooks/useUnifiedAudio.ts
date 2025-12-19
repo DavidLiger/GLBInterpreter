@@ -32,6 +32,8 @@ export default function useUnifiedAudio({
   const previousPOIRef = useRef<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const playPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
+  const preloadedSceneAudioRef = useRef<HTMLAudioElement | null>(null);
+  const sceneAudioReadyRef = useRef<Promise<void> | null>(null);
 
     // ══════════════════════════════════════
     // 1. CRÉATION LAZY DES AUDIOS (au lieu de preload)
@@ -83,6 +85,59 @@ export default function useUnifiedAudio({
         allAudiosRef.current.push(audio);
         return audio;
     }, []); // ✅ AUCUNE dépendance !
+
+    // ✅ AJOUTER cette nouvelle fonction après getOrCreateAmbientAudio
+    const preloadSceneAudio = useCallback(async (sceneSound: string) => {
+    console.log("📦 [AUDIO] Préchargement scène:", sceneSound);
+    
+    if (preloadedSceneAudioRef.current && preloadedSceneAudioRef.current.src.includes(sceneSound)) {
+        console.log("✅ [AUDIO] Déjà préchargé");
+        return;
+    }
+    
+    const audio = new Audio();
+    audio.loop = false;
+    audio.muted = muted;
+    audio.volume = volume;
+    
+    try {
+        const { getAssetFromCache } = await import('@/components/diorama/lib/downloadManager');
+        const cachedBlob = await getAssetFromCache('folio', sceneSound);
+        
+        if (cachedBlob) {
+        audio.src = URL.createObjectURL(cachedBlob);
+        } else {
+        audio.src = sceneSound;
+        }
+    } catch {
+        audio.src = sceneSound;
+    }
+    
+    sceneAudioReadyRef.current = new Promise((resolve, reject) => {
+        audio.addEventListener('canplaythrough', () => {
+        console.log("✅ [AUDIO] Scène prête:", sceneSound);
+        preloadedSceneAudioRef.current = audio;
+        allAudiosRef.current.push(audio);
+        resolve();
+        }, { once: true });
+        
+        audio.addEventListener('error', (e) => {
+        console.error("❌ [AUDIO] Erreur préchargement:", e);
+        reject(e);
+        }, { once: true });
+        
+        audio.load();
+    });
+    
+    await sceneAudioReadyRef.current;
+    }, [muted, volume]);
+
+    // ✅ AJOUTER cette fonction pour attendre
+    const waitForSceneAudio = useCallback(async () => {
+    if (sceneAudioReadyRef.current) {
+        await sceneAudioReadyRef.current;
+    }
+    }, []);
 
     // ══════════════════════════════════════
     // 3. GESTION AMBIENT (avec création lazy)
@@ -213,12 +268,26 @@ export default function useUnifiedAudio({
             });
 
             // Si l'audio existe déjà ET c'est le même src
-            if (sceneAudioRef.current && sceneAudioRef.current.src.includes(audioState.currentSceneSound)) {
+            // if (sceneAudioRef.current && sceneAudioRef.current.src.includes(audioState.currentSceneSound)) {
+            //     if (sceneAudioRef.current.paused) {
+            //         console.log("▶️ [SCENE] Resume");
+            //         sceneAudioRef.current.play().catch(() => {});
+            //     }
+            //     return; // ✅ NE PAS recréer
+            // }
+
+            if (preloadedSceneAudioRef.current && 
+                    preloadedSceneAudioRef.current.src.includes(audioState.currentSceneSound)) {
+                console.log("▶️ [SCENE] Utilisation audio préchargé");
+                
+                if (sceneAudioRef.current !== preloadedSceneAudioRef.current) {
+                    sceneAudioRef.current = preloadedSceneAudioRef.current;
+                }
+                
                 if (sceneAudioRef.current.paused) {
-                    console.log("▶️ [SCENE] Resume");
                     sceneAudioRef.current.play().catch(() => {});
                 }
-                return; // ✅ NE PAS recréer
+                return;
             }
             
             // Sinon, créer nouvel audio
@@ -467,5 +536,7 @@ export default function useUnifiedAudio({
         cleanup,
         sceneAudioRef,
         prepareForPOIChange,
+        preloadSceneAudio, // ✅ NOUVEAU
+        waitForSceneAudio,
     };
 }
