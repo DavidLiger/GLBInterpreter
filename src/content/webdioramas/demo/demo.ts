@@ -13,7 +13,7 @@ export const demo: DioramaConfig3DWithPostProcessing = {
     minGPUTier: 1,
   },
   name: {
-    fr: "David Liger",
+    fr: "Livre augmenté - Démonstartion",
     en: "David Liger",
     es: "David Liger"
   },
@@ -73,24 +73,24 @@ export const demo: DioramaConfig3DWithPostProcessing = {
       sceneSound: `${BASE_URL}/sounds/voices/voix-POI-start.mp3`,
       zoom: 0.5, // règlages de la camera sur ce POI (jusqu'à enableZoom)
       lookAxis: "x",
-      minDistance: 2.4,
+      minDistance: 3.4,
       maxDistance: 8,
       minPolarAngle: 0.7,
       maxPolarAngle: 1.36,
-      minAzimuthAngle: 4.24,
-      maxAzimuthAngle: -2.4,
+      minAzimuthAngle: -2.24,
+      maxAzimuthAngle: 2.0,
       enableZoom: true,
       children: [ // POIs enfant
         {
-          id: "david_00",
+          id: "poi_Sherlock",
           label: {
-            fr: "çà bosse...",
+            fr: "Sherlock",
             en: "It's working...",
             es: "¡Vamos allá!"
           },
-          emptyName: "david_00",
+          emptyName: "poi_Sherlock",
           autoplay: true,
-          icon: `${BASE_URL}/icons/nerd-icon.webp`,
+          icon: `${BASE_URL}/icons/deerstalker-hat.webp`,
           ambientSound: `${BASE_URL}/sounds/Decode_The_Matrix/Decrypt_the_Night.mp3`,
           sceneSound: `${BASE_URL}/sounds/voices/voix-POI-david_00.mp3`,
           zoom: 0.2,
@@ -361,15 +361,15 @@ export const demo: DioramaConfig3DWithPostProcessing = {
       enableZoom: true,
       children: [ // POIs enfant
         {
-          id: "david_01",
+          id: "poi_perso_Alice",
           label: {
-            fr: "çà bosse...",
+            fr: "Alice",
             en: "It's working...",
             es: "¡Vamos allá!"
           },
-          emptyName: "david_01",
+          emptyName: "poi_perso_Alice",
           autoplay: true,
-          icon: `${BASE_URL}/icons/nerd-icon.webp`,
+          icon: `${BASE_URL}/icons/white-rabbit.webp`,
           ambientSound: `${BASE_URL}/sounds/Decode_The_Matrix/Mainframe_Pulse.mp3`,
           sceneSound: `${BASE_URL}/sounds/voices/voix-POI-david_01.mp3`,
           zoom: 0.2,
@@ -571,15 +571,15 @@ export const demo: DioramaConfig3DWithPostProcessing = {
       enableZoom: true,
       children: [ // POIs enfant
         {
-          id: "david_02",
+          id: "poi_perso_Treasure",
           label: {
-            fr: "çà bosse...",
+            fr: "Jim Hawkins",
             en: "It's working...",
             es: "¡Vamos allá!"
           },
-          emptyName: "david_02",
+          emptyName: "poi_perso_Treasure",
           autoplay: true,
-          icon: `${BASE_URL}/icons/nerd-icon.webp`,
+          icon: `${BASE_URL}/icons/treasure-map.webp`,
           ambientSound: `${BASE_URL}/sounds/Decode_The_Matrix/Quantum_Access.mp3`,
           sceneSound: `${BASE_URL}/sounds/voices/voix-POI-david_02.mp3`,
           zoom: 0.2,
@@ -781,15 +781,15 @@ export const demo: DioramaConfig3DWithPostProcessing = {
       enableZoom: true,
       children: [ // POIs enfant
         {
-          id: "david_02",
+          id: "poi_Nemo",
           label: {
-            fr: "çà bosse...",
+            fr: "Nemo",
             en: "It's working...",
             es: "¡Vamos allá!"
           },
-          emptyName: "david_02",
+          emptyName: "poi_Nemo",
           autoplay: true,
-          icon: `${BASE_URL}/icons/nerd-icon.webp`,
+          icon: `${BASE_URL}/icons/trident.webp`,
           ambientSound: `${BASE_URL}/sounds/Decode_The_Matrix/Quantum_Access.mp3`,
           sceneSound: `${BASE_URL}/sounds/voices/voix-POI-david_02.mp3`,
           zoom: 0.2,
@@ -1005,7 +1005,7 @@ export const demo: DioramaConfig3DWithPostProcessing = {
       type: "spot",
       emptyName: "spot_01", // pointe vers spot_01_target (ajout de _target derrière le nom du emptyname)
       color: 0xfff2cc,
-      intensity: 1.5,
+      intensity: 0.8,
       distance: 10,
       angle: Math.PI / 2,
       penumbra: 0.3,
@@ -1014,7 +1014,7 @@ export const demo: DioramaConfig3DWithPostProcessing = {
       type: "spot",
       emptyName: "spot_02", // pointe vers spot_01_target (ajout de _target derrière le nom du emptyname)
       color: 0xfff2cc,
-      intensity: 1.5,
+      intensity: 0.8,
       distance: 10,
       angle: Math.PI / 2,
       penumbra: 0.5,
@@ -1023,7 +1023,7 @@ export const demo: DioramaConfig3DWithPostProcessing = {
       type: "spot",
       emptyName: "spot_03",
       color: 0xfff2cc,
-      intensity: 1.5,
+      intensity: 0.8,
       distance: 10,
       angle: Math.PI / 2,
       penumbra: 0.5,
@@ -1032,7 +1032,7 @@ export const demo: DioramaConfig3DWithPostProcessing = {
       type: "spot",
       emptyName: "spot_04",
       color: 0xfff2cc,
-      intensity: 1.5,
+      intensity: 0.8,
       distance: 10,
       angle: Math.PI / 2,
       penumbra: 0.5,
@@ -1041,7 +1041,7 @@ export const demo: DioramaConfig3DWithPostProcessing = {
       type: "spot",
       emptyName: "spot_05",
       color: 0xfff2cc,
-      intensity: 1.5,
+      intensity: 0.8,
       distance: 10,
       angle: Math.PI / 2,
       penumbra: 0.5,
