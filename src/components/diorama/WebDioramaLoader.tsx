@@ -832,6 +832,25 @@ function WebDioramaLoaderInner({
         
           setLoadedScene(scene);
 
+          // 🔧 FIX: Force les murs à être complètement opaques
+          gltf.scene.traverse((child: any) => {
+            if (child.isMesh) {
+              const mesh = child as THREE.Mesh;
+              const mat = mesh.material as THREE.MeshStandardMaterial;
+              
+              // Cibler spécifiquement wall_1 et wall_2
+              if (child.name.includes('wall')) {
+                console.log("🔧 Correction du mur:", child.name);
+                mat.transparent = false;
+                mat.opacity = 1.0;
+                mat.side = THREE.FrontSide; // ← Le fix principal !
+                mat.depthWrite = true;
+                mat.alphaTest = 0;
+                mat.needsUpdate = true;
+              }
+            }
+          });
+
           // Frustum culling + bounding boxes
           gltf.scene.traverse((child: any) => {
             if (child.isMesh) {
