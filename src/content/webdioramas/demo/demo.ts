@@ -563,8 +563,8 @@ export const demo: DioramaConfig3DWithPostProcessing = {
       zoom: 0.5, // règlages de la camera sur ce POI (jusqu'à enableZoom)
       lookAxis: "z",
       minDistance: 2.6,
-      maxDistance: 4.4,
-      minPolarAngle: 1.1,
+      maxDistance: 4.2,
+      minPolarAngle: 1.2,
       maxPolarAngle: 1.52,
       minAzimuthAngle: 0.24,
       maxAzimuthAngle: 4,
