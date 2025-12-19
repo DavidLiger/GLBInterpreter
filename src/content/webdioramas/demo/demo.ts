@@ -13,7 +13,7 @@ export const demo: DioramaConfig3DWithPostProcessing = {
     minGPUTier: 1,
   },
   name: {
-    fr: "Livre augmenté - Démonstartion",
+    fr: "Démonstration",
     en: "David Liger",
     es: "David Liger"
   },
@@ -213,14 +213,6 @@ export const demo: DioramaConfig3DWithPostProcessing = {
               }
             ]
           },
-          effects: {
-            enabled: true,
-            skybox: {
-              intensity: 0.8,
-              tint: "#ffd9b3",
-              texture: `${BASE_URL}/images/dioramas/work-planets/space_hdr_texture_of_stars.webp`,
-            }
-          }
         }
       ],
       elements: [ // elements posssedant une animation dans le glb
@@ -329,14 +321,6 @@ export const demo: DioramaConfig3DWithPostProcessing = {
         aperture: 0.015,
         maxblur: 0.01,
       },
-      effects: {
-        enabled: true,
-        skybox: {
-          intensity: 0.8,
-          tint: "#ffd9b3",
-          texture: `${BASE_URL}/images/dioramas/work-planets/space_hdr_texture_of_stars.webp`,
-        }
-      }
     },
     {
       id: "poi_Alice",
@@ -461,14 +445,6 @@ export const demo: DioramaConfig3DWithPostProcessing = {
               }
             ]
           },
-          effects: {
-            enabled: true,
-            skybox: {
-              intensity: 0.8,
-              tint: "#ffd9b3",
-              texture: `${BASE_URL}/images/dioramas/work-planets/space_hdr_texture_of_stars.webp`,
-            }
-          }
         }
       ],
       elements: [ // elements posssedant une animation dans le glb
@@ -539,14 +515,6 @@ export const demo: DioramaConfig3DWithPostProcessing = {
           }
         ]
       },
-      effects: {
-        enabled: true,
-        skybox: {
-          intensity: 0.8,
-          tint: "#ffd9b3",
-          texture: `${BASE_URL}/images/dioramas/work-planets/space_hdr_texture_of_stars.webp`,
-        }
-      }
     },
     {
       id: "poi_Treasure_Island",
@@ -671,14 +639,6 @@ export const demo: DioramaConfig3DWithPostProcessing = {
               }
             ]
           },
-          effects: {
-            enabled: true,
-            skybox: {
-              intensity: 0.8,
-              tint: "#ffd9b3",
-              texture: `${BASE_URL}/images/dioramas/work-planets/space_hdr_texture_of_stars.webp`,
-            }
-          }
         }
       ],
       elements: [ // elements posssedant une animation dans le glb
@@ -749,14 +709,6 @@ export const demo: DioramaConfig3DWithPostProcessing = {
           }
         ]
       },
-      effects: {
-        enabled: true,
-        skybox: {
-          intensity: 0.8,
-          tint: "#ffd9b3",
-          texture: `${BASE_URL}/images/dioramas/work-planets/space_hdr_texture_of_stars.webp`,
-        }
-      }
     },
     {
       id: "poi_Abyss",
@@ -881,14 +833,6 @@ export const demo: DioramaConfig3DWithPostProcessing = {
               }
             ]
           },
-          effects: {
-            enabled: true,
-            skybox: {
-              intensity: 0.8,
-              tint: "#ffd9b3",
-              texture: `${BASE_URL}/images/dioramas/work-planets/space_hdr_texture_of_stars.webp`,
-            }
-          }
         }
       ],
       elements: [ // elements posssedant une animation dans le glb
@@ -959,14 +903,6 @@ export const demo: DioramaConfig3DWithPostProcessing = {
           }
         ]
       },
-      effects: {
-        enabled: true,
-        skybox: {
-          intensity: 0.8,
-          tint: "#ffd9b3",
-          texture: `${BASE_URL}/images/dioramas/work-planets/space_hdr_texture_of_stars.webp`,
-        }
-      }
     }
   ],
   videos: [ // pour les videostextures
