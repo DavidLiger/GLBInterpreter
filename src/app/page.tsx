@@ -1,7 +1,5 @@
 'use client'
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import HeaderV2 from "@/components/common/Header";
 import BooksSection from "@/components/books/BooksSection";
 import CollectionsSection from "@/components/books/CollectionsSection";
@@ -14,19 +12,6 @@ import { useState } from "react";
 
 export default function Home() {
   const [headerScrolled, setHeaderScrolled] = useState(false);
-  const router = useRouter();
-
-  // 🔄 Redirection automatique pour le portfolio
-  useEffect(() => {
-    if (process.env.NEXT_PUBLIC_SITE_TYPE === 'folio') {
-      router.replace('/webdiorama/folio/curriculum?t=abcd1234');
-    }
-  }, [router]);
-
-  // ⚠️ Si c'est le folio, on ne render rien (redirection en cours)
-  if (process.env.NEXT_PUBLIC_SITE_TYPE === 'folio') {
-    return null;
-  }
 
   const jsonLd = {
     '@context': 'https://schema.org',

@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build --webpack",
-    "start": "next start --webpack",
+    "start": "next start",
     "lint": "eslint",
-    "export-configs": "ts-node scripts/export-configs.ts"
+    "export-configs": "ts-node scripts/export-configs.ts",     
+    "issue-tokens": "node scripts/issue-tokens.mjs"
   },
   "dependencies": {
     "@gltf-transform/core": "^4.2.1",
@@ -35,6 +36,7 @@
     "@types/three": "^0.180.0",
     "eslint": "^9",
     "eslint-config-next": "15.5.2",
+    "qrcode": "^1.5.4",
     "tailwindcss": "^4",
     "typescript": "^5.9.2"
   }

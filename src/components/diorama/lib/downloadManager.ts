@@ -20,7 +20,7 @@ interface DownloadProgress {
 
 interface IndexEntry {
   path: string;
-  token: string;
+  tokenHash: string;
 }
 
 interface BookIndex {

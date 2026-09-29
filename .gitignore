@@ -64,5 +64,8 @@ public/sw.js
 public/sw.js.map
 public/swe-worker-*.js
 
-
+# Tokens en clair et QR d'impression (îlot 0) — jamais commités
+/private/
+# Index générés
+/dist/
 

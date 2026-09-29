@@ -1,7 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 import WebDioramaLoader from "@/components/diorama/WebDioramaLoader";
 import type { DioramaConfig3DWithVideos } from "@/types/diorama";
-import { allWebdioramas } from "@/content/webdioramas/index"; // ✅ Import statique
+import { allWebdioramas } from "@/content/webdioramas/index"; 
+import { readFile } from "node:fs/promises"; 
+import path from "node:path"; 
+import { tokenMatches } from "@/lib/token";
 
 export const dynamic = 'force-dynamic';
 
@@ -27,8 +30,8 @@ export default async function DioramaPage({ params, searchParams }: Props) {
     const entry = webdioramas[dioramaId];
     if (!entry) return notFound();
 
-    if (!token || token !== entry.token) {
-      console.warn("Token invalide", dioramaId, "fourni:", token);
+    if (!tokenMatches(token, await getLocalTokenHash(bookId, dioramaId))) {
+      console.warn("Token invalide", bookId, dioramaId);
       return notFound();
     }
 
@@ -50,14 +53,14 @@ export default async function DioramaPage({ params, searchParams }: Props) {
 
     const indexJson = await indexRes.json() as Record<
       string,
-      { path: string; token: string; redirectUrl?: string }
+      { path: string; tokenHash: string; redirectUrl?: string }
     >;
 
     const entry = indexJson[dioramaId];
     if (!entry) return notFound();
 
-    if (!token || token !== entry.token) {
-      console.warn("Token invalide", dioramaId, "fourni:", token);
+    if (!tokenMatches(token, entry.tokenHash)) {
+      console.warn("Token invalide", bookId, dioramaId);
       return notFound();
     }
 
@@ -79,5 +82,17 @@ export default async function DioramaPage({ params, searchParams }: Props) {
     }
     console.error("Erreur lors du chargement du diorama:", err);
     return notFound();
+  }
+}
+
+
+// Mode local : empreintes lues depuis l'index généré par `npm run issue-tokens` (non versionné).
+// bookId est déjà validé par la présence dans allWebdioramas avant l'appel.
+async function getLocalTokenHash(bookId: string, sceneId: string): Promise<string | undefined> {
+  try {
+    const raw = await readFile(path.join(process.cwd(), "dist", "index", bookId, "index.json"), "utf8");
+    return (JSON.parse(raw) as Record<string, { tokenHash?: string }>)[sceneId]?.tokenHash;
+  } catch {
+    return undefined;
   }
 }

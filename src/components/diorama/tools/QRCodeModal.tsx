@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from "react";
 import { X } from "lucide-react";
-import { QRCodeCanvas } from "qrcode.react";
+import { QRCodeSVG } from "qrcode.react";
 
 interface QRModalProps {
   onOpenChange?: (isOpen: boolean) => void; // ✅
@@ -10,8 +10,8 @@ interface QRModalProps {
 
 export default function QRModal({ onOpenChange }: QRModalProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [url, setUrl] = useState("https://faerium-site.vercel.app/webdiorama/1/street?t=abcd1234");
-  const qrRef = useRef<HTMLCanvasElement>(null);
+  const [url, setUrl] = useState("https://editions-liger.com/q/");
+  const qrRef = useRef<SVGSVGElement>(null);
 
   // ✅ MODIFIER le setIsOpen
   const handleSetIsOpen = (value: boolean) => {
@@ -21,11 +21,13 @@ export default function QRModal({ onOpenChange }: QRModalProps) {
 
   const downloadQRCode = () => {
     if (!qrRef.current) return;
-    const canvas = qrRef.current;
+    const svg = new XMLSerializer().serializeToString(qrRef.current);
+    const href = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
     const link = document.createElement("a");
-    link.href = canvas.toDataURL("image/png");
-    link.download = "qrcode.png";
+    link.href = href;
+    link.download = "qrcode.svg";
     link.click();
+    setTimeout(() => URL.revokeObjectURL(href), 0);
   };
 
   if (process.env.NODE_ENV !== "development") return null;
@@ -66,7 +68,7 @@ export default function QRModal({ onOpenChange }: QRModalProps) {
 
         {/* QR Code */}
         <div className="flex justify-center mb-4 p-2 bg-white rounded">
-            <QRCodeCanvas ref={qrRef} value={url} size={200} />
+            <QRCodeSVG ref={qrRef} value={url} size={200} marginSize={4} level="M" />
         </div>
 
 
