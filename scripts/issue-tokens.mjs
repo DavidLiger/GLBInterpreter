@@ -60,7 +60,7 @@ if (upload) {
     "npx",
     ["wrangler", "r2", "object", "put", `${bucket}/${R2_PREFIX}${bookId}/index.json`,
      "--file", indexPath, "--content-type", "application/json", "--remote"],
-    { stdio: "inherit" },
+    { stdio: "inherit", shell: process.platform === "win32" },
   );
 }
 

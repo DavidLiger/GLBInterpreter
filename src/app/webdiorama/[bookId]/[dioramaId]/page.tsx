@@ -35,12 +35,6 @@ export default async function DioramaPage({ params, searchParams }: Props) {
       return notFound();
     }
 
-    // ✅ Vérifier redirection
-    if (entry.redirectUrl) {
-      console.log(`🔀 Redirection vers: ${entry.redirectUrl}`);
-      redirect(entry.redirectUrl);
-    }
-
     return <WebDioramaLoader config={entry.config} bookId={bookId} />;
   }
 
@@ -53,7 +47,7 @@ export default async function DioramaPage({ params, searchParams }: Props) {
 
     const indexJson = await indexRes.json() as Record<
       string,
-      { path: string; tokenHash: string; redirectUrl?: string }
+      { path: string; tokenHash: string }
     >;
 
     const entry = indexJson[dioramaId];
@@ -62,11 +56,6 @@ export default async function DioramaPage({ params, searchParams }: Props) {
     if (!tokenMatches(token, entry.tokenHash)) {
       console.warn("Token invalide", bookId, dioramaId);
       return notFound();
-    }
-
-    if (entry.redirectUrl) {
-      console.log(`🔀 Redirection vers: ${entry.redirectUrl}`);
-      redirect(entry.redirectUrl);
     }
 
     const dioramaFile = entry.path;
