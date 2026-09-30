@@ -45,7 +45,7 @@ export default function LoaderOverlay({
     if (typeof window !== 'undefined') {
       const ua = navigator.userAgent;
       const isRecommended = 
-        (/Chrome|CriOS|Brave/i.test(ua) && !/Edg/i.test(ua)) ||
+        /Chrome|CriOS|Brave/i.test(ua) ||
         (/Safari/i.test(ua) && /Apple/i.test(ua) && !/Chrome/i.test(ua));
       
       setIsRecommendedBrowser(isRecommended);
