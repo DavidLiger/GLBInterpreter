@@ -17,12 +17,17 @@ export async function GET(
     });
   }
 
-  const target = new URL(`/webdiorama/${bookId}/${sceneId}`, request.url);
   const t = request.nextUrl.searchParams.get("t");
-  if (t) target.searchParams.set("t", t);
+  const query = t ? `?t=${encodeURIComponent(t)}` : "";
 
-  const res = NextResponse.redirect(target, 307);
-  res.headers.set("X-Robots-Tag", "noindex, nofollow");
-  res.headers.set("Cache-Control", "no-store");
-  return res;
+  // Location relative : résolue par le navigateur sur l'hôte réellement appelé
+  // (tunnel, proxy, préversion), là où request.url peut valoir localhost.
+  return new NextResponse(null, {
+    status: 307,
+    headers: {
+      Location: `/webdiorama/${bookId}/${sceneId}${query}`,
+      "X-Robots-Tag": "noindex, nofollow",
+      "Cache-Control": "no-store",
+    },
+  });
 }
