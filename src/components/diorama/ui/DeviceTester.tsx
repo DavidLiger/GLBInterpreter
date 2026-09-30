@@ -64,6 +64,12 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
     }
   );
 
+  // 0.3.e — sortie de secours : erreur de chargement GLB, délai dépassé ou clic « Passer »
+  const skipTest = () => {
+    cancelBenchmark();
+    onSkip();
+  };
+
   // Dans DeviceTester.tsx, ajoutez au début du composant :
   useEffect(() => {
     console.log('🔍 DeviceTester mounted, phase:', phase);
@@ -113,6 +119,7 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
         undefined,
         (error) => {
             console.error('❌ Erreur chargement GLB pour benchmark:', error);
+            skipTest();
     });
 
     return () => {
@@ -145,6 +152,17 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
       setTimeout(() => setPhase('results'), 500);
     }
   }, [result, phase, isRunning]); // ✅ Ajouter isRunning
+
+  // 0.3.e — plafond de la phase testing : chargement GLB + durée du benchmark + 15 s de marge
+  useEffect(() => {
+    if (phase !== 'testing' || result) return;
+    const timer = setTimeout(() => {
+      console.warn('⏱️ Test appareil trop long, passage direct à la scène');
+      skipTest();
+    }, config.testDuration + 15000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, result]);
 
   // Dans DeviceTester.tsx, ajoutez un useEffect de cleanup global :
   useEffect(() => {
@@ -389,6 +407,15 @@ export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onS
                 {t.deviceTester?.completesAnalysisTitle || "✓ Analyse terminée, préparation des résultats..."}
               </motion.p>
             )}
+
+            <div className="flex justify-center mt-6">
+              <button
+                onClick={skipTest}
+                className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-full transition"
+              >
+                {t.deviceTester?.skip || "Passer"}
+              </button>
+            </div>
           </motion.div>
         )}
 
