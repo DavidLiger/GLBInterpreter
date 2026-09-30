@@ -87,9 +87,14 @@ export default function Header({ header, howItWorks, onScrollChange }: HeaderPro
         `}
       />
 
+      <h1 className="sr-only">
+        {t.header.titleLine1} {t.header.titleLine2} — {t.header.subtitle}
+      </h1>
+
       {/* B. Le Texte "iger" */}
       {/* Il est maintenant ABSOLUTE pour pouvoir glisser physiquement vers la gauche comme l'image */}
-      <h1 
+      <span
+        aria-hidden="true"
         // Optionnel : Tu peux aussi ajouter le onClick ici si tu veux que cliquer sur le texte remonte aussi la page
         // onClick={handleLogoClick} 
         // className={`... cursor-pointer ...`}
@@ -106,7 +111,7 @@ export default function Header({ header, howItWorks, onScrollChange }: HeaderPro
         `}
       >
         {t.header.titleLine2.slice(1)}
-      </h1>
+      </span>
 
       {/* --- 3. AUTRES ÉLÉMENTS DU CONTENU --- */}
       <div

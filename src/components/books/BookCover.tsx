@@ -28,9 +28,9 @@ export default function BookCover({ image, title, publisherText, disclaimerText,
     <div className="relative w-full aspect-[2/3] bg-white shadow-2xl overflow-hidden rounded-lg">
       {/* Titre en haut */}
       <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/80 to-transparent p-4">
-        <h1 className="text-white text-xl sm:text-2xl font-bold text-center drop-shadow-lg">
+        <h3 className="text-white text-xl sm:text-2xl font-bold text-center drop-shadow-lg">
           {title}
-        </h1>
+        </h3>
       </div>
 
       {/* Image de couverture */}

@@ -630,7 +630,6 @@ const HomeTranslationContext = createContext<HomeTranslationContextType | null>(
 export function HomeTranslationProvider({ children }: { children: ReactNode }) {
   // ✅ TOUJOURS initialiser avec "fr" (valeur statique SSR-safe)
   const [lang, setLangState] = useState<Lang>("fr");
-  const [mounted, setMounted] = useState(false); // ✅ AJOUTER
   
   // ✅ Détecter la langue UNIQUEMENT côté client
   useEffect(() => {
@@ -638,7 +637,6 @@ export function HomeTranslationProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem("homepage-lang");
     if (saved && ["fr", "en", "es"].includes(saved)) {
       setLangState(saved as Lang);
-      setMounted(true);
       return;
     }
     
@@ -649,7 +647,6 @@ export function HomeTranslationProvider({ children }: { children: ReactNode }) {
       setLangState(browserLang as Lang);
     }
     
-    setMounted(true);
     console.log("🏠 Langue homepage détectée:", lang);
   }, []);
   
@@ -659,11 +656,6 @@ export function HomeTranslationProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("homepage-lang", newLang);
     console.log("💾 Langue homepage sauvegardée:", newLang);
   };
-  
-  // ✅ Ne rien afficher jusqu'à ce que la langue soit détectée
-  if (!mounted) {
-    return null; // Ou un loader minimal
-  }
   
   return (
     <HomeTranslationContext.Provider value={{ lang, setLang, t: translations[lang] as any }}>
