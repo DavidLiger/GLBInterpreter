@@ -10,7 +10,14 @@ export const usePOIAnimations = (
   const actionsRef = useRef<Map<string, THREE.AnimationAction>>(new Map());
 
   // ✅ Hook placeholder
-  const placeholderSwap = usePlaceholderSwap({ 
+  // On déstructure : l'objet retourné par usePlaceholderSwap change à chaque rendu, ses fonctions non.
+  // Dépendre de l'objet rendait instables prepareActions / stopAllAnimations / cleanup.
+  const {
+    initPlaceholder,
+    resetAll: resetAllPlaceholders,
+    cleanup: cleanupPlaceholders,
+    startAnimationWithSkip,
+  } = usePlaceholderSwap({
     emptyRefs,
     transitionFrames: 5
   });
@@ -67,7 +74,7 @@ export const usePOIAnimations = (
         // ✅ Initialiser placeholder si configuré
         if (el.placeholderMesh) {
           console.log(`🎭 Init placeholder pour: ${el.name} -> ${el.placeholderMesh}`);
-          placeholderSwap.initPlaceholder(el.name, el.placeholderMesh);
+          initPlaceholder(el.name, el.placeholderMesh);
         }
 
         // Trouver un mixer existant ou créer
@@ -93,21 +100,21 @@ export const usePOIAnimations = (
         console.log(`✅ Action préparée (pas jouée): ${el.name} -> ${clip.name}`);
       });
     },
-    [emptyRefs, placeholderSwap]
+    [emptyRefs, initPlaceholder]
   );
 
   // ────────────── Stopper toutes les animations ──────────────
   const stopAllAnimations = useCallback(() => {
     console.log('🛑 Stop all animations');
     
-    placeholderSwap.resetAll();
+    resetAllPlaceholders();
 
     Object.values(mixerRef.current).forEach((mixer) => {
       mixer.stopAllAction();
     });
     
     actionsRef.current.clear(); // ✅ Vider aussi les actions préparées
-  }, [placeholderSwap]);
+  }, [resetAllPlaceholders]);
 
   // ────────────── Update pour animate() ──────────────
   const updateMixers = useCallback((delta: number) => {
@@ -118,14 +125,14 @@ export const usePOIAnimations = (
   const cleanup = useCallback(() => {
     console.log('🧹 Cleanup mixers:', Object.keys(mixerRef.current).length);
     
-    placeholderSwap.cleanup();
+    cleanupPlaceholders();
     
     Object.values(mixerRef.current).forEach(mixer => {
       mixer.stopAllAction();
     });
     mixerRef.current = {};
     actionsRef.current.clear();
-  }, [placeholderSwap]);
+  }, [cleanupPlaceholders]);
 
   return { 
     mixerRef, 
@@ -135,6 +142,6 @@ export const usePOIAnimations = (
     stopAllAnimations, 
     updateMixers, 
     cleanup,
-    startAnimationWithSkip: placeholderSwap.startAnimationWithSkip,
+    startAnimationWithSkip,
   };
 };

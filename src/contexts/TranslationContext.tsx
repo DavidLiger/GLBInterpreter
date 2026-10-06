@@ -111,6 +111,11 @@ const translations = {
       message: "La scène a été mise en pause pour économiser la mémoire.",
       button: "⚡ Relancer la scène"
     },
+    loadError: {
+      title: "Impossible de charger la scène",
+      message: "Vérifiez votre connexion puis réessayez. Si le problème persiste, fermez l'onglet et rouvrez le lien.",
+      button: "Recharger la scène"
+    },
     launcher: {
       loading: "Chargement...",
       sceneOpening: "Ouverture de la scène...",
@@ -232,6 +237,11 @@ const translations = {
       message: "The scene has been paused to save memory.",
       button: "⚡ Restart the scene"
     },
+    loadError: {
+      title: "The scene could not be loaded",
+      message: "Check your connection and try again. If the problem persists, close the tab and reopen the link.",
+      button: "Reload the scene"
+    },
     launcher: {
       loading: "Loading..",
       sceneOpening: "Opening scene...",
@@ -352,6 +362,11 @@ const translations = {
       title: "Escena en pausa",
       message: "La escena se ha pausado para ahorrar memoria.",
       button: "⚡ Reiniciar la escena"
+    },
+    loadError: {
+      title: "No se pudo cargar la escena",
+      message: "Comprueba tu conexión e inténtalo de nuevo. Si el problema persiste, cierra la pestaña y vuelve a abrir el enlace.",
+      button: "Recargar la escena"
     },
     launcher: {
       loading: "Cargando...",

@@ -177,6 +177,12 @@ export function setupPostProcessing(
             renderer.toneMappingExposure = exposure;
         }
     },
+    // EffectComposer.dispose() ne libère que ses 2 render targets et la copyPass :
+    // chaque passe (SSAO, bloom, bokeh, …) possède les siennes et doit être libérée à part.
+    dispose: () => {
+      composer.passes.forEach((pass) => pass.dispose());
+      composer.dispose();
+    },
 
   };
 }

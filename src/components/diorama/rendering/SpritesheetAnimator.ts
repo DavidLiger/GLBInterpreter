@@ -14,6 +14,7 @@ interface SpritesheetData {
   currentTime: number;
   isPlaying: boolean;
   mixerName?: string; // ✅ AJOUTER : pour lier au mixer spécifique
+  lastFrame: number; // dernière frame appliquée (-1 = aucune) : n'écrire l'offset que si la frame change
 }
 
 export class SpritesheetAnimator {
@@ -35,6 +36,7 @@ export class SpritesheetAnimator {
       currentTime: 0,
       isPlaying: true,
       mixerName, // ✅ Stocker le nom du mixer
+      lastFrame: -1,
     });
     
     console.log(`📹 Spritesheet enregistrée: ${name}`, { ...config, mixerName });
@@ -51,7 +53,7 @@ export class SpritesheetAnimator {
         if (mixer && mixer.time > 0) {
           // Utiliser le temps du mixer au lieu du delta
           const frame = Math.floor(mixer.time * data.config.fps) % data.config.totalFrames;
-          this.updateTextureUV(data.texture, frame, data.config);
+          this.applyFrame(data, frame);
         }
         return;
       }
@@ -59,8 +61,15 @@ export class SpritesheetAnimator {
       // Mode 'loop' : comportement actuel
       data.currentTime += deltaTime;
       const frame = Math.floor(data.currentTime * data.config.fps) % data.config.totalFrames;
-      this.updateTextureUV(data.texture, frame, data.config);
+      this.applyFrame(data, frame);
     });
+  }
+
+  // N'appliquer l'offset que lorsque la frame change (≈ 24 fps au lieu de 60+ écritures par seconde)
+  private applyFrame(data: SpritesheetData, frame: number) {
+    if (frame === data.lastFrame) return;
+    data.lastFrame = frame;
+    this.updateTextureUV(data.texture, frame, data.config);
   }
 
   private updateTextureUV(
@@ -77,8 +86,8 @@ export class SpritesheetAnimator {
     const offsetX = col / columns;
     const offsetY = 1 - (row + 1) / rows;
 
+    // texture.offset met à jour la matrice UV tout seul : needsUpdate re-téléverserait l'image entière au GPU
     texture.offset.set(offsetX, offsetY);
-    texture.needsUpdate = true;
   }
 
   play(name: string) {
@@ -92,6 +101,7 @@ export class SpritesheetAnimator {
   }
 
   dispose() {
+    this.spritesheets.forEach(({ texture }) => texture.dispose());
     this.spritesheets.clear();
   }
 }

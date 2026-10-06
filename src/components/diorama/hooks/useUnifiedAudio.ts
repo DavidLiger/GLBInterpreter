@@ -474,7 +474,9 @@ export default function useUnifiedAudio({
         }, 1500);
     }, []);
 
-    const cleanup = () => {
+    // useCallback([]) : ne dépend que de refs et d'un setter stable. Une fonction recréée à chaque
+    // rendu faisait démonter/remonter les listeners de cycle de vie de WebDioramaLoader.
+    const cleanup = useCallback(() => {
         console.log("🔇 Cleanup audio unifié - Début");
         
         // ✅ 0. DÉSACTIVER startSoundReady pour éviter re-trigger
@@ -519,7 +521,7 @@ export default function useUnifiedAudio({
         allAudiosRef.current = [];
         
         console.log("✅ Cleanup audio unifié terminé");
-    };
+    }, []);
 
     // ══════════════════════════════════════
     // RETURN

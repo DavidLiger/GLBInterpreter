@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export function useFullscreen(
   targetRef: React.RefObject<HTMLElement | null>,
   onChange?: (isFs: boolean) => void
 ) {
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // onChange vit dans une ref : l'abonnement est posé une seule fois (sinon il est refait,
+  // et handleChange() rappelé, à chaque rendu dont le callback est une fonction fléchée en ligne).
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
 
   useEffect(() => {
     const handleChange = () => {
@@ -17,7 +24,7 @@ export function useFullscreen(
         (document as any).msFullscreenElement
       );
       setIsFullscreen(fs);
-      onChange?.(fs);
+      onChangeRef.current?.(fs);
     };
 
     document.addEventListener("fullscreenchange", handleChange);
@@ -33,7 +40,7 @@ export function useFullscreen(
       document.removeEventListener("mozfullscreenchange", handleChange as any);
       document.removeEventListener("MSFullscreenChange", handleChange as any);
     };
-  }, [onChange]);
+  }, []);
 
   const toggle = async () => {
     const el = targetRef.current;

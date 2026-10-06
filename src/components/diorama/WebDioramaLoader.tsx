@@ -1,7 +1,7 @@
 "use client";
 
 import { TranslationProvider, useTranslation } from "@/contexts/TranslationContext";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import * as THREE from "three";
 import { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
@@ -36,7 +36,7 @@ import ConfigConverterTool from "./tools/ConfigConverterTool";
 import QRCodeModal from "./tools/QRCodeModal";
 import DownloadTooltip from "./ui/DownloadTooltip";
 import { useWebGLContext } from "./hooks/useWebGLContext";
-import { disposeScene, logSceneStats } from "./utils/webglHelpers";
+import { disposeObject, disposeScene, logSceneStats } from "./utils/webglHelpers";
 import BookDownloadModal from "./ui/BookDownloadModal";
 import { isBookFullyCached, getAssetFromCache } from "./lib/downloadManager";
 import useUnifiedAudio from "./hooks/useUnifiedAudio";
@@ -48,7 +48,7 @@ import { applySpritesheets } from "./rendering/applySpritesheet";
 import { SpritesheetAnimator } from "./rendering/SpritesheetAnimator";
 import CVButton from "./ui/CVButton";
 import CVModal from "./ui/CVModal";
-
+ 
 const HandyGeorge = localFont({
   src: "../../../public/fonts/HandyGeorge.ttf",
   variable: "--font-HandyGeorge",
@@ -79,7 +79,6 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   const { t } = useTranslation(); // ✅ Maintenant c'est OK !
   const [assetsReady, setAssetsReady] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(true);
-  const [isInitializing, setIsInitializing] = useState(false);  // ✅ NOUVEAU
   const [checkingCache, setCheckingCache] = useState(true);
   const [testKey, setTestKey] = useState(0);
   const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
@@ -113,14 +112,7 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
         console.log("✅ Assets en cache, lancement direct");
         setCheckingCache(false);
         setShowDownloadModal(false);
-        setIsInitializing(true);
-        
-        console.log("⏳ Pause 2s pour libérer mémoire...");
-        setTimeout(() => {
-          console.log("✅ Mémoire libérée, lancement scène...");
-          setAssetsReady(true);
-          setIsInitializing(false);
-        }, 3000);
+        setAssetsReady(true);
       } else {
         console.log("📦 Assets manquants, afficher modal");
         setShowDownloadModal(true);
@@ -180,38 +172,14 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
               config={config}
               onComplete={() => {
                 setShowDownloadModal(false);
-                setIsInitializing(true); // ✅ État intermédiaire
-                
-                console.log("⏳ Pause 2s pour libérer mémoire...");
-                
-                // ✅ Forcer garbage collection (si disponible)
-                if (typeof window !== 'undefined' && (window as any).gc) {
-                  (window as any).gc();
-                }
-                
-                // ✅ Délai avant de lancer la scène 3D
-                setTimeout(() => {
-                  console.log("✅ Mémoire libérée, lancement scène...");
-                  setAssetsReady(true);
-                }, 2000);
+                setAssetsReady(true);
               }}
               onCancel={() => setShowDownloadModal(false)}
               isFolioMode={isFolioMode}
             />
           )}
 
-          {/* ✅ Écran de transition */}
-          {isInitializing && !assetsReady && (
-            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-              <div className="text-white text-center">
-                <div className="text-6xl mb-4 animate-pulse">🎬</div>
-                <p className="text-xl">{t.reload?.preparing || "Préparation de la scène..."}</p>
-                <p className="text-sm text-gray-400 mt-2">{t.reload?.optimizing || "Optimisation mémoire GPU"}</p>
-              </div>
-            </div>
-          )}
-
-          {!assetsReady && !showDownloadModal && !checkingCache && !isInitializing && (
+          {!assetsReady && !showDownloadModal && !checkingCache && (
             <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
               <div className="text-center">
                 <div className="text-6xl mb-6">📦</div>
@@ -254,6 +222,7 @@ function WebDioramaLoaderInner({
   const emptyRefs = useRef<Record<string, THREE.Object3D>>({});
   const animationFrameRef = useRef<number | undefined>(undefined);
   const videoElementsRef = useRef<HTMLVideoElement[]>([]);
+  const videoTexturesRef = useRef<THREE.VideoTexture[]>([]);
   const { 
     mixerRef, 
     actionsRef,
@@ -290,7 +259,7 @@ function WebDioramaLoaderInner({
   }, []);
 
   // ✅ Hook WebGL simplifié
-  const { renderer, error: webglError, isReady: webglReady } = useWebGLContext(containerRef, {
+  const { renderer, error: webglError, isReady: webglReady, destroy: destroyRenderer } = useWebGLContext(containerRef, {
     isMobile: isMobileDevice,
     onContextLost: () => {
       if (animationFrameRef.current) {
@@ -318,6 +287,7 @@ function WebDioramaLoaderInner({
 
   const currentPoi = currentPOI ? findPOIRecursively(currentPOI) ?? undefined : undefined;
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<"network" | "cache" | "parse" | null>(null);
   const [isMobile, setIsMobile] = useState(false);
   const [showLoaderOverlay, setShowLoaderOverlay] = useState(true);
   const [viewportHeight, setViewportHeight] = useState<number>(0);
@@ -639,31 +609,61 @@ function WebDioramaLoaderInner({
     };
   }, []);
 
-  const updateRendererSize = () => {
-    const w = containerRef.current?.clientWidth;
-    const h = containerRef.current?.clientHeight;
-    if (!w || !h || !cameraRef.current || !renderer) return;
+  // Redimensionne caméra / renderer / composer sur la taille réelle du conteneur.
+  // setSize() réalloue le canvas : on ne l'appelle que si la taille a réellement changé.
+  // `force` : réappliquer la taille au composer même si le renderer est déjà à la bonne taille
+  // (composer fraîchement créé, qui démarre aux dimensions de la fenêtre).
+  const rendererSizeRef = useRef(new THREE.Vector2());
+  const updateRendererSize = useCallback((force = false) => {
+    const el = containerRef.current;
+    const camera = cameraRef.current;
+    if (!el || !camera || !renderer) return;
 
-    cameraRef.current.aspect = w / h;
-    cameraRef.current.updateProjectionMatrix();
-    renderer.setSize(w, h);
+    const w = el.clientWidth;
+    const h = el.clientHeight;
+    if (!w || !h) return;
 
-    if (composerRef.current) {
-      composerRef.current.updateSize(w, h);
+    const aspect = w / h;
+    if (camera.aspect !== aspect) {
+      camera.aspect = aspect;
+      camera.updateProjectionMatrix();
     }
-  };
 
-  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(
-    containerRef,
-    () => setTimeout(updateRendererSize, 50)
-  );
+    const current = renderer.getSize(rendererSizeRef.current);
+    const sizeChanged = current.x !== w || current.y !== h;
+    if (sizeChanged) renderer.setSize(w, h);
+    if (sizeChanged || force) composerRef.current?.updateSize(w, h);
+  }, [renderer]);
+
+  // Toujours la dernière version, pour les écouteurs posés une seule fois
+  const updateRendererSizeRef = useRef(updateRendererSize);
+  useEffect(() => {
+    updateRendererSizeRef.current = updateRendererSize;
+  }, [updateRendererSize]);
+
+  // Changement de plein écran : attendre la fin de la transition du navigateur (annulable)
+  const fullscreenTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const onFullscreenChange = useCallback(() => {
+    if (fullscreenTimerRef.current !== undefined) clearTimeout(fullscreenTimerRef.current);
+    fullscreenTimerRef.current = setTimeout(() => {
+      fullscreenTimerRef.current = undefined;
+      updateRendererSizeRef.current();
+    }, 50);
+  }, []);
+  useEffect(() => {
+    return () => {
+      if (fullscreenTimerRef.current !== undefined) clearTimeout(fullscreenTimerRef.current);
+    };
+  }, []);
+
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(containerRef, onFullscreenChange);
   useResize(updateRendererSize);
 
   useEffect(() => {
     const updateVH = () => {
       const vh = window.visualViewport?.height || window.innerHeight;
       setViewportHeight(vh);
-      updateRendererSize();
+      updateRendererSizeRef.current();
     };
 
     updateVH();
@@ -699,9 +699,30 @@ function WebDioramaLoaderInner({
     }
   }, [currentPOI]);
 
+  // Arrête et libère toutes les vidéos : éléments <video> ET VideoTextures (GPU).
+  // Vider videoElementsRef invalide aussi les `loadeddata` encore en attente (voir applyVideos).
+  const stopVideos = useCallback(() => {
+    videoElementsRef.current.forEach((video) => {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      video.remove();
+    });
+    videoElementsRef.current = [];
+
+    videoTexturesRef.current.forEach((texture) => texture.dispose());
+    videoTexturesRef.current = [];
+  }, []);
+
   // ✅ Chargement de la scène
   useEffect(() => {
     if (!renderer || !webglReady || !containerRef.current) return;
+
+    // Tâches asynchrones à neutraliser si l'effet est nettoyé avant leur fin (démontage,
+    // StrictMode, changement de scène) : drapeau + timers + travail différé après la 1re frame.
+    let cancelled = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let afterFirstFrame: (() => void) | null = null;
 
     const width = window.innerWidth;
     const height = window.innerHeight;
@@ -713,6 +734,7 @@ function WebDioramaLoaderInner({
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.01, 1000);
     camera.position.set(0, 2, 5);
     cameraRef.current = camera;
+    updateRendererSizeRef.current(); // aspect depuis la taille réelle du conteneur
 
     spritesheetAnimatorRef.current = new SpritesheetAnimator();
 
@@ -785,12 +807,24 @@ function WebDioramaLoaderInner({
         console.warn("⚠️ Erreur accès cache, chargement depuis R2:", err);
       }
 
+      // Effet nettoyé pendant l'attente du cache : ne pas lancer le chargement
+      if (cancelled) {
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        return;
+      }
+
       loader.load(
         glbUrl,
         async (gltf: GLTF) => {
           // ✅ Nettoyer l'object URL si créé
           if (objectUrl) {
             URL.revokeObjectURL(objectUrl);
+          }
+
+          // Effet nettoyé pendant le chargement : libérer le GLB reçu et s'arrêter là
+          if (cancelled) {
+            disposeObject(gltf.scene);
+            return;
           }
 
           scene.add(gltf.scene);
@@ -817,14 +851,12 @@ function WebDioramaLoaderInner({
             }
           });
 
-          // Frustum culling + bounding boxes
+          // Frustum culling : actif par défaut. Seuls restent exclus les meshes dont la géométrie
+          // sort de sa boîte statique : skinnés (sphère figée sur la pose de repos) et morph targets.
+          // (three calcule lui-même les bounding volumes à la demande.)
           gltf.scene.traverse((child: any) => {
-            if (child.isMesh) {
+            if (child.isMesh && (child.isSkinnedMesh || child.morphTargetInfluences)) {
               child.frustumCulled = false;
-              if (child.geometry && !child.geometry.boundingBox) {
-                child.geometry.computeBoundingBox();
-                child.geometry.computeBoundingSphere();
-              }
             }
           });
 
@@ -882,17 +914,23 @@ function WebDioramaLoaderInner({
           applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
 
           // Post-processing
-          setTimeout(() => {
+          timers.push(setTimeout(() => {
+            if (cancelled) return;
+
             if (!isMobileDevice) {
               composerRef.current = setupPostProcessing(renderer, scene, camera, ppConfig);
+              updateRendererSizeRef.current(true); // le composer démarre aux dimensions de la fenêtre
             }
 
             if (configWithPP.emissiveObjects) {
               setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
             }
-          }, 100);
+          }, 100));
 
-          setTimeout(() => {
+          // Spritesheets et vidéos : lancés juste après la première frame rendue de la scène
+          // (remplace l'ancien délai fixe de 3 s)
+          afterFirstFrame = () => {
+            if (cancelled) return;
             applySpritesheets(
               gltf.scene, 
               emptyRefs.current, 
@@ -903,9 +941,10 @@ function WebDioramaLoaderInner({
               gltf.scene, 
               emptyRefs.current, 
               (config as DioramaConfig3DWithVideos).videos,
-              videoElementsRef
+              videoElementsRef,
+              videoTexturesRef
             );
-          }, 3000);
+          };
 
           setLoadingProgress(70);
 
@@ -922,6 +961,8 @@ function WebDioramaLoaderInner({
           setIsLoaded(true);
         },
         (xhr) => {
+          if (cancelled) return;
+
           // ✅ MODIFIÉ : Ne pas afficher progress si déjà en cache
           if (objectUrl) {
             // Déjà en cache, skip progress
@@ -936,11 +977,24 @@ function WebDioramaLoaderInner({
           setLoadingProgress(Math.floor(progress));
         },
         (error) => {
-          console.error("Erreur chargement GLB:", error);
           if (objectUrl) {
             URL.revokeObjectURL(objectUrl);
           }
-          setIsLoaded(true);
+          if (cancelled) return;
+
+          // Origine de l'échec, pour le diagnostic :
+          //  - cache   : le GLB venait du cache local et ne se décode pas (entrée corrompue)
+          //  - network : requête échouée (hors ligne, HTTP 4xx/5xx, CORS)
+          //  - parse   : fichier reçu mais GLB invalide
+          const message = error instanceof Error ? error.message : String(error);
+          // Erreur HTTP de FileLoader (porte `response`) ou échec fetch : messages Chrome / Firefox / Safari
+          const isNetworkFailure =
+            !!(error as { response?: unknown } | null)?.response ||
+            /fetch for|failed to fetch|networkerror|load failed/i.test(message);
+          const source = objectUrl ? "cache" : isNetworkFailure ? "network" : "parse";
+
+          console.error(`❌ Échec chargement GLB (${source}) : ${config.glb}`, error);
+          setLoadError(source);
         }
       );
     };
@@ -960,12 +1014,10 @@ function WebDioramaLoaderInner({
         shouldAnimateRef.current = false; // ✅ Désactiver le flag
         return;
       }
-      if (document.hidden) {
-        animationFrameRef.current = requestAnimationFrame(animate);
-        return;
-      }
-
-      const delta = clock.current.getDelta();
+      // Delta borné : après une longue pause (onglet en arrière-plan, thread bloqué) le premier
+      // delta serait énorme et les animations sauteraient. (Le navigateur suspend déjà les RAF
+      // d'un onglet caché : l'ancien test document.hidden n'avait pas d'objet.)
+      const delta = Math.min(clock.current.getDelta(), 0.1);
       updateMixers(delta);
       controlsRef.current?.update();
 
@@ -979,6 +1031,13 @@ function WebDioramaLoaderInner({
         renderer.render(sceneRef.current, cameraRef.current);
       }
 
+      // Travail différé jusqu'à la première frame rendue (spritesheets, vidéos)
+      if (afterFirstFrame) {
+        const run = afterFirstFrame;
+        afterFirstFrame = null;
+        run();
+      }
+
       animationFrameRef.current = requestAnimationFrame(animate);
     };
 
@@ -987,6 +1046,10 @@ function WebDioramaLoaderInner({
 
     // Cleanup
     return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+      afterFirstFrame = null;
+
       if (animationFrameRef.current !== undefined) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = undefined;
@@ -1001,6 +1064,13 @@ function WebDioramaLoaderInner({
         spritesheetAnimatorRef.current.dispose();
         spritesheetAnimatorRef.current = null;
       }
+
+      if (composerRef.current) {
+        composerRef.current.dispose();
+        composerRef.current = null;
+      }
+
+      stopVideos();
 
       disposeScene(sceneRef.current);
       sceneRef.current = null;
@@ -1041,108 +1111,51 @@ function WebDioramaLoaderInner({
       }
       console.log("🛑 Cleanup WebGL immédiat");
 
-      // ✅ CRITIQUE : Désactiver RAF en premier
+      // 1. ✅ CRITIQUE : Désactiver RAF en premier, puis l'annuler
       shouldAnimateRef.current = false;
-      
-      // ✅ Annuler RAF
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = undefined;
       }
 
-      // ✅ 0. MUTER ET STOPPER via les hooks AVANT tout
-      console.log("🔇 Cleanup audio via hooks...");
-      cleanupAudio(); // Ceci va vider les refs
-      cleanupScenePlayer();
-      
-      // ✅ 0.5. PUIS muter TOUS les audios DOM restants (sécurité)
-      console.log("🔇 Mute tous audios DOM restants...");
-      document.querySelectorAll('audio').forEach((audio) => {
-        const audioEl = audio as HTMLAudioElement;
-        console.log("🔇 Mute audio DOM:", audioEl.src);
-        audioEl.pause();
-        audioEl.muted = true;
-        audioEl.volume = 0;
-        audioEl.currentTime = 0;
-        audioEl.src = '';
-        audioEl.load();
-      });
-      // setIsHidden(true);
-      
-      // 1. Annuler RAF
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = undefined;
-      }
-      
-      // 2. ✅ STOP TOUS LES AUDIOS via le hook
-      console.log("🔇 Appel cleanupAudio...");
+      // 2. Audio et lecteur de scène (les audios ne sont jamais dans le DOM : tout passe par les hooks)
       cleanupAudio();
       cleanupScenePlayer();
 
-      // 2.5. ✅ Stop vidéos
-      videoElementsRef.current.forEach(video => {
-        console.log("🎬 Stop vidéo:", video.src);
-        video.pause();
-        video.currentTime = 0;
-        video.src = '';
-        video.load();
-        video.remove();
-      });
-      videoElementsRef.current = [];
-      
-      // 3. ✅ STOP VIDEOS (avec bon typage)
-      document.querySelectorAll('video').forEach((video) => {
-        const videoEl = video as HTMLVideoElement;
-        videoEl.pause();
-        videoEl.currentTime = 0;
-        videoEl.src = '';
-        videoEl.load();
-      });
-      
-      // 4. Stop animations
+      // 3. Vidéos (éléments + textures) : stopVideos() sait les retrouver, pas besoin de fouiller le DOM
+      stopVideos();
+
+      // 4. Animations (cleanupMixers vide aussi mixerRef)
       stopAllAnimations();
       cleanupMixers();
-      // Object.values(mixerRef.current).forEach(mixer => mixer.stopAllAction());
-
-      // ✅ AJOUTER : Vider les mixers
-      console.log('🧹 Nettoyage mixers:', Object.keys(mixerRef.current).length);
-      mixerRef.current = {};
 
       if (spritesheetAnimatorRef.current) {
         spritesheetAnimatorRef.current.dispose();
         spritesheetAnimatorRef.current = null;
       }
-      
-      // 5. Dispose scene
+
+      // 5. Post-processing, scène, contrôles
+      if (composerRef.current) {
+        composerRef.current.dispose();
+        composerRef.current = null;
+      }
+
       if (sceneRef.current) {
         disposeScene(sceneRef.current);
         sceneRef.current = null;
       }
-      
-      // 6. Dispose renderer + FORCE CONTEXT LOSS
-      if (renderer) {
-        renderer.dispose();
-        // renderer.forceContextLoss();
-        renderer.domElement?.remove();
-      }
-      
-      // 7. Dispose composer
-      if (composerRef.current) {
-        composerRef.current.composer?.dispose();
-        composerRef.current = null;
-      }
-      
-      // 8. Dispose controls
+
       if (controlsRef.current) {
         controlsRef.current.dispose();
         controlsRef.current = null;
       }
-      
-      // 9. Reset refs
+
+      // 6. Renderer : possédé par useWebGLContext (dispose + perte de contexte + retrait du canvas)
+      destroyRenderer();
+
+      // 7. Reset refs
       cameraRef.current = null;
       emptyRefs.current = {};
-      mixerRef.current = {};
       
       console.log("✅ Cleanup complet terminé");
     };
@@ -1200,27 +1213,6 @@ function WebDioramaLoaderInner({
       }
     };
     
-    const handleBlur = () => {
-      console.log("👁️ Window blur");
-
-      if (isDevMode) {
-        console.log("🔧 DEV MODE: Blur ignoré");
-        return;
-      }
-
-      // ✅ AJOUTER : Ignorer si outil dev ouvert
-      if (devToolOpenRef.current) {
-        console.log("⏸️ Blur ignoré : outil dev ouvert");
-        return;
-      }
-
-      if (!wasHiddenRef.current) {
-        wasHiddenRef.current = true;
-        voluntaryCleanupRef.current = true;
-        performCleanup();
-      }
-    };
-    
     const handlePageHide = () => {
       console.log("👁️ Page hide");
 
@@ -1245,18 +1237,18 @@ function WebDioramaLoaderInner({
     // console.log("🎬 Setup listeners - document.hidden:", document.hidden);
     
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("blur", handleBlur);
     window.addEventListener("focus", handleFocus);
     window.addEventListener("pagehide", handlePageHide);
     
     return () => {
       // console.log("🧹 Cleanup listeners");
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("blur", handleBlur);
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("pagehide", handlePageHide);
     };
-  }, [renderer, stopAllAnimations, cleanupAudio, cleanupScenePlayer]);
+    // Tout ce qui est listé est stable (useCallback / refs) : l'effet n'est posé qu'une fois.
+    // Ne pas y ajouter de valeur instable, sous peine de re-souscrire à chaque rendu.
+  }, [stopAllAnimations, cleanupMixers, cleanupAudio, cleanupScenePlayer, stopVideos, destroyRenderer]);
 
   useEffect(() => {
     if (showLoaderOverlay) {
@@ -1385,6 +1377,23 @@ function WebDioramaLoaderInner({
           {isDevMode && (
             <div className="fixed top-2 left-2 z-[200] px-3 py-1 bg-yellow-500 text-black text-xs font-bold rounded-full shadow-lg">
               🔧 DEV MODE
+            </div>
+          )}
+
+          {/* ❌ Échec de chargement du GLB : écran bloquant avec rechargement */}
+          {loadError && (
+            <div className="fixed inset-0 bg-gradient-to-br from-gray-900 via-black to-gray-900 flex items-center justify-center z-[9999]">
+              <div className="text-center p-8 max-w-md mx-4">
+                <div className="text-4xl mb-6">⚠️</div>
+                <h2 className="text-2xl font-bold text-white mb-3">{t.loadError.title}</h2>
+                <p className="text-gray-300 mb-6">{t.loadError.message}</p>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95"
+                >
+                  {t.loadError.button}
+                </button>
+              </div>
             </div>
           )}
 
