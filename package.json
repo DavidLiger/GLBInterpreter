@@ -8,7 +8,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "export-configs": "ts-node scripts/export-configs.ts",     
+    "export-configs": "ts-node scripts/export-configs.ts",
     "issue-tokens": "node scripts/issue-tokens.mjs"
   },
   "dependencies": {
@@ -37,6 +37,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.2",
     "qrcode": "^1.5.4",
+    "serwist": "^9.2.3",
     "tailwindcss": "^4",
     "typescript": "^5.9.2"
   }

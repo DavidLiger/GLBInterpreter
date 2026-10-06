@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Award, Star, Trophy, Target } from "lucide-react";
+import { Star, Trophy } from "lucide-react";
 import type { ExperienceContent } from "@/types/experience";
 
 interface AchievementTemplateProps {

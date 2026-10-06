@@ -6,10 +6,6 @@ import { useTranslation } from "@/contexts/TranslationContext";
 import ExperienceModal from "./ExperienceModal";
 import { usePOIContentCheck } from "../hooks/usePOIContentCheck";
 
-interface ContentManifest {
-  poisWithContent: string[];
-}
-
 interface POIBreadcrumbsProps {
   currentPOI: string | null;
   goToPOI: (poi: POI) => void;
@@ -44,41 +40,12 @@ export default function POIBreadcrumbs({
   const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
 
     // ✅ UTILISER le hook
-  const { poisWithContent, contentChecked, hasPOIContent } = usePOIContentCheck({ 
+  const { poisWithContent, contentChecked } = usePOIContentCheck({ 
     sceneId: bookId 
   });
 
   // ── Construire la liste des breadcrumbs
   const breadcrumbList: { poi: POI; type: "parent" | "active" | "sibling" | "child" }[] = [];
-
-  // useEffect(() => {
-  //   if (!isFolioMode) return;
-
-  //   const loadManifest = async () => {
-  //     const baseUrl = "https://webdiorama-proxy.david-liger-pro.workers.dev/assets/folio/content";
-      
-  //     try {
-  //       const response = await fetch(`${baseUrl}/manifest.json`);
-        
-  //       if (response.ok) {
-  //         const manifest = await response.json() as ContentManifest; // ✅ Type explicite
-  //         const available = new Set<string>(manifest.poisWithContent || []); // ✅ Type explicite
-  //         console.log('✅ POIs avec contenu:', Array.from(available));
-  //         setPoisWithContent(available);
-  //       } else {
-  //         console.warn('⚠️ Manifest introuvable, aucun POI avec contenu');
-  //         setPoisWithContent(new Set<string>()); // ✅ Type explicite
-  //       }
-  //     } catch (err) {
-  //       console.warn('⚠️ Erreur chargement manifest:', err);
-  //       setPoisWithContent(new Set<string>()); // ✅ Type explicite
-  //     } finally {
-  //       setContentChecked(true);
-  //     }
-  //   };
-
-  //   loadManifest();
-  // }, [isFolioMode]);
 
     // ✅ NOUVEAU : Ouvrir automatiquement au démarrage en mode folio
   useEffect(() => {

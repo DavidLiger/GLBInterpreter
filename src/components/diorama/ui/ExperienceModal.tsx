@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Maximize2, Minimize2, ExternalLink, Calendar, Code, Award } from "lucide-react";
+import { Maximize2, Minimize2 } from "lucide-react";
 import type { ExperienceContent } from "@/types/experience";
 import ProjectTemplate from "./templates/ProjectTemplate";
 import JobTemplate from "./templates/JobTemplate";

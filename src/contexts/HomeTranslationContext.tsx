@@ -647,14 +647,12 @@ export function HomeTranslationProvider({ children }: { children: ReactNode }) {
       setLangState(browserLang as Lang);
     }
     
-    console.log("🏠 Langue homepage détectée:", lang);
   }, []);
   
   // ✅ Fonction pour changer la langue + sauvegarder
   const setLang = (newLang: Lang) => {
     setLangState(newLang);
     localStorage.setItem("homepage-lang", newLang);
-    console.log("💾 Langue homepage sauvegardée:", newLang);
   };
   
   return (

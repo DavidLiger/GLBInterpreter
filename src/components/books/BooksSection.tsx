@@ -41,10 +41,6 @@ export default function BooksSection() {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-    // ✅ DEBUG
-  console.log('🔍 t.books:', t.books);
-  console.log('🔍 content.books:', content.books);
-
   const openModal = (book: Book) => {
     setSelectedBook(book);
     setIsModalOpen(true);
@@ -68,11 +64,7 @@ export default function BooksSection() {
     return { ...book, ...(englishBook || { title: 'Untitled', summary: '' }) };
   });
 
-  console.log('✅ Books with translations:', booksWithTranslations); // ✅ DEBUG
-
   const foregroundBooks = booksWithTranslations.filter(b => b.foreground);
-
-  console.log('⭐ Foreground books:', foregroundBooks); // ✅ DEBUG
 
   return (
     <section id="books" className="py-16 px-6 max-w-6xl mx-auto scroll-mt-20">

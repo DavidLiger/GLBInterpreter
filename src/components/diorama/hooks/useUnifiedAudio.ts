@@ -8,7 +8,6 @@ interface AudioState {
   isPaused: boolean;
   isEnded: boolean;
   currentSceneSound?: string;
-  currentTime?: number;
 }
 
 interface UseUnifiedAudioProps {

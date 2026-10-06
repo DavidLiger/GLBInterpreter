@@ -42,9 +42,9 @@ export function countSceneVertices(scene: THREE.Scene): number {
 }
 
 /**
- * Calculer les draw calls d'une scène
+ * Compter les meshes d'une scène (≠ draw calls réels : voir renderer.info.render.calls)
  */
-export function countDrawCalls(scene: THREE.Scene): number {
+export function countMeshes(scene: THREE.Scene): number {
   let count = 0;
 
   scene.traverse((object) => {
@@ -63,12 +63,13 @@ export function logSceneStats(scene: THREE.Scene, renderer: THREE.WebGLRenderer)
   if (process.env.NODE_ENV !== 'development') return;
 
   const vertices = countSceneVertices(scene);
-  const drawCalls = countDrawCalls(scene);
+  const meshes = countMeshes(scene);
   const info = renderer.info;
 
   console.group('📊 Scene Stats');
   console.log(`Vertices: ${vertices.toLocaleString()}`);
-  console.log(`Draw calls: ${drawCalls}`);
+  console.log(`Meshes: ${meshes}`);
+  console.log(`Draw calls: ${info.render.calls}`);
   console.log(`Triangles: ${info.render.triangles.toLocaleString()}`);
   console.log(`Textures: ${info.memory.textures}`);
   console.log(`Geometries: ${info.memory.geometries}`);

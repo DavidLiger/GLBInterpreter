@@ -6,14 +6,12 @@ interface UseWebGLContextOptions {
   powerPreference?: 'default' | 'high-performance' | 'low-power';
   isMobile?: boolean;
   onContextLost?: () => void;
-  onContextRestored?: () => void;
 }
 
 interface WebGLContextReturn {
   renderer: THREE.WebGLRenderer | null;
   error: 'init' | 'lost' | null;
   isReady: boolean;
-  retryInit: () => void;
 }
 
 /**
@@ -31,7 +29,6 @@ export function useWebGLContext(
     powerPreference = 'high-performance',
     isMobile = false,
     onContextLost,
-    onContextRestored,
   } = options;
 
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -138,17 +135,9 @@ export function useWebGLContext(
     };
   }, []);
 
-  const retryInit = () => {
-    hasInitializedRef.current = false;
-    setError(null);
-    setIsReady(false);
-    initRenderer();
-  };
-
   return {
     renderer: rendererRef.current,
     error,
     isReady,
-    retryInit,
   };
 }

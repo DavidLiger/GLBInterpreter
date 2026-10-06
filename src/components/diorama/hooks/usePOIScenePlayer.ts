@@ -10,17 +10,13 @@ type UsePOIScenePlayerProps = {
   animations: THREE.AnimationClip[];
   mixerRef: Record<string, THREE.AnimationMixer>;
   actionsRef: React.MutableRefObject<Map<string, THREE.AnimationAction>>; 
-  // ambientAudioRefs?: Record<string, HTMLAudioElement>;
   fadeDuration?: number;
   muted?: boolean;
-  startPlaceholders?: (poi: POIWithElements) => void;
-  // onSceneStart?: (poiId: string, sceneSound?: string) => void;
-  // onSceneEnd?: (poiId: string) => void;
 
   goToPOI?: (poi: POIWithElements, smooth?: boolean, duration?: number) => void;
   findPOIRecursively?: (id: string) => POIWithElements | null;
   moveCameraToPOI?: (obj: THREE.Object3D, poi: POIWithElements, smooth?: boolean, onComplete?: () => void, duration?: number) => void;
-  moveCameraDuringAnimation?: (obj: THREE.Object3D, poi: POIWithElements, smooth?: boolean, onComplete?: () => void, duration?: number) => void;
+  moveCameraDuringAnimation?: (obj: THREE.Object3D, poi: POIWithElements) => void;
   emptyRefs?: React.RefObject<Record<string, THREE.Object3D>>;
 
   findParentPOI?: (childId: string) => POIWithElements | null;
@@ -44,13 +40,9 @@ export const usePOIScenePlayer = ({
   animations,
   mixerRef,
   actionsRef, 
-  // ambientAudioRefs = {},
   fadeDuration = 0.15,
-  startPlaceholderAnimation, // ✅ NOUVEAU
-  startPlaceholders,
   startAnimationWithSkip,
   prepareStopAnimation,
-  // muted = false,
   findParentPOI,
   emptyRefs, 
   controlsRef,
@@ -65,13 +57,10 @@ export const usePOIScenePlayer = ({
   const [duration, setDuration] = useState(1); // Durée initiale par défaut
   const [isEnded, setIsEnded] = useState(false);
   const [isWaitingAudio, setIsWaitingAudio] = useState(false);
-  // const [sceneMuted, setSceneMuted] = useState(false);
 
   const activeActionsRef = useRef<THREE.AnimationAction[]>([]);
-  // const sceneAudioRef = useRef<HTMLAudioElement | null>(null);
   const rafRef = useRef<number | undefined>(undefined);
   const lastSeekTimeRef = useRef(0);
-  const triggeredCameraSteps = useRef<Set<number>>(new Set());
 
   const moveCameraToPOIRef = useRef(moveCameraToPOI);
   const moveCameraDuringAnimationRef = useRef(moveCameraDuringAnimation);
@@ -80,8 +69,6 @@ export const usePOIScenePlayer = ({
   const durationRef = useRef(duration);
   const lastProgressRef = useRef(0);
   const frameCountRef = useRef(0);
-  const audioProgressRef = useRef(0);
-  const activePOIIdRef = useRef<string | null>(null);
   const hasAutoplayedRef = useRef<Set<string>>(new Set());
 
   // 🔹 Reset stable de la scène
@@ -154,8 +141,6 @@ export const usePOIScenePlayer = ({
       }
     }
 
-    triggeredCameraSteps.current.clear();
-
     if (forceReplay) lastSeekTimeRef.current = 0;
     resetSceneStable();
 
@@ -224,12 +209,6 @@ export const usePOIScenePlayer = ({
     activeActionsRef.current = actions;
     setIsPlaying(true);
     setIsPaused(false);
-
-    if (!forceReplay && lastSeekTimeRef.current > 0) {
-      actions.forEach(a => {
-        a.time = Math.min(lastSeekTimeRef.current, a.getClip().duration);
-      });
-    }
   }, [poi, actionsRef, mixerRef, fadeDuration, resetSceneStable, findParentPOI, startAnimationWithSkip, prepareStopAnimation, waitForSceneAudioRef]);
 
   // ✅ NOUVEAU : Auto-lancer si POI a autoplay
@@ -394,17 +373,6 @@ function getCameraStepAtTime(poi: POIWithElements, t: number) {
 useEffect(() => {
   if (!poi || !emptyRefs?.current || !controlsRef?.current || !moveCameraDuringAnimation || !moveCameraToPOI) return;
 
-  const controls = controlsRef.current;
-
-  const getLookOffset = (axis: "x" | "y" | "z" = "x") => {
-    switch (axis) {
-      case "x": return new THREE.Vector3(1, 0, 0);
-      case "y": return new THREE.Vector3(0, 1, 0);
-      case "z": return new THREE.Vector3(0, 0, 1);
-      default: return new THREE.Vector3(1, 0, 0);
-    }
-  };
-
   // 🔹 Fonction pour reset camera POI de base (utilisateur)
   const resetCameraToPOI = () => {
     const baseObj = emptyRefs.current[poi.emptyName];
@@ -423,24 +391,7 @@ useEffect(() => {
 
   resetCameraToPOI();
 
-    // ✅ Mettre à jour l'ID actif
-  activePOIIdRef.current = poi.id;
-
   const update = () => {
-  // ✅ Utiliser poiRef.current partout
-  if (activePOIIdRef.current !== poi.id) {
-      if (activeActionsRef.current.length > 0) {
-        console.log(`🛑 POI changé: ${activePOIIdRef.current} → ${poi.id}, stop des actions`);
-        activeActionsRef.current.forEach(a => a.stop());
-        activeActionsRef.current = [];
-        setIsPlaying(false);
-        setIsPaused(false);
-        activePOIIdRef.current = poi.id; // ✅ Mettre à jour
-      }
-      rafRef.current = requestAnimationFrame(update);
-      return;
-    }
-  
   if (activeActionsRef.current.length === 0) {
     rafRef.current = requestAnimationFrame(update);
     return;
@@ -482,7 +433,7 @@ useEffect(() => {
           tempObj.position.copy(look).addScaledVector(direction, zoomDistance);
         }
 
-        moveCameraDuringAnimationRef.current?.(tempObj, poiRef.current, false); // ✅ poiRef.current
+        moveCameraDuringAnimationRef.current?.(tempObj, poiRef.current);
       }
     }
   }
@@ -535,7 +486,6 @@ const cleanup = useCallback(() => {
     isWaitingAudio,
     progress,
     duration,
-    audioProgress: audioProgressRef, 
     togglePlayPause,
     seekScene,
     playScene,

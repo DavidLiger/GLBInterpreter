@@ -9,8 +9,6 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import localFont from "next/font/local";
 import type { DioramaConfig3D, DioramaConfig3DWithVideos } from "@/types/diorama";
-import usePOIAudio from "./audio/usePOIAudio";
-import SoundButton from "./audio/SoundButton";
 import VolumeControl from "./audio/VolumeControl"; 
 import { usePOINavigation } from "./hooks/usePOINavigation";
 import LoaderOverlay from "./ui/LoaderOverlay";
@@ -38,10 +36,9 @@ import ConfigConverterTool from "./tools/ConfigConverterTool";
 import QRCodeModal from "./tools/QRCodeModal";
 import DownloadTooltip from "./ui/DownloadTooltip";
 import { useWebGLContext } from "./hooks/useWebGLContext";
-// import { useAssetPreloader } from "./hooks/useAssetPreloader";
 import { disposeScene, logSceneStats } from "./utils/webglHelpers";
 import BookDownloadModal from "./ui/BookDownloadModal";
-import { isBookFullyCached, getAssetFromCache, downloadAllAssets } from "./lib/downloadManager";
+import { isBookFullyCached, getAssetFromCache } from "./lib/downloadManager";
 import useUnifiedAudio from "./hooks/useUnifiedAudio";
 import DeviceTester from "./ui/DeviceTester";
 import SceneAnalyzer from "./ui/SceneAnalyzer";
@@ -51,12 +48,6 @@ import { applySpritesheets } from "./rendering/applySpritesheet";
 import { SpritesheetAnimator } from "./rendering/SpritesheetAnimator";
 import CVButton from "./ui/CVButton";
 import CVModal from "./ui/CVModal";
-import { usePlaceholderSwap } from "./hooks/usePlaceholderSwap";
-
-const BullstandRegular = localFont({
-  src: "../../../public/fonts/Bullstand-Regular.ttf",
-  variable: "--font-Bullstand-Regular",
-});
 
 const HandyGeorge = localFont({
   src: "../../../public/fonts/HandyGeorge.ttf",
@@ -91,7 +82,6 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   const [isInitializing, setIsInitializing] = useState(false);  // ✅ NOUVEAU
   const [checkingCache, setCheckingCache] = useState(true);
   const [testKey, setTestKey] = useState(0);
-  const [isPreparingAfterTest, setIsPreparingAfterTest] = useState(false);
   const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
   const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
     navigator.userAgent
@@ -101,16 +91,13 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
     return (config as any).deviceTester?.enabled || false;
   });
 
-  const [deviceTestPassed, setDeviceTestPassed] = useState(false);
-
   useEffect(() => {
-  // ✅ Force le test en dev avec Ctrl+Shift+T
+  // ✅ Force le test en dev avec Ctrl+Shift+P
   const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'P' && process.env.NODE_ENV === 'development') {
         console.log('🔍 Force device test');
         localStorage.removeItem('device-benchmark-passed');
         setShowDeviceTester(true);
-        setDeviceTestPassed(false);
       }
     };
     
@@ -170,7 +157,6 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
           onRetest={handleRetest}
           onComplete={(passed) => {
             console.log('✅ Test terminé, résultat:', passed);
-            setDeviceTestPassed(true);
             
             // ✅ ATTENDRE 2 secondes pour libérer WebGL
             console.log('⏳ Pause 2s pour libérer le contexte WebGL du test...');
@@ -181,18 +167,9 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
           }}
           onSkip={() => {
             console.log('⏭️ Test skippé');
-            setDeviceTestPassed(true);
             setShowDeviceTester(false);
           }}
         />
-      )}
-      {isPreparingAfterTest && (
-        <div className="fixed inset-0 bg-black z-[9998] flex items-center justify-center">
-          <div className="text-white text-center">
-            <div className="animate-spin text-4xl mb-4">⚙️</div>
-            <p className="text-xl">{t.deviceTester?.preparing || "Préparation de l'expérience..."}</p>
-          </div>
-        </div>
       )}
       {/* ✅ Le reste seulement si pas de device tester */}
       {!showDeviceTester && (
@@ -216,7 +193,6 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
                 setTimeout(() => {
                   console.log("✅ Mémoire libérée, lancement scène...");
                   setAssetsReady(true);
-                  // setIsInitializing(false);
                 }, 2000);
               }}
               onCancel={() => setShowDownloadModal(false)}
@@ -283,21 +259,17 @@ function WebDioramaLoaderInner({
     actionsRef,
     initMixers, 
     prepareActions, 
-    startPlaceholders, // ✅ Fonction pour déclencher les swaps
     stopAllAnimations, 
     updateMixers, 
     cleanup: cleanupMixers,
     startAnimationWithSkip,
   } = usePOIAnimations(emptyRefs);
   const clock = useRef(new THREE.Clock());
-  const hasAutoUnmutedRef = useRef(false);
   const composerRef = useRef<ReturnType<typeof setupPostProcessing> | null>(null);
   const voluntaryCleanupRef = useRef(false);
   const wasHiddenRef = useRef(false);
   const textureLoader = useMemo(() => new THREE.TextureLoader(), []);
   const [experienceStarted, setExperienceStarted] = useState(false);
-  const [showClickToContinue, setShowClickToContinue] = useState(false);
-  const pendingSceneChangeRef = useRef<string | null>(null);
   const [showCVModal, setShowCVModal] = useState(false);
   const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
   const isDevMode = process.env.NEXT_PUBLIC_DEV_MODE === 'true';
@@ -327,9 +299,6 @@ function WebDioramaLoaderInner({
       }
     },
   });
-
-  // ✅ Hook préchargement assets
-  // const { loadAssets, progress: assetProgress, loadedCount, totalCount, currentAsset } = useAssetPreloader();
 
   const { currentPOI, goToPOI, findParentPOI, moveCameraToPOI, moveCameraDuringAnimation, setCurrentPOI, findPOIRecursively } =
     usePOINavigation(
@@ -372,7 +341,6 @@ function WebDioramaLoaderInner({
 
   const { 
     isPlaying, isPaused, isEnded, isWaitingAudio, progress, duration, 
-    audioProgress,
     togglePlayPause, seekScene, stopScene,
     currentSceneSound, // ✅ NOUVEAU
     cleanup: cleanupScenePlayer 
@@ -382,7 +350,6 @@ function WebDioramaLoaderInner({
     mixerRef: mixerRef.current,
     actionsRef,
     startAnimationWithSkip,
-    startPlaceholders,// ✅ NOUVEAU
     muted: false, // ✅ On gère mute dans useUnifiedAudio maintenant
     emptyRefs,
     controlsRef,
@@ -415,7 +382,6 @@ function WebDioramaLoaderInner({
       isPaused,
       isEnded,
       currentSceneSound,
-      currentTime: audioProgress.current,
     }
   });
 
@@ -983,38 +949,6 @@ function WebDioramaLoaderInner({
 
     // ✅ Reste de la boucle d'animation inchangé...
     const animate = () => {
-      // ✅ Log toutes les 300 frames (5s à 60fps)
-      if (animationFrameRef.current && animationFrameRef.current % 300 === 0) {
-        console.log('🎬 RAF actif:', animationFrameRef.current, 'shouldAnimate:', shouldAnimateRef.current);
-        
-        // ✅ DIAGNOSTIC : Compter les objets dans la scène
-        if (sceneRef.current) {
-          let meshCount = 0;
-          let textureCount = 0;
-          let materialCount = 0;
-          
-          sceneRef.current.traverse((obj) => {
-            if (obj instanceof THREE.Mesh) {
-              meshCount++;
-              if (obj.material) {
-                materialCount++;
-                const mat = obj.material as THREE.Material & { map?: THREE.Texture };
-                if (mat.map) textureCount++;
-              }
-            }
-          });
-          
-          // console.log('📊 Scène:', { meshCount, textureCount, materialCount });
-          // console.log('📊 Mixers:', Object.keys(mixerRef.current).length);
-          // console.log('📊 Videos:', videoElementsRef.current.length);
-        }
-        
-        // ✅ Mémoire GPU (si disponible)
-        if (renderer) {
-          console.log('🎮 WebGL:', renderer.info.memory, renderer.info.render);
-        }
-      }
-
       // ✅ CRITIQUE : Vérifier le flag EN PREMIER
       if (!shouldAnimateRef.current) {
         console.log('🛑 RAF stoppé par flag');
@@ -1072,36 +1006,6 @@ function WebDioramaLoaderInner({
       sceneRef.current = null;
     };
   }, [renderer, webglReady, config.glb, bookId]);
-
-  // ✅ Nettoyage périodique du renderer pour éviter accumulation
-  useEffect(() => {
-    if (!renderer) return;
-    
-    const cleanupInterval = setInterval(() => {
-      if (!renderer || document.hidden || devToolOpenRef.current) return;
-      
-      console.log('🧹 Nettoyage périodique renderer');
-      
-      // ✅ Forcer le garbage collection des programmes WebGL
-      renderer.info.programs?.forEach((program: any) => {
-        if (program && program.usedTimes === 0) {
-          renderer.renderLists.dispose();
-        }
-      });
-      
-      // ✅ Logger les stats
-      console.log('📊 Renderer info:', {
-        geometries: renderer.info.memory.geometries,
-        textures: renderer.info.memory.textures,
-        programs: renderer.info.programs?.length || 0,
-        calls: renderer.info.render.calls,
-        triangles: renderer.info.render.triangles,
-      });
-      
-    }, 30000); // ✅ Toutes les 30 secondes
-    
-    return () => clearInterval(cleanupInterval);
-  }, [renderer]);
 
   // DOF selon POI
   useEffect(() => {
@@ -1354,13 +1258,6 @@ function WebDioramaLoaderInner({
     };
   }, [renderer, stopAllAnimations, cleanupAudio, cleanupScenePlayer]);
 
-  // Auto-unmute reset
-  useEffect(() => {
-    if (isPlaying && !isEnded) {
-      hasAutoUnmutedRef.current = false;
-    }
-  }, [isPlaying, isEnded]);
-
   useEffect(() => {
     if (showLoaderOverlay) {
       document.body.style.overflow = "hidden";
@@ -1502,17 +1399,6 @@ function WebDioramaLoaderInner({
                 sceneName={config.name[lang]}
                 loaderImage={config.loaderImage}
                 fontClassName={HandyGeorge.className}
-                autoplay={autoplay}
-                bookId={bookId}
-                // assetLoadingStatus={
-                //   currentAsset 
-                //     ? `${currentAsset.type} : ${currentAsset.name}` 
-                //     : loadingProgress < 70 
-                //       ? "Chargement de la scène 3D..." 
-                //       : loadingProgress < 100 
-                //         ? `Chargement des assets (${loadedCount}/${totalCount})...`
-                //         : ""
-                // }
                 onStart={() => {
                   window.scrollTo(0, 0);
 

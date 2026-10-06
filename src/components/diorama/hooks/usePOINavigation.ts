@@ -1,16 +1,13 @@
 // hooks/usePOINavigation.ts
 import { useState, useCallback } from "react";
 import * as THREE from "three";
+import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import type { POI, POIWithElements, DioramaConfig3D } from "@/types/diorama";
-
-type UsePOINavigationProps = {
-  onPOIChange?: () => void;
-};
 
 export const usePOINavigation = (
   config: DioramaConfig3D,
   cameraRef: React.RefObject<THREE.PerspectiveCamera | null>,
-  controlsRef: React.RefObject<any>,
+  controlsRef: React.RefObject<OrbitControls | null>,
   emptyRefs: React.RefObject<Record<string, THREE.Object3D>>,
   onPOIChange?: () => void 
 ) => {
@@ -44,23 +41,6 @@ export const usePOINavigation = (
     };
     return search(config.pois);
   }, [config.pois]);
-
-  const getVisiblePOIs = useCallback((): POI[] => {
-    if (!currentPOI) return config.pois;
-
-    const activePOI = config.pois.find((p) => p.id === currentPOI) || findPOIRecursively(currentPOI);
-    const parent = findParentPOI(currentPOI);
-
-    if (parent) {
-      const siblings = parent.children?.filter((p) => p.id !== currentPOI) ?? [];
-      const children = activePOI?.children ?? [];
-      return [...siblings, ...children];
-    } else {
-      const siblings = config.pois.filter((p) => p.id !== currentPOI);
-      const children = activePOI?.children ?? [];
-      return [...siblings, ...children];
-    }
-  }, [currentPOI, config.pois, findParentPOI, findPOIRecursively]);
 
   // ────────────── Caméra / déplacement AMÉLIORÉ ──────────────
   const animateCameraMove = useCallback((
@@ -117,9 +97,6 @@ export const usePOINavigation = (
     const easeInOutQuart = (t: number) =>
       t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
 
-    const lerp = (from?: number, to?: number, t = 0) =>
-      from !== undefined && to !== undefined ? from + (to - from) * t : to ?? from;
-
     let animationFrame: number;
 
     const step = (time: number) => {
@@ -136,17 +113,6 @@ export const usePOINavigation = (
       
       // ✅ Interpoler target
       controls.target.lerpVectors(fromTarget, toTarget, t);
-
-      // ✅ Interpoler les contraintes progressivement (mais ne pas les appliquer encore)
-      const newConstraints = {
-        minDistance: lerp(fromOrbit?.minDistance, toPOI?.minDistance, t) ?? savedConstraints.minDistance,
-        maxDistance: lerp(fromOrbit?.maxDistance, toPOI?.maxDistance, t) ?? savedConstraints.maxDistance,
-        minPolarAngle: lerp(fromOrbit?.minPolarAngle, toPOI?.minPolarAngle, t) ?? savedConstraints.minPolarAngle,
-        maxPolarAngle: lerp(fromOrbit?.maxPolarAngle, toPOI?.maxPolarAngle, t) ?? savedConstraints.maxPolarAngle,
-        minAzimuthAngle: lerp(fromOrbit?.minAzimuthAngle, toPOI?.minAzimuthAngle, t) ?? savedConstraints.minAzimuthAngle,
-        maxAzimuthAngle: lerp(fromOrbit?.maxAzimuthAngle, toPOI?.maxAzimuthAngle, t) ?? savedConstraints.maxAzimuthAngle,
-        dampingFactor: lerp(fromOrbit?.dampingFactor, toPOI?.dampingFactor, t) ?? controls.dampingFactor,
-      };
 
       controls.update();
 
@@ -174,47 +140,22 @@ export const usePOINavigation = (
   }, [cameraRef, controlsRef]);
 
   const moveCameraDuringAnimation = useCallback(
-    (
-      obj: THREE.Object3D,
-      poi: POIWithElements,
-      smooth = true,
-      onComplete?: () => void,
-      duration = 1
-    ) => {
+    (obj: THREE.Object3D, poi: POIWithElements) => {
       if (!cameraRef.current || !controlsRef.current) return;
 
       const camera = cameraRef.current;
       const controls = controlsRef.current;
 
-      const fromPos = camera.position.clone();
       const toPos = obj.position.clone();
 
       const lookAt = new THREE.Vector3();
       obj.getWorldDirection(lookAt);
       lookAt.add(obj.position);
 
-      if (smooth) {
-        const startTime = performance.now();
-        const animate = (time: number) => {
-          const elapsed = (time - startTime) / 1000;
-          const t = Math.min(elapsed / duration, 1);
-
-          camera.position.lerpVectors(fromPos, toPos, t);
-          camera.lookAt(lookAt);
-          controls.target.lerp(lookAt, t);
-          controls.update();
-
-          if (t < 1) requestAnimationFrame(animate);
-          else if (onComplete) onComplete();
-        };
-        requestAnimationFrame(animate);
-      } else {
-        camera.position.copy(toPos);
-        camera.lookAt(lookAt);
-        controls.target.copy(lookAt);
-        controls.update();
-        if (onComplete) onComplete?.();
-      }
+      camera.position.copy(toPos);
+      camera.lookAt(lookAt);
+      controls.target.copy(lookAt);
+      controls.update();
 
       controls.minDistance = poi.minDistance ?? 1;
       controls.maxDistance = poi.maxDistance ?? 20;
@@ -279,10 +220,8 @@ export const usePOINavigation = (
       } else if (poi.lookAxis) {
         // Fallback sur lookAxis si angles non définis
         switch (poi.lookAxis) {
-          case "x": targetAzimuth = 0; break;
           case "z": targetAzimuth = Math.PI / 2; break;
-          case "y": targetAzimuth = 0; break;
-          default: targetAzimuth = 0;
+          default: targetAzimuth = 0; // "x", "y"
         }
       }
 
@@ -386,7 +325,6 @@ export const usePOINavigation = (
   return {
     currentPOI,
     goToPOI,
-    getVisiblePOIs,
     findParentPOI,
     moveCameraToPOI,
     moveCameraDuringAnimation,

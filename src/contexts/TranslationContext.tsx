@@ -407,7 +407,6 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
     if (detected !== lang) {
       setLangState(detected);
     }
-    console.log("🌍 Langue détectée:", detected);
   }, []);
   
   // ✅ Fonction pour changer la langue + sauvegarder
@@ -415,7 +414,6 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
     setLangState(newLang);
     if (typeof window !== "undefined") {
       localStorage.setItem("webdiorama-lang", newLang);
-      console.log("💾 Langue sauvegardée:", newLang);
     }
   };
   

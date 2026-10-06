@@ -15,10 +15,7 @@ interface LoaderOverlayProps {
   sceneName?: string;
   loaderImage?: string;
   fontClassName?: string;
-  autoplay?: boolean;
-  bookId?: string;
   onStart?: () => void;
-  assetLoadingStatus?: string;
 }
 
 export default function LoaderOverlay({
@@ -29,15 +26,12 @@ export default function LoaderOverlay({
   sceneName,
   loaderImage,
   fontClassName,
-  autoplay = false,
-  bookId,
   onStart,
-  assetLoadingStatus,
-}: LoaderOverlayProps & { bookId: string }) {
+}: LoaderOverlayProps) {
   const [showOverlay, setShowOverlay] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [viewportHeight, setViewportHeight] = useState<number | null>(null);
-  const { t, lang } = useTranslation();
+  const { t } = useTranslation();
 
   const [isRecommendedBrowser, setIsRecommendedBrowser] = useState<boolean>(true);
 
@@ -188,13 +182,6 @@ export default function LoaderOverlay({
                       />
                     </div>
                   </div>
-                  
-                  {/* Statut détaillé */}
-                  {assetLoadingStatus && (
-                    <p className="text-center text-xs text-gray-300 animate-pulse px-4">
-                      {assetLoadingStatus}
-                    </p>
-                  )}
                 </div>
               )}
             </div>

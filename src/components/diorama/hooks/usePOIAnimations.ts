@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 import * as THREE from "three";
-import type { POIWithElements, AnimatedElement } from "@/types/diorama";
+import type { POIWithElements } from "@/types/diorama";
 import { usePlaceholderSwap } from "./usePlaceholderSwap";
 
 export const usePOIAnimations = (
@@ -8,7 +8,6 @@ export const usePOIAnimations = (
 ) => {
   const mixerRef = useRef<Record<string, THREE.AnimationMixer>>({});
   const actionsRef = useRef<Map<string, THREE.AnimationAction>>(new Map());
-  const activeActionsRef = useRef<Map<string, THREE.AnimationAction>>(new Map());
 
   // ✅ Hook placeholder
   const placeholderSwap = usePlaceholderSwap({ 
@@ -25,7 +24,6 @@ export const usePOIAnimations = (
       mixer.stopAllAction();
     });
     mixerRef.current = {};
-    activeActionsRef.current.clear();
     
     let mixerCount = 0;
     
@@ -86,10 +84,8 @@ export const usePOIAnimations = (
         if (!clip) return console.warn(`⚠️ Clip non trouvé : ${el.clipName}`);
 
         // ✅ Créer l'action et la STOCKER dans actionsRef
+        // (reset/loop/clamp appliqués au lancement par usePOIScenePlayer.playScene)
         const action = mixer.clipAction(clip);
-        action.reset();
-        action.setLoop(el.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
-        action.clampWhenFinished = true;
         
         // ✅ CLEF IMPORTANTE : Stocker avec el.name, PAS clip.name
         actionsRef.current.set(el.name, action);
@@ -98,30 +94,6 @@ export const usePOIAnimations = (
       });
     },
     [emptyRefs, placeholderSwap]
-  );
-
-  // ────────────── Démarrer les swaps de placeholders ──────────────
-  const startPlaceholders = useCallback(
-    (poi: POIWithElements) => {
-      console.log(`🎭 startPlaceholders pour POI: ${poi.id}`);
-      
-      poi.elements?.forEach((el) => {
-        if (el.placeholderMesh) {
-          const action = actionsRef.current.get(el.name);
-          if (!action) return;
-          
-          console.log(`🎭 Start placeholder swap: ${el.name}`);
-          placeholderSwap.startAnimation(el.name, el.transitionFrames);
-          
-          // Si non-looping, préparer le swap inverse
-          if (!el.loop) {
-            const duration = action.getClip().duration;
-            placeholderSwap.prepareStopAnimation(el.name, duration, el.transitionFrames);
-          }
-        }
-      });
-    },
-    [placeholderSwap]
   );
 
   // ────────────── Stopper toutes les animations ──────────────
@@ -134,7 +106,6 @@ export const usePOIAnimations = (
       mixer.stopAllAction();
     });
     
-    activeActionsRef.current.clear();
     actionsRef.current.clear(); // ✅ Vider aussi les actions préparées
   }, [placeholderSwap]);
 
@@ -153,7 +124,6 @@ export const usePOIAnimations = (
       mixer.stopAllAction();
     });
     mixerRef.current = {};
-    activeActionsRef.current.clear();
     actionsRef.current.clear();
   }, [placeholderSwap]);
 
@@ -162,7 +132,6 @@ export const usePOIAnimations = (
     actionsRef, // ✅ Exposé
     initMixers, 
     prepareActions, // ✅ Renommé depuis playPOIAnimations
-    startPlaceholders, // ✅ NOUVEAU
     stopAllAnimations, 
     updateMixers, 
     cleanup,
