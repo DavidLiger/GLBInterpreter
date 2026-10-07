@@ -1,22 +1,16 @@
 import { notFound, redirect } from "next/navigation";
 import WebDioramaLoader from "@/components/diorama/WebDioramaLoader";
 import type { DioramaConfig3DWithVideos } from "@/types/diorama";
-import { allWebdioramas } from "@/content/webdioramas/index"; 
-import { readFile } from "node:fs/promises"; 
-import path from "node:path"; 
-import { tokenMatches } from "@/lib/token";
+import { allWebdioramas } from "@/content/webdioramas/index";
 
 export const dynamic = 'force-dynamic';
 
 type Props = {
   params: Promise<{ bookId: string; dioramaId: string }>;
-  searchParams: Promise<{ t?: string }>;
 };
 
-export default async function DioramaPage({ params, searchParams }: Props) {
+export default async function DioramaPage({ params }: Props) {
   const { bookId, dioramaId } = await params;
-  const awaitedSearchParams = await searchParams;
-  const token = awaitedSearchParams?.t;
 
   // ✅ Utiliser USE_R2 pour forcer R2 en local si besoin
   const useR2 = process.env.USE_R2 === 'true';
@@ -30,11 +24,6 @@ export default async function DioramaPage({ params, searchParams }: Props) {
     const entry = webdioramas[dioramaId];
     if (!entry) return notFound();
 
-    if (!tokenMatches(token, await getLocalTokenHash(bookId, dioramaId))) {
-      console.warn("Token invalide", bookId, dioramaId);
-      return notFound();
-    }
-
     return <WebDioramaLoader config={entry.config} bookId={bookId} />;
   }
 
@@ -45,18 +34,10 @@ export default async function DioramaPage({ params, searchParams }: Props) {
     const indexRes = await fetch(`${baseUrl}/assets/${bookId}/index.json`);
     if (!indexRes.ok) throw new Error("Index non trouvé");
 
-    const indexJson = await indexRes.json() as Record<
-      string,
-      { path: string; tokenHash: string }
-    >;
+    const indexJson = await indexRes.json() as Record<string, { path: string }>;
 
     const entry = indexJson[dioramaId];
     if (!entry) return notFound();
-
-    if (!tokenMatches(token, entry.tokenHash)) {
-      console.warn("Token invalide", bookId, dioramaId);
-      return notFound();
-    }
 
     const dioramaFile = entry.path;
     const dioramaRes = await fetch(`${baseUrl}/assets/${bookId}/${dioramaFile}`);
@@ -71,17 +52,5 @@ export default async function DioramaPage({ params, searchParams }: Props) {
     }
     console.error("Erreur lors du chargement du diorama:", err);
     return notFound();
-  }
-}
-
-
-// Mode local : empreintes lues depuis l'index généré par `npm run issue-tokens` (non versionné).
-// bookId est déjà validé par la présence dans allWebdioramas avant l'appel.
-async function getLocalTokenHash(bookId: string, sceneId: string): Promise<string | undefined> {
-  try {
-    const raw = await readFile(path.join(process.cwd(), "dist", "index", bookId, "index.json"), "utf8");
-    return (JSON.parse(raw) as Record<string, { tokenHash?: string }>)[sceneId]?.tokenHash;
-  } catch {
-    return undefined;
   }
 }

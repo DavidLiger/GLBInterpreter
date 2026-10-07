@@ -40,7 +40,6 @@ import { disposeObject, disposeScene, logSceneStats } from "./utils/webglHelpers
 import BookDownloadModal from "./ui/BookDownloadModal";
 import { isBookFullyCached, getAssetFromCache } from "./lib/downloadManager";
 import useUnifiedAudio from "./hooks/useUnifiedAudio";
-import DeviceTester from "./ui/DeviceTester";
 import SceneAnalyzer from "./ui/SceneAnalyzer";
 import GLBOptimizer from "./ui/GLBOptimizer";
 import SpritesheetGenerator from "./ui/SpritesheetGenerator";
@@ -80,30 +79,8 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
   const [assetsReady, setAssetsReady] = useState(false);
   const [showDownloadModal, setShowDownloadModal] = useState(true);
   const [checkingCache, setCheckingCache] = useState(true);
-  const [testKey, setTestKey] = useState(0);
   const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
-  const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-    navigator.userAgent
-  );
   
-  const [showDeviceTester, setShowDeviceTester] = useState(() => {
-    return (config as any).deviceTester?.enabled || false;
-  });
-
-  useEffect(() => {
-  // ✅ Force le test en dev avec Ctrl+Shift+P
-  const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key === 'P' && process.env.NODE_ENV === 'development') {
-        console.log('🔍 Force device test');
-        localStorage.removeItem('device-benchmark-passed');
-        setShowDeviceTester(true);
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
   useEffect(() => {
     const checkCacheStatus = async () => {
       const cached = await isBookFullyCached(bookId);
@@ -123,10 +100,6 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
     checkCacheStatus();
   }, [bookId]);
 
-  const handleRetest = () => {
-    setTestKey(prev => prev + 1);
-  };
-
   return (
     <>
       {/* ✅ Écran de vérification cache */}
@@ -139,68 +112,36 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
         </div>
       )}
 
-      {/* ✅ Device Tester EN PREMIER, bloque tout */}
-      {showDeviceTester && (config as any).deviceTester && (
-        <DeviceTester
-          key={testKey}
-          isMobileDevice={isMobileDevice}
-          glbUrl={config.glb}
-          config={(config as any).deviceTester}
-          onRetest={handleRetest}
-          onComplete={(passed) => {
-            console.log('✅ Test terminé, résultat:', passed);
-            
-            // ✅ ATTENDRE 2 secondes pour libérer WebGL
-            console.log('⏳ Pause 2s pour libérer le contexte WebGL du test...');
-            setTimeout(() => {
-              console.log('✅ Contexte WebGL libéré, continuer');
-              setShowDeviceTester(false);
-            }, 2000);
+      {showDownloadModal && !assetsReady && (
+        <BookDownloadModal
+          bookId={bookId}
+          onComplete={() => {
+            setShowDownloadModal(false);
+            setAssetsReady(true);
           }}
-          onSkip={() => {
-            console.log('⏭️ Test skippé');
-            setShowDeviceTester(false);
-          }}
+          onCancel={() => setShowDownloadModal(false)}
+          isFolioMode={isFolioMode}
         />
       )}
-      {/* ✅ Le reste seulement si pas de device tester */}
-      {!showDeviceTester && (
-        <>
-          {showDownloadModal && !assetsReady && (
-            <BookDownloadModal
-              bookId={bookId}
-              config={config}
-              onComplete={() => {
-                setShowDownloadModal(false);
-                setAssetsReady(true);
-              }}
-              onCancel={() => setShowDownloadModal(false)}
-              isFolioMode={isFolioMode}
-            />
-          )}
 
-          {!assetsReady && !showDownloadModal && !checkingCache && (
-            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-              <div className="text-center">
-                <div className="text-6xl mb-6">📦</div>
-                <h2 className="text-white text-xl mb-6">
-                  {t.bookDownload?.required || "Téléchargement requis"}
-                </h2>
-                <button
-                  onClick={() => setShowDownloadModal(true)}
-                  className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transition"
-                >
-                  📥 {t.bookDownload?.download || "Télécharger"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {assetsReady && <WebDioramaLoaderInner config={config} bookId={bookId} />}
-        </>
+      {!assetsReady && !showDownloadModal && !checkingCache && (
+        <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+          <div className="text-center">
+            <div className="text-6xl mb-6">📦</div>
+            <h2 className="text-white text-xl mb-6">
+              {t.bookDownload?.required || "Téléchargement requis"}
+            </h2>
+            <button
+              onClick={() => setShowDownloadModal(true)}
+              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transition"
+            >
+              📥 {t.bookDownload?.download || "Télécharger"}
+            </button>
+          </div>
+        </div>
       )}
 
-      
+      {assetsReady && <WebDioramaLoaderInner config={config} bookId={bookId} />}
     </>
   );
 }
@@ -246,18 +187,6 @@ function WebDioramaLoaderInner({
     navigator.userAgent
   );
 
-  // ✅ TOUT EN HAUT du composant, avant les hooks
-  useEffect(() => {
-    const nextScene = sessionStorage.getItem('webdiorama-next-scene');
-    
-    if (nextScene && nextScene !== window.location.href) {
-      console.log('🔄 Redirection vers scène suivante:', nextScene);
-      sessionStorage.removeItem('webdiorama-next-scene');
-      window.location.replace(nextScene); // ✅ replace au lieu de href
-      return;
-    }
-  }, []);
-
   // ✅ Hook WebGL simplifié
   const { renderer, error: webglError, isReady: webglReady, destroy: destroyRenderer } = useWebGLContext(containerRef, {
     isMobile: isMobileDevice,
@@ -301,7 +230,6 @@ function WebDioramaLoaderInner({
   const devToolOpenRef = useRef(false);
   const shouldAnimateRef = useRef(true); 
   const spritesheetAnimatorRef = useRef<SpritesheetAnimator | null>(null);
-  const performCleanupRef = useRef<(() => void) | null>(null);
   const waitForSceneAudioRef = useRef<(() => Promise<void>) | null>(null);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
@@ -379,181 +307,6 @@ function WebDioramaLoaderInner({
     }
     return active.icon;
   }, [currentPOI, findPOIRecursively, findParentPOI]);
-
-  // ✅ Heartbeat avec info de visibilité
-  useEffect(() => {
-    const updateHeartbeat = () => {
-      localStorage.setItem('webdiorama-viewer-alive', JSON.stringify({
-        timestamp: Date.now(),
-        isVisible: !document.hidden // ✅ Ajouter l'état de visibilité
-      }));
-    };
-    
-    updateHeartbeat();
-    const interval = setInterval(updateHeartbeat, 1000);
-    
-    // ✅ Update aussi lors des changements de visibilité
-    const handleVisibilityChange = () => {
-      updateHeartbeat();
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      localStorage.removeItem('webdiorama-viewer-alive');
-    };
-  }, []);
-
-  // ✅ Nettoyer localStorage à la fermeture
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      console.log('🧹 VIEWER: Nettoyage localStorage avant fermeture');
-      localStorage.removeItem('webdiorama-viewer-alive');
-      localStorage.removeItem('webdiorama-change-scene');
-      localStorage.removeItem('webdiorama-scene-processed');
-      localStorage.removeItem('webdiorama-changing-scene');
-    };
-    
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
-    return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      // Cleanup aussi au démontage du composant
-      handleBeforeUnload();
-    };
-  }, []);
-
-  useEffect(() => {
-    console.log('🎬 VIEWER: Démarrage polling changement scène');
-    const processedRequests = new Set<string>();
-    
-    const checkSceneChange = () => {
-    const changeRequest = localStorage.getItem('webdiorama-change-scene');
-    
-    if (changeRequest) {
-      try {
-        const { url, requestId, bookId, dioramaId } = JSON.parse(changeRequest);
-        
-        if (processedRequests.has(requestId)) {
-          console.log('⏭️ VIEWER: Demande déjà traitée:', requestId);
-          return;
-        }
-        
-        console.log('🔄 VIEWER: Nouvelle demande détectée:', requestId, url);
-        
-        const currentUrl = window.location.href;
-        if (currentUrl.includes(`/${bookId}/${dioramaId}`)) {
-          console.log('⏭️ VIEWER: Déjà sur cette scène, ignorer');
-          processedRequests.add(requestId);
-          localStorage.setItem('webdiorama-scene-processed', requestId);
-          return;
-        }
-        
-        localStorage.setItem('webdiorama-changing-scene', 'true');
-        processedRequests.add(requestId);
-        localStorage.setItem('webdiorama-scene-processed', requestId);
-        
-        setNeedsManualRestart(false);
-        wasHiddenRef.current = false;
-
-        // ✅ CRITIQUE : Désactiver le flag RAF
-        console.log('🛑 VIEWER: Désactivation flag RAF');
-        shouldAnimateRef.current = false; // ✅ EN PREMIER
-        
-        // ✅ CRITIQUE : Arrêter RAF AVANT cleanup
-        console.log('🛑 VIEWER: Arrêt RAF avant changement scène');
-        if (animationFrameRef.current !== undefined) {
-          cancelAnimationFrame(animationFrameRef.current);
-          animationFrameRef.current = undefined;
-        }
-        
-        // ✅ Attendre 2 frames pour être sûr
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            console.log('🧹 VIEWER: RAF définitivement arrêté, cleanup maintenant');
-            
-            if (performCleanupRef.current) {
-              performCleanupRef.current();
-            }
-            
-            setTimeout(() => {
-              console.log('🔄 VIEWER: Redirection vers:', url);
-              localStorage.removeItem('webdiorama-change-scene');
-              localStorage.removeItem('webdiorama-changing-scene');
-              sessionStorage.setItem('webdiorama-next-scene', url);
-              window.location.reload();
-            }, 1000);
-          });
-        });
-        
-      } catch (e) {
-        console.error('❌ VIEWER: Erreur parsing:', e);
-      }
-    }
-  };
-    
-    checkSceneChange();
-    const pollInterval = setInterval(checkSceneChange, 500);
-    
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        console.log('👁️ VIEWER: Retour focus, check immédiat');
-        checkSceneChange();
-      }
-    };
-    
-    const handleFocus = () => {
-      console.log('👁️ VIEWER: Focus, check immédiat');
-      checkSceneChange();
-    };
-    
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
-    
-    return () => {
-      clearInterval(pollInterval);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, []);
-
-  // ✅ Heartbeat pour indiquer au launcher qu'on est vivant
-  useEffect(() => {
-    const updateHeartbeat = () => {
-      localStorage.setItem('webdiorama-viewer-alive', JSON.stringify({
-        timestamp: Date.now()
-      }));
-    };
-    
-    updateHeartbeat();
-    const interval = setInterval(updateHeartbeat, 1000);
-    
-    return () => {
-      clearInterval(interval);
-      localStorage.removeItem('webdiorama-viewer-alive');
-    };
-  }, []);
-
-  // ✅ Écouter les changements de scène
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'webdiorama-change-scene' && e.newValue) {
-        const { url } = JSON.parse(e.newValue);
-        console.log('🔄 Changement de scène demandé:', url);
-        
-        // ✅ Changer de scène
-        window.location.href = url;
-      }
-    };
-    
-    window.addEventListener('storage', handleStorageChange);
-    
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, []);
 
   useEffect(() => {
     devToolOpenRef.current = devToolOpen;
@@ -1173,11 +926,6 @@ function WebDioramaLoaderInner({
         return;
       }
       
-      if (localStorage.getItem('webdiorama-changing-scene') === 'true') {
-        console.log("⏸️ Visibility change ignoré : changement de scène en cours");
-        return;
-      }
-
       if (document.hidden && !wasHiddenRef.current) {
         console.log("🚨 Détection: onglet caché → cleanup");
         wasHiddenRef.current = true;
@@ -1202,11 +950,6 @@ function WebDioramaLoaderInner({
         return;
       }
       
-      if (localStorage.getItem('webdiorama-changing-scene') === 'true') {
-        console.log("⏸️ Focus ignoré : changement de scène en cours");
-        return;
-      }
-
       if (wasHiddenRef.current) {
         console.log("⏸️ Détection: retour focus → demander relance manuelle");
         setNeedsManualRestart(true);

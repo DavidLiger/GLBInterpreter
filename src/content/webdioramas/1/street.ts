@@ -6,12 +6,6 @@ export const street: DioramaConfig3DWithPostProcessing = {
   glb: `${BASE_URL}/models/street.glb`,
   loaderImage: `${BASE_URL}/icons/dioramas/test_street/street-preview.png`,
   autoplay: true, // ← Mode tutoriel automatique ou pas
-  deviceTester: {
-    enabled: false,
-    testDuration: 10000,
-    minFPS: 25,
-    minGPUTier: 1,
-  },
   name: {
     fr: "La place du village",
     en: "The Village Square",

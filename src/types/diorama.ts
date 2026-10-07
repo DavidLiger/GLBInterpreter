@@ -186,14 +186,6 @@ export interface PostProcessingConfig {
   };
 }
 
-export interface DeviceTesterConfig {
-  enabled: boolean;
-  testDuration: number;
-  minFPS: number;
-  minGPUTier: number;
-  skipIfPreviouslyTested?: boolean;
-}
-
 export type DioramaConfig3D = {
   glb: string;
   name: TranslatedString;
@@ -206,7 +198,6 @@ export type DioramaConfig3D = {
   toonOutline?: ToonOutlineConfig; // 🔥 nouvel objet
   credits?: DioramaCredits;
   autoplay?: boolean;
-  deviceTester?: DeviceTesterConfig;
 };
 
 export interface DioramaCredits {

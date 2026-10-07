@@ -8,8 +8,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "export-configs": "ts-node scripts/export-configs.ts",
-    "issue-tokens": "node scripts/issue-tokens.mjs"
+    "export-configs": "ts-node scripts/export-configs.ts"
   },
   "dependencies": {
     "@gltf-transform/core": "^4.2.1",

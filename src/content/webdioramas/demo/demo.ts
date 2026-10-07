@@ -6,12 +6,6 @@ export const demo: DioramaConfig3DWithPostProcessing = {
   glb: `${BASE_URL}/models/demo.glb`,
   loaderImage: `${BASE_URL}/images/preview.webp`,
   autoplay: true, // ← Mode tutoriel automatique ou pas
-  deviceTester: {
-    enabled: true,
-    testDuration: 10000,
-    minFPS: 25,
-    minGPUTier: 1,
-  },
   name: {
     fr: "Démonstration",
     en: "David Liger",

@@ -1,0 +1,2259 @@
+diff --git a/scripts/issue-tokens.mjs b/scripts/issue-tokens.mjs
+deleted file mode 100644
+index de32512..0000000
+--- a/scripts/issue-tokens.mjs
++++ /dev/null
+@@ -1,71 +0,0 @@
+-// scripts/issue-tokens.mjs — îlot 0 (0.1.a, 0.1.b, 0.2.b)
+-// Usage : node scripts/issue-tokens.mjs <bookId> <sceneId>=<configPath> [...] [--upload]
+-// Tokens en clair : private/books/<bookId>.json (non versionné, jamais régénérés s'ils existent)
+-// QR d'impression : private/qr/<bookId>/qr-<bookId>-<sceneId>.svg
+-// Index public    : dist/index/<bookId>/index.json  → { [sceneId]: { path, tokenHash } }
+-import { randomBytes, createHash } from "node:crypto";
+-import { mkdir, readFile, writeFile } from "node:fs/promises";
+-import { execFileSync } from "node:child_process";
+-import path from "node:path";
+-import QRCode from "qrcode";
+-
+-const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+-const SITE_URL = process.env.SITE_URL ?? "https://editions-liger.com";
+-const R2_PREFIX = process.env.R2_PREFIX ?? "assets/";
+-
+-const args = process.argv.slice(2);
+-const upload = args.includes("--upload");
+-const [bookId, ...sceneArgs] = args.filter((a) => a !== "--upload");
+-
+-if (!bookId || !ID_RE.test(bookId)) fail("bookId manquant ou invalide");
+-
+-const privatePath = path.join("private", "books", `${bookId}.json`);
+-const book = await readJson(privatePath, { scenes: {} });
+-
+-for (const arg of sceneArgs) {
+-  const [sceneId, configPath] = arg.split("=");
+-  if (!ID_RE.test(sceneId ?? "") || !configPath) fail(`argument invalide : ${arg} (attendu sceneId=chemin)`);
+-  const existing = book.scenes[sceneId];
+-  book.scenes[sceneId] = {
+-    path: configPath,
+-    token: existing?.token ?? randomBytes(16).toString("base64url"),
+-  };
+-  console.log(`${existing ? "conservé " : "nouveau  "} ${bookId}/${sceneId}`);
+-}
+-
+-if (Object.keys(book.scenes).length === 0) fail("aucune scène : passer au moins sceneId=chemin");
+-
+-await mkdir(path.dirname(privatePath), { recursive: true });
+-await writeFile(privatePath, JSON.stringify(book, null, 2) + "\n");
+-
+-const qrDir = path.join("private", "qr", bookId);
+-await mkdir(qrDir, { recursive: true });
+-const index = {};
+-for (const [sceneId, { path: p, token }] of Object.entries(book.scenes)) {
+-  index[sceneId] = { path: p, tokenHash: createHash("sha256").update(token, "utf8").digest("hex") };
+-  const url = `${SITE_URL}/q/${bookId}/${sceneId}?t=${token}`;
+-  const svg = await QRCode.toString(url, { type: "svg", errorCorrectionLevel: "M", margin: 4 });
+-  await writeFile(path.join(qrDir, `qr-${bookId}-${sceneId}.svg`), svg);
+-}
+-
+-const indexPath = path.join("dist", "index", bookId, "index.json");
+-await mkdir(path.dirname(indexPath), { recursive: true });
+-await writeFile(indexPath, JSON.stringify(index, null, 2) + "\n");
+-console.log(`écrit : ${privatePath}, ${qrDir}/, ${indexPath}`);
+-
+-if (upload) {
+-  const bucket = process.env.R2_BUCKET;
+-  if (!bucket) fail("R2_BUCKET non défini");
+-  execFileSync(
+-    "npx",
+-    ["wrangler", "r2", "object", "put", `${bucket}/${R2_PREFIX}${bookId}/index.json`,
+-     "--file", indexPath, "--content-type", "application/json", "--remote"],
+-    { stdio: "inherit", shell: process.platform === "win32" },
+-  );
+-}
+-
+-async function readJson(p, fallback) {
+-  try { return JSON.parse(await readFile(p, "utf8")); }
+-  catch (e) { if (e.code === "ENOENT") return fallback; throw e; }
+-}
+-function fail(msg) { console.error(`issue-tokens : ${msg}`); process.exit(1); }
+\ No newline at end of file
+diff --git a/src/app/q/[bookId]/[sceneId]/route.ts b/src/app/q/[bookId]/[sceneId]/route.ts
+deleted file mode 100644
+index 9a8fc14..0000000
+--- a/src/app/q/[bookId]/[sceneId]/route.ts
++++ /dev/null
+@@ -1,33 +0,0 @@
+-import { NextResponse, type NextRequest } from "next/server";
+-
+-// 0.2.a — URL canonique des QR : valide les segments puis redirige (307) vers la scène.
+-// La vérification du token reste sur la page cible.
+-const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+-
+-export async function GET(
+-  request: NextRequest,
+-  { params }: { params: Promise<{ bookId: string; sceneId: string }> },
+-) {
+-  const { bookId, sceneId } = await params;
+-
+-  if (!ID_RE.test(bookId) || !ID_RE.test(sceneId)) {
+-    return new NextResponse("Not Found", {
+-      status: 404,
+-      headers: { "X-Robots-Tag": "noindex, nofollow" },
+-    });
+-  }
+-
+-  const t = request.nextUrl.searchParams.get("t");
+-  const query = t ? `?t=${encodeURIComponent(t)}` : "";
+-
+-  // Location relative : résolue par le navigateur sur l'hôte réellement appelé
+-  // (tunnel, proxy, préversion), là où request.url peut valoir localhost.
+-  return new NextResponse(null, {
+-    status: 307,
+-    headers: {
+-      Location: `/webdiorama/${bookId}/${sceneId}${query}`,
+-      "X-Robots-Tag": "noindex, nofollow",
+-      "Cache-Control": "no-store",
+-    },
+-  });
+-}
+\ No newline at end of file
+diff --git a/src/app/scan/[bookId]/[dioramaId]/page.tsx b/src/app/scan/[bookId]/[dioramaId]/page.tsx
+deleted file mode 100644
+index b86d001..0000000
+--- a/src/app/scan/[bookId]/[dioramaId]/page.tsx
++++ /dev/null
+@@ -1,243 +0,0 @@
+-'use client';
+-
+-import { useTranslation, TranslationProvider  } from '@/contexts/TranslationContext';
+-import { useEffect, useState } from 'react';
+-
+-type Props = {
+-  params: Promise<{ bookId: string; dioramaId: string }>;
+-  searchParams: Promise<{ t?: string }>;
+-};
+-
+-const COOLDOWN_KEY = 'webdiorama-last-scan';
+-const COOLDOWN_DURATION = 5000; // 5 secondes
+-
+-function ScanLauncherContent({ params, searchParams }: Props) {
+-  const { t } = useTranslation(); // ✅ Maintenant c'est OK !
+-  const [mounted, setMounted] = useState(false);
+-  const [resolvedParams, setResolvedParams] = useState<{ bookId: string; dioramaId: string } | null>(null);
+-  const [resolvedToken, setResolvedToken] = useState<string | null>(null);
+-  const [status, setStatus] = useState<'opening' | 'blocked' | 'success' | 'manual-redirect' | 'cooldown'>('opening');
+-  const [isReusingViewer, setIsReusingViewer] = useState(false);
+-  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+-
+-  useEffect(() => {
+-    Promise.all([params, searchParams]).then(([p, sp]) => {
+-      setResolvedParams(p);
+-      setResolvedToken(sp.t || null);
+-      setMounted(true);
+-    });
+-  }, [params, searchParams]);
+-
+-  useEffect(() => {
+-    // ✅ Auto-close après 15s si status est success ou manual-redirect
+-    if (status === 'success' || status === 'manual-redirect') {
+-      const autoCloseTimer = setTimeout(() => {
+-        console.log('🚪 Auto-fermeture launcher après 8s');
+-        window.close();
+-      }, 8000);
+-      
+-      return () => clearTimeout(autoCloseTimer);
+-    }
+-  }, [status]);
+-
+-  useEffect(() => {
+-    if (!mounted || !resolvedParams || !resolvedToken) return;
+-
+-    const url = `/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`;
+-
+-    // Vérifier le cooldown
+-    const lastScan = localStorage.getItem(COOLDOWN_KEY);
+-    if (lastScan) {
+-      const timeSinceLastScan = Date.now() - parseInt(lastScan);
+-      
+-      if (timeSinceLastScan < COOLDOWN_DURATION) {
+-        const remaining = Math.ceil((COOLDOWN_DURATION - timeSinceLastScan) / 1000);
+-        setStatus('cooldown');
+-        setCooldownRemaining(remaining);
+-        
+-        const countdown = setInterval(() => {
+-          const newRemaining = Math.ceil((COOLDOWN_DURATION - (Date.now() - parseInt(lastScan))) / 1000);
+-          
+-          if (newRemaining <= 0) {
+-            clearInterval(countdown);
+-            localStorage.setItem(COOLDOWN_KEY, Date.now().toString());
+-            proceedWithScan();
+-          } else {
+-            setCooldownRemaining(newRemaining);
+-          }
+-        }, 1000);
+-        
+-        return () => clearInterval(countdown);
+-      }
+-    }
+-    
+-    localStorage.setItem(COOLDOWN_KEY, Date.now().toString());
+-    proceedWithScan();
+-    
+-    function proceedWithScan() {
+-      if (!resolvedParams || !resolvedToken) return;
+-      
+-      // Nettoyer les données zombies
+-      const existingViewer = localStorage.getItem('webdiorama-viewer-alive');
+-      if (existingViewer) {
+-        try {
+-          const { timestamp } = JSON.parse(existingViewer);
+-          const age = Date.now() - timestamp;
+-          
+-          if (age > 5000) {
+-            localStorage.removeItem('webdiorama-viewer-alive');
+-            localStorage.removeItem('webdiorama-change-scene');
+-            localStorage.removeItem('webdiorama-scene-processed');
+-            localStorage.removeItem('webdiorama-changing-scene');
+-          }
+-        } catch {
+-          localStorage.removeItem('webdiorama-viewer-alive');
+-          localStorage.removeItem('webdiorama-change-scene');
+-          localStorage.removeItem('webdiorama-scene-processed');
+-          localStorage.removeItem('webdiorama-changing-scene');
+-        }
+-      }
+-      
+-      const checkExistingViewer = () => {
+-        const existingViewer = localStorage.getItem('webdiorama-viewer-alive');
+-        
+-        if (existingViewer) {
+-          try {
+-            const { timestamp } = JSON.parse(existingViewer);
+-            const age = Date.now() - timestamp;
+-            
+-            if (age < 3000) {
+-              setIsReusingViewer(true);
+-              
+-              const requestId = `${Date.now()}-${Math.random()}`;
+-              
+-              localStorage.setItem('webdiorama-change-scene', JSON.stringify({
+-                url: url,
+-                timestamp: Date.now(),
+-                requestId,
+-                bookId: resolvedParams.bookId,
+-                dioramaId: resolvedParams.dioramaId
+-              }));
+-              
+-              setStatus('manual-redirect');
+-              return true;
+-            }
+-          } catch {}
+-        }
+-        return false;
+-      };
+-      
+-      if (checkExistingViewer()) return;
+-      
+-      setTimeout(() => {
+-        if (checkExistingViewer()) return;
+-        
+-        const viewer = window.open(url, 'webdiorama-viewer');
+-        
+-        if (viewer) {
+-          viewer.focus();
+-          setStatus('success');
+-          
+-          setTimeout(() => {
+-            window.close();
+-          }, 1500);
+-        } else {
+-          setStatus('blocked');
+-        }
+-      }, 500);
+-    }
+-  }, [mounted, resolvedParams, resolvedToken]);
+-
+-  if (!mounted || !resolvedParams || !resolvedToken) {
+-    return (
+-      <div className="min-h-screen bg-black flex items-center justify-center">
+-        <div className="text-white">{t.launcher.loading}</div>
+-      </div>
+-    );
+-  }
+-
+-  return (
+-    <div className="min-h-screen bg-gradient-to-br from-purple-900 via-black to-blue-900 flex items-center justify-center p-4">
+-      <div className="text-center max-w-md">
+-        {status === 'opening' && (
+-          <>
+-            <div className="text-6xl mb-6 animate-pulse">🎬</div>
+-            <h1 className="text-3xl font-bold text-white mb-4">
+-              {t.launcher.sceneOpening}
+-            </h1>
+-          </>
+-        )}
+-        
+-        {status === 'cooldown' && (
+-          <>
+-            <div className="text-6xl mb-6 animate-pulse">⏱️</div>
+-            <h1 className="text-3xl font-bold text-white mb-4">
+-              {t.launcher.preparing}
+-            </h1>
+-            <div className="text-6xl font-bold text-purple-400 mb-4">
+-              {cooldownRemaining}s
+-            </div>
+-            <p className="text-gray-300 mb-2">
+-              {t.launcher.optimizing}
+-            </p>
+-          </>
+-        )}
+-        
+-        {status === 'blocked' && (
+-          <>
+-            <div className="text-6xl mb-6">🚫</div>
+-            <h1 className="text-3xl font-bold text-white mb-4">
+-              {t.launcher.requiredAction}
+-            </h1>
+-            <p className="text-gray-300 mb-6">
+-              {t.launcher.clickToOpen}
+-            </p>
+-            <a
+-              href={`/webdiorama/${resolvedParams.bookId}/${resolvedParams.dioramaId}?t=${resolvedToken}`}
+-              target="webdiorama-viewer"
+-              className="inline-block px-8 py-4 bg-purple-600 hover:bg-purple-700 text-white rounded-full font-bold transition"
+-            >
+-              {t.launcher.openScene}
+-            </a>
+-          </>
+-        )}
+-
+-        {status === 'manual-redirect' && (
+-          <>
+-            <div className="text-6xl mb-6 animate-bounce">✅</div>
+-            <h1 className="text-xl font-bold text-white mb-4">
+-              {t.launcher.changing}
+-            </h1>
+-            <p className="text-xl text-gray-300 mb-4">
+-              {t.launcher.redirect}
+-            </p>
+-            <p className="text-sm text-gray-400">
+-              {t.launcher.autoClose}
+-            </p>
+-          </>
+-        )}
+-
+-        {status === 'success' && (
+-          <>
+-            <div className="text-6xl mb-6 animate-bounce">✅</div>
+-            <h1 className="text-3xl font-bold text-white mb-4">
+-              {t.launcher.letsgo}
+-            </h1>
+-            <p className="text-sm text-gray-400 mt-2">
+-              {t.launcher.autoClose}
+-            </p>
+-          </>
+-        )}
+-      </div>
+-    </div>
+-  );
+-}
+-
+-export default function ScanLauncherPage(props: Props) {
+-  return (
+-    // Ajoutez les props nécessaires à votre Provider si besoin (ex: locale)
+-    <TranslationProvider> 
+-      <ScanLauncherContent {...props} />
+-    </TranslationProvider>
+-  );
+-}
+\ No newline at end of file
+diff --git a/src/app/scan/layout.tsx b/src/app/scan/layout.tsx
+deleted file mode 100644
+index 2368fff..0000000
+--- a/src/app/scan/layout.tsx
++++ /dev/null
+@@ -1,7 +0,0 @@
+-import type { Metadata } from 'next';
+-
+-export const metadata: Metadata = { robots: { index: false, follow: false } };
+-
+-export default function Layout({ children }: { children: React.ReactNode }) {
+-  return children;
+-}
+\ No newline at end of file
+diff --git a/src/app/webdiorama/[bookId]/[dioramaId]/page.tsx b/src/app/webdiorama/[bookId]/[dioramaId]/page.tsx
+index 83742a4..e8313e3 100644
+--- a/src/app/webdiorama/[bookId]/[dioramaId]/page.tsx
++++ b/src/app/webdiorama/[bookId]/[dioramaId]/page.tsx
+@@ -1,22 +1,16 @@
+ import { notFound, redirect } from "next/navigation";
+ import WebDioramaLoader from "@/components/diorama/WebDioramaLoader";
+ import type { DioramaConfig3DWithVideos } from "@/types/diorama";
+-import { allWebdioramas } from "@/content/webdioramas/index"; 
+-import { readFile } from "node:fs/promises"; 
+-import path from "node:path"; 
+-import { tokenMatches } from "@/lib/token";
++import { allWebdioramas } from "@/content/webdioramas/index";
+ 
+ export const dynamic = 'force-dynamic';
+ 
+ type Props = {
+   params: Promise<{ bookId: string; dioramaId: string }>;
+-  searchParams: Promise<{ t?: string }>;
+ };
+ 
+-export default async function DioramaPage({ params, searchParams }: Props) {
++export default async function DioramaPage({ params }: Props) {
+   const { bookId, dioramaId } = await params;
+-  const awaitedSearchParams = await searchParams;
+-  const token = awaitedSearchParams?.t;
+ 
+   // ✅ Utiliser USE_R2 pour forcer R2 en local si besoin
+   const useR2 = process.env.USE_R2 === 'true';
+@@ -30,11 +24,6 @@ export default async function DioramaPage({ params, searchParams }: Props) {
+     const entry = webdioramas[dioramaId];
+     if (!entry) return notFound();
+ 
+-    if (!tokenMatches(token, await getLocalTokenHash(bookId, dioramaId))) {
+-      console.warn("Token invalide", bookId, dioramaId);
+-      return notFound();
+-    }
+-
+     return <WebDioramaLoader config={entry.config} bookId={bookId} />;
+   }
+ 
+@@ -45,19 +34,11 @@ export default async function DioramaPage({ params, searchParams }: Props) {
+     const indexRes = await fetch(`${baseUrl}/assets/${bookId}/index.json`);
+     if (!indexRes.ok) throw new Error("Index non trouvé");
+ 
+-    const indexJson = await indexRes.json() as Record<
+-      string,
+-      { path: string; tokenHash: string }
+-    >;
++    const indexJson = await indexRes.json() as Record<string, { path: string }>;
+ 
+     const entry = indexJson[dioramaId];
+     if (!entry) return notFound();
+ 
+-    if (!tokenMatches(token, entry.tokenHash)) {
+-      console.warn("Token invalide", bookId, dioramaId);
+-      return notFound();
+-    }
+-
+     const dioramaFile = entry.path;
+     const dioramaRes = await fetch(`${baseUrl}/assets/${bookId}/${dioramaFile}`);
+     if (!dioramaRes.ok) throw new Error("Fichier diorama non trouvé");
+@@ -73,15 +54,3 @@ export default async function DioramaPage({ params, searchParams }: Props) {
+     return notFound();
+   }
+ }
+-
+-
+-// Mode local : empreintes lues depuis l'index généré par `npm run issue-tokens` (non versionné).
+-// bookId est déjà validé par la présence dans allWebdioramas avant l'appel.
+-async function getLocalTokenHash(bookId: string, sceneId: string): Promise<string | undefined> {
+-  try {
+-    const raw = await readFile(path.join(process.cwd(), "dist", "index", bookId, "index.json"), "utf8");
+-    return (JSON.parse(raw) as Record<string, { tokenHash?: string }>)[sceneId]?.tokenHash;
+-  } catch {
+-    return undefined;
+-  }
+-}
+\ No newline at end of file
+diff --git a/src/app/webdiorama/layout.tsx b/src/app/webdiorama/layout.tsx
+deleted file mode 100644
+index 2368fff..0000000
+--- a/src/app/webdiorama/layout.tsx
++++ /dev/null
+@@ -1,7 +0,0 @@
+-import type { Metadata } from 'next';
+-
+-export const metadata: Metadata = { robots: { index: false, follow: false } };
+-
+-export default function Layout({ children }: { children: React.ReactNode }) {
+-  return children;
+-}
+\ No newline at end of file
+diff --git a/src/components/diorama/WebDioramaLoader.tsx b/src/components/diorama/WebDioramaLoader.tsx
+index 30c51aa..03690f7 100644
+--- a/src/components/diorama/WebDioramaLoader.tsx
++++ b/src/components/diorama/WebDioramaLoader.tsx
+@@ -40,7 +40,6 @@ import { disposeObject, disposeScene, logSceneStats } from "./utils/webglHelpers
+ import BookDownloadModal from "./ui/BookDownloadModal";
+ import { isBookFullyCached, getAssetFromCache } from "./lib/downloadManager";
+ import useUnifiedAudio from "./hooks/useUnifiedAudio";
+-import DeviceTester from "./ui/DeviceTester";
+ import SceneAnalyzer from "./ui/SceneAnalyzer";
+ import GLBOptimizer from "./ui/GLBOptimizer";
+ import SpritesheetGenerator from "./ui/SpritesheetGenerator";
+@@ -80,30 +79,8 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
+   const [assetsReady, setAssetsReady] = useState(false);
+   const [showDownloadModal, setShowDownloadModal] = useState(true);
+   const [checkingCache, setCheckingCache] = useState(true);
+-  const [testKey, setTestKey] = useState(0);
+   const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
+-  const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+-    navigator.userAgent
+-  );
+   
+-  const [showDeviceTester, setShowDeviceTester] = useState(() => {
+-    return (config as any).deviceTester?.enabled || false;
+-  });
+-
+-  useEffect(() => {
+-  // ✅ Force le test en dev avec Ctrl+Shift+P
+-  const handleKeyDown = (e: KeyboardEvent) => {
+-      if (e.ctrlKey && e.shiftKey && e.key === 'P' && process.env.NODE_ENV === 'development') {
+-        console.log('🔍 Force device test');
+-        localStorage.removeItem('device-benchmark-passed');
+-        setShowDeviceTester(true);
+-      }
+-    };
+-    
+-    window.addEventListener('keydown', handleKeyDown);
+-    return () => window.removeEventListener('keydown', handleKeyDown);
+-  }, []);
+-
+   useEffect(() => {
+     const checkCacheStatus = async () => {
+       const cached = await isBookFullyCached(bookId);
+@@ -123,10 +100,6 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
+     checkCacheStatus();
+   }, [bookId]);
+ 
+-  const handleRetest = () => {
+-    setTestKey(prev => prev + 1);
+-  };
+-
+   return (
+     <>
+       {/* ✅ Écran de vérification cache */}
+@@ -139,68 +112,36 @@ function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaCo
+         </div>
+       )}
+ 
+-      {/* ✅ Device Tester EN PREMIER, bloque tout */}
+-      {showDeviceTester && (config as any).deviceTester && (
+-        <DeviceTester
+-          key={testKey}
+-          isMobileDevice={isMobileDevice}
+-          glbUrl={config.glb}
+-          config={(config as any).deviceTester}
+-          onRetest={handleRetest}
+-          onComplete={(passed) => {
+-            console.log('✅ Test terminé, résultat:', passed);
+-            
+-            // ✅ ATTENDRE 2 secondes pour libérer WebGL
+-            console.log('⏳ Pause 2s pour libérer le contexte WebGL du test...');
+-            setTimeout(() => {
+-              console.log('✅ Contexte WebGL libéré, continuer');
+-              setShowDeviceTester(false);
+-            }, 2000);
+-          }}
+-          onSkip={() => {
+-            console.log('⏭️ Test skippé');
+-            setShowDeviceTester(false);
++      {showDownloadModal && !assetsReady && (
++        <BookDownloadModal
++          bookId={bookId}
++          onComplete={() => {
++            setShowDownloadModal(false);
++            setAssetsReady(true);
+           }}
++          onCancel={() => setShowDownloadModal(false)}
++          isFolioMode={isFolioMode}
+         />
+       )}
+-      {/* ✅ Le reste seulement si pas de device tester */}
+-      {!showDeviceTester && (
+-        <>
+-          {showDownloadModal && !assetsReady && (
+-            <BookDownloadModal
+-              bookId={bookId}
+-              config={config}
+-              onComplete={() => {
+-                setShowDownloadModal(false);
+-                setAssetsReady(true);
+-              }}
+-              onCancel={() => setShowDownloadModal(false)}
+-              isFolioMode={isFolioMode}
+-            />
+-          )}
+ 
+-          {!assetsReady && !showDownloadModal && !checkingCache && (
+-            <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
+-              <div className="text-center">
+-                <div className="text-6xl mb-6">📦</div>
+-                <h2 className="text-white text-xl mb-6">
+-                  {t.bookDownload?.required || "Téléchargement requis"}
+-                </h2>
+-                <button
+-                  onClick={() => setShowDownloadModal(true)}
+-                  className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transition"
+-                >
+-                  📥 {t.bookDownload?.download || "Télécharger"}
+-                </button>
+-              </div>
+-            </div>
+-          )}
+-
+-          {assetsReady && <WebDioramaLoaderInner config={config} bookId={bookId} />}
+-        </>
++      {!assetsReady && !showDownloadModal && !checkingCache && (
++        <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
++          <div className="text-center">
++            <div className="text-6xl mb-6">📦</div>
++            <h2 className="text-white text-xl mb-6">
++              {t.bookDownload?.required || "Téléchargement requis"}
++            </h2>
++            <button
++              onClick={() => setShowDownloadModal(true)}
++              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transition"
++            >
++              📥 {t.bookDownload?.download || "Télécharger"}
++            </button>
++          </div>
++        </div>
+       )}
+ 
+-      
++      {assetsReady && <WebDioramaLoaderInner config={config} bookId={bookId} />}
+     </>
+   );
+ }
+@@ -246,18 +187,6 @@ function WebDioramaLoaderInner({
+     navigator.userAgent
+   );
+ 
+-  // ✅ TOUT EN HAUT du composant, avant les hooks
+-  useEffect(() => {
+-    const nextScene = sessionStorage.getItem('webdiorama-next-scene');
+-    
+-    if (nextScene && nextScene !== window.location.href) {
+-      console.log('🔄 Redirection vers scène suivante:', nextScene);
+-      sessionStorage.removeItem('webdiorama-next-scene');
+-      window.location.replace(nextScene); // ✅ replace au lieu de href
+-      return;
+-    }
+-  }, []);
+-
+   // ✅ Hook WebGL simplifié
+   const { renderer, error: webglError, isReady: webglReady, destroy: destroyRenderer } = useWebGLContext(containerRef, {
+     isMobile: isMobileDevice,
+@@ -301,7 +230,6 @@ function WebDioramaLoaderInner({
+   const devToolOpenRef = useRef(false);
+   const shouldAnimateRef = useRef(true); 
+   const spritesheetAnimatorRef = useRef<SpritesheetAnimator | null>(null);
+-  const performCleanupRef = useRef<(() => void) | null>(null);
+   const waitForSceneAudioRef = useRef<(() => Promise<void>) | null>(null);
+   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
+   const autoplay = config.autoplay ?? false;
+@@ -380,181 +308,6 @@ function WebDioramaLoaderInner({
+     return active.icon;
+   }, [currentPOI, findPOIRecursively, findParentPOI]);
+ 
+-  // ✅ Heartbeat avec info de visibilité
+-  useEffect(() => {
+-    const updateHeartbeat = () => {
+-      localStorage.setItem('webdiorama-viewer-alive', JSON.stringify({
+-        timestamp: Date.now(),
+-        isVisible: !document.hidden // ✅ Ajouter l'état de visibilité
+-      }));
+-    };
+-    
+-    updateHeartbeat();
+-    const interval = setInterval(updateHeartbeat, 1000);
+-    
+-    // ✅ Update aussi lors des changements de visibilité
+-    const handleVisibilityChange = () => {
+-      updateHeartbeat();
+-    };
+-    
+-    document.addEventListener('visibilitychange', handleVisibilityChange);
+-    
+-    return () => {
+-      clearInterval(interval);
+-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+-      localStorage.removeItem('webdiorama-viewer-alive');
+-    };
+-  }, []);
+-
+-  // ✅ Nettoyer localStorage à la fermeture
+-  useEffect(() => {
+-    const handleBeforeUnload = () => {
+-      console.log('🧹 VIEWER: Nettoyage localStorage avant fermeture');
+-      localStorage.removeItem('webdiorama-viewer-alive');
+-      localStorage.removeItem('webdiorama-change-scene');
+-      localStorage.removeItem('webdiorama-scene-processed');
+-      localStorage.removeItem('webdiorama-changing-scene');
+-    };
+-    
+-    window.addEventListener('beforeunload', handleBeforeUnload);
+-    
+-    return () => {
+-      window.removeEventListener('beforeunload', handleBeforeUnload);
+-      // Cleanup aussi au démontage du composant
+-      handleBeforeUnload();
+-    };
+-  }, []);
+-
+-  useEffect(() => {
+-    console.log('🎬 VIEWER: Démarrage polling changement scène');
+-    const processedRequests = new Set<string>();
+-    
+-    const checkSceneChange = () => {
+-    const changeRequest = localStorage.getItem('webdiorama-change-scene');
+-    
+-    if (changeRequest) {
+-      try {
+-        const { url, requestId, bookId, dioramaId } = JSON.parse(changeRequest);
+-        
+-        if (processedRequests.has(requestId)) {
+-          console.log('⏭️ VIEWER: Demande déjà traitée:', requestId);
+-          return;
+-        }
+-        
+-        console.log('🔄 VIEWER: Nouvelle demande détectée:', requestId, url);
+-        
+-        const currentUrl = window.location.href;
+-        if (currentUrl.includes(`/${bookId}/${dioramaId}`)) {
+-          console.log('⏭️ VIEWER: Déjà sur cette scène, ignorer');
+-          processedRequests.add(requestId);
+-          localStorage.setItem('webdiorama-scene-processed', requestId);
+-          return;
+-        }
+-        
+-        localStorage.setItem('webdiorama-changing-scene', 'true');
+-        processedRequests.add(requestId);
+-        localStorage.setItem('webdiorama-scene-processed', requestId);
+-        
+-        setNeedsManualRestart(false);
+-        wasHiddenRef.current = false;
+-
+-        // ✅ CRITIQUE : Désactiver le flag RAF
+-        console.log('🛑 VIEWER: Désactivation flag RAF');
+-        shouldAnimateRef.current = false; // ✅ EN PREMIER
+-        
+-        // ✅ CRITIQUE : Arrêter RAF AVANT cleanup
+-        console.log('🛑 VIEWER: Arrêt RAF avant changement scène');
+-        if (animationFrameRef.current !== undefined) {
+-          cancelAnimationFrame(animationFrameRef.current);
+-          animationFrameRef.current = undefined;
+-        }
+-        
+-        // ✅ Attendre 2 frames pour être sûr
+-        requestAnimationFrame(() => {
+-          requestAnimationFrame(() => {
+-            console.log('🧹 VIEWER: RAF définitivement arrêté, cleanup maintenant');
+-            
+-            if (performCleanupRef.current) {
+-              performCleanupRef.current();
+-            }
+-            
+-            setTimeout(() => {
+-              console.log('🔄 VIEWER: Redirection vers:', url);
+-              localStorage.removeItem('webdiorama-change-scene');
+-              localStorage.removeItem('webdiorama-changing-scene');
+-              sessionStorage.setItem('webdiorama-next-scene', url);
+-              window.location.reload();
+-            }, 1000);
+-          });
+-        });
+-        
+-      } catch (e) {
+-        console.error('❌ VIEWER: Erreur parsing:', e);
+-      }
+-    }
+-  };
+-    
+-    checkSceneChange();
+-    const pollInterval = setInterval(checkSceneChange, 500);
+-    
+-    const handleVisibilityChange = () => {
+-      if (!document.hidden) {
+-        console.log('👁️ VIEWER: Retour focus, check immédiat');
+-        checkSceneChange();
+-      }
+-    };
+-    
+-    const handleFocus = () => {
+-      console.log('👁️ VIEWER: Focus, check immédiat');
+-      checkSceneChange();
+-    };
+-    
+-    document.addEventListener('visibilitychange', handleVisibilityChange);
+-    window.addEventListener('focus', handleFocus);
+-    
+-    return () => {
+-      clearInterval(pollInterval);
+-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+-      window.removeEventListener('focus', handleFocus);
+-    };
+-  }, []);
+-
+-  // ✅ Heartbeat pour indiquer au launcher qu'on est vivant
+-  useEffect(() => {
+-    const updateHeartbeat = () => {
+-      localStorage.setItem('webdiorama-viewer-alive', JSON.stringify({
+-        timestamp: Date.now()
+-      }));
+-    };
+-    
+-    updateHeartbeat();
+-    const interval = setInterval(updateHeartbeat, 1000);
+-    
+-    return () => {
+-      clearInterval(interval);
+-      localStorage.removeItem('webdiorama-viewer-alive');
+-    };
+-  }, []);
+-
+-  // ✅ Écouter les changements de scène
+-  useEffect(() => {
+-    const handleStorageChange = (e: StorageEvent) => {
+-      if (e.key === 'webdiorama-change-scene' && e.newValue) {
+-        const { url } = JSON.parse(e.newValue);
+-        console.log('🔄 Changement de scène demandé:', url);
+-        
+-        // ✅ Changer de scène
+-        window.location.href = url;
+-      }
+-    };
+-    
+-    window.addEventListener('storage', handleStorageChange);
+-    
+-    return () => {
+-      window.removeEventListener('storage', handleStorageChange);
+-    };
+-  }, []);
+-
+   useEffect(() => {
+     devToolOpenRef.current = devToolOpen;
+     console.log('🔧 DevTool state changed:', devToolOpen);
+@@ -1173,11 +926,6 @@ function WebDioramaLoaderInner({
+         return;
+       }
+       
+-      if (localStorage.getItem('webdiorama-changing-scene') === 'true') {
+-        console.log("⏸️ Visibility change ignoré : changement de scène en cours");
+-        return;
+-      }
+-
+       if (document.hidden && !wasHiddenRef.current) {
+         console.log("🚨 Détection: onglet caché → cleanup");
+         wasHiddenRef.current = true;
+@@ -1202,11 +950,6 @@ function WebDioramaLoaderInner({
+         return;
+       }
+       
+-      if (localStorage.getItem('webdiorama-changing-scene') === 'true') {
+-        console.log("⏸️ Focus ignoré : changement de scène en cours");
+-        return;
+-      }
+-
+       if (wasHiddenRef.current) {
+         console.log("⏸️ Détection: retour focus → demander relance manuelle");
+         setNeedsManualRestart(true);
+diff --git a/src/components/diorama/hooks/useDeviceBenchmark.ts b/src/components/diorama/hooks/useDeviceBenchmark.ts
+deleted file mode 100644
+index 7fadc60..0000000
+--- a/src/components/diorama/hooks/useDeviceBenchmark.ts
++++ /dev/null
+@@ -1,365 +0,0 @@
+-import { useState, useCallback, useRef, useEffect } from 'react';
+-import * as THREE from 'three';
+-
+-export interface BenchmarkResult {
+-  fps: {
+-    average: number;
+-    min: number;
+-    max: number;
+-  };
+-  gpuTier: number;
+-  gpuName: string;
+-  memory: number | null; // GB
+-  webglCapabilities: {
+-    maxTextureSize: number;
+-    maxRenderbufferSize: number;
+-    maxViewportDims: [number, number];
+-    extensions: string[];
+-  };
+-  resolution: {
+-    width: number;
+-    height: number;
+-    pixelRatio: number;
+-  };
+-  passed: boolean;
+-  warnings: string[];
+-  errors: string[];
+-}
+-
+-interface BenchmarkCallbacks {
+-  onGpuDetectStart?: () => void;
+-  onGpuDetectComplete?: (name: string) => void;
+-  onCapabilitiesStart?: () => void;
+-  onCapabilitiesComplete?: () => void;
+-  onMemoryStart?: () => void;
+-  onMemoryComplete?: () => void;
+-  onFpsTestStart?: () => void;
+-  onFpsTestComplete?: () => void;
+-}
+-
+-interface BenchmarkConfig {
+-  testDuration: number;
+-  minFPS: number;
+-  minGPUTier: number;
+-}
+-
+-export function useDeviceBenchmark(config: BenchmarkConfig, callbacks?: BenchmarkCallbacks) {
+-  const [isRunning, setIsRunning] = useState(false);
+-  const [progress, setProgress] = useState(0);
+-  const [result, setResult] = useState<BenchmarkResult | null>(null);
+-  
+-  const fpsDataRef = useRef<number[]>([]);
+-  const testStartTimeRef = useRef<number>(0);
+-  const rafRef = useRef<number | undefined>(undefined); 
+-
+-  const detectGPUTier = useCallback(async (): Promise<{ tier: number; name: string }> => {
+-    const canvas = document.createElement('canvas');
+-    const gl = canvas.getContext('webgl') || canvas.getContext('webgl2');
+-    
+-    if (!gl) return { tier: 0, name: 'Unknown' };
+-    
+-    const glContext = gl as WebGLRenderingContext | WebGL2RenderingContext;
+-    
+-    const debugInfo = glContext.getExtension('WEBGL_debug_renderer_info');
+-    const renderer = debugInfo 
+-      ? glContext.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) 
+-      : 'Unknown GPU';
+-    
+-    // ✅ Extraire le nom propre du GPU
+-    let cleanRenderer = renderer;
+-    
+-    // Enlever ANGLE ( ... )
+-    if (renderer.startsWith('ANGLE (') && renderer.endsWith(')')) {
+-      cleanRenderer = renderer.slice(7, -1).trim();
+-    }
+-    
+-    // Extraire juste la partie intéressante
+-    // Ex: "AMD, AMD Radeon(TM) Graphics (0x00001681) Direct3D11..."
+-    //  -> "AMD Radeon(TM) Graphics"
+-    const gpuMatch = cleanRenderer.match(/(NVIDIA GeForce [^(]+|AMD Radeon[^(]+|Intel[^(]+|Mali[^(]+|Adreno \d+)/i);
+-    if (gpuMatch) {
+-      cleanRenderer = gpuMatch[0].trim();
+-    } else {
+-      // Fallback : garder jusqu'au premier "("
+-      const fallbackMatch = cleanRenderer.match(/^[^(]+/);
+-      if (fallbackMatch) {
+-        cleanRenderer = fallbackMatch[0].trim();
+-      }
+-    }
+-    
+-    // Nettoyer les doublons (ex: "AMD, AMD Radeon" -> "AMD Radeon")
+-    cleanRenderer = cleanRenderer.replace(/^[^,]+,\s*/, '');
+-    
+-    // Heuristique
+-    let tier = 2;
+-    const rendererLower = cleanRenderer.toLowerCase();
+-    
+-    if (rendererLower.includes('adreno') && parseInt(rendererLower.match(/\d+/)?.[0] || '0') < 500) {
+-      tier = 1;
+-    } else if (rendererLower.includes('mali') && parseInt(rendererLower.match(/\d+/)?.[0] || '0') < 76) {
+-      tier = 1;
+-    } else if (rendererLower.includes('intel') && !rendererLower.includes('iris')) {
+-      tier = 1;
+-    } else if (rendererLower.includes('nvidia') || rendererLower.includes('rtx') || rendererLower.includes('geforce')) {
+-      tier = 3;
+-    } else if (rendererLower.includes('radeon rx') || rendererLower.includes('radeon 7') || rendererLower.includes('radeon 6')) {
+-      tier = 3;
+-    }
+-    
+-    return { tier, name: cleanRenderer };
+-  }, []);
+-
+-  // Obtenir WebGL capabilities
+-    const getWebGLCapabilities = useCallback(() => {
+-        const canvas = document.createElement('canvas');
+-        const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+-        
+-        if (!gl) {
+-            return {
+-            maxTextureSize: 0,
+-            maxRenderbufferSize: 0,
+-            maxViewportDims: [0, 0] as [number, number],
+-            extensions: [],
+-            };
+-        }
+-        
+-        // ✅ Cast explicite
+-        const glContext = gl as WebGLRenderingContext | WebGL2RenderingContext;
+-        
+-        return {
+-            maxTextureSize: glContext.getParameter(glContext.MAX_TEXTURE_SIZE),
+-            maxRenderbufferSize: glContext.getParameter(glContext.MAX_RENDERBUFFER_SIZE),
+-            maxViewportDims: glContext.getParameter(glContext.MAX_VIEWPORT_DIMS) as [number, number],
+-            extensions: glContext.getSupportedExtensions() || [],
+-        };
+-    }, []);
+-
+-  // Test FPS avec une scène simple
+-  const runFPSTest = useCallback((renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera) => {
+-    return new Promise<void>((resolve) => {
+-      console.log('🎬 Init FPS test, durée:', config.testDuration, 'ms');
+-      fpsDataRef.current = [];
+-      testStartTimeRef.current = performance.now();
+-      let lastTime = performance.now();
+-      let frameCount = 0;
+-      const warmupFrames = 60; // ✅ Ignorer les 60 premières frames (1 seconde à 60fps)
+-      
+-      const testLoop = () => {
+-        const now = performance.now();
+-        const delta = now - lastTime;
+-        const fps = 1000 / delta;
+-        
+-        fpsDataRef.current.push(fps);
+-        frameCount++;
+-
+-        // ✅ Ne collecter les FPS qu'après le warm-up
+-        if (frameCount > warmupFrames) {
+-          // ✅ Filtrer les valeurs aberrantes (< 10 fps ou > 200 fps)
+-          if (fps >= 10 && fps <= 200) {
+-            fpsDataRef.current.push(fps);
+-          }
+-        }
+-
+-        lastTime = now;
+-        
+-        // Rendu
+-        renderer.render(scene, camera);
+-        
+-        // Progress
+-        const elapsed = now - testStartTimeRef.current;
+-        const progressPercent = Math.min((elapsed / config.testDuration) * 100, 100);
+-        setProgress(progressPercent);
+-
+-        // Log tous les 100 frames (après warmup)
+-        if (frameCount > warmupFrames && (frameCount - warmupFrames) % 100 === 0) {
+-          const currentAvg = fpsDataRef.current.reduce((a, b) => a + b, 0) / fpsDataRef.current.length;
+-          console.log(`⚡ Frame ${frameCount}, elapsed: ${elapsed.toFixed(0)}ms, FPS moyen: ${currentAvg.toFixed(1)}`);
+-        }
+-        
+-        if (elapsed < config.testDuration) {
+-          rafRef.current = requestAnimationFrame(testLoop);
+-        } else {
+-          console.log(`✅ Test FPS terminé, ${frameCount} frames en ${elapsed.toFixed(0)}ms`);
+-          resolve();
+-        }
+-      };
+-      
+-      console.log('🎬 Démarrage loop RAF...');
+-      rafRef.current = requestAnimationFrame(testLoop);
+-    });
+-  }, [config.testDuration]);
+-
+-  // Lancer le benchmark
+-  const runBenchmark = useCallback(async (
+-    renderer: THREE.WebGLRenderer,
+-    scene: THREE.Scene,
+-    camera: THREE.Camera
+-  ) => {
+-      // ✅ Guard contre double appel
+-      if (isRunning) {
+-        console.warn('⚠️ Benchmark déjà en cours');
+-        return;
+-      }
+-
+-    console.log('🎬 Démarrage benchmark...');
+-    setIsRunning(true);
+-    setProgress(0);
+-    
+-    try {
+-      // 1. Détection GPU
+-      callbacks?.onGpuDetectStart?.();
+-      console.log('🔍 Détection GPU...');
+-      await new Promise(resolve => setTimeout(resolve, 500)); // ✅ Pause pour visibilité
+-      const gpu = await detectGPUTier();
+-      console.log('✅ GPU détecté:', gpu);
+-      callbacks?.onGpuDetectComplete?.(gpu.name);
+-      
+-      // 2. Capabilities
+-      callbacks?.onCapabilitiesStart?.();
+-      console.log('🔍 Détection capabilities...');
+-      await new Promise(resolve => setTimeout(resolve, 500)); // ✅ Pause
+-      const capabilities = getWebGLCapabilities();
+-      console.log('✅ Capabilities:', capabilities);
+-      callbacks?.onCapabilitiesComplete?.();
+-      
+-      // 3. Mémoire
+-      callbacks?.onMemoryStart?.();
+-      const memory = (navigator as any).deviceMemory || null;
+-      console.log('💾 Mémoire:', memory);
+-      await new Promise(resolve => setTimeout(resolve, 300)); // ✅ Pause
+-      callbacks?.onMemoryComplete?.();
+-      
+-      // 4. Résolution
+-      const resolution = {
+-        width: window.innerWidth,
+-        height: window.innerHeight,
+-        pixelRatio: window.devicePixelRatio,
+-      };
+-      console.log('📐 Résolution:', resolution);
+-      
+-      // 5. Test FPS
+-      callbacks?.onFpsTestStart?.();
+-      console.log('⚡ Démarrage test FPS...');
+-      await runFPSTest(renderer, scene, camera);
+-      console.log('✅ Test FPS terminé, FPS collectés:', fpsDataRef.current.length);
+-      callbacks?.onFpsTestComplete?.();
+-
+-      console.log('✅ Test FPS terminé, FPS collectés:', fpsDataRef.current.length);
+-
+-      // ✅ Vérifier qu'on a bien des données
+-      if (fpsDataRef.current.length === 0) {
+-        console.error('❌ Aucune donnée FPS collectée !');
+-        throw new Error('Test FPS échoué');
+-      }
+-
+-      // ✅ Trier pour calcul des percentiles
+-      const sortedFPS = [...fpsDataRef.current].sort((a, b) => a - b);
+-
+-      // Calcul statistiques robustes
+-      const avgFPS = fpsDataRef.current.reduce((a, b) => a + b, 0) / fpsDataRef.current.length;
+-
+-      // ✅ Percentiles (plus robuste que min/max)
+-      const p1 = sortedFPS[Math.floor(sortedFPS.length * 0.01)];  // 1er percentile
+-      const p5 = sortedFPS[Math.floor(sortedFPS.length * 0.05)];  // 5e percentile
+-      const p50 = sortedFPS[Math.floor(sortedFPS.length * 0.50)]; // Médiane
+-      const p95 = sortedFPS[Math.floor(sortedFPS.length * 0.95)]; // 95e percentile
+-      const p99 = sortedFPS[Math.floor(sortedFPS.length * 0.99)]; // 99e percentile
+-
+-      const minFPS = Math.min(...fpsDataRef.current);
+-      const maxFPS = Math.max(...fpsDataRef.current);
+-
+-      console.log('📊 FPS moyen:', avgFPS.toFixed(1));
+-      console.log('📊 FPS min absolu:', minFPS.toFixed(1));
+-      console.log('📊 FPS 1er percentile:', p1.toFixed(1));
+-      console.log('📊 FPS 5e percentile:', p5.toFixed(1));
+-      console.log('📊 FPS médiane:', p50.toFixed(1));
+-      
+-      // Analyse
+-      const warnings: string[] = [];
+-      const errors: string[] = [];
+-      let passed = true;
+-      
+-      if (avgFPS < config.minFPS) {
+-        errors.push(`FPS moyen trop faible: ${avgFPS.toFixed(1)} (min: ${config.minFPS})`);
+-        passed = false;
+-      }
+-
+-      // ✅ Warning seulement si le 5e percentile est < 80% du seuil
+-      // (ignore les 5% de frames les plus lentes, souvent dues à des événements externes)
+-      if (p5 < config.minFPS * 0.8) {
+-        warnings.push(`FPS instables: 5% des frames sous ${p5.toFixed(1)} FPS`);
+-      }
+-
+-      // ✅ Warning si écart entre p5 et p95 est > 20 FPS (instabilité)
+-      if (p95 - p5 > 20) {
+-        warnings.push(`Performances variables (${p5.toFixed(1)} - ${p95.toFixed(1)} FPS)`);
+-      }
+-
+-      if (gpu.tier < config.minGPUTier) {
+-        errors.push(`GPU trop faible: Tier ${gpu.tier} (min: ${config.minGPUTier})`);
+-        passed = false;
+-      }
+-
+-      if (memory && memory < 2) {
+-        warnings.push(`Mémoire RAM faible: ${memory} GB`);
+-      }
+-
+-      if (resolution.pixelRatio > 2 && avgFPS < config.minFPS * 1.2) {
+-        warnings.push(`Résolution haute (${resolution.pixelRatio.toFixed(1)}x) peut impacter les performances`);
+-      }
+-      
+-      const result: BenchmarkResult = {
+-        fps: {
+-          average: avgFPS,
+-          min: p5, // ✅ Utiliser p5 au lieu du min absolu
+-          max: p95, // ✅ Utiliser p95 au lieu du max absolu
+-        },
+-        gpuTier: gpu.tier,
+-        gpuName: gpu.name,
+-        memory,
+-        webglCapabilities: capabilities,
+-        resolution,
+-        passed,
+-        warnings,
+-        errors,
+-      };
+-      
+-      setResult(result);
+-      
+-    } catch (error) {
+-      console.error('❌ Benchmark error:', error);
+-      setResult({
+-        fps: { average: 0, min: 0, max: 0 },
+-        gpuTier: 0,
+-        gpuName: 'Error',
+-        memory: null,
+-        webglCapabilities: getWebGLCapabilities(),
+-        resolution: {
+-          width: window.innerWidth,
+-          height: window.innerHeight,
+-          pixelRatio: window.devicePixelRatio,
+-        },
+-        passed: false,
+-        warnings: [],
+-        errors: ['Erreur pendant le test'],
+-      });
+-    } finally {
+-      setIsRunning(false);
+-    }
+-  }, [config, detectGPUTier, getWebGLCapabilities, runFPSTest, callbacks]);
+-
+-  const cancelBenchmark = useCallback(() => {
+-    if (rafRef.current) {
+-      cancelAnimationFrame(rafRef.current);
+-    }
+-    setIsRunning(false);
+-  }, []);
+-
+-  return {
+-    isRunning,
+-    progress,
+-    result,
+-    runBenchmark,
+-    cancelBenchmark,
+-  };
+-}
+\ No newline at end of file
+diff --git a/src/components/diorama/lib/downloadManager.ts b/src/components/diorama/lib/downloadManager.ts
+index 2088bcc..c2db755 100644
+--- a/src/components/diorama/lib/downloadManager.ts
++++ b/src/components/diorama/lib/downloadManager.ts
+@@ -20,7 +20,6 @@ interface DownloadProgress {
+ 
+ interface IndexEntry {
+   path: string;
+-  tokenHash: string;
+ }
+ 
+ interface BookIndex {
+diff --git a/src/components/diorama/ui/BookDownloadModal.tsx b/src/components/diorama/ui/BookDownloadModal.tsx
+index 2255639..f74a988 100644
+--- a/src/components/diorama/ui/BookDownloadModal.tsx
++++ b/src/components/diorama/ui/BookDownloadModal.tsx
+@@ -4,20 +4,17 @@ import { useState, useEffect } from 'react';
+ import { motion, AnimatePresence } from 'framer-motion';
+ import { downloadManager, getBookManifest, isBookFullyCached } from '../lib/downloadManager';
+ import { useTranslation } from '@/contexts/TranslationContext';
+-import { DioramaConfig3D } from '@/types/diorama';
+ 
+ interface BookDownloadModalProps {
+   bookId: string;
+-  config: DioramaConfig3D;
+   onComplete: () => void;
+   onCancel?: () => void;
+   isFolioMode?: boolean; 
+ }
+ 
+ export default function BookDownloadModal({ 
+-  bookId, 
+-  config, 
+-  onComplete, 
++  bookId,
++  onComplete,
+   onCancel, 
+   isFolioMode = false, 
+ }: BookDownloadModalProps) {
+@@ -35,7 +32,6 @@ export default function BookDownloadModal({
+   const [totalSize, setTotalSize] = useState(0); // ✅ NOUVEAU
+   const [storageWarning, setStorageWarning] = useState<'low' | 'critical' | null>(null); // ✅ NOUVEAU
+   const { t } = useTranslation();
+-  const isDemo = (config as any).deviceTester?.enabled || false;
+ 
+   useEffect(() => {
+     setMounted(true);
+@@ -194,9 +190,7 @@ export default function BookDownloadModal({
+             <h2 className="text-2xl font-bold text-white mb-4">
+               {isFolioMode
+                 ? "📂 Expérience interactive"
+-                : isDemo 
+-                  ? (t.bookDownload?.demoTitle || "📦 Téléchargement de la démo")
+-                  : (t.bookDownload?.modalTitle || "📦 Téléchargement du livre")}
++                : (t.bookDownload?.modalTitle || "📦 Téléchargement du livre")}
+             </h2>
+ 
+             {!downloading && !error && (
+@@ -205,9 +199,7 @@ export default function BookDownloadModal({
+                 <p className="text-gray-300 mb-6 text-sm">
+                   {isFolioMode
+                     ? "Cette expérience 3D interactive nécessite le téléchargement d'assets pour fonctionner de manière optimale. Les données seront mises en cache pour les prochaines visites."
+-                    : isDemo
+-                      ? (t.bookDownload?.demoMessage || "Téléchargez la démo pour découvrir les WebDioramas")
+-                      : (t.bookDownload?.modalMessage || "Télécharger toutes les scènes du livre pour une utilisation hors ligne")}
++                    : (t.bookDownload?.modalMessage || "Télécharger toutes les scènes du livre pour une utilisation hors ligne")}
+                 </p>
+ 
+                 {/* Infos de stockage */}
+diff --git a/src/components/diorama/ui/DeviceTester.tsx b/src/components/diorama/ui/DeviceTester.tsx
+deleted file mode 100644
+index 7b3a9c7..0000000
+--- a/src/components/diorama/ui/DeviceTester.tsx
++++ /dev/null
+@@ -1,613 +0,0 @@
+-"use client";
+-
+-import { useState, useEffect, useRef } from 'react';
+-import { motion, AnimatePresence } from 'framer-motion';
+-import * as THREE from 'three';
+-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader';
+-import { useDeviceBenchmark, BenchmarkResult } from '../hooks/useDeviceBenchmark';
+-import { useTranslation } from '@/contexts/TranslationContext';
+-
+-interface DeviceTesterProps {
+-  glbUrl: string;
+-  config: {
+-    testDuration: number;
+-    minFPS: number;
+-    minGPUTier: number;
+-  };
+-  onRetest: () => void;
+-  onComplete: (passed: boolean) => void;
+-  onSkip: () => void;
+-  isMobileDevice: boolean;
+-}
+-
+-export default function DeviceTester({ glbUrl, config, onRetest, onComplete, onSkip, isMobileDevice }: DeviceTesterProps) {
+-  const { t } = useTranslation();
+-  const [phase, setPhase] = useState<'intro' | 'testing' | 'results'>('intro');
+-  const [sceneReady, setSceneReady] = useState(false);
+-  const containerRef = useRef<HTMLDivElement>(null);
+-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+-  const sceneRef = useRef<THREE.Scene | null>(null);
+-  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+-  const hasStartedTestRef = useRef(false);
+-  const [testSteps, setTestSteps] = useState<{
+-    gpu: 'pending' | 'running' | 'done';
+-    capabilities: 'pending' | 'running' | 'done';
+-    memory: 'pending' | 'running' | 'done';
+-    fps: 'pending' | 'running' | 'done';
+-  }>({
+-    gpu: 'pending',
+-    capabilities: 'pending',
+-    memory: 'pending',
+-    fps: 'pending',
+-  });
+-
+-  const [gpuName, setGpuName] = useState<string>('');
+-
+-  const { isRunning, progress, result, runBenchmark, cancelBenchmark } = useDeviceBenchmark(
+-    {
+-      testDuration: config.testDuration,
+-      minFPS: config.minFPS,
+-      minGPUTier: config.minGPUTier,
+-    },
+-    {
+-      onGpuDetectStart: () => setTestSteps(s => ({ ...s, gpu: 'running' })),
+-      onGpuDetectComplete: (name) => {
+-        setGpuName(name);
+-        setTestSteps(s => ({ ...s, gpu: 'done' }));
+-      },
+-      onCapabilitiesStart: () => setTestSteps(s => ({ ...s, capabilities: 'running' })),
+-      onCapabilitiesComplete: () => setTestSteps(s => ({ ...s, capabilities: 'done' })),
+-      onMemoryStart: () => setTestSteps(s => ({ ...s, memory: 'running' })),
+-      onMemoryComplete: () => setTestSteps(s => ({ ...s, memory: 'done' })),
+-      onFpsTestStart: () => setTestSteps(s => ({ ...s, fps: 'running' })),
+-      onFpsTestComplete: () => setTestSteps(s => ({ ...s, fps: 'done' })),
+-    }
+-  );
+-
+-  // 0.3.e — sortie de secours : erreur de chargement GLB, délai dépassé ou clic « Passer »
+-  const skipTest = () => {
+-    cancelBenchmark();
+-    onSkip();
+-  };
+-
+-  // Dans DeviceTester.tsx, ajoutez au début du composant :
+-  useEffect(() => {
+-    console.log('🔍 DeviceTester mounted, phase:', phase);
+-    return () => console.log('🔍 DeviceTester unmounted');
+-  }, []);
+-
+-  useEffect(() => {
+-    console.log('🔍 Phase changed:', phase);  
+-  }, [phase]);
+-
+-  // Préparer la scène de test
+-  useEffect(() => {
+-    if (!containerRef.current || phase !== 'testing') return;
+-
+-    const canvas = document.createElement('canvas');
+-    canvas.style.display = 'none';
+-    containerRef.current.appendChild(canvas);
+-
+-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+-    renderer.setSize(window.innerWidth, window.innerHeight);
+-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+-    rendererRef.current = renderer;
+-
+-    const scene = new THREE.Scene();
+-    scene.background = new THREE.Color(0x000000);
+-    sceneRef.current = scene;
+-
+-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+-    camera.position.set(0, 2, 5);
+-    cameraRef.current = camera;
+-
+-    // Charger le GLB
+-    const loader = new GLTFLoader();
+-    loader.load(glbUrl, (gltf) => {
+-    console.log('✅ GLB chargé pour benchmark');
+-      scene.add(gltf.scene);
+-      
+-      // Lumières simples
+-      const light = new THREE.DirectionalLight(0xffffff, 1);
+-      light.position.set(5, 10, 5);
+-      scene.add(light);
+-      scene.add(new THREE.AmbientLight(0x404040));
+-
+-      console.log('✅ Scène prête pour benchmark');
+-      setSceneReady(true);
+-    },
+-        undefined,
+-        (error) => {
+-            console.error('❌ Erreur chargement GLB pour benchmark:', error);
+-            skipTest();
+-    });
+-
+-    return () => {
+-      renderer.dispose();
+-      canvas.remove();
+-    };
+-  }, [phase, glbUrl]);
+-
+-  // Modifiez le useEffect de lancement :
+-  useEffect(() => {
+-    if (sceneReady && phase === 'testing' && !isRunning && !hasStartedTestRef.current && rendererRef.current && sceneRef.current && cameraRef.current) {
+-      console.log('🎬 Lancement du benchmark...');
+-      hasStartedTestRef.current = true; // ✅ Marquer comme lancé
+-      runBenchmark(rendererRef.current, sceneRef.current, cameraRef.current);
+-    }
+-    // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }, [sceneReady, phase, isRunning]);
+-
+-  // Reset le flag quand on change de phase
+-  useEffect(() => {
+-    if (phase === 'intro') {
+-      hasStartedTestRef.current = false;
+-    }
+-  }, [phase]);
+-
+-  // Passer aux résultats
+-  useEffect(() => {
+-    if (result && phase === 'testing' && !isRunning) { // ✅ Ajouter !isRunning
+-      console.log('✅ Résultats disponibles, affichage dans 500ms...');
+-      setTimeout(() => setPhase('results'), 500);
+-    }
+-  }, [result, phase, isRunning]); // ✅ Ajouter isRunning
+-
+-  // 0.3.e — plafond de la phase testing : chargement GLB + durée du benchmark + 15 s de marge
+-  useEffect(() => {
+-    if (phase !== 'testing' || result) return;
+-    const timer = setTimeout(() => {
+-      console.warn('⏱️ Test appareil trop long, passage direct à la scène');
+-      skipTest();
+-    }, config.testDuration + 15000);
+-    return () => clearTimeout(timer);
+-    // eslint-disable-next-line react-hooks/exhaustive-deps
+-  }, [phase, result]);
+-
+-  // Dans DeviceTester.tsx, ajoutez un useEffect de cleanup global :
+-  useEffect(() => {
+-    // Cleanup à l'unmount du composant entier
+-    return () => {
+-      console.log('🧹 Cleanup DeviceTester - Libération WebGL');
+-      
+-      // Annuler le benchmark en cours
+-      if (isRunning) {
+-        cancelBenchmark();
+-      }
+-      
+-      // Dispose renderer
+-      if (rendererRef.current) {
+-        rendererRef.current.dispose();
+-        rendererRef.current.forceContextLoss(); // ✅ Force la libération
+-        rendererRef.current = null;
+-      }
+-      
+-      // Clear scene
+-      if (sceneRef.current) {
+-        sceneRef.current.traverse((obj) => {
+-          if ((obj as any).geometry) (obj as any).geometry.dispose();
+-          if ((obj as any).material) {
+-            if (Array.isArray((obj as any).material)) {
+-              (obj as any).material.forEach((mat: any) => mat.dispose());
+-            } else {
+-              (obj as any).material.dispose();
+-            }
+-          }
+-        });
+-        sceneRef.current = null;
+-      }
+-      
+-      cameraRef.current = null;
+-      
+-      // Supprimer tous les canvas créés
+-      if (containerRef.current) {
+-        const canvases = containerRef.current.querySelectorAll('canvas');
+-        canvases.forEach(canvas => canvas.remove());
+-      }
+-      
+-      console.log('✅ Cleanup DeviceTester terminé');
+-    };
+-  }, []); // ✅ Seulement à l'unmount, pas de deps
+-
+-    return (
+-      <div className="fixed inset-0 bg-black z-[10000] overflow-y-auto">
+-        {/* ✅ Container seulement visible en phase testing ET avec pointer-events: none */}
+-        <div 
+-        ref={containerRef} 
+-        className="absolute inset-0"
+-        style={{ 
+-            pointerEvents: 'none', // ✅ Ne bloque pas les clics
+-            visibility: phase === 'testing' ? 'visible' : 'hidden', // ✅ Caché en intro/results
+-        }}
+-        />
+-        
+-        {/* ✅ Conteneur scrollable pour le contenu */}
+-      <div className="min-h-screen w-full flex items-center justify-center py-4 sm:py-8 px-4">
+-      <AnimatePresence mode="wait">
+-        {/* Intro */}
+-        {phase === 'intro' && (
+-            <motion.div
+-              key="intro"
+-              initial={{ opacity: 0 }}
+-              animate={{ opacity: 1 }}
+-              exit={{ opacity: 0 }}
+-              className="max-w-md w-full text-center relative z-10"
+-            >
+-            <div className="text-6xl mb-6">🔍</div>
+-            <h2 className="text-2xl font-bold text-white mb-4">
+-                {t.deviceTester?.title || "Test de compatibilité"}
+-            </h2>
+-            <p className="text-gray-300 mb-8">
+-                {t.deviceTester?.description || "Vérifions que votre appareil peut faire tourner l'application correctement. Ce test prend environ 10 secondes."}
+-            </p>
+-            <div className="flex gap-4 justify-center">
+-                <button
+-                onClick={() => {
+-                    console.log('🔍 Clic sur Démarrer le test');
+-                    setPhase('testing');
+-                }}
+-                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold rounded-full transition"
+-                >
+-                {t.deviceTester?.start || "Démarrer le test"}
+-                </button>
+-                <button
+-                onClick={() => {
+-                    console.log('🔍 Clic sur Passer');
+-                    onSkip();
+-                }}
+-                className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-full transition"
+-                >
+-                {t.deviceTester?.skip || "Passer"}
+-                </button>
+-            </div>
+-            </motion.div>
+-        )}
+-
+-        {/* Testing - Checklist */}
+-        {phase === 'testing' && (
+-          <motion.div
+-            key="testing"
+-            initial={{ opacity: 0 }}
+-            animate={{ opacity: 1 }}
+-            exit={{ opacity: 0 }}
+-            className="max-w-md w-full relative z-10"
+-          >
+-            <div className="text-6xl mb-6 text-center animate-pulse">⚡</div>
+-            <h2 className="text-2xl font-bold text-white mb-6 text-center">
+-              {t.deviceTester?.testing || "Test en cours..."}
+-            </h2>
+-            
+-            {/* GPU Name Display */}
+-            {gpuName && (
+-              <div className="bg-gray-800 rounded-lg p-3 mb-6 border border-gray-700">
+-                <p className="text-xs text-gray-400 mb-1">{t.deviceTester?.GPUDetectorTitle || "Carte graphique détectée"}</p>
+-                <p className="text-white text-sm truncate">{gpuName}</p>
+-              </div>
+-            )}
+-            
+-            {/* Checklist */}
+-            <div className="space-y-3 mb-6">
+-              {/* Test GPU */}
+-              <div className="flex items-center gap-3 bg-gray-800 rounded-lg p-4">
+-                <div className="flex-shrink-0">
+-                  {testSteps.gpu === 'pending' && (
+-                    <div className="w-6 h-6 rounded-full border-2 border-gray-600" />
+-                  )}
+-                  {testSteps.gpu === 'running' && (
+-                    <div className="w-6 h-6 rounded-full border-2 border-blue-500 animate-spin border-t-transparent" />
+-                  )}
+-                  {testSteps.gpu === 'done' && (
+-                    <motion.div
+-                      initial={{ scale: 0 }}
+-                      animate={{ scale: 1 }}
+-                      className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center"
+-                    >
+-                      <span className="text-white text-sm">✓</span>
+-                    </motion.div>
+-                  )}
+-                </div>
+-                <p className={`flex-1 ${testSteps.gpu === 'done' ? 'text-white' : 'text-gray-400'}`}>
+-                  {t.deviceTester?.GPUDetecting || "Détection GPU"}
+-                </p>
+-              </div>
+-
+-              {/* Test Capabilities */}
+-              <div className="flex items-center gap-3 bg-gray-800 rounded-lg p-4">
+-                <div className="flex-shrink-0">
+-                  {testSteps.capabilities === 'pending' && (
+-                    <div className="w-6 h-6 rounded-full border-2 border-gray-600" />
+-                  )}
+-                  {testSteps.capabilities === 'running' && (
+-                    <div className="w-6 h-6 rounded-full border-2 border-blue-500 animate-spin border-t-transparent" />
+-                  )}
+-                  {testSteps.capabilities === 'done' && (
+-                    <motion.div
+-                      initial={{ scale: 0 }}
+-                      animate={{ scale: 1 }}
+-                      className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center"
+-                    >
+-                      <span className="text-white text-sm">✓</span>
+-                    </motion.div>
+-                  )}
+-                </div>
+-                <p className={`flex-1 ${testSteps.capabilities === 'done' ? 'text-white' : 'text-gray-400'}`}>
+-                  {t.deviceTester?.WEBGLCapacitiesTitle || "Analyse capacités WebGL"}
+-                </p>
+-              </div>
+-
+-              {/* Test Memory */}
+-              <div className="flex items-center gap-3 bg-gray-800 rounded-lg p-4">
+-                <div className="flex-shrink-0">
+-                  {testSteps.memory === 'pending' && (
+-                    <div className="w-6 h-6 rounded-full border-2 border-gray-600" />
+-                  )}
+-                  {testSteps.memory === 'running' && (
+-                    <div className="w-6 h-6 rounded-full border-2 border-blue-500 animate-spin border-t-transparent" />
+-                  )}
+-                  {testSteps.memory === 'done' && (
+-                    <motion.div
+-                      initial={{ scale: 0 }}
+-                      animate={{ scale: 1 }}
+-                      className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center"
+-                    >
+-                      <span className="text-white text-sm">✓</span>
+-                    </motion.div>
+-                  )}
+-                </div>
+-                <p className={`flex-1 ${testSteps.memory === 'done' ? 'text-white' : 'text-gray-400'}`}>
+-                  {t.deviceTester?.MemoryCheckTitle || "Vérification mémoire"}
+-                </p>
+-              </div>
+-
+-              {/* Test FPS */}
+-              <div className="flex items-center gap-3 bg-gray-800 rounded-lg p-4">
+-                <div className="flex-shrink-0">
+-                  {testSteps.fps === 'pending' && (
+-                    <div className="w-6 h-6 rounded-full border-2 border-gray-600" />
+-                  )}
+-                  {testSteps.fps === 'running' && (
+-                    <div className="w-6 h-6 rounded-full border-2 border-blue-500 animate-spin border-t-transparent" />
+-                  )}
+-                  {testSteps.fps === 'done' && (
+-                    <motion.div
+-                      initial={{ scale: 0 }}
+-                      animate={{ scale: 1 }}
+-                      className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center"
+-                    >
+-                      <span className="text-white text-sm">✓</span>
+-                    </motion.div>
+-                  )}
+-                </div>
+-                <div className="flex-1">
+-                  <p className={`${testSteps.fps === 'done' ? 'text-white' : 'text-gray-400'}`}>
+-                    {t.deviceTester?.ThreeDPERFTestTitle || "Test de performance 3D"}
+-                  </p>
+-                  {testSteps.fps === 'running' && (
+-                    <div className="mt-2">
+-                      <div className="w-full h-1 bg-gray-700 rounded-full overflow-hidden">
+-                        <motion.div
+-                          className="h-full bg-gradient-to-r from-blue-500 to-purple-600"
+-                          style={{ width: `${progress}%` }}
+-                          transition={{ duration: 0.3 }}
+-                        />
+-                      </div>
+-                      <p className="text-xs text-gray-500 mt-1">{progress.toFixed(0)}%</p>
+-                    </div>
+-                  )}
+-                </div>
+-              </div>
+-            </div>
+-            
+-            {testSteps.fps === 'done' && (
+-              <motion.p
+-                initial={{ opacity: 0 }}
+-                animate={{ opacity: 1 }}
+-                className="text-center text-green-400 text-sm"
+-              >
+-                {t.deviceTester?.completesAnalysisTitle || "✓ Analyse terminée, préparation des résultats..."}
+-              </motion.p>
+-            )}
+-
+-            <div className="flex justify-center mt-6">
+-              <button
+-                onClick={skipTest}
+-                className="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-full transition"
+-              >
+-                {t.deviceTester?.skip || "Passer"}
+-              </button>
+-            </div>
+-          </motion.div>
+-        )}
+-
+-        {/* Results */}
+-        {phase === 'results' && result && (
+-          <>
+-            {/* {console.log('🎯 Rendering results phase, result:', result)} */}
+-            {result ? (
+-              <motion.div
+-                key="results"
+-                initial={{ opacity: 0, y: 20 }}
+-                animate={{ opacity: 1, y: 0 }}
+-                className="max-w-2xl w-full bg-gray-900 rounded-2xl p-4 sm:p-8 border border-gray-700 relative z-10"
+-              >
+-                <div className="text-center mb-4 sm:mb-6">
+-                  <div className="text-4xl sm:text-6xl mb-2 sm:mb-4">
+-                    {result.passed ? '✅' : '⚠️'}
+-                  </div>
+-                  <h2 className="text-xl sm:text-2xl font-bold text-white mb-2">
+-                    {result.passed 
+-                      ? (t.deviceTester?.resultPassed || "Appareil compatible !")
+-                      : (t.deviceTester?.resultFailed || "Performances limitées")}
+-                  </h2>
+-                </div>
+-
+-                {/* Stats - Grid responsive */}
+-                <div className="grid grid-cols-2 gap-2 sm:gap-4 mb-4 sm:mb-6">
+-                  <div className="bg-gray-800 rounded-lg p-3 sm:p-4">
+-                    <p className="text-gray-400 text-xs sm:text-sm mb-1">{t.deviceTester?.FPSAverage || "FPS Moyen"}</p>
+-                    <p className={`text-xl sm:text-2xl font-bold ${result.fps.average >= config.minFPS ? 'text-green-400' : 'text-red-400'}`}>
+-                      {result.fps.average.toFixed(1)}
+-                    </p>
+-                    <p className="text-xs text-gray-500 mt-1">Min: {config.minFPS}</p>
+-                  </div>
+-                  
+-                  <div className="bg-gray-800 rounded-lg p-3 sm:p-4">
+-                    <p className="text-gray-400 text-xs sm:text-sm mb-1">{t.deviceTester?.GPUPower || "Puissance GPU"}</p>
+-                    <p className={`text-xl sm:text-2xl font-bold ${result.gpuTier >= config.minGPUTier ? 'text-green-400' : 'text-red-400'}`}>
+-                      {result.gpuTier}/3
+-                    </p>
+-                    <p className="text-xs text-gray-500 mt-1">
+-                      {result.gpuTier === 1 && (t.deviceTester?.low || "Faible")}
+-                      {result.gpuTier === 2 && (t.deviceTester?.medium || "Moyen")}
+-                      {result.gpuTier === 3 && (t.deviceTester?.high || "Élevé")}
+-                    </p>
+-                  </div>
+-                  
+-                  <div className="bg-gray-800 rounded-lg p-3 sm:p-4">
+-                    <p className="text-gray-400 text-xs sm:text-sm mb-1">{t.deviceTester?.FPSMin || "FPS Min (p5)"}</p>
+-                    <p className="text-lg sm:text-xl font-bold text-gray-300">
+-                      {result.fps.min.toFixed(1)}
+-                    </p>
+-                    <p className="text-xs text-gray-500 mt-1">{t.deviceTester?.lowest5PerCent || "5% le plus bas"}</p>
+-                  </div>
+-                  
+-                  <div className="bg-gray-800 rounded-lg p-3 sm:p-4">
+-                    <p className="text-gray-400 text-xs sm:text-sm mb-1">{t.deviceTester?.memoryTitle || "Mémoire"}</p>
+-                    <p className="text-lg sm:text-xl font-bold text-gray-300">
+-                      {result.memory ? `${result.memory} GB` : 'N/A'}
+-                    </p>
+-                  </div>
+-                </div>
+-
+-                {/* GPU Name - Responsive */}
+-                <div className="bg-gray-800 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
+-                  <p className="text-gray-400 text-xs sm:text-sm mb-1">{t.deviceTester?.graphicsCardTitle || "Carte graphique"}</p>
+-                  <p className="text-white text-xs sm:text-sm break-words">{result.gpuName}</p>
+-                </div>
+-
+-                {/* Warnings/Errors - Responsive */}
+-                {result.errors.length > 0 && (
+-                  <div className="bg-red-900/30 border border-red-500 rounded-lg p-3 sm:p-4 mb-3 sm:mb-4">
+-                    <p className="text-red-300 font-semibold mb-2 text-sm sm:text-base">{t.deviceTester?.detectedProblems || "❌ Problèmes détectés :"}</p>
+-                    {result.errors.map((error, i) => (
+-                      <p key={i} className="text-red-200 text-xs sm:text-sm">• {error}</p>
+-                    ))}
+-                  </div>
+-                )}
+-
+-                {result.warnings.length > 0 && (
+-                  <div className="bg-yellow-900/30 border border-yellow-500 rounded-lg p-3 sm:p-4 mb-4 sm:mb-6">
+-                    <p className="text-yellow-300 font-semibold mb-2 text-sm sm:text-base">{t.deviceTester?.warningsTitle || "⚠️ Avertissements :"}</p>
+-                    {result.warnings.map((warning, i) => (
+-                      <p key={i} className="text-yellow-200 text-xs sm:text-sm">• {warning}</p>
+-                    ))}
+-                  </div>
+-                )}
+-
+-                {result.gpuTier === 0 && (
+-                  <div className="bg-red-900/30 border border-red-500 rounded-lg p-4 mb-4">
+-                    <p className="text-red-300 font-semibold mb-2">
+-                      {t.deviceTester?.noWebGL || "❌ WebGL non disponible ou en mode compatibilité"}
+-                    </p>
+-                    <p className="text-red-200 text-sm">
+-                      {t.deviceTester?.impossible || "Votre navigateur ne peut pas utiliser l'accélération matérielle 3D."}
+-                      {t.deviceTester?.impossible2 || "L'expérience sera très dégradée ou impossible."}
+-                    </p>
+-                    <p className="text-red-200 text-sm mt-2">
+-                      {t.deviceTester?.checkBrowserParams || "• Vérifiez que WebGL est activé dans les paramètres du navigateur"}
+-                      <br />
+-                      {t.deviceTester?.tryAnotherBrowser || "• Essayez un autre navigateur (Chrome, Edge, Safari)"}
+-                      <br />
+-                      {t.deviceTester?.updateGPUDriver || "• Mettez à jour vos pilotes graphiques"}
+-                    </p>
+-                  </div>
+-                )}
+-
+-                {!result.passed && (
+-                  <div className="mt-4 space-y-3">
+-                    {/* Message principal */}
+-                    <p className="text-center text-gray-400 text-xs sm:text-sm">
+-                      {t.deviceTester?.warningMessage || "L'expérience pourrait être dégradée sur cet appareil."}
+-                    </p>
+-                    
+-                    {/* Conseils */}
+-                    <div className="bg-blue-900/30 border border-blue-500 rounded-lg p-3 sm:p-4">
+-                      <p className="text-blue-300 font-semibold mb-2 text-sm sm:text-base">
+-                        {t.deviceTester?.advicesTitle || "💡 Conseils pour améliorer les performances"}
+-                      </p>
+-                      <ul className="text-blue-200 text-xs sm:text-sm space-y-2">
+-                        <li className="flex gap-2">
+-                          <span className="flex-shrink-0">•</span>
+-                          <span>{t.deviceTester?.closeApps || "Fermez les autres applications et onglets du navigateur"}</span>
+-                        </li>
+-                        <li className="flex gap-2">
+-                          <span className="flex-shrink-0">•</span>
+-                          <span>{t.deviceTester?.disableEnergySaver || "Désactivez l'économiseur de batterie ou le mode économie d'énergie"}</span>
+-                        </li>
+-                        {result.gpuTier < config.minGPUTier && (
+-                          <li className="flex gap-2">
+-                            <span className="flex-shrink-0">•</span>
+-                            <span>{t.deviceTester?.enablePerfMode || "Activez le mode « Performances » dans les paramètres système"}</span>
+-                          </li>
+-                        )}
+-                        {result.fps.average < config.minFPS && (
+-                          <li className="flex gap-2">
+-                            <span className="flex-shrink-0">•</span>
+-                            <span>{t.deviceTester?.reduceLight || "Réduisez la luminosité de l'écran et fermez le multitâche"}</span>
+-                          </li>
+-                        )}
+-                        <li className="flex gap-2">
+-                          <span className="flex-shrink-0">•</span>
+-                          <span>{t.deviceTester?.controlHeating || "Assurez-vous que votre appareil n'est pas en surchauffe"}</span>
+-                        </li>
+-                        {isMobileDevice && (
+-                          <li className="flex gap-2">
+-                            <span className="flex-shrink-0">•</span>
+-                            <span>{t.deviceTester?.highPerfMode || "Connectez votre téléphone au chargeur pour activer le mode haute performance"}</span>
+-                          </li>
+-                        )}
+-                      </ul>
+-                    </div>
+-
+-                    {/* Note finale */}
+-                    <p className="text-center text-gray-500 text-xs">
+-                      {t.deviceTester?.finalNote || "Ces conseils peuvent améliorer temporairement les performances, mais ne remplaceront pas un appareil plus puissant."}
+-                    </p>
+-                  </div>
+-                )}
+-
+-                {/* Actions */}
+-                <div className="flex gap-3 sm:gap-4">
+-                  <button
+-                    onClick={() => {
+-                      console.log('🔄 Refaire le test (unmount/remount)');
+-                      onRetest(); // ✅ Appeler le parent au lieu de reset local
+-                    }}
+-                    className="flex-1 px-4 sm:px-6 py-2 sm:py-3 bg-gray-700 hover:bg-gray-600 text-white text-sm sm:text-base font-bold rounded-full transition"
+-                  >
+-                    {t.deviceTester?.testRetry || "🔄 Refaire le test"}
+-                  </button>
+-                  <button
+-                    onClick={() => {
+-                      console.log('✅ Clic continuer, passed:', result.passed);
+-                      onComplete(result.passed);
+-                    }}
+-                    className="flex-1 px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-sm sm:text-base font-bold rounded-full transition"
+-                  >
+-                    {result.passed 
+-                      ? (t.deviceTester?.continue || "Continuer")
+-                      : (t.deviceTester?.continueAnyway || "Continuer quand même")}
+-                  </button>
+-                </div>
+-              </motion.div>
+-            ) : (
+-              <div className="text-white">{t.deviceTester?.resultsLoading || "Chargement résultats..."}</div>
+-            )}
+-          </>
+-          
+-        )}
+-        </AnimatePresence>
+-        </div>
+-    </div>
+-    );
+-}
+\ No newline at end of file
+diff --git a/src/content/webdioramas/1/street.ts b/src/content/webdioramas/1/street.ts
+index 6f322b9..f6f733d 100644
+--- a/src/content/webdioramas/1/street.ts
++++ b/src/content/webdioramas/1/street.ts
+@@ -6,12 +6,6 @@ export const street: DioramaConfig3DWithPostProcessing = {
+   glb: `${BASE_URL}/models/street.glb`,
+   loaderImage: `${BASE_URL}/icons/dioramas/test_street/street-preview.png`,
+   autoplay: true, // ← Mode tutoriel automatique ou pas
+-  deviceTester: {
+-    enabled: false,
+-    testDuration: 10000,
+-    minFPS: 25,
+-    minGPUTier: 1,
+-  },
+   name: {
+     fr: "La place du village",
+     en: "The Village Square",
+diff --git a/src/content/webdioramas/demo/demo.ts b/src/content/webdioramas/demo/demo.ts
+index a5ee3df..ae32fe3 100644
+--- a/src/content/webdioramas/demo/demo.ts
++++ b/src/content/webdioramas/demo/demo.ts
+@@ -6,12 +6,6 @@ export const demo: DioramaConfig3DWithPostProcessing = {
+   glb: `${BASE_URL}/models/demo.glb`,
+   loaderImage: `${BASE_URL}/images/preview.webp`,
+   autoplay: true, // ← Mode tutoriel automatique ou pas
+-  deviceTester: {
+-    enabled: true,
+-    testDuration: 10000,
+-    minFPS: 25,
+-    minGPUTier: 1,
+-  },
+   name: {
+     fr: "Démonstration",
+     en: "David Liger",
+diff --git a/src/content/webdioramas/folio/curriculum.ts b/src/content/webdioramas/folio/curriculum.ts
+index 2547c89..20d35da 100644
+--- a/src/content/webdioramas/folio/curriculum.ts
++++ b/src/content/webdioramas/folio/curriculum.ts
+@@ -6,12 +6,6 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
+   glb: `${BASE_URL}/models/work-planets.glb`,
+   loaderImage: `${BASE_URL}/images/dioramas/work-planets/preview.webp`,
+   autoplay: true, // ← Mode tutoriel automatique ou pas
+-  deviceTester: {
+-    enabled: false,
+-    testDuration: 10000,
+-    minFPS: 25,
+-    minGPUTier: 1,
+-  },
+   name: {
+     fr: "David Liger",
+     en: "David Liger",
+diff --git a/src/contexts/TranslationContext.tsx b/src/contexts/TranslationContext.tsx
+index cc653f2..48914c8 100644
+--- a/src/contexts/TranslationContext.tsx
++++ b/src/contexts/TranslationContext.tsx
+@@ -32,8 +32,6 @@ const translations = {
+       cacheChecking: "Vérification du cache...",
+       modalTitle: "📦 Téléchargement du livre",
+       modalMessage: "Télécharger toutes les scènes du livre pour une utilisation hors ligne",
+-      demoTitle: "📦 Téléchargement de la démo",
+-      demoMessage: "Téléchargez la démo pour découvrir les WebDioramas",
+       storageInfo: "Espace disponible : ",
+       modalSize: "Taille estimée : ~500 MB",
+       cancel: "Annuler",
+@@ -60,52 +58,6 @@ const translations = {
+       preparing: "Préparation de la scène...",
+       optimizing: "Optimisation mémoire GPU"
+     },
+-    deviceTester: {
+-      title: "Test de compatibilité",
+-      description: "Vérifions que votre appareil peut faire tourner l'application correctement. Ce test prend environ 10 secondes.",
+-      start: "Démarrer le test",
+-      skip: "Passer",
+-      testing: "Test en cours...",
+-      resultPassed: "Appareil compatible !",
+-      resultFailed: "Performances limitées",
+-      continue: "Continuer",
+-      continueAnyway: "Continuer quand même",
+-      warningMessage: "L'expérience pourrait être dégradée sur cet appareil.",
+-      GPUDetectorTitle: "Carte graphique détectée",
+-      GPUDetecting: "Détection GPU",
+-      WEBGLCapacitiesTitle: "Analyse capacités WebGL",
+-      MemoryCheckTitle: "Vérification mémoire",
+-      ThreeDPERFTestTitle: "Test de performance 3D",
+-      completesAnalysisTitle: "✓ Analyse terminée, préparation des résultats...",
+-      FPSAverage: "FPS Moyen",
+-      GPUPower: "Puissance GPU",
+-      FPSMin: "FPS Min (p5)",
+-      lowest5PerCent: "5% le plus bas",
+-      memoryTitle: "Mémoire",
+-      graphicsCardTitle: "Carte graphique",
+-      detectedProblems: "❌ Problèmes détectés :",
+-      warningsTitle: "⚠️ Avertissements :",
+-      testRetry: "🔄 Refaire le test",
+-      advicesTitle: "💡 Conseils pour améliorer les performances",
+-      closeApps: "Fermez les autres applications et onglets du navigateur",
+-      disableEnergySaver: "Désactivez l'économiseur de batterie ou le mode économie d'énergie",
+-      enablePerfMode: "Activez le mode « Performances » dans les paramètres système",
+-      reduceLight: "Réduisez la luminosité de l'écran et fermez le multitâche",
+-      controlHeating: "Assurez-vous que votre appareil n'est pas en surchauffe",
+-      highPerfMode: "Connectez votre téléphone au chargeur pour activer le mode haute performance",
+-      finalNote: "Ces conseils peuvent améliorer temporairement les performances, mais ne remplaceront pas un appareil plus puissant.",
+-      resultsLoading: "Chargement résultats...",
+-      low: "Faible",
+-      medium: "Moyen",
+-      high: "Élevé",
+-      preparing: "Préparation de l'expérience...",
+-      noWebGL: "❌ WebGL non disponible ou en mode compatibilité",
+-      impossible: "Votre navigateur ne peut pas utiliser l'accélération matérielle 3D.",
+-      impossible2: "L'expérience sera très dégradée ou impossible.",
+-      checkBrowserParams: "• Vérifiez que WebGL est activé dans les paramètres du navigateur",
+-      tryAnotherBrowser: "• Essayez un autre navigateur (Chrome, Edge, Safari)",
+-      updateGPUDriver: "• Mettez à jour vos pilotes graphiques"
+-    },
+     restart: {
+       title: "Scène en pause",
+       message: "La scène a été mise en pause pour économiser la mémoire.",
+@@ -116,19 +68,6 @@ const translations = {
+       message: "Vérifiez votre connexion puis réessayez. Si le problème persiste, fermez l'onglet et rouvrez le lien.",
+       button: "Recharger la scène"
+     },
+-    launcher: {
+-      loading: "Chargement...",
+-      sceneOpening: "Ouverture de la scène...",
+-      preparing: "Préparation en cours...",
+-      optimizing: "Optimisation mémoire GPU",
+-      requiredAction: "Action requise",
+-      clickToOpen: "Cliquez ci-dessous pour ouvrir la scène",
+-      openScene: "🎬 Ouvrir la scène",
+-      changing: "Changement de scène en cours",
+-      redirect: "Retournez sur l'onglet de la scène 3D",
+-      autoClose: "(Cette page se fermera automatiquement)",
+-      letsgo: "C'est parti !"
+-    }
+   },
+   en: {
+     loader: { start: "Click to start", startMobile: "Tap to start", browserWarning: "⚠️ For optimal experience, use Chrome or Brave" },
+@@ -158,8 +97,6 @@ const translations = {
+       cacheChecking: "Checking cache...",
+       modalTitle: "📦 Download book",
+       modalMessage: "Download all scenes for offline use.",
+-      demoTitle: "📦 Download the demo",
+-      demoMessage: "Download the demo to discover WebDioramas",
+       storageInfo: "Available space : ",
+       modalSize: "Estimated size: ~500 MB",
+       cancel: "Cancel",
+@@ -186,52 +123,6 @@ const translations = {
+       preparing: "Preparing the stage...",
+       optimizing: "GPU memory optimisation"
+     },
+-    deviceTester: {
+-      title: "Compatibility test",
+-      description: "Let us verify that your device can run the application correctly. This test takes approximately 10 seconds.",
+-      start: "Start the test",
+-      skip: "Pass",
+-      testing: "Testing in progress...",
+-      resultPassed: "Compatible device!",
+-      resultFailed: "Limited performance",
+-      continue: "Continue",
+-      continueAnyway: "Keep going anyway",
+-      warningMessage: "The experience may be degraded on this device.",
+-      GPUDetectorTitle: "Graphics card detected",
+-      GPUDetecting: "GPU detection",
+-      WEBGLCapacitiesTitle: "WebGL capabilities analysis",
+-      MemoryCheckTitle: "Memory check",
+-      ThreeDPERFTestTitle: "3D performance test",
+-      completesAnalysisTitle: "✓ Analysis completed, preparation of results...",
+-      FPSAverage: "Medium FPS",
+-      GPUPower: "GPU power",
+-      FPSMin: "Min FPS (p5)",
+-      lowest5PerCent: "lowest 5%",
+-      memoryTitle: "Memory",
+-      graphicsCardTitle: "Graphics card",
+-      detectedProblems: "❌ Problems detected :",
+-      warningsTitle: "⚠️ Warnings :",
+-      testRetry: "🔄 Retake the test",
+-      advicesTitle: "💡 Tips for improving performance",
+-      closeApps: "Close other applications and browser tabs.",
+-      disableEnergySaver: "Disable battery saver or power saving mode",
+-      enablePerfMode: "Enable ‘Performance’ mode in the system settings.",
+-      reduceLight: "Reduce screen brightness and close multitasking",
+-      controlHeating: "Ensure that your device is not overheating.",
+-      highPerfMode: "Connect your phone to the charger to activate high-performance mode.",
+-      finalNote: "These tips may temporarily improve performance, but they will not replace a more powerful device.",
+-      resultsLoading: "Loading results...",
+-      low: "Low",
+-      medium: "Medium",
+-      high: "High",
+-      preparing: "Preparing for the experiment...",
+-      noWebGL: "❌ WebGL unavailable or in compatibility mode",
+-      impossible: "Your browser cannot use 3D hardware acceleration.",
+-      impossible2: "The experience will be significantly degraded or impossible.",
+-      checkBrowserParams: "• Check that WebGL is enabled in your browser settings.",
+-      tryAnotherBrowser: "• Try another browser (Chrome, Edge, Safari)",
+-      updateGPUDriver: "• Update your graphics drivers"
+-    },
+     restart: {
+       title: "Scene on hold",
+       message: "The scene has been paused to save memory.",
+@@ -242,19 +133,6 @@ const translations = {
+       message: "Check your connection and try again. If the problem persists, close the tab and reopen the link.",
+       button: "Reload the scene"
+     },
+-    launcher: {
+-      loading: "Loading..",
+-      sceneOpening: "Opening scene...",
+-      preparing: "Preparing...",
+-      optimizing: "Optimising GPU memory",
+-      requiredAction: "Action required",
+-      clickToOpen: "Click below to open the scene",
+-      openScene: "🎬 Open scene",
+-      changing: "Changing scene...",
+-      redirect: "Return to the 3D scene tab",
+-      autoClose: "(This page will close automatically)",
+-      letsgo: "Let's go !"
+-    }
+   },
+   es: {
+     loader: { start: "Clic para comenzar", startMobile: "Toca para comenzar", browserWarning: "⚠️ Para una experiencia óptima, use Chrome o Brave" },
+@@ -284,8 +162,6 @@ const translations = {
+       cacheChecking: "Comprobando la caché...",
+       modalTitle: "📦 Descargar libro",
+       modalMessage: "Descarga todas las escenas para uso sin conexión.",
+-      demoTitle: "📦 Descargar la demo",
+-      demoMessage: "Descargue la demo para descubrir los WebDioramas.",
+       storageInfo: "Espacio disponible : ",
+       modalSize: "Tamaño estimado: ~500 MB",
+       cancel: "Cancelar",
+@@ -312,52 +188,6 @@ const translations = {
+       preparing: "Preparación del escenario...",
+       optimizing: "Optimización de la memoria GPU"
+     },
+-    deviceTester: {
+-      title: "Prueba de compatibilidad",
+-      description: "Comprobemos que tu dispositivo puede ejecutar la aplicación correctamente. Esta prueba dura unos 10 segundos.",
+-      start: "Iniciar la prueba",
+-      skip: "Pasar",
+-      testing: "Prueba en curso...",
+-      resultPassed: "¡Dispositivo compatible!",
+-      resultFailed: "Rendimiento limitado",
+-      continue: "Continuar",
+-      continueAnyway: "Continuar de todos modos",
+-      warningMessage: "La experiencia podría verse afectada en este dispositivo.",
+-      GPUDetectorTitle: "Tarjeta gráfica detectada",
+-      GPUDetecting: "Detección de GPU",
+-      WEBGLCapacitiesTitle: "Análisis de capacidades WebG",
+-      MemoryCheckTitle: "Verificación de memoria",
+-      ThreeDPERFTestTitle: "Prueba de rendimiento 3D",
+-      completesAnalysisTitle: "✓ Análisis completado, preparación de los resultados...",
+-      FPSAverage: "FPS medio",
+-      GPUPower: "Potencia de la GPU",
+-      FPSMin: "FPS mín. (p5)",
+-      lowest5PerCent: "5 % más bajo",
+-      memoryTitle: "Memoria",
+-      graphicsCardTitle: "Tarjeta gráfica",
+-      detectedProblems: "❌ Problemas detectados :",
+-      warningsTitle: "⚠️ Advertencias :",
+-      testRetry: "🔄 Rehacer la prueba",
+-      advicesTitle: "💡 Consejos para mejorar el rendimiento",
+-      closeApps: "Cierre las demás aplicaciones y pestañas del navegador.",
+-      disableEnergySaver: "Desactive el ahorro de batería o el modo de ahorro de energía.",
+-      enablePerfMode: "Activa el modo «Rendimiento» en los ajustes del sistema.",
+-      reduceLight: "Reduzca el brillo de la pantalla y cierre la multitarea.",
+-      controlHeating: "Asegúrese de que su dispositivo no se sobrecaliente.",
+-      highPerfMode: "Conecte su teléfono al cargador para activar el modo de alto rendimiento.",
+-      finalNote: "Estos consejos pueden mejorar temporalmente el rendimiento, pero no sustituyen a un dispositivo más potente.",
+-      resultsLoading: "Cargando resultados...",
+-      low: "Bajo",
+-      medium: "Medio",
+-      high: "Elevado",
+-      preparing: "Preparación del experimento...",
+-      noWebGL: "❌ WebGL no disponible o en modo compatibilidad",
+-      impossible: "Su navegador no puede utilizar la aceleración 3D por hardware.",
+-      impossible2: "La experiencia será muy deficiente o imposible.",
+-      checkBrowserParams: "• Comprueba que WebGL está activado en la configuración del navegador.",
+-      tryAnotherBrowser: "• Prueba con otro navegador (Chrome, Edge, Safari).",
+-      updateGPUDriver: "• Actualiza tus controladores gráficos."
+-    },
+     restart: {
+       title: "Escena en pausa",
+       message: "La escena se ha pausado para ahorrar memoria.",
+@@ -368,19 +198,6 @@ const translations = {
+       message: "Comprueba tu conexión e inténtalo de nuevo. Si el problema persiste, cierra la pestaña y vuelve a abrir el enlace.",
+       button: "Recargar la escena"
+     },
+-    launcher: {
+-      loading: "Cargando...",
+-      sceneOpening: "Abrir escena...",
+-      preparing: "Preparando...",
+-      optimizing: "Optimizando memoria GPU",
+-      requiredAction: "Acción requerida",
+-      clickToOpen: "Haga clic a continuación para abrir la escena",
+-      openScene: "🎬 Abrir la escena",
+-      changing: "Cambio de escena en curso",
+-      redirect: "Volver a la pestaña de la escena 3D",
+-      autoClose: "(Esta página se cerrará automáticamente)",
+-      letsgo: "¡Allá vamos!"
+-    }
+   }
+ };
+ 
+diff --git a/src/lib/token.ts b/src/lib/token.ts
+deleted file mode 100644
+index 50ff661..0000000
+--- a/src/lib/token.ts
++++ /dev/null
+@@ -1,8 +0,0 @@
+-import { createHash, timingSafeEqual } from "node:crypto";
+-
+-export function tokenMatches(token: string | undefined, hashHex: string | undefined): boolean {
+-  if (!token || !hashHex || !/^[0-9a-f]{64}$/.test(hashHex)) return false;
+-  const a = createHash("sha256").update(token, "utf8").digest();
+-  const b = Buffer.from(hashHex, "hex");
+-  return a.length === b.length && timingSafeEqual(a, b);
+-}
+\ No newline at end of file
+diff --git a/src/types/diorama.ts b/src/types/diorama.ts
+index 9189c8a..c95a262 100644
+--- a/src/types/diorama.ts
++++ b/src/types/diorama.ts
+@@ -186,14 +186,6 @@ export interface PostProcessingConfig {
+   };
+ }
+ 
+-export interface DeviceTesterConfig {
+-  enabled: boolean;
+-  testDuration: number;
+-  minFPS: number;
+-  minGPUTier: number;
+-  skipIfPreviouslyTested?: boolean;
+-}
+-
+ export type DioramaConfig3D = {
+   glb: string;
+   name: TranslatedString;
+@@ -206,7 +198,6 @@ export type DioramaConfig3D = {
+   toonOutline?: ToonOutlineConfig; // 🔥 nouvel objet
+   credits?: DioramaCredits;
+   autoplay?: boolean;
+-  deviceTester?: DeviceTesterConfig;
+ };
+ 
+ export interface DioramaCredits {

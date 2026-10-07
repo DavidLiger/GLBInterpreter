@@ -6,12 +6,6 @@ export const curriculum: DioramaConfig3DWithPostProcessing = {
   glb: `${BASE_URL}/models/work-planets.glb`,
   loaderImage: `${BASE_URL}/images/dioramas/work-planets/preview.webp`,
   autoplay: true, // ← Mode tutoriel automatique ou pas
-  deviceTester: {
-    enabled: false,
-    testDuration: 10000,
-    minFPS: 25,
-    minGPUTier: 1,
-  },
   name: {
     fr: "David Liger",
     en: "David Liger",
