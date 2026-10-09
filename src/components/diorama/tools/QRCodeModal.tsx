@@ -10,7 +10,7 @@ interface QRModalProps {
 
 export default function QRModal({ onOpenChange }: QRModalProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [url, setUrl] = useState("https://editions-liger.com/q/");
+  const [url, setUrl] = useState("https://dino.editions-liger.com/s/");
   const qrRef = useRef<SVGSVGElement>(null);
 
   // ✅ MODIFIER le setIsOpen

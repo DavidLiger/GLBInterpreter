@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack && node scripts/generate-scene-stubs.mjs",
-    "lint": "eslint"
+    "build": "next build --webpack && tsx scripts/build-book.ts",
+    "lint": "eslint",
+    "book:check": "tsx scripts/build-book.ts --check",
+    "book:test-source": "tsx scripts/make-test-book.ts"
   },
   "dependencies": {
     "@serwist/next": "^9.2.1",
@@ -14,7 +16,6 @@
     "idb": "^8.0.3",
     "lucide-react": "^0.542.0",
     "next": "^16.0.7",
-    "qrcode.react": "^4.2.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
     "three": "^0.180.0"
@@ -26,14 +27,18 @@
     "@gltf-transform/functions": "^4.2.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/three": "^0.180.0",
     "eslint": "^9",
     "eslint-config-next": "15.5.2",
     "qrcode": "^1.5.4",
+    "qrcode.react": "^4.2.0",
     "serwist": "^9.2.3",
     "tailwindcss": "^4",
-    "typescript": "^5.9.2"
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.2",
+    "zod": "^4.6.5"
   }
 }

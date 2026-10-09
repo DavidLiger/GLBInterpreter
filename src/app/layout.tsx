@@ -2,12 +2,13 @@ import type { Metadata } from "next";
 import "./globals.css";
 import ServiceWorkerRegister from "@/components/book/ServiceWorkerRegister";
 
-// Métadonnées minimales. L'image OG unique du livre et le manifest du livre sont produits au build en Î6/Î9.
+// Métadonnées minimales. Le build du livre (scripts/build-book.ts, Î6) remplace manifest.webmanifest par celui du
+// livre et ajoute og:title / og:image dans index.html ; icônes et plein écran complets en Î9.
 // Chemins relatifs (D-8.4) : le dossier exporté doit fonctionner sous `/` comme sous `/<dépôt>/`.
 export const metadata: Metadata = {
   title: 'GLBInterpreter',
   description: 'Lecteur 3D pour livres augmentés.',
-  manifest: './manifest.json',
+  manifest: './manifest.webmanifest',
   icons: { icon: './icon.png' },
 };
 

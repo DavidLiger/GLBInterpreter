@@ -68,6 +68,8 @@ public/swe-worker-*.js
 
 # Tokens en clair et QR d'impression (îlot 0) — jamais commités
 /private/
-# Index générés
+# Index générés, QR d'impression (build-book : dist/qr/<bookId>/)
 /dist/
+# Livre de test synthétique (npm run book:test-source)
+/books/test-dino/
 
