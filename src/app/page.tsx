@@ -1,58 +1,18 @@
-'use client'
+import Link from "next/link";
 
-import HeaderV2 from "@/components/common/Header";
-import BooksSection from "@/components/books/BooksSection";
-import CollectionsSection from "@/components/books/CollectionsSection";
-import Footer from "@/components/common/Footer";
-import Copyright from "@/components/common/Copyright";
-import content from "../content/content.json";
-import { HomeTranslationProvider } from "@/contexts/HomeTranslationContext";
-import HomeLanguageSelector from "@/components/common/HomeLanguageSelector";
-import { useState } from "react";
-
+// Page d'accueil minimale du repo (Î4). La vitrine vit dans faerium-site ; la route d'entrée
+// définitive (/s/<scène>) est posée en Î5.
 export default function Home() {
-  const [headerScrolled, setHeaderScrolled] = useState(false);
-
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Organization',
-    name: 'Éditions Liger',
-    url: 'https://editions-liger.com',
-    logo: 'https://editions-liger.com/images/logo.png',
-    description: 'Maison d\'édition spécialisée dans les livres augmentés avec expériences 3D immersives',
-    sameAs: [
-      'https://www.instagram.com/editionsliger',
-      'https://www.facebook.com/editionsliger'
-    ]
-  };
-
   return (
-    <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-      <div className="min-h-screen flex flex-col bg-gray-300 text-gray-900">
-        <HomeTranslationProvider>
-          <HeaderV2 
-            header={content.header}
-            howItWorks={content.howItWorks}
-            onScrollChange={setHeaderScrolled}
-          />
-          
-          {!headerScrolled && <HomeLanguageSelector />}
-          
-          <main className="pt-48">
-            <BooksSection />
-            <CollectionsSection 
-              title={content.collectionsSection.title}
-            />
-            <Copyright />
-          </main>
-          
-          <Footer />
-        </HomeTranslationProvider>
-      </div>
-    </>
+    <main className="min-h-screen flex flex-col items-center justify-center gap-4 bg-black text-white p-6 text-center">
+      <h1 className="text-2xl font-bold">GLBInterpreter</h1>
+      <p className="text-white/70">Lecteur 3D pour livres augmentés.</p>
+      <Link
+        href="/webdiorama/1/street"
+        className="px-6 py-3 rounded-full bg-white/15 hover:bg-white/25 transition"
+      >
+        Ouvrir la scène de test
+      </Link>
+    </main>
   );
 }

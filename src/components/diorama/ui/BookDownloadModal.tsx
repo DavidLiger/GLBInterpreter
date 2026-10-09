@@ -9,14 +9,12 @@ interface BookDownloadModalProps {
   bookId: string;
   onComplete: () => void;
   onCancel?: () => void;
-  isFolioMode?: boolean; 
 }
 
 export default function BookDownloadModal({ 
   bookId,
   onComplete,
   onCancel, 
-  isFolioMode = false, 
 }: BookDownloadModalProps) {
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -186,20 +184,14 @@ export default function BookDownloadModal({
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.9, y: 20 }}
           >
-            {/* ✅ MODIFIÉ : Titre selon le mode */}
             <h2 className="text-2xl font-bold text-white mb-4">
-              {isFolioMode
-                ? "📂 Expérience interactive"
-                : (t.bookDownload?.modalTitle || "📦 Téléchargement du livre")}
+              {t.bookDownload?.modalTitle || "📦 Téléchargement du livre"}
             </h2>
 
             {!downloading && !error && (
               <>
-                {/* ✅ MODIFIÉ : Message selon le mode */}
                 <p className="text-gray-300 mb-6 text-sm">
-                  {isFolioMode
-                    ? "Cette expérience 3D interactive nécessite le téléchargement d'assets pour fonctionner de manière optimale. Les données seront mises en cache pour les prochaines visites."
-                    : (t.bookDownload?.modalMessage || "Télécharger toutes les scènes du livre pour une utilisation hors ligne")}
+                  {t.bookDownload?.modalMessage || "Télécharger toutes les scènes du livre pour une utilisation hors ligne"}
                 </p>
 
                 {/* Infos de stockage */}
@@ -254,10 +246,7 @@ export default function BookDownloadModal({
                         : 'bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white'
                     }`}
                   >
-                    {/* ✅ MODIFIÉ : Texte bouton selon le mode */}
-                    {isFolioMode 
-                      ? "📥 Télécharger" 
-                      : t.bookDownload?.download}
+                    {t.bookDownload?.download}
                   </button>
                   <button
                     onClick={() => {
@@ -266,17 +255,9 @@ export default function BookDownloadModal({
                     }}
                     className="px-6 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-full transition"
                   >
-                    {/* ✅ MODIFIÉ : En folio, "Plus tard" au lieu de "Annuler" */}
-                    {isFolioMode ? "⏭️ Plus tard" : t.bookDownload?.cancel}
+                    {t.bookDownload?.cancel}
                   </button>
                 </div>
-
-                {/* ✅ NOUVEAU : Note en mode folio */}
-                {isFolioMode && (
-                  <p className="text-gray-500 text-xs mt-4 text-center">
-                    💡 L'expérience fonctionnera en streaming sans téléchargement, mais sera plus lente.
-                  </p>
-                )}
               </>
             )}
 
@@ -331,7 +312,7 @@ export default function BookDownloadModal({
                     }}
                     className="px-6 bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 rounded-full transition"
                   >
-                    {isFolioMode ? "⏭️ Continuer" : t.bookDownload?.close}
+                    {t.bookDownload?.close}
                   </button>
                 </div>
               </>

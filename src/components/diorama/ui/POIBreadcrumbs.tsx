@@ -3,8 +3,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { POI } from "@/types/diorama";
 import { useTranslation } from "@/contexts/TranslationContext";
-import ExperienceModal from "./ExperienceModal";
-import { usePOIContentCheck } from "../hooks/usePOIContentCheck";
 
 interface POIBreadcrumbsProps {
   currentPOI: string | null;
@@ -14,8 +12,6 @@ interface POIBreadcrumbsProps {
   configPOIs: POI[];
   isPortrait: boolean;
   viewportHeight: number;
-  experienceStarted?: boolean;
-  bookId: string;
 }
 
 export default function POIBreadcrumbs({
@@ -26,8 +22,6 @@ export default function POIBreadcrumbs({
   configPOIs,
   isPortrait,
   viewportHeight,
-  experienceStarted = true,
-  bookId,
 }: POIBreadcrumbsProps) {
   const { lang } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -36,35 +30,8 @@ export default function POIBreadcrumbs({
   const activePOI = currentPOI ? findPOIRecursively(currentPOI) : null;
   const parent = activePOI ? findParentPOI(activePOI.id) : null;
 
-  const [selectedPOI, setSelectedPOI] = useState<string | null>(null);
-  const isFolioMode = process.env.NEXT_PUBLIC_SITE_TYPE === 'folio';
-
-    // ✅ UTILISER le hook
-  const { poisWithContent, contentChecked } = usePOIContentCheck({ 
-    sceneId: bookId 
-  });
-
   // ── Construire la liste des breadcrumbs
   const breadcrumbList: { poi: POI; type: "parent" | "active" | "sibling" | "child" }[] = [];
-
-    // ✅ NOUVEAU : Ouvrir automatiquement au démarrage en mode folio
-  useEffect(() => {
-    // ✅ ATTENDRE que la vérification soit terminée
-    if (!contentChecked) return;
-    
-    if (!isFolioMode || !currentPOI || !experienceStarted) return;
-    
-    // ✅ SI le POI a du contenu → ouvrir
-    if (poisWithContent.has(currentPOI)) {
-      console.log('🎬 POI a du contenu, ouvrir modal:', currentPOI);
-      setSelectedPOI(currentPOI);
-    } else {
-      // ✅ SINON → fermer/ne rien faire
-      console.log('❌ POI sans contenu, PAS de modal:', currentPOI);
-      setSelectedPOI(null);
-    }
-  }, [contentChecked, isFolioMode, currentPOI, experienceStarted, poisWithContent]);
-
 
   if (!activePOI) {
     // 🔹 Aucun actif → afficher tous les POIs racine
@@ -159,8 +126,6 @@ export default function POIBreadcrumbs({
             else separator = "|";
           }
 
-          const hasContent = poisWithContent.has(item.poi.id);
-
           return (
             <React.Fragment key={`${item.poi.id}-${item.type}`}>
               {separator && <span className={separatorClass}>{separator}</span>}
@@ -172,11 +137,6 @@ export default function POIBreadcrumbs({
                 onClick={() => {
                   if (item.type !== "active") {
                     goToPOI(item.poi);
-                  }
-                  
-                  // ✅ Ouvrir modal SEULEMENT si contenu vérifié ET existant
-                  if (isFolioMode && contentChecked && poisWithContent.has(item.poi.id)) {
-                    setSelectedPOI(item.poi.id);
                   }
                 }}
                 disabled={item.type === "active"}
@@ -207,16 +167,6 @@ export default function POIBreadcrumbs({
         })}
       </AnimatePresence>
     </div>
-    {/* ✅ Modal expérience */}
-    {isFolioMode && selectedPOI && poisWithContent.has(selectedPOI) ? (
-      <ExperienceModal
-        poiId={selectedPOI}
-        isOpen={true}
-        onClose={() => setSelectedPOI(null)}
-        baseUrl="https://webdiorama-proxy.david-liger-pro.workers.dev/assets/folio/content"
-        isPortrait={isPortrait}
-      />
-    ) : null}
     </>
   );
 }

@@ -1,9 +1,14 @@
+// src/content/fixtures/test-street.ts
+// Cartouche de test (D-8.3) : sert de livre tant que le livre-démo/livre 1 n'existe pas.
+// Contenu de développement uniquement, non destiné à la publication. Les crédits d'origine
+// (musique « Aquatic Ambience », sources de sons non vérifiées) ont été retirés en Î4 ;
+// les crédits réels sont refaits par asset en Î6 (C-16).
 import type { DioramaConfig3DWithPostProcessing } from "@/types/diorama";
 
 const BASE_URL = process.env.NEXT_PUBLIC_ASSET_BASE_URL || "";
 
-export const castle: DioramaConfig3DWithPostProcessing = {
-  glb: `${BASE_URL}/models/castle.glb`,
+export const testStreet: DioramaConfig3DWithPostProcessing = {
+  glb: `${BASE_URL}/models/street.glb`,
   loaderImage: `${BASE_URL}/icons/dioramas/test_street/street-preview.png`,
   autoplay: true, // ← Mode tutoriel automatique ou pas
   name: {
@@ -52,8 +57,7 @@ export const castle: DioramaConfig3DWithPostProcessing = {
       },
       emptyName: "start",
       icon: `${BASE_URL}/icons/dioramas/test_street/start.png`,
-      ambientSound: `${BASE_URL}/sounds/aquatic_ambience.mp3`,
-      sceneSound: "/sounds/goofy_Ahh_trap_short.mp3",
+      sceneSound: `${BASE_URL}/sounds/goofy_Ahh_trap_short.mp3`,
       zoom: 0.5, // règlages de la cmera sur ce POI (jusqu'à enableZoom)
       lookAxis: "x",
       minDistance: 1,
@@ -138,7 +142,7 @@ export const castle: DioramaConfig3DWithPostProcessing = {
           {
             time: 0.5,
             text: {
-              fr: "Salut ! Bienvenue dans le diorama.",
+              fr: "Salut ! Bienvenue dans le diorama man.",
               en: "Hi! Welcome to the diorama.",
               es: "¡Hola! Bienvenido al diorama."
             },
@@ -152,9 +156,27 @@ export const castle: DioramaConfig3DWithPostProcessing = {
                 en: "Here, you can explore the 3D scene.",
                 es: "Aquí puedes explorar la escena 3D."
               },
-              // ...
+              {
+                fr: "Tu peux zoomer, tourner la caméra, et cliquer sur les points d'intérêt.",
+                en: "You can zoom in, rotate the camera, and click on points of interest.",
+                es: "Puedes ampliar la imagen, girar la cámara y hacer clic en los puntos de interés."
+              },
+              {
+                fr: "Amuse-toi bien !",
+                en: "Have fun!",
+                es: "¡Que te diviertas!"
+              }
             ],
             characterId: "guide"
+          },
+          {
+            time: 12.5,
+            text: {
+                fr: "Allons voir ce qu’il se passe plus loin !",
+                en: "Let's go and see what's happening further on!",
+                es: "¡Vamos a ver qué pasa más allá!"
+              },
+            characterId: "hero"
           }
         ]
       },
@@ -212,7 +234,7 @@ export const castle: DioramaConfig3DWithPostProcessing = {
           type: "armature",
           clipName: "walkAppart",
           autoplay: false,
-          loop: false
+          loop: false,
         },
         {
           name: "Suzanne",
@@ -340,12 +362,24 @@ export const castle: DioramaConfig3DWithPostProcessing = {
     },
   ],
   videos: [ // pour les videostextures
+    // {
+    //   name: "TVScreen",
+    //   src: `${BASE_URL}/videos/test_street/Cab_Calloway_1933.mp4`,
+    //   materialIndex: 0,
+    //   loop: true,
+    //   muted: true,
+    // },
     {
       name: "TVScreen",
-      src: `${BASE_URL}/videos/test_street/Cab_Calloway_1933.mp4`,
-      materialIndex: 0,
-      loop: true,
-      muted: true,
+      src: "https://webdiorama-proxy.david-liger-pro.workers.dev/assets/1/spritesheets/spritesheet_TV-screen.webp",
+      type: "spritesheet",
+      spritesheet: {
+        columns: 8,
+        rows: 6,
+        totalFrames: 48,
+        fps: 24,
+        mode: "loop"
+      }
     },
     {
       name: "TVScreen2",
@@ -390,20 +424,12 @@ export const castle: DioramaConfig3DWithPostProcessing = {
   },
   credits: {
     description: {
-      fr: "Scène 3D immersive du village...",
-      en: "Immersive 3D village scene...",
-      es: "Escena 3D inmersiva del pueblo..."
+      fr: "Scène de test (développement).",
+      en: "Test scene (development).",
+      es: "Escena de prueba (desarrollo)."
     },
-    music: [
-      { title: "Aquatic Ambience", author: "David Wise", source: "No royalties - remix version" },
-      { title: "Cab Calloway 1933", source: "Domaine public" },
-    ],
-    sounds: [
-      { title: "kids_playing.mp3", source: "freesound.org" },
-      { title: "snoring_guy.mp3", source: "mixkit.co" },
-    ],
-    licenses: ["Copyright", "Les Editions Liger"],
-    project: "Diorama 3D Demo",
-    year: "2025",
+    licenses: ["Contenu de test, non publié"],
+    project: "GLBInterpreter – fixture de test",
+    year: "2026",
   },
 };

@@ -52,36 +52,3 @@ body {
 .safe-area-bottom {
   padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
 }
-
-/* src/app/globals.css ou styles appropriés */
-
-/* ✅ Isolation du contenu CV pour éviter qu'il n'affecte le layout parent */
-.cv-container {
-  /* Réinitialiser les styles qui pourraient fuir */
-  all: initial;
-  
-  /* Restaurer les styles de base */
-  display: block;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  line-height: 1.5;
-  color: #1f2937;
-  
-  /* Contenir le contenu */
-  max-width: 100%;
-  box-sizing: border-box;
-}
-
-/* ✅ Styles pour le contenu à l'intérieur */
-.cv-container * {
-  box-sizing: border-box;
-}
-
-/* ✅ Empêcher les marges/paddings de déborder */
-.cv-container > *:first-child {
-  margin-top: 0 !important;
-}
-
-.cv-container > *:last-child {
-  margin-bottom: 0 !important;
-}
-
