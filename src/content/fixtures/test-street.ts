@@ -5,11 +5,13 @@
 // les crédits réels sont refaits par asset en Î6 (C-16).
 import type { DioramaConfig3DWithPostProcessing } from "@/types/diorama";
 
-const BASE_URL = process.env.NEXT_PUBLIC_ASSET_BASE_URL || "";
+// Chemins relatifs à la racine du livre (D-8.1, Î5) : les fichiers sont servis depuis le dossier exporté
+// (`public/` en développement). Les médias lourds (models/, sounds/, videos/, spritesheets/,
+// icons/dioramas/test_street/) ne sont pas versionnés : à copier localement dans `public/` (voir README).
 
 export const testStreet: DioramaConfig3DWithPostProcessing = {
-  glb: `${BASE_URL}/models/street.glb`,
-  loaderImage: `${BASE_URL}/icons/dioramas/test_street/street-preview.png`,
+  glb: `models/street.glb`,
+  loaderImage: `icons/dioramas/test_street/street-preview.png`,
   autoplay: true, // ← Mode tutoriel automatique ou pas
   name: {
     fr: "La place du village",
@@ -56,8 +58,8 @@ export const testStreet: DioramaConfig3DWithPostProcessing = {
         es: "Vista inicial"
       },
       emptyName: "start",
-      icon: `${BASE_URL}/icons/dioramas/test_street/start.png`,
-      sceneSound: `${BASE_URL}/sounds/goofy_Ahh_trap_short.mp3`,
+      icon: `icons/dioramas/test_street/start.png`,
+      sceneSound: `sounds/goofy_Ahh_trap_short.mp3`,
       zoom: 0.5, // règlages de la cmera sur ce POI (jusqu'à enableZoom)
       lookAxis: "x",
       minDistance: 1,
@@ -130,12 +132,12 @@ export const testStreet: DioramaConfig3DWithPostProcessing = {
           { 
             id: "hero", 
             name: { fr: "Alex", en: "Alex", es: "Alex" }, 
-            image: `${BASE_URL}/images/dioramas/test_street/characters/icone-elf.png` 
+            image: `images/dioramas/test_street/characters/icone-elf.png` 
           },
           { 
             id: "guide", 
             name: { fr: "Luna", en: "Luna", es: "Luna" }, 
-            image: `${BASE_URL}/images/dioramas/test_street/characters/icone-goblin.png` 
+            image: `images/dioramas/test_street/characters/icone-goblin.png` 
           }
         ],
         lines: [
@@ -196,12 +198,12 @@ export const testStreet: DioramaConfig3DWithPostProcessing = {
           intensity: 0.6,
           color: "#ffcc66",
           area: [5, 3, 5],
-          texture: `${BASE_URL}/images/textures/leaf.png`,
+          texture: `images/textures/leaf.png`,
         },
         skybox: {
           intensity: 0.8,
           tint: "#ffd9b3",
-          texture: `${BASE_URL}/images/hdr/city.png`,
+          texture: `images/hdr/city.png`,
         },
         lighting: {
           temperature: 3200,
@@ -217,8 +219,8 @@ export const testStreet: DioramaConfig3DWithPostProcessing = {
         es: "Ventana de apartamento"
       },
       emptyName: "window",
-      icon: `${BASE_URL}/icons/dioramas/test_street/window.png`,
-      ambientSound: `${BASE_URL}/sounds/kids_playing.mp3`,
+      icon: `icons/dioramas/test_street/window.png`,
+      ambientSound: `sounds/kids_playing.mp3`,
       zoom: 0.2,
       lookAxis: "x",
       minDistance: 0.05,
@@ -253,8 +255,8 @@ export const testStreet: DioramaConfig3DWithPostProcessing = {
             es: "Apartamento"
           },
           emptyName: "apartment",
-          icon: `${BASE_URL}/icons/dioramas/test_street/apartment.png`,
-          ambientSound: `${BASE_URL}/sounds/tv_background.mp3`,
+          icon: `icons/dioramas/test_street/apartment.png`,
+          ambientSound: `sounds/tv_background.mp3`,
           zoom: 0.2,
           lookAxis: "x",
           minDistance: 0.01,
@@ -282,8 +284,8 @@ export const testStreet: DioramaConfig3DWithPostProcessing = {
                 es: "Cofre"
               },
               emptyName: "coffre",
-              icon: `${BASE_URL}/icons/dioramas/test_street/coffre.png`,
-              ambientSound: `${BASE_URL}/sounds/snoring_guy.mp3`,
+              icon: `icons/dioramas/test_street/coffre.png`,
+              ambientSound: `sounds/snoring_guy.mp3`,
               zoom: 0.05,
               lookAxis: "x",
               minDistance: 0.01,
@@ -304,8 +306,8 @@ export const testStreet: DioramaConfig3DWithPostProcessing = {
                 es: "Puerta"
               },
           emptyName: "door",
-          icon: `${BASE_URL}/icons/dioramas/test_street/apartment.png`,
-          ambientSound: `${BASE_URL}/sounds/tv_background.mp3`,
+          icon: `icons/dioramas/test_street/apartment.png`,
+          ambientSound: `sounds/tv_background.mp3`,
           zoom: 0.2,
           lookAxis: "x",
           minDistance: 0.01,
@@ -331,9 +333,9 @@ export const testStreet: DioramaConfig3DWithPostProcessing = {
         es: "Ventana de apartamento 2"
       },
       emptyName: "window2",
-      icon: `${BASE_URL}/icons/dioramas/test_street/window.png`,
-      ambientSound: `${BASE_URL}/sounds/kids_playing.mp3`,
-      sceneSound: `${BASE_URL}/sounds/bonjour_exuberant.mp3`,
+      icon: `icons/dioramas/test_street/window.png`,
+      ambientSound: `sounds/kids_playing.mp3`,
+      sceneSound: `sounds/bonjour_exuberant.mp3`,
       zoom: 0.2,
       lookAxis: "x",
       minDistance: 0.05,
@@ -364,14 +366,14 @@ export const testStreet: DioramaConfig3DWithPostProcessing = {
   videos: [ // pour les videostextures
     // {
     //   name: "TVScreen",
-    //   src: `${BASE_URL}/videos/test_street/Cab_Calloway_1933.mp4`,
+    //   src: `videos/test_street/Cab_Calloway_1933.mp4`,
     //   materialIndex: 0,
     //   loop: true,
     //   muted: true,
     // },
     {
       name: "TVScreen",
-      src: "https://webdiorama-proxy.david-liger-pro.workers.dev/assets/1/spritesheets/spritesheet_TV-screen.webp",
+      src: "spritesheets/spritesheet_TV-screen.webp",
       type: "spritesheet",
       spritesheet: {
         columns: 8,
@@ -383,7 +385,7 @@ export const testStreet: DioramaConfig3DWithPostProcessing = {
     },
     {
       name: "TVScreen2",
-      src: `${BASE_URL}/videos/test_street/Cab_Calloway_Minnie.mp4`,
+      src: `videos/test_street/Cab_Calloway_Minnie.mp4`,
       autoplay: true,
     },
   ],

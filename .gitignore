@@ -42,10 +42,12 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Ignore heavy assets (migrated to R2)
+# Médias lourds de la cartouche de test (contenu de développement, non versionné) : copiés localement
+# dans public/ (voir README). Les assets d'un vrai livre sont copiés par le script de build (Î6).
 public/models/
 public/videos/
 public/sounds/
+public/spritesheets/
 public/jsons
 public/image/dioramas
 # Ignore tout dans public/icons/dioramas

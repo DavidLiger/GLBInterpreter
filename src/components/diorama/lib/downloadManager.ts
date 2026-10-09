@@ -1,4 +1,6 @@
 import { openDB, IDBPDatabase } from 'idb';
+import { book } from '@/content/book';
+import { getAssetUrl } from './assets';
 
 interface DownloadTask {
   id: string;
@@ -16,14 +18,6 @@ interface DownloadProgress {
   progress: number;
   speed: number;
   eta: number;
-}
-
-interface IndexEntry {
-  path: string;
-}
-
-interface BookIndex {
-  [key: string]: IndexEntry;
 }
 
 interface BookAsset {
@@ -265,30 +259,24 @@ class DownloadManager {
 }
 
 /**
- * Récupérer TOUS les assets du livre (toutes scènes)
+ * Récupérer TOUS les assets du livre (toutes scènes).
+ * Î5 : la liste est construite depuis les configurations embarquées du livre (plus d'index distant) ; les URL
+ * sont relatives à la racine du livre. Remplacé en Î8 par la liste de fichiers générée au build (Î6).
  */
 export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
-  const baseUrl = process.env.NEXT_PUBLIC_ASSETS_URL;
   const allAssets: BookAsset[] = [];
 
   try {
-    const indexRes = await fetch(`${baseUrl}/assets/${bookId}/index.json`);
-    if (!indexRes.ok) throw new Error(`Index HTTP ${indexRes.status}`);
-    
-    const index = await indexRes.json() as BookIndex; // ✅ Cast explicite
+    if (bookId !== book.id) throw new Error(`Livre inconnu « ${bookId} » (livre du build : « ${book.id} »)`);
 
-    for (const [sceneId, entry] of Object.entries(index)) {
-      const configRes = await fetch(`${baseUrl}/assets/${bookId}/${entry.path}`);
-      if (!configRes.ok) {
-        console.warn(`⚠️ Impossible de charger ${sceneId}`);
-        continue;
-      }
-      
-      const config = await configRes.json();
+    for (const sceneId of book.sceneIds) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const config: any = book.getScene(sceneId);
+      if (!config) continue;
 
       if (config.glb) {
         allAssets.push({
-          url: config.glb,
+          url: getAssetUrl(config.glb),
           type: 'glb',
           taskId: `${bookId}-${sceneId}-glb`,
           size: 50 * 1024 * 1024, // ✅ Estimer (15 MB par exemple)
@@ -297,7 +285,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
 
       if (config.loaderImage) {
         allAssets.push({
-          url: config.loaderImage,
+          url: getAssetUrl(config.loaderImage),
           type: 'image',
           taskId: `${bookId}-${sceneId}-loader`,
           size: 200 * 1024, // ✅ 200 KB
@@ -307,7 +295,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
       const extractFromPOI = (poi: any, poiPath: string) => {
         if (poi.icon) {
           allAssets.push({
-            url: poi.icon,
+            url: getAssetUrl(poi.icon),
             type: 'image',
             taskId: `${bookId}-${sceneId}-${poiPath}-icon`,
             size: 50 * 1024, // ✅ 50 KB
@@ -316,7 +304,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
 
         if (poi.ambientSound) {
           allAssets.push({
-            url: poi.ambientSound,
+            url: getAssetUrl(poi.ambientSound),
             type: 'audio',
             taskId: `${bookId}-${sceneId}-${poiPath}-ambient`,
             size: 2 * 1024 * 1024, // ✅ 2 MB
@@ -325,7 +313,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
 
         if (poi.sceneSound) {
           allAssets.push({
-            url: poi.sceneSound,
+            url: getAssetUrl(poi.sceneSound),
             type: 'audio',
             taskId: `${bookId}-${sceneId}-${poiPath}-scene`,
             size: 3 * 1024 * 1024, // ✅ 3 MB
@@ -335,7 +323,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
         poi.dialogue?.characters?.forEach((char: any, i: number) => {
           if (char.image) {
             allAssets.push({
-              url: char.image,
+              url: getAssetUrl(char.image),
               type: 'image',
               taskId: `${bookId}-${sceneId}-${poiPath}-char-${i}`,
               size: 100 * 1024, // ✅ 100 KB
@@ -345,7 +333,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
 
         if (poi.effects?.particles?.texture) {
           allAssets.push({
-            url: poi.effects.particles.texture,
+            url: getAssetUrl(poi.effects.particles.texture),
             type: 'image',
             taskId: `${bookId}-${sceneId}-${poiPath}-particle`,
             size: 500 * 1024, // ✅ 500 KB
@@ -354,7 +342,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
 
         if (poi.effects?.skybox?.texture) {
           allAssets.push({
-            url: poi.effects.skybox.texture,
+            url: getAssetUrl(poi.effects.skybox.texture),
             type: 'image',
             taskId: `${bookId}-${sceneId}-${poiPath}-skybox`,
             size: 2 * 1024 * 1024, // ✅ 2 MB
@@ -375,7 +363,7 @@ export async function getBookManifest(bookId: string): Promise<BookAsset[]> {
       config.videos?.forEach((video: any, i: number) => {
         if (video.src) {
           allAssets.push({
-            url: video.src,
+            url: getAssetUrl(video.src),
             type: 'video',
             taskId: `${bookId}-${sceneId}-video-${i}`,
             size: 20 * 1024 * 1024, // ✅ 20 MB

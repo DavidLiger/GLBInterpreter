@@ -126,7 +126,7 @@ export default function LoaderOverlay({
             {/* ✅ Section centrale : Image */}
             <div className="flex-1 flex items-center justify-center w-full max-w-2xl">
               <motion.img
-                src={loaderImage ?? '/icons/dioramas/UI/scene-preview.png'}
+                src={loaderImage ?? 'icons/dioramas/UI/scene-preview.png'}
                 alt="Scene Preview"
                 className="object-contain"
                 initial={{ scale: 0.9, opacity: 0 }}

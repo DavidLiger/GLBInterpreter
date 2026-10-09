@@ -8,7 +8,7 @@ interface ConfigConverterToolProps {
 }
 
 export default function ConfigConverterTool({
-  defaultProxyUrl = "https://webdiorama-proxy.david-liger-pro.workers.dev/assets/1",
+  defaultProxyUrl = "",
   defaultSceneId = "street",
   onOpenChange
 }: ConfigConverterToolProps) {
@@ -68,7 +68,7 @@ const instructions = [
         if (match) source = match[1];
         }
 
-        // 3️⃣ Nettoie l’URL proxy (supprime le slash final)
+        // 3️⃣ Nettoie le préfixe des assets (supprime le slash final) ; vide = chemins relatifs au livre (D-8.1)
         const PROXY = proxyUrl.replace(/\/$/, '');
 
         // 4️⃣ Évalue le code TS dans un contexte sécurisé
@@ -98,9 +98,14 @@ const instructions = [
         if (typeof obj === 'string') {
             let val = obj;
 
-            // Remplace BASE_URL par le proxy Cloudflare
+            // Remplace BASE_URL par le préfixe des assets
             if (val.includes('${BASE_URL}')) {
             val = val.replace(/\$\{BASE_URL\}/g, PROXY);
+            }
+
+            // Sans préfixe : `${BASE_URL}/models/x.glb` évalué en `/models/x.glb` → chemin relatif au livre
+            if (!PROXY && /^\/(models|sounds|videos|images|icons|spritesheets)\//.test(val)) {
+            val = val.slice(1);
             }
 
             // Évite les doublons /assets/X/assets/X
@@ -195,11 +200,9 @@ const instructions = [
   const loadExample = () => {
     const example = `import type { DioramaConfig3DWithPostProcessing } from "@/types/diorama";
 
-const BASE_URL = process.env.NEXT_PUBLIC_ASSET_BASE_URL || "";
-
 export const street: DioramaConfig3DWithPostProcessing = {
-  glb: \`\${BASE_URL}/models/street.glb\`,
-  loaderImage: \`\${BASE_URL}/icons/dioramas/test_street/street-preview.png\`,
+  glb: "models/street.glb",
+  loaderImage: "icons/dioramas/test_street/street-preview.png",
   autoplay: true,
   name: "La place du village",
   navigationType: "fps",
@@ -216,7 +219,7 @@ export const street: DioramaConfig3DWithPostProcessing = {
       id: "start",
       label: "Vue initiale",
       emptyName: "start",
-      icon: \`\${BASE_URL}/icons/dioramas/test_street/start.png\`,
+      icon: "icons/dioramas/test_street/start.png",
       zoom: 0.5,
       minPolarAngle: 0,
       maxPolarAngle: Math.PI / 2,
@@ -290,14 +293,14 @@ export const street: DioramaConfig3DWithPostProcessing = {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-1">
-                🌐 URL du Proxy Cloudflare
+                📁 Préfixe des assets (vide = chemins relatifs au livre)
               </label>
               <input
                 type="text"
                 value={proxyUrl}
                 onChange={(e) => setProxyUrl(e.target.value)}
                 className="w-full px-3 py-2 bg-gray-700 text-white border border-gray-600 rounded focus:border-purple-500 focus:outline-none text-sm"
-                placeholder="https://webdiorama-proxy.david-liger-pro.workers.dev/assets/1"
+                placeholder="(vide)"
               />
             </div>
             

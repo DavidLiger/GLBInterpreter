@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GLBInterpreter
 
-## Getting Started
+Lecteur 3D (Next.js + Three.js) des livres augmentés des Éditions Liger. Une « console » qui lit une
+« cartouche » : un GLB et une configuration de scène par page du livre.
 
-First, run the development server:
+Un livre = **une application statique, publique et portable** : un dossier contenant le code, la configuration et
+tous les assets, qui fonctionne servi à la racine d'un domaine (`https://hôte/`) comme sous un sous-chemin
+(`https://hôte/depot/`). Pas de serveur, pas de compte, pas de contrôle d'accès.
+
+## Routage
+
+- Le livre est une page unique (`index.html`). La scène courante est dans le hash : `#/s/<scène>`.
+- Les QR codes imprimés pointent vers `https://<hôte>/s/<scène>` : le fichier `s/<scène>/index.html`, généré après
+  le build, redirige vers `<racine du dossier>#/s/<scène>`.
+- Tous les chemins sont relatifs (assets, service worker `./sw.js`, manifest `./manifest.json`).
+
+## Développement
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev            # http://localhost:3000/#/s/street
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+La cartouche de test (`src/content/fixtures/test-street.ts`, déclarée dans `src/content/book.json` et
+`src/content/book.ts`) attend ses médias dans `public/`, non versionnés : `models/street.glb`, `sounds/*.mp3`,
+`videos/test_street/*.mp4`, `spritesheets/spritesheet_TV-screen.webp`, `icons/dioramas/test_street/*.png`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Les outils de développement (analyse de scène, optimiseur GLB, convertisseur de config, QR, spritesheets,
+réglages de post-processing) n'existent qu'en `npm run dev`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Build
 
-## Learn More
+```bash
+rm -rf .next out && npm run build   # next build --webpack + stubs s/<scène>/
+```
 
-To learn more about Next.js, take a look at the following resources:
+Le dossier `out/` est le livre. Pour le tester à la racine et sous un sous-chemin :
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+(cd out && python3 -m http.server 8001)                        # http://localhost:8001/s/street
+mkdir -p /tmp/sous && cp -r out /tmp/sous/depot
+(cd /tmp/sous && python3 -m http.server 8002)                  # http://localhost:8002/depot/s/street
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Déploiement
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Hébergement statique (Cloudflare Pages à la racine du sous-domaine du livre ; miroir GitHub Pages sous
+sous-chemin). Le dossier `out/` se republie tel quel sur n'importe quel hébergeur de fichiers statiques.

@@ -97,7 +97,7 @@ export default function POIPlayer({
     if (isEnded) {
       return (
         <button onClick={onTogglePlayPause}>
-          <img src="/icons/dioramas/UI/replay_btn.png" alt="Replay" className="w-6 h-6" />
+          <img src="icons/dioramas/UI/replay_btn.png" alt="Replay" className="w-6 h-6" />
         </button>
       );
     }
@@ -105,14 +105,14 @@ export default function POIPlayer({
     if (!isPlaying || isPaused) {
       return (
         <button onClick={onTogglePlayPause}>
-          <img src="/icons/dioramas/UI/play_btn.png" alt="Play" className="w-6 h-6" />
+          <img src="icons/dioramas/UI/play_btn.png" alt="Play" className="w-6 h-6" />
         </button>
       );
     }
 
     return (
       <button onClick={onTogglePlayPause}>
-        <img src="/icons/dioramas/UI/pause_btn.png" alt="Pause" className="w-6 h-6" />
+        <img src="icons/dioramas/UI/pause_btn.png" alt="Pause" className="w-6 h-6" />
       </button>
     );
   };
@@ -156,7 +156,7 @@ export default function POIPlayer({
         <div className="flex items-center gap-1">
           {progress > 0 && !isEnded && (
             <button onClick={onStop}>
-              <img src="/icons/dioramas/UI/stop_btn.png" alt="Stop" className="w-5 h-5" />
+              <img src="icons/dioramas/UI/stop_btn.png" alt="Stop" className="w-5 h-5" />
             </button>
           )}
           {renderControlButton()}

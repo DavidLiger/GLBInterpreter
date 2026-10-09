@@ -30,8 +30,8 @@ export default function FullscreenButton({
       <img
         src={
           isFullscreen
-            ? "/icons/dioramas/UI/fullscreen-exit.png"
-            : "/icons/dioramas/UI/fullscreen.png"
+            ? "icons/dioramas/UI/fullscreen-exit.png"
+            : "icons/dioramas/UI/fullscreen.png"
         }
         alt={isFullscreen ? "Quitter plein écran" : "Plein écran"}
         className="w-8 h-8 object-contain"

@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
-import localFont from "next/font/local";
+import dynamic from "next/dynamic";
 import type { DioramaConfig3D, DioramaConfig3DWithVideos } from "@/types/diorama";
 import VolumeControl from "./audio/VolumeControl"; 
 import { usePOINavigation } from "./hooks/usePOINavigation";
@@ -28,28 +28,24 @@ import DialogueButton from "./ui/DialogueButton";
 import InfoButton from "./ui/InfoButton";
 import InfoModal from "./ui/InfoModal";
 import POIBreadcrumbs from "./ui/POIBreadcrumbs";
-import PostProcessingControls from "./rendering/PostProcessingControls";
 import { setupPostProcessing, setupEmissiveMaterials } from "./rendering/setupPostProcessing";
 import { usePOIEffects } from "./hooks/usePOIEffects";
 import RotateHint from "./ui/RotateHint";
-import ConfigConverterTool from "./tools/ConfigConverterTool";
-import QRCodeModal from "./tools/QRCodeModal";
 import DownloadTooltip from "./ui/DownloadTooltip";
 import { useWebGLContext } from "./hooks/useWebGLContext";
 import { disposeObject, disposeScene, logSceneStats } from "./utils/webglHelpers";
 import BookDownloadModal from "./ui/BookDownloadModal";
 import { isBookFullyCached, getAssetFromCache } from "./lib/downloadManager";
 import useUnifiedAudio from "./hooks/useUnifiedAudio";
-import SceneAnalyzer from "./ui/SceneAnalyzer";
-import GLBOptimizer from "./ui/GLBOptimizer";
-import SpritesheetGenerator from "./ui/SpritesheetGenerator";
 import { applySpritesheets } from "./rendering/applySpritesheet";
 import { SpritesheetAnimator } from "./rendering/SpritesheetAnimator";
- 
-const HandyGeorge = localFont({
-  src: "../../../public/fonts/HandyGeorge.ttf",
-  variable: "--font-HandyGeorge",
-});
+
+// Outils de développement hors bundle de production (R-29, T-01) : la condition est évaluée au build, la branche
+// `import()` disparaît en production.
+const DevTools =
+  process.env.NODE_ENV === "development"
+    ? dynamic(() => import("./tools/DevTools"), { ssr: false })
+    : null;
 
 export default function WebDioramaLoader({ config, bookId }: { config: DioramaConfig3D; bookId: string }) {
   const [mounted, setMounted] = useState(false); // ✅ NOUVEAU
@@ -1144,7 +1140,7 @@ function WebDioramaLoaderInner({
                 isLoaded={isLoaded}
                 sceneName={config.name[lang]}
                 loaderImage={config.loaderImage}
-                fontClassName={HandyGeorge.className}
+                fontClassName="font-handy"
                 onStart={() => {
                   window.scrollTo(0, 0);
 
@@ -1204,57 +1200,12 @@ function WebDioramaLoaderInner({
             viewportHeight={viewportHeight}
           />
 
-          {process.env.NODE_ENV === "development" && composerRef.current && (
-            <PostProcessingControls
+          {DevTools && (
+            <DevTools
               composer={composerRef.current}
-              onUpdate={(type, values) => {
-                if (!composerRef.current) return;
-                if (type === "bloom")
-                  composerRef.current.updateBloom(values.strength, values.radius, values.threshold);
-                if (type === "ssao")
-                  composerRef.current.updateSSAO(values.kernelRadius, values.minDistance);
-                if (type === "dof") {
-                  if ("enabled" in values) composerRef.current.enableDOF(values.enabled);
-                  else composerRef.current.updateDOF(values.focus, values.aperture, values.maxblur);
-                }
-                if (type === "toneMapping")
-                  composerRef.current?.updateToneMapping(values.type, values.exposure);
-              }}
-              onOpenChange={setDevToolOpen} 
-            />
-          )}
-
-          {process.env.NODE_ENV === "development" && (
-            <SceneAnalyzer
-              scene={loadedScene} 
+              scene={loadedScene}
               glbUrl={config.glb}
               onOpenChange={setDevToolOpen}
-            />
-          )}
-
-          {process.env.NODE_ENV === "development" && (
-            <ConfigConverterTool
-              defaultProxyUrl="https://webdiorama-proxy.david-liger-pro.workers.dev/assets/1"
-              defaultSceneId="street"
-              onOpenChange={setDevToolOpen} 
-            />
-          )}
-
-          {process.env.NODE_ENV === "development" && (
-            <QRCodeModal 
-              onOpenChange={setDevToolOpen} 
-            />
-          )}
-
-          {process.env.NODE_ENV === "development" && (
-            <GLBOptimizer 
-              onOpenChange={setDevToolOpen} 
-            />
-          )}
-
-          {process.env.NODE_ENV === "development" && (
-            <SpritesheetGenerator 
-              onOpenChange={setDevToolOpen} 
             />
           )}
 

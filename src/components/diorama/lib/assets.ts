@@ -1,16 +1,9 @@
-// Helper pour construire les URLs des assets depuis R2
-const R2_BASE_URL = 'https://webdiorama-proxy.david-liger-pro.workers.dev/assets/home';
-
-export function getAssetUrl(filename: string): string {
-  // Si l'URL commence déjà par http, on la retourne telle quelle
-  if (filename.startsWith('http')) {
-    return filename;
+// Chemins d'assets relatifs à la racine du livre (D-8.1, Î5). Le livre est une page unique à la racine de son
+// dossier (D-8.4) : un chemin relatif se résout donc toujours depuis cette racine, sous `/` comme sous `/<dépôt>/`.
+// Aucune URL distante : les assets font partie du dossier du livre (exigence 0).
+export function getAssetUrl(path: string): string {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith('//')) {
+    throw new Error(`getAssetUrl : URL absolue refusée (« ${path} ») ; les assets sont dans le dossier du livre`);
   }
-  
-  // Enlever le / au début et /images/ si présent
-  let cleanPath = filename.replace(/^\//, '');
-  cleanPath = cleanPath.replace(/^images\//, '');
-  
-  // Préfixer avec l'URL R2
-  return `${R2_BASE_URL}/${cleanPath}`;
+  return path.replace(/^(\.\/|\/)+/, '');
 }

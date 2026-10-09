@@ -15,8 +15,8 @@ export default function DialogueButton({ visible, onToggle }: DialogueButtonProp
       <img
         src={
           visible
-            ? "/icons/dioramas/UI/chat_on.png"
-            : "/icons/dioramas/UI/chat_off.png"
+            ? "icons/dioramas/UI/chat_on.png"
+            : "icons/dioramas/UI/chat_off.png"
         }
         alt={visible ? "Sous-titres visibles" : "Sous-titres masqués"}
         className="w-8 h-8 object-contain"

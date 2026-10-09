@@ -19,7 +19,7 @@ export default function RotateHint({ show }: RotateHintProps) {
           transition={{ duration: 0.3 }}
         >
           <img
-            src="/icons/dioramas/UI/rotate-phone.png"
+            src="icons/dioramas/UI/rotate-phone.png"
             alt="Tournez le téléphone"
             className="w-32 h-20 opacity-60 rounded-lg"
           />

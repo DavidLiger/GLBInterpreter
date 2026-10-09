@@ -4,9 +4,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "@/contexts/TranslationContext";
 
 const flags = { 
-  fr: "/icons/flags/fr.png", 
-  en: "/icons/flags/en.png", 
-  es: "/icons/flags/es.png" 
+  fr: "icons/flags/fr.png", 
+  en: "icons/flags/en.png", 
+  es: "icons/flags/es.png" 
 };
 
 export default function LanguageSelector() {

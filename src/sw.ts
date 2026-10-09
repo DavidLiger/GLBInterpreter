@@ -1,6 +1,6 @@
 import type { PrecacheEntry } from "serwist";
 import { Serwist } from "serwist";
-import { NetworkFirst, CacheFirst, NetworkOnly } from "serwist";
+import { NetworkFirst, CacheFirst } from "serwist";
 import { ExpirationPlugin } from "serwist";
 
 declare const self: ServiceWorkerGlobalScope & {
@@ -16,13 +16,6 @@ const serwist = new Serwist({
   // et Serwist gère généralement le nettoyage du precache automatiquement.
 
   runtimeCaching: [
-    // 1. ✅ Assets R2 (Cloudflare) → STRICTEMENT RÉSEAU
-    // Empêche le SW de stocker des réponses opaques qui causent l'erreur CORS
-    {
-      matcher: ({ url }) => url.hostname.includes('workers.dev'),
-      handler: new NetworkOnly(),
-    },
-    
     // 2. Pages HTML
     {
       matcher: ({ request }) => request.destination === 'document',
@@ -55,10 +48,9 @@ const serwist = new Serwist({
       }),
     },
     
-    // 4. Images locales (Exclut explicitement workers.dev via le matcher précédent ou celui-ci)
+    // 4. Images locales (Î5 : plus d'assets distants ; le cache du livre arrive en Î8)
     {
-      matcher: ({ request, url }) => 
-        request.destination === 'image' && !url.hostname.includes('workers.dev'),
+      matcher: ({ request }) => request.destination === 'image',
       handler: new CacheFirst({
         cacheName: 'images-v2', // C'est ICI que ton bug actuel sera résolu
         plugins: [

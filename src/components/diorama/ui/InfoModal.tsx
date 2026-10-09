@@ -17,10 +17,10 @@ interface InfoModalProps {
 
 export default function InfoModal({ show, onClose, credits, isMobile, poiIcon }: InfoModalProps) {
   // Images selon device
-  const rotateIcon = isMobile ? "/icons/dioramas/UI/one-finger.png" : "/icons/dioramas/UI/mouse-left-click.png";
-  const zoomIcon = isMobile ? "/icons/dioramas/UI/two-fingers.png" : "/icons/dioramas/UI/mouse-scroll.png";
-  const soundIcon = "/icons/dioramas/UI/sound.png"
-  const subtitlesIcon = "/icons/dioramas/UI/chat_on.png"
+  const rotateIcon = isMobile ? "icons/dioramas/UI/one-finger.png" : "icons/dioramas/UI/mouse-left-click.png";
+  const zoomIcon = isMobile ? "icons/dioramas/UI/two-fingers.png" : "icons/dioramas/UI/mouse-scroll.png";
+  const soundIcon = "icons/dioramas/UI/sound.png"
+  const subtitlesIcon = "icons/dioramas/UI/chat_on.png"
   const { t, lang } = useTranslation();
 
   return (

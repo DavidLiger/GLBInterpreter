@@ -1,22 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import ServiceWorkerRegister from "@/components/book/ServiceWorkerRegister";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-// Métadonnées minimales (Î4). L'image OG unique du livre est fixée au build en Î6.
+// Métadonnées minimales. L'image OG unique du livre et le manifest du livre sont produits au build en Î6/Î9.
+// Chemins relatifs (D-8.4) : le dossier exporté doit fonctionner sous `/` comme sous `/<dépôt>/`.
 export const metadata: Metadata = {
   title: 'GLBInterpreter',
   description: 'Lecteur 3D pour livres augmentés.',
+  manifest: './manifest.json',
+  icons: { icon: './icon.png' },
 };
+
+// Police déclarée ici et non dans le CSS compilé : une URL de `public/` dans le CSS serait résolue depuis
+// `_next/static/css/`, et `next/font` refuse un `assetPrefix` relatif (spike Î5).
+const fontFaces = `@font-face{font-family:HandyGeorge;src:url(fonts/HandyGeorge.ttf) format("truetype");font-display:swap}`;
 
 export default function RootLayout({
   children,
@@ -25,9 +22,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <head>
+        <style dangerouslySetInnerHTML={{ __html: fontFaces }} />
+      </head>
+      <body className="antialiased">
+        <ServiceWorkerRegister />
         {children}
       </body>
     </html>

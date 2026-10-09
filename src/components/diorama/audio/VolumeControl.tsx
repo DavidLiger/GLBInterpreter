@@ -63,8 +63,8 @@ export default function VolumeControl({
   // ✅ Icône selon état
   const displayMuted = muted || volume === 0;
   const iconSrc = displayMuted 
-    ? "/icons/dioramas/UI/muted.png" 
-    : "/icons/dioramas/UI/sound.png";
+    ? "icons/dioramas/UI/muted.png" 
+    : "icons/dioramas/UI/sound.png";
 
   return (
     <div ref={containerRef} className="relative">
