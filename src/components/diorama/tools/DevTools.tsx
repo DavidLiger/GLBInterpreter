@@ -2,14 +2,14 @@
 
 // Outils de développement regroupés (R-29, T-01). Importé par WebDioramaLoader en `import()` dynamique sous la
 // condition `NODE_ENV === "development"` : en production la branche est éliminée au build et ni ce module, ni les
-// outils, ni `@gltf-transform/*` / `qrcode.react` n'entrent dans le bundle.
+// outils, ni `qrcode.react` n'entrent dans le bundle. L'optimisation des GLB est faite au build (Î7, scripts/glb-pipeline.ts) :
+// l'ancien GLBOptimizer du navigateur est supprimé (T-19).
 import type * as THREE from "three";
 import PostProcessingControls from "../rendering/PostProcessingControls";
 import type { setupPostProcessing } from "../rendering/setupPostProcessing";
 import SceneAnalyzer from "../ui/SceneAnalyzer";
 import ConfigConverterTool from "./ConfigConverterTool";
 import QRCodeModal from "./QRCodeModal";
-import GLBOptimizer from "../ui/GLBOptimizer";
 import SpritesheetGenerator from "../ui/SpritesheetGenerator";
 
 type Composer = ReturnType<typeof setupPostProcessing>;
@@ -45,7 +45,6 @@ export default function DevTools({
       <SceneAnalyzer scene={scene} glbUrl={glbUrl} onOpenChange={onOpenChange} />
       <ConfigConverterTool defaultSceneId="street" onOpenChange={onOpenChange} />
       <QRCodeModal onOpenChange={onOpenChange} />
-      <GLBOptimizer onOpenChange={onOpenChange} />
       <SpritesheetGenerator onOpenChange={onOpenChange} />
     </>
   );

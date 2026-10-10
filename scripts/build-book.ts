@@ -3,6 +3,7 @@
 //   npm run build -- --source <dossier du livre>     next build + livre complet (mode livre)
 //   npm run build                                    next build + cartouche de test (mode fixture, provisoire)
 //   npm run book:check -- --source <dossier>         validation seule, sans next build ni écriture
+//   option --textures auto|ktx2|webp|keep            textures des GLB (défaut auto : KTX2 si `ktx` est installé, sinon WebP)
 //
 // Dossier source d'un livre (chemins d'assets relatifs à sa racine = racine du dossier construit, D-8.1) :
 //   book.json                    couche livre (spec-extras-blender.md §5)
@@ -11,17 +12,31 @@
 //   icon-192.png, icon-512.png   facultatifs : icônes du manifest (Î9)
 //   images/, icons/, sounds/…    assets référencés par les configs et book.json (seuls ceux-là sont copiés)
 //
+// Ordre (Î7) : la config est lue et validée sur le GLB SOURCE, puis le GLB est optimisé (scripts/glb-pipeline.ts : extras
+// étrangers retirés, prune, dedup sans MATERIAL, textures KTX2/WebP, Meshopt) vers out/scenes/<scène>.glb ; le GLB écrit est
+// relu et comparé (GLBI_ROOT, clips, src_*, nœuds cités par la config). Un GLB source déjà Meshopt est accepté ; Draco, non.
+// Limite d'hébergement (25 MiB par fichier) contrôlée sur le dossier construit : erreur en mode livre, pas de découpage.
+//
 // Mode livre, dans out/ : scenes/<scène>.glb, scenes/<scène>.json (config validée + crédits des modèles),
 // assets référencés, manifest.webmanifest, og:image dans index.html, stubs s/<scène>/index.html (D-8.4),
 // book.json (livre + liste des fichiers { path, size, sha256 }). QR SVG par scène dans dist/qr/<bookId>/.
-// Mode fixture : stubs d'après src/content/book.json et out/book.json { bookId, scenes, fixture, files }.
+// Mode fixture : GLB de out/ optimisés sur place (empties conservés), stubs d'après src/content/book.json et
+// out/book.json { bookId, scenes, fixture, files }.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { NodeIO, type Document, type Node as GNode } from '@gltf-transform/core';
-import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
+import type { Document, Node as GNode } from '@gltf-transform/core';
 import QRCode from 'qrcode';
+import {
+  formatMiB,
+  optimizeGlbFile,
+  readGlbFile,
+  referencedNodeNames,
+  resolveTextureMode,
+  TEXTURE_MODES,
+  type TextureMode,
+} from './glb-pipeline';
 import {
   bookSchema,
   builtBookSchema,
@@ -76,10 +91,11 @@ interface Options {
   out: string;
   qrDir: string;
   check: boolean;
+  textures: TextureMode;
 }
 
 function parseArgs(argv: string[]): Options {
-  const opts: Options = { source: process.env.BOOK_SOURCE || null, out: 'out', qrDir: 'dist/qr', check: false };
+  const opts: Options = { source: process.env.BOOK_SOURCE || null, out: 'out', qrDir: 'dist/qr', check: false, textures: 'auto' };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => {
@@ -91,7 +107,11 @@ function parseArgs(argv: string[]): Options {
     else if (a === '--out') opts.out = next();
     else if (a === '--qr-dir') opts.qrDir = next();
     else if (a === '--check') opts.check = true;
-    else throw new Error(`option inconnue « ${a} » (options : --source, --out, --qr-dir, --check)`);
+    else if (a === '--textures') {
+      const t = next() as TextureMode;
+      if (!TEXTURE_MODES.includes(t)) throw new Error(`--textures : ${TEXTURE_MODES.join(', ')} attendu (trouvé « ${t} »)`);
+      opts.textures = t;
+    } else throw new Error(`option inconnue « ${a} » (options : --source, --out, --qr-dir, --check, --textures)`);
   }
   return opts;
 }
@@ -155,12 +175,8 @@ interface SceneResult {
   modelCredits: ModelCredit[];
   /** Assets référencés par la config (chemins relatifs à la racine du livre). */
   assets: Set<string>;
-}
-
-let io: NodeIO | null = null;
-async function readGlb(file: string): Promise<Document> {
-  io ??= new NodeIO().registerExtensions(ALL_EXTENSIONS);
-  return io.read(file);
+  /** Nœuds cités par la config (cible caméra, objets animés) : protégés de `prune` à l'optimisation. */
+  protect: string[];
 }
 
 /** Valeur de `glbi_config` : chaîne JSON qui doit donner un objet (`JSON.parse("1.0")` renvoie 1 sans exception). */
@@ -209,9 +225,9 @@ async function readScene(sourceDir: string, id: string): Promise<SceneResult | n
 
   let doc: Document;
   try {
-    doc = await readGlb(glbFile);
+    doc = await readGlbFile(glbFile);
   } catch (e) {
-    err(`${label} : ${glbRel} illisible (${(e as Error).message}). Le build lit les GLB sources non compressés ; la compression est en Î7.`);
+    err(`${label} : ${glbRel} illisible (${(e as Error).message})`);
     return null;
   }
 
@@ -318,11 +334,8 @@ async function readScene(sourceDir: string, id: string): Promise<SceneResult | n
     warn(`${label} : ${glbClipNames.length} clip(s) dans le GLB mais pas de module animations`);
   }
 
-  // --- Hygiène : propriétés de scène étrangères (retirées par le pipeline en Î7) ---
-  for (const s of root.listScenes()) {
-    const foreign = Object.keys(s.getExtras() ?? {}).filter((k) => !k.startsWith('glbi_'));
-    if (foreign.length) warn(`${label} : propriétés de scène non préfixées glbi_ (retirées en Î7) : ${foreign.join(', ')}`);
-  }
+  // --- Hygiène : les extras de scène hors glbi_ et de nœud hors glbi_/src_ sont retirés à l'optimisation (Î7),
+  //     listés dans le journal d'écriture de la scène.
 
   // --- Crédits des modèles : propriétés src_* des nœuds (D-8.5), dédoublonnées ---
   const credits = new Map<string, ModelCredit>();
@@ -367,7 +380,7 @@ async function readScene(sourceDir: string, id: string): Promise<SceneResult | n
   const used = new Set([...sounds, ...(animations?.actions ?? []).map((a) => a.icon), config.scene.loaderImage].filter(Boolean));
   for (const c of creditList) if (!used.has(c.asset)) warn(`${label} : crédit pour « ${c.asset} », asset non utilisé par la scène`);
 
-  return { id, config, source, modelCredits, assets };
+  return { id, config, source, modelCredits, assets, protect: referencedNodeNames(config) };
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -481,6 +494,65 @@ async function writeQrCodes(qrDir: string, book: Book): Promise<string[]> {
 }
 
 // ---------------------------------------------------------------------------------------------------------
+// Optimisation des GLB (Î7, scripts/glb-pipeline.ts)
+// ---------------------------------------------------------------------------------------------------------
+
+function resolveTextureModeOrFail(mode: TextureMode): TextureMode {
+  try {
+    const r = resolveTextureMode(mode);
+    if (r.note) warn(r.note);
+    return r.mode;
+  } catch (e) {
+    err((e as Error).message);
+    fail();
+  }
+}
+
+/** Optimise `rel` du dossier source vers le dossier construit ; contrôle de survie (erreur si un élément est perdu). */
+async function writeOptimizedScene(sourceDir: string, outDir: string, rel: string, protect: string[], textures: TextureMode): Promise<boolean> {
+  try {
+    const r = await optimizeGlbFile(path.join(sourceDir, rel), path.join(outDir, rel), { protect, textures });
+    for (const s of r.survival) err(`${rel} : optimisation : ${s}`);
+    const stripped = [...r.stripped.scene.map((k) => `scène.${k}`), ...r.stripped.node.map((k) => `nœud.${k}`)];
+    console.log(
+      `build-book : ${rel} ${formatMiB(r.inBytes)} → ${formatMiB(r.outBytes)} (textures ${r.textures})` +
+        (stripped.length ? ` ; extras retirés : ${stripped.join(', ')}` : ''),
+    );
+    return r.survival.length === 0;
+  } catch (e) {
+    err(`${rel} : optimisation impossible (${(e as Error).message})`);
+    return false;
+  }
+}
+
+/**
+ * Cartouche de test : GLB recopiés de public/ par next build, optimisés sur place. Empties feuilles conservés (la config
+ * TS de la fixture cite POI et éléments par nom) ; un échec laisse le fichier d'origine (avertissement).
+ */
+async function optimizeFixtureGlbs(outDir: string, mode: TextureMode): Promise<void> {
+  const glbs = listFiles(outDir).filter((f) => f.toLowerCase().endsWith('.glb'));
+  if (!glbs.length) return;
+  const textures = resolveTextureModeOrFail(mode);
+  for (const rel of glbs) {
+    const file = path.join(outDir, rel);
+    const tmp = `${file}.opt`;
+    try {
+      const r = await optimizeGlbFile(file, tmp, { keepLeaves: true, protect: [], textures });
+      if (r.survival.length) {
+        fs.rmSync(tmp, { force: true });
+        warn(`${rel} : optimisation écartée (${r.survival.join(' ; ')}), fichier d'origine conservé`);
+        continue;
+      }
+      fs.renameSync(tmp, file);
+      console.log(`build-book : ${rel} ${formatMiB(r.inBytes)} → ${formatMiB(r.outBytes)} (textures ${r.textures})`);
+    } catch (e) {
+      fs.rmSync(tmp, { force: true });
+      warn(`${rel} : optimisation impossible (${(e as Error).message}), fichier d'origine conservé`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------------------------------------
 // Modes
 // ---------------------------------------------------------------------------------------------------------
 
@@ -517,8 +589,8 @@ function requireExport(outDir: string): void {
   }
 }
 
-/** Cartouche de test (fixture `test-street`, lue par le lecteur actuel) : stubs et liste de fichiers seulement. */
-function buildFixture(opts: Options): void {
+/** Cartouche de test (fixture `test-street`, lue par le lecteur actuel) : GLB optimisés, stubs et liste de fichiers. */
+async function buildFixture(opts: Options): Promise<void> {
   const outDir = path.resolve(ROOT, opts.out);
   console.log('build-book : mode fixture (pas de --source) : cartouche de test src/content/book.json');
   const index = readJson(path.join(ROOT, 'src/content/book.json'), 'src/content/book.json') as { bookId?: unknown; scenes?: unknown } | undefined;
@@ -533,6 +605,7 @@ function buildFixture(opts: Options): void {
     return;
   }
   requireExport(outDir);
+  await optimizeFixtureGlbs(outDir, opts.textures);
   writeStubs(outDir, scenes as string[], 'GLBInterpreter');
   const files = collectFiles(outDir, false);
   if (errors.length) fail();
@@ -576,12 +649,6 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
     const f = path.join(sourceDir, a);
     if (!fs.existsSync(f) || !fs.statSync(f).isFile()) err(`asset « ${a} » introuvable dans le dossier source (V-03)`);
   }
-  for (const id of book.scenes) {
-    const f = path.join(sourceDir, `scenes/${id}.glb`);
-    if (fs.existsSync(f) && fs.statSync(f).size > MAX_FILE_BYTES) {
-      err(`scenes/${id}.glb : ${(fs.statSync(f).size / 1048576).toFixed(1)} MiB (limite ${MAX_FILE_BYTES / 1048576} MiB par fichier ; compression en Î7)`);
-    }
-  }
 
   // --- Fichiers sources non utilisés ---
   const known = new Set<string>(['book.json', 'icon-192.png', 'icon-512.png', ...assets]);
@@ -606,15 +673,23 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
   // --- Écriture du dossier construit ---
   requireExport(outDir);
   removeFixtureMedia(outDir);
+  const textures = resolveTextureModeOrFail(opts.textures);
+  let usesKtx2 = false;
   for (const s of scenes) {
     const glbRel = `scenes/${s.id}.glb`;
-    copyIntoOut(sourceDir, outDir, glbRel);
+    if (!(await writeOptimizedScene(sourceDir, outDir, glbRel, s.protect, textures))) continue;
+    usesKtx2 ||= fs.readFileSync(path.join(outDir, glbRel)).includes('KHR_texture_basisu');
     const built: BuiltScene = { ...s.config, build: { glb: glbRel, source: s.source, modelCredits: s.modelCredits } };
     const check = builtSceneSchema.safeParse(built);
     if (!check.success) formatIssues(check.error, `scenes/${s.id}.json (sortie) : `).forEach(err);
     fs.writeFileSync(path.join(outDir, `scenes/${s.id}.json`), `${JSON.stringify(built, null, 2)}\n`);
   }
   for (const a of [...assets].sort()) copyIntoOut(sourceDir, outDir, a);
+  // Transcodeur Basis (≈ 0,6 MiB) inutile si aucune scène n'a de texture KTX2 : retiré du livre (jamais chargé dans ce cas).
+  if (!usesKtx2 && fs.existsSync(path.join(outDir, 'decoders/basis'))) {
+    fs.rmSync(path.join(outDir, 'decoders/basis'), { recursive: true, force: true });
+    console.log('build-book : aucune texture KTX2, transcodeur Basis retiré du livre');
+  }
   writeWebManifest(sourceDir, outDir, book);
   injectOg(outDir, book);
   writeStubs(outDir, book.scenes, book.title[book.languages[0]]);
@@ -643,7 +718,7 @@ async function main(): Promise<void> {
     process.exit(2);
   }
   if (opts.source) await buildBook(opts, opts.source);
-  else buildFixture(opts);
+  else await buildFixture(opts);
 }
 
 main().catch((e) => {

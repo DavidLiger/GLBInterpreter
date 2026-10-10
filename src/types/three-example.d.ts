@@ -15,6 +15,9 @@ declare module 'three/examples/jsm/loaders/GLTFLoader' {
   }
 
   export class GLTFLoader extends Loader {
+    // Décodeurs (Î7) : types de three/examples/jsm/libs/meshopt_decoder.module.js et loaders/KTX2Loader.js.
+    setMeshoptDecoder(decoder: unknown): this;
+    setKTX2Loader(loader: unknown): this;
     load(
       url: string,
       onLoad: (gltf: GLTF) => void,

@@ -4,7 +4,7 @@ import { TranslationProvider, useTranslation } from "@/contexts/TranslationConte
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import * as THREE from "three";
-import { GLTF, GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader";
+import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import dynamic from "next/dynamic";
@@ -36,6 +36,7 @@ import { useWebGLContext } from "./hooks/useWebGLContext";
 import { disposeObject, disposeScene, logSceneStats } from "./utils/webglHelpers";
 import BookDownloadModal from "./ui/BookDownloadModal";
 import { isBookFullyCached, getAssetFromCache } from "./lib/downloadManager";
+import { createGLTFLoader, type GLTFLoaderWithDecoders } from "./lib/gltfDecoders";
 import useUnifiedAudio from "./hooks/useUnifiedAudio";
 import { applySpritesheets } from "./rendering/applySpritesheet";
 import { SpritesheetAnimator } from "./rendering/SpritesheetAnimator";
@@ -220,6 +221,8 @@ function WebDioramaLoaderInner({
   const devToolOpenRef = useRef(false);
   const shouldAnimateRef = useRef(true); 
   const spritesheetAnimatorRef = useRef<SpritesheetAnimator | null>(null);
+  // Décodeurs Meshopt/KTX2 du chargement en cours (Î7) : KTX2Loader libéré au nettoyage de la scène
+  const gltfDecodersRef = useRef<GLTFLoaderWithDecoders | null>(null);
   const waitForSceneAudioRef = useRef<(() => Promise<void>) | null>(null);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
   const autoplay = config.autoplay ?? false;
@@ -526,8 +529,12 @@ function WebDioramaLoaderInner({
 
     // Chargement GLB
     const loadGLB = async () => {
-      const loader = new GLTFLoader();
-      
+      // GLB optimisés par le pipeline (Meshopt + KTX2) : décodeurs auto-hébergés (R-33)
+      gltfDecodersRef.current?.dispose();
+      const decoders = createGLTFLoader(renderer);
+      gltfDecodersRef.current = decoders;
+      const loader = decoders.loader;
+
       let glbUrl = config.glb;
       let objectUrl: string | null = null;
 
@@ -817,6 +824,9 @@ function WebDioramaLoaderInner({
 
       disposeScene(sceneRef.current);
       sceneRef.current = null;
+
+      gltfDecodersRef.current?.dispose();
+      gltfDecodersRef.current = null;
     };
   }, [renderer, webglReady, config.glb, bookId]);
 
@@ -892,6 +902,10 @@ function WebDioramaLoaderInner({
         controlsRef.current.dispose();
         controlsRef.current = null;
       }
+
+      // Décodeurs (workers du KTX2Loader)
+      gltfDecodersRef.current?.dispose();
+      gltfDecodersRef.current = null;
 
       // 6. Renderer : possédé par useWebGLContext (dispose + perte de contexte + retrait du canvas)
       destroyRenderer();

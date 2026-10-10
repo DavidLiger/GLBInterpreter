@@ -8,7 +8,10 @@
     "build": "next build --webpack && tsx scripts/build-book.ts",
     "lint": "eslint",
     "book:check": "tsx scripts/build-book.ts --check",
-    "book:test-source": "tsx scripts/make-test-book.ts"
+    "book:test-source": "tsx scripts/make-test-book.ts",
+    "predev": "tsx scripts/copy-decoders.ts",
+    "prebuild": "tsx scripts/copy-decoders.ts",
+    "glb:report": "tsx scripts/glb-report.ts"
   },
   "dependencies": {
     "@serwist/next": "^9.2.1",
@@ -22,9 +25,9 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
-    "@gltf-transform/core": "^4.2.1",
-    "@gltf-transform/extensions": "^4.2.1",
-    "@gltf-transform/functions": "^4.2.1",
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.6",
@@ -33,9 +36,11 @@
     "@types/three": "^0.180.0",
     "eslint": "^9",
     "eslint-config-next": "15.5.2",
+    "meshoptimizer": "^1.3.0",
     "qrcode": "^1.5.4",
     "qrcode.react": "^4.2.0",
     "serwist": "^9.2.3",
+    "sharp": "^0.35.5",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5.9.2",

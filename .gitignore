@@ -73,3 +73,6 @@ public/swe-worker-*.js
 # Livre de test synthétique (npm run book:test-source)
 /books/test-dino/
 
+
+# Décodeurs copiés depuis three par scripts/copy-decoders.ts (predev / prebuild, Î7)
+public/decoders/
