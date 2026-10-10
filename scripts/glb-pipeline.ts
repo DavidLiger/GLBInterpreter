@@ -8,6 +8,8 @@
 //   extras (au test, GLBI_ROOT a survécu parce qu'il était le parent du rig, pas grâce à ses extras). D'où
 //   `keepExtras: true`, appliqué APRÈS le retrait des extras étrangers, et la protection des nœuds nommés dans la config
 //   (cible caméra `start`, objets animés) par un marqueur temporaire.
+//   `keepAttributes: true` : sinon `prune` retire les UV d'un maillage dont le matériau n'a pas de texture, alors que le
+//   lecteur pose des textures au runtime (spritesheets, vidéos : écrans TV de la fixture, constaté au test Î7).
 // - Pas de Draco (Meshopt retenu) : un GLB source compressé en Draco est refusé avec un message explicite.
 // - Textures : KTX2 (BasisU, outil `ktx` de KTX-Software ≥ 4.4 dans le PATH) ou WebP (sharp). `auto` = KTX2 si `ktx` est
 //   disponible, sinon WebP. ETC1S pour la couleur et les données, UASTC + zstd pour les cartes de normales.
@@ -320,7 +322,7 @@ export async function optimizeDocument(doc: Document, opts: OptimizeOptions = {}
   for (const n of marked) n.setExtras({ ...n.getExtras(), [KEEP_MARK]: true });
 
   await doc.transform(
-    prune({ keepExtras: true, keepLeaves: opts.keepLeaves ?? false }),
+    prune({ keepExtras: true, keepAttributes: true, keepLeaves: opts.keepLeaves ?? false }),
     // Matériaux non fusionnés (T-16) : le lecteur modifie des matériaux par maillage.
     dedup({ propertyTypes: [PropertyType.ACCESSOR, PropertyType.MESH, PropertyType.TEXTURE, PropertyType.SKIN] }),
   );
