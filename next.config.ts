@@ -15,7 +15,7 @@ const withSerwist = withSerwistInit({
   register: false, // enregistré par ServiceWorkerRegister (./sw.js, scope ./)
   cacheOnNavigation: false,
   globPublicPatterns: [],
-  reloadOnOnline: true, // inchangé (O-27, Î8)
+  reloadOnOnline: false, // O-27 : pas de rechargement forcé au retour du réseau (le livre est installé)
   disable: !isProd,
 });
 

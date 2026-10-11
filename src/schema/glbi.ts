@@ -249,12 +249,31 @@ export type Book = z.infer<typeof bookSchema>;
 // Sorties du build (dossier du livre) — lues par le lecteur (Î8, Î10, Î13)
 // ---------------------------------------------------------------------------------------------------------
 
-/** Une entrée de la liste des fichiers du livre (O-13, C-34) : chemin relatif à la racine, taille, empreinte. */
-export const bookFileSchema = z.strictObject({
+/** Une partie déployée d'un fichier découpé (D-8.7) : chemin relatif à la racine, taille, empreinte. */
+export const bookFilePartSchema = z.strictObject({
   path: z.string().min(1),
-  size: z.number().int().nonnegative(),
+  size: z.number().int().positive(),
   sha256: z.string().regex(/^[0-9a-f]{64}$/),
 });
+export type BookFilePart = z.infer<typeof bookFilePartSchema>;
+
+/**
+ * Une entrée de la liste des fichiers du livre (O-13, C-34) : chemin relatif à la racine, taille, empreinte.
+ * D-8.7 : un fichier de plus de 25 MiB n'est pas déployé tel quel ; `parts` liste ses parties dans l'ordre, et
+ * `path`/`size`/`sha256` décrivent le fichier logique que le téléchargeur recompose et range sous son URL d'origine.
+ */
+export const bookFileSchema = z
+  .strictObject({
+    path: z.string().min(1),
+    size: z.number().int().nonnegative(),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/),
+    parts: z.array(bookFilePartSchema).min(2).optional(),
+  })
+  .superRefine((f, ctx) => {
+    if (f.parts && f.parts.reduce((s, p) => s + p.size, 0) !== f.size) {
+      ctx.addIssue({ code: 'custom', path: ['parts'], message: `somme des parties ≠ taille du fichier (${f.size})` });
+    }
+  });
 export type BookFile = z.infer<typeof bookFileSchema>;
 
 /** Crédit d'un modèle, collecté dans les propriétés `src_*` des nœuds du GLB (D-8.5). */

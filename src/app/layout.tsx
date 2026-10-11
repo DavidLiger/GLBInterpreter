@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import ServiceWorkerRegister from "@/components/book/ServiceWorkerRegister";
 
 // Métadonnées minimales. Le build du livre (scripts/build-book.ts, Î6) remplace manifest.webmanifest par celui du
 // livre et ajoute og:title / og:image dans index.html ; icônes et plein écran complets en Î9.
@@ -27,7 +26,6 @@ export default function RootLayout({
         <style dangerouslySetInnerHTML={{ __html: fontFaces }} />
       </head>
       <body className="antialiased">
-        <ServiceWorkerRegister />
         {children}
       </body>
     </html>

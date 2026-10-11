@@ -2,17 +2,30 @@
 
 import WebDioramaLoader from "@/components/diorama/WebDioramaLoader";
 import { book } from "@/content/book";
+import { TranslationProvider } from "@/contexts/TranslationContext";
+import DebugConsole from "./DebugConsole";
+import InstallGate from "./install/InstallGate";
+import ServiceWorkerRegister from "./ServiceWorkerRegister";
 import { parseSceneHash, sceneHref, useLocationHash } from "./sceneRoute";
 
-// Routeur du livre (D-8.4). `#/s/<scène>` → scène ; hash vide → accueil provisoire (le menu de collection
-// arrive en Î13) ; autre hash → scène inconnue.
+// Racine du livre. Î8 : rien du livre ne s'affiche avant l'installation complète (InstallGate) ; la console de
+// débogage (`#/debug`, `?debug=1`) et l'invite de mise à jour du service worker restent hors de cette garde.
 export default function BookApp() {
   const hash = useLocationHash();
+  return (
+    <TranslationProvider>
+      <DebugConsole />
+      <ServiceWorkerRegister inScene={hash !== undefined && parseSceneHash(hash) !== null} />
+      {/* Rendu statique (build) : le hash n'est connu qu'au navigateur. */}
+      {hash === undefined ? <div className="fixed inset-0 bg-black" /> : <InstallGate><BookRoute hash={hash} /></InstallGate>}
+    </TranslationProvider>
+  );
+}
 
-  // Rendu statique (build) : le hash n'est connu qu'au navigateur.
-  if (hash === undefined) return <div className="fixed inset-0 bg-black" />;
-
-  if (hash === "" || hash === "#" || hash === "#/") return <BookHome />;
+// Routeur du livre (D-8.4). `#/s/<scène>` → scène ; hash vide (ou `#/debug`) → accueil provisoire (le menu de
+// collection arrive en Î13) ; autre hash → scène inconnue.
+function BookRoute({ hash }: { hash: string }) {
+  if (hash === "" || hash === "#" || hash === "#/" || hash === "#/debug") return <BookHome />;
 
   const sceneId = parseSceneHash(hash);
   const config = sceneId ? book.getScene(sceneId) : undefined;

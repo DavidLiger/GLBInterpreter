@@ -100,7 +100,7 @@ export default function useUnifiedAudio({
     audio.volume = volume;
     
     try {
-        const { getAssetFromCache } = await import('@/components/diorama/lib/downloadManager');
+        const { getAssetFromCache } = await import('@/components/book/install/bookCache');
         const cachedBlob = await getAssetFromCache('folio', sceneSound);
         
         if (cachedBlob) {
@@ -307,7 +307,7 @@ export default function useUnifiedAudio({
             // ✅ CHARGER DEPUIS CACHE
             (async () => {
                 try {
-                    const { getAssetFromCache } = await import('@/components/diorama/lib/downloadManager');
+                    const { getAssetFromCache } = await import('@/components/book/install/bookCache');
                     const bookId = 'folio';
                     
                     const cachedBlob = await getAssetFromCache(bookId, audioState.currentSceneSound!);

@@ -31,11 +31,9 @@ import POIBreadcrumbs from "./ui/POIBreadcrumbs";
 import { setupPostProcessing, setupEmissiveMaterials } from "./rendering/setupPostProcessing";
 import { usePOIEffects } from "./hooks/usePOIEffects";
 import RotateHint from "./ui/RotateHint";
-import DownloadTooltip from "./ui/DownloadTooltip";
 import { useWebGLContext } from "./hooks/useWebGLContext";
 import { disposeObject, disposeScene, logSceneStats } from "./utils/webglHelpers";
-import BookDownloadModal from "./ui/BookDownloadModal";
-import { isBookFullyCached, getAssetFromCache } from "./lib/downloadManager";
+import { getAssetFromCache } from "@/components/book/install/bookCache";
 import { createGLTFLoader, type GLTFLoaderWithDecoders } from "./lib/gltfDecoders";
 import useUnifiedAudio from "./hooks/useUnifiedAudio";
 import { applySpritesheets } from "./rendering/applySpritesheet";
@@ -68,75 +66,10 @@ export default function WebDioramaLoader({ config, bookId }: { config: DioramaCo
   );
 }
 
-// ✅ Composant INTERNE avec useTranslation
+// Î8 : le livre entier est installé et vérifié avant le montage du lecteur (InstallGate, src/components/book/install/) ;
+// plus de vérification de cache ni de modale de téléchargement ici.
 function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaConfig3D; bookId: string }) {
-  const { t } = useTranslation(); // ✅ Maintenant c'est OK !
-  const [assetsReady, setAssetsReady] = useState(false);
-  const [showDownloadModal, setShowDownloadModal] = useState(true);
-  const [checkingCache, setCheckingCache] = useState(true);
-  
-  useEffect(() => {
-    const checkCacheStatus = async () => {
-      const cached = await isBookFullyCached(bookId);
-      
-      if (cached) {
-        console.log("✅ Assets en cache, lancement direct");
-        setCheckingCache(false);
-        setShowDownloadModal(false);
-        setAssetsReady(true);
-      } else {
-        console.log("📦 Assets manquants, afficher modal");
-        setShowDownloadModal(true);
-        setCheckingCache(false);
-      }
-    };
-    
-    checkCacheStatus();
-  }, [bookId]);
-
-  return (
-    <>
-      {/* ✅ Écran de vérification cache */}
-      {checkingCache && (
-        <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-          <div className="text-white text-center">
-            <div className="animate-spin text-4xl mb-4">⚙️</div>
-            <p>{t.bookDownload.cacheChecking}</p>
-          </div>
-        </div>
-      )}
-
-      {showDownloadModal && !assetsReady && (
-        <BookDownloadModal
-          bookId={bookId}
-          onComplete={() => {
-            setShowDownloadModal(false);
-            setAssetsReady(true);
-          }}
-          onCancel={() => setShowDownloadModal(false)}
-        />
-      )}
-
-      {!assetsReady && !showDownloadModal && !checkingCache && (
-        <div className="fixed inset-0 bg-black flex items-center justify-center z-[9999]">
-          <div className="text-center">
-            <div className="text-6xl mb-6">📦</div>
-            <h2 className="text-white text-xl mb-6">
-              {t.bookDownload?.required || "Téléchargement requis"}
-            </h2>
-            <button
-              onClick={() => setShowDownloadModal(true)}
-              className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transition"
-            >
-              📥 {t.bookDownload?.download || "Télécharger"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {assetsReady && <WebDioramaLoaderInner config={config} bookId={bookId} />}
-    </>
-  );
+  return <WebDioramaLoaderInner config={config} bookId={bookId} />;
 }
 
 function WebDioramaLoaderInner({
@@ -539,8 +472,7 @@ function WebDioramaLoaderInner({
       let objectUrl: string | null = null;
 
       try {
-        // ✅ Essayer de charger depuis le cache
-        console.log("📦 Tentative chargement depuis cache...");
+        // Lecture directe dans le cache du livre (Î8) ; sans entrée, l'URL passe par le service worker puis le réseau.
         const cachedBlob = await getAssetFromCache(bookId, config.glb);
         
         if (cachedBlob) {
@@ -551,10 +483,10 @@ function WebDioramaLoaderInner({
           // ✅ Progress instantané à 70% car déjà en cache
           setLoadingProgress(70);
         } else {
-          console.log("📥 GLB non trouvé en cache, chargement depuis R2");
+          console.log("📥 GLB absent du cache du livre, chargement par URL");
         }
       } catch (err) {
-        console.warn("⚠️ Erreur accès cache, chargement depuis R2:", err);
+        console.warn("⚠️ Erreur accès cache, chargement par URL:", err);
       }
 
       // Effet nettoyé pendant l'attente du cache : ne pas lancer le chargement
@@ -1180,8 +1112,6 @@ function WebDioramaLoaderInner({
           </AnimatePresence>
 
           {showRotateHint && <RotateHint show={true} />}
-
-          <DownloadTooltip bookId={bookId} isPortrait={isPortrait} variant="scene" />
 
           <div className="absolute top-2 right-2 z-50 flex flex-row gap-2 items-end">
             <InfoButton onClick={() => setShowInfoModal(true)} />

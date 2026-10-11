@@ -76,3 +76,7 @@ public/swe-worker-*.js
 
 # Décodeurs copiés depuis three par scripts/copy-decoders.ts (predev / prebuild, Î7)
 public/decoders/
+
+# Tests d'installation (Playwright, Î8)
+/test-results/
+/playwright-report/

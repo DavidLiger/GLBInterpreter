@@ -12,7 +12,7 @@ tous les assets, qui fonctionne servi à la racine d'un domaine (`https://hôte/
 - Le livre est une page unique (`index.html`). La scène courante est dans le hash : `#/s/<scène>`.
 - Les QR codes imprimés pointent vers `https://<hôte>/s/<scène>` : le fichier `s/<scène>/index.html`, généré après
   le build, redirige vers `<racine du dossier>#/s/<scène>`.
-- Tous les chemins sont relatifs (assets, service worker `./sw.js`, manifest `./manifest.json`).
+- Tous les chemins sont relatifs (assets, service worker `./sw.js`, manifest `./manifest.webmanifest`).
 
 ## Développement
 
@@ -26,7 +26,8 @@ La cartouche de test (`src/content/fixtures/test-street.ts`, déclarée dans `sr
 `videos/test_street/*.mp4`, `spritesheets/spritesheet_TV-screen.webp`, `icons/dioramas/test_street/*.png`.
 
 Les outils de développement (analyse de scène, convertisseur de config, QR, spritesheets,
-réglages de post-processing) n'existent qu'en `npm run dev`.
+réglages de post-processing) n'existent qu'en `npm run dev`. En développement, l'écran « Installer le livre » est
+contourné (pas de `book.json` ni de service worker) : l'installation se teste dans le dossier exporté (voir plus bas).
 
 ## Build
 
@@ -62,8 +63,14 @@ La config est lue et validée sur le GLB **source**, puis le GLB est optimisé v
 extras de scène hors `glbi_` et de nœud hors `glbi_`/`src_` retirés, `prune` (garde `GLBI_ROOT` et les nœuds cités par la
 config : cible caméra, objets animés), `dedup` sans fusion des matériaux, textures, Meshopt (inclut `quantize`). Le GLB
 écrit est relu : `GLBI_ROOT`, noms des clips et propriétés `src_*` doivent être intacts, sinon le build échoue. Pas de
-Draco. Un fichier de plus de 25 MiB fait échouer le build d'un livre (pas de découpage). En mode fixture, les GLB de
-`out/` sont optimisés sur place (empties conservés).
+Draco. En mode fixture, les GLB de `out/` sont optimisés sur place (empties conservés).
+
+### Fichiers de plus de 25 MiB (D-8.7)
+
+Cloudflare Pages refuse les fichiers de plus de 25 MiB. Le build découpe tout fichier plus gros en parties de 20 MiB
+(`<chemin>.part001`, `.part002`…) et retire l'original du dossier. Son entrée dans `book.json.files` garde le chemin,
+la taille et l'empreinte du fichier logique et liste ses parties (`parts`) ; le téléchargeur du lecteur les recompose
+et range le fichier sous son URL d'origine. Pour les tests, `--part-mib <n>` découpe tout fichier de plus de n MiB.
 
 Textures (`--textures`, défaut `auto`) : `ktx2` (BasisU, outil `ktx` de [KTX-Software](https://github.com/KhronosGroup/KTX-Software/releases)
 ≥ 4.4 dans le `PATH`), `webp` (sans outil externe), `keep`. `auto` = KTX2 si `ktx` est installé, sinon WebP avec un
@@ -88,6 +95,42 @@ Le dossier `out/` est le livre. Pour le tester à la racine et sous un sous-chem
 mkdir -p /tmp/sous && cp -r out /tmp/sous/depot
 (cd /tmp/sous && npx http-server -p 8002)                      # http://localhost:8002/depot/s/<scène>
 ```
+
+## Installation du livre sur l'appareil (Î8)
+
+Au premier lancement, l'écran « Installer le livre » lit `book.json`, annonce la taille et télécharge **tous** les
+fichiers listés (application comprise) dans le Cache Storage `book-<bookId>@<chemin du dossier>`, par lots, avec
+vérification de la taille et du SHA-256 de chaque fichier ; rien du livre ne s'affiche avant la fin. Une coupure ou
+une pause conserve ce qui est déjà vérifié (reprise fichier par fichier, partie par partie). Le service worker
+(`src/sw.ts`) sert ensuite tout depuis ce cache, hors ligne. Après une reconstruction du livre, l'écran propose une mise
+à jour : seuls les fichiers dont l'empreinte a changé sont retéléchargés.
+
+### Tester l'installation
+
+Tests automatiques (Chromium et WebKit de Playwright ; WebKit n'est pas Safari iOS) :
+
+```bash
+npx playwright install chromium webkit                         # une fois
+rm -rf .next out && npm run build -- --part-mib 1              # découpe forcée : des parties à recomposer
+npm run test:install
+```
+
+Procédure manuelle hors ligne (O-34), sur le dossier exporté servi par `npx http-server` (voir plus haut) :
+
+1. Ouvrir `http://localhost:8001/s/<scène>` : écran « Installer le livre », taille annoncée, bouton « Installer ».
+2. Pendant le téléchargement, « Mettre en pause » puis « Reprendre » : la progression repart de ce qui est acquis.
+3. Fin du téléchargement : la scène s'ouvre. Outils de développement du navigateur > Application > Cache Storage :
+   un cache `book-<bookId>@/` contient tous les fichiers de `book.json`, sans fichier `.partNNN`.
+4. Couper le serveur (ou cocher « Offline » dans l'onglet Réseau), recharger, ouvrir `/s/<scène>` : la scène s'ouvre.
+5. Reconstruire le livre après avoir modifié un fichier, relancer le serveur, recharger : écran « Mise à jour du
+   livre », taille à télécharger = fichiers modifiés seulement.
+6. Recommencer sous `/depot/`.
+
+Sur téléphone (sans Mac pour l'iPhone) : ajouter `?debug=1` à l'adresse ou ouvrir `#/debug` pour afficher la console
+Eruda (logs, réseau, stockage) ; elle reste active jusqu'à la fermeture de l'onglet. Si l'onglet est tué pendant
+l'installation, le relancement affiche la dernière étape atteinte (clé localStorage `glbi:install-trace`). Le Cache
+Storage et le service worker exigent HTTPS (ou `localhost`) : tester sur l'adresse publiée ou une prévisualisation
+Cloudflare Pages, pas sur `http://<IP locale>`.
 
 ## Déploiement
 

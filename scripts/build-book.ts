@@ -4,6 +4,7 @@
 //   npm run build                                    next build + cartouche de test (mode fixture, provisoire)
 //   npm run book:check -- --source <dossier>         validation seule, sans next build ni écriture
 //   option --textures auto|ktx2|webp|keep            textures des GLB (défaut auto : KTX2 si `ktx` est installé, sinon WebP)
+//   option --part-mib <n>                            tests seulement : découpe tout fichier > n MiB en parties de n MiB
 //
 // Dossier source d'un livre (chemins d'assets relatifs à sa racine = racine du dossier construit, D-8.1) :
 //   book.json                    couche livre (spec-extras-blender.md §5)
@@ -15,11 +16,14 @@
 // Ordre (Î7) : la config est lue et validée sur le GLB SOURCE, puis le GLB est optimisé (scripts/glb-pipeline.ts : extras
 // étrangers retirés, prune, dedup sans MATERIAL, textures KTX2/WebP, Meshopt) vers out/scenes/<scène>.glb ; le GLB écrit est
 // relu et comparé (GLBI_ROOT, clips, src_*, nœuds cités par la config). Un GLB source déjà Meshopt est accepté ; Draco, non.
-// Limite d'hébergement (25 MiB par fichier) contrôlée sur le dossier construit : erreur en mode livre, pas de découpage.
+// Limite d'hébergement (25 MiB par fichier, D-8.7, Î8) : tout fichier de plus de 25 MiB est découpé en parties de 20 MiB
+// (`<chemin>.part001`, …) ; l'original n'est pas déployé. Son entrée dans book.json.files garde le chemin, la taille et
+// l'empreinte du fichier logique et liste ses parties (`parts`) ; le téléchargeur les recompose (src/components/book/install).
+// La limite de 25 MiB est ensuite contrôlée sur les fichiers déployés (les parties).
 //
 // Mode livre, dans out/ : scenes/<scène>.glb, scenes/<scène>.json (config validée + crédits des modèles),
 // assets référencés, manifest.webmanifest, og:image dans index.html, stubs s/<scène>/index.html (D-8.4),
-// book.json (livre + liste des fichiers { path, size, sha256 }). QR SVG par scène dans dist/qr/<bookId>/.
+// book.json (livre + liste des fichiers { path, size, sha256, parts? }). QR SVG par scène dans dist/qr/<bookId>/.
 // Mode fixture : GLB de out/ optimisés sur place (empties conservés), stubs d'après src/content/book.json et
 // out/book.json { bookId, scenes, fixture, files }.
 import fs from 'node:fs';
@@ -48,6 +52,7 @@ import {
   SCENE_ID_PATTERN,
   type Book,
   type BookFile,
+  type BookFilePart,
   type BuiltScene,
   type GlbiConfig,
   type ModelCredit,
@@ -58,6 +63,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 /** Limites de Cloudflare Pages (architecture, Déploiement). */
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_FILES = 20000;
+/** D-8.7 : taille des parties d'un fichier découpé (marge sous la limite de 25 MiB). */
+const PART_BYTES = 20 * 1024 * 1024;
 
 /** Fichiers du dossier construit absents de la liste de téléchargement (Î8) : l'index lui-même et le service worker. */
 const EXCLUDED_FROM_FILES = [/^book\.json$/, /^sw\.js(\.map)?$/, /^swe-worker-[^/]*\.js$/, /\.map$/, /(^|\/)\.DS_Store$/, /(^|\/)Thumbs\.db$/];
@@ -70,6 +77,8 @@ const errors: string[] = [];
 const warnings: string[] = [];
 const err = (m: string) => errors.push(m);
 const warn = (m: string) => warnings.push(m);
+/** Dossier construit en cours d'écriture (après `requireExport`) : un échec le laisse incomplet. */
+let writingOut: string | null = null;
 
 function flushReport(): void {
   for (const w of warnings) console.warn(`  avertissement : ${w}`);
@@ -78,7 +87,16 @@ function flushReport(): void {
 
 function fail(): never {
   flushReport();
-  console.error(`build-book : ${errors.length} erreur(s), ${warnings.length} avertissement(s). Rien n'est publié.`);
+  if (writingOut) {
+    // Sans book.json, le dossier ne peut pas être installé par le lecteur : un dossier incomplet ne sert pas par erreur.
+    fs.rmSync(path.join(writingOut, 'book.json'), { force: true });
+    console.error(
+      `build-book : ${errors.length} erreur(s), ${warnings.length} avertissement(s). ` +
+        `Le dossier ${toPosix(path.relative(ROOT, writingOut)) || writingOut}/ est incomplet (book.json retiré) : ne pas le publier.`,
+    );
+  } else {
+    console.error(`build-book : ${errors.length} erreur(s), ${warnings.length} avertissement(s). Rien n'a été écrit.`);
+  }
   process.exit(1);
 }
 
@@ -92,10 +110,21 @@ interface Options {
   qrDir: string;
   check: boolean;
   textures: TextureMode;
+  /** D-8.7 : seuil de découpage et taille des parties (octets). Défaut : > 25 MiB, parties de 20 MiB. */
+  splitAbove: number;
+  partBytes: number;
 }
 
 function parseArgs(argv: string[]): Options {
-  const opts: Options = { source: process.env.BOOK_SOURCE || null, out: 'out', qrDir: 'dist/qr', check: false, textures: 'auto' };
+  const opts: Options = {
+    source: process.env.BOOK_SOURCE || null,
+    out: 'out',
+    qrDir: 'dist/qr',
+    check: false,
+    textures: 'auto',
+    splitAbove: MAX_FILE_BYTES,
+    partBytes: PART_BYTES,
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => {
@@ -111,7 +140,11 @@ function parseArgs(argv: string[]): Options {
       const t = next() as TextureMode;
       if (!TEXTURE_MODES.includes(t)) throw new Error(`--textures : ${TEXTURE_MODES.join(', ')} attendu (trouvé « ${t} »)`);
       opts.textures = t;
-    } else throw new Error(`option inconnue « ${a} » (options : --source, --out, --qr-dir, --check, --textures)`);
+    } else if (a === '--part-mib') {
+      const n = Number(next());
+      if (!(n >= 1 && n <= 20)) throw new Error('--part-mib : nombre de MiB entre 1 et 20 attendu');
+      opts.splitAbove = opts.partBytes = Math.floor(n * 1024 * 1024);
+    } else throw new Error(`option inconnue « ${a} » (options : --source, --out, --qr-dir, --check, --textures, --part-mib)`);
   }
   return opts;
 }
@@ -135,8 +168,17 @@ function listFiles(dir: string): string[] {
   return outList.sort();
 }
 
+/** Empreinte lue par blocs (un GLB découpé peut peser plusieurs centaines de Mo). */
 function sha256(file: string): string {
-  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  const h = crypto.createHash('sha256');
+  const fd = fs.openSync(file, 'r');
+  try {
+    const buf = Buffer.allocUnsafe(4 * 1024 * 1024);
+    for (let n; (n = fs.readSync(fd, buf, 0, buf.length, null)) > 0; ) h.update(buf.subarray(0, n));
+  } finally {
+    fs.closeSync(fd);
+  }
+  return h.digest('hex');
 }
 
 function readJson(file: string, label: string): unknown {
@@ -412,20 +454,69 @@ function writeStubs(outDir: string, sceneIds: readonly string[], title: string):
 }
 
 /**
- * Liste des fichiers du dossier construit (O-13, C-34) + contrôle des limites de l'hébergeur.
- * `strict` : dépassement = erreur (livre publié) ; sinon avertissement (cartouche de test, jamais publiée).
+ * D-8.7 : découpe `rel` en parties de `partBytes` octets (`<rel>.part001`, …) à côté de lui, puis retire l'original
+ * (le fichier logique n'est pas déployé). Renvoie les parties dans l'ordre.
  */
-function collectFiles(outDir: string, strict = true): BookFile[] {
+function splitFile(outDir: string, rel: string, partBytes: number): BookFilePart[] {
+  const full = path.join(outDir, rel);
+  const parts: BookFilePart[] = [];
+  const fd = fs.openSync(full, 'r');
+  try {
+    const buf = Buffer.allocUnsafe(partBytes);
+    for (let i = 1; ; i++) {
+      let n = 0;
+      while (n < partBytes) {
+        const r = fs.readSync(fd, buf, n, partBytes - n, null);
+        if (r === 0) break;
+        n += r;
+      }
+      if (n === 0) break;
+      const partRel = `${rel}.part${String(i).padStart(3, '0')}`;
+      const partFull = path.join(outDir, partRel);
+      if (fs.existsSync(partFull)) throw new Error(`${partRel} existe déjà dans le dossier construit`);
+      const data = buf.subarray(0, n);
+      fs.writeFileSync(partFull, data);
+      parts.push({ path: partRel, size: n, sha256: crypto.createHash('sha256').update(data).digest('hex') });
+      if (n < partBytes) break;
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.rmSync(full);
+  return parts;
+}
+
+/**
+ * Liste des fichiers du dossier construit (O-13, C-34), découpage des gros fichiers (D-8.7) + contrôle des limites de
+ * l'hébergeur sur les fichiers déployés. `strict` : dépassement = erreur (livre publié) ; sinon avertissement
+ * (cartouche de test, jamais publiée).
+ */
+function collectFiles(outDir: string, opts: Pick<Options, 'splitAbove' | 'partBytes'>, strict = true): BookFile[] {
   const limit = (m: string) => (strict ? err(m) : warn(`${m} ; toléré pour la cartouche de test, refusé pour un livre`));
-  const all = listFiles(outDir);
-  if (all.length > MAX_FILES) limit(`${all.length} fichiers dans le dossier construit (limite ${MAX_FILES})`);
   const files: BookFile[] = [];
-  for (const rel of all) {
+  for (const rel of listFiles(outDir)) {
+    if (EXCLUDED_FROM_FILES.some((re) => re.test(rel))) continue;
     const full = path.join(outDir, rel);
     const size = fs.statSync(full).size;
-    if (size > MAX_FILE_BYTES) limit(`${rel} : ${(size / 1048576).toFixed(1)} MiB (limite ${MAX_FILE_BYTES / 1048576} MiB par fichier)`);
-    if (EXCLUDED_FROM_FILES.some((re) => re.test(rel))) continue;
-    files.push({ path: rel, size, sha256: sha256(full) });
+    const sha = sha256(full);
+    if (size > opts.splitAbove) {
+      try {
+        const parts = splitFile(outDir, rel, opts.partBytes);
+        files.push({ path: rel, size, sha256: sha, parts });
+        console.log(`build-book : ${rel} (${(size / 1048576).toFixed(1)} MiB) découpé en ${parts.length} parties (D-8.7)`);
+      } catch (e) {
+        err(`${rel} : découpage impossible (${(e as Error).message})`);
+      }
+      continue;
+    }
+    files.push({ path: rel, size, sha256: sha });
+  }
+  // Limites contrôlées sur ce qui sera réellement déployé (parties comprises, fichier logique exclu).
+  const deployed = listFiles(outDir);
+  if (deployed.length > MAX_FILES) limit(`${deployed.length} fichiers dans le dossier construit (limite ${MAX_FILES})`);
+  for (const rel of deployed) {
+    const size = fs.statSync(path.join(outDir, rel)).size;
+    if (size > MAX_FILE_BYTES) limit(`${rel} : ${(size / 1048576).toFixed(1)} MiB (limite ${MAX_FILE_BYTES / 1048576} MiB par fichier déployé)`);
   }
   return files;
 }
@@ -560,7 +651,7 @@ async function optimizeFixtureGlbs(outDir: string, mode: TextureMode): Promise<v
  * Médias de la cartouche de test, recopiés de `public/` par `next build` (voir .gitignore) : retirés du dossier d'un
  * livre v1, qui ne doit contenir que ses propres assets. `icons/dioramas/UI` est l'interface du lecteur : conservé.
  */
-const FIXTURE_MEDIA = ['models', 'videos', 'sounds', 'spritesheets', 'jsons', 'image/dioramas', 'images/dioramas'];
+const FIXTURE_MEDIA = ['models', 'videos', 'sounds', 'spritesheets', 'jsons', 'image/dioramas', 'images/dioramas', 'images/hdr', 'images/textures'];
 
 function removeFixtureMedia(outDir: string): void {
   const removed: string[] = [];
@@ -587,6 +678,7 @@ function requireExport(outDir: string): void {
     err(`${toPosix(path.relative(ROOT, outDir)) || outDir}/index.html absent : lancer \`next build\` avant (ou \`npm run build\`)`);
     fail();
   }
+  writingOut = outDir;
 }
 
 /** Cartouche de test (fixture `test-street`, lue par le lecteur actuel) : GLB optimisés, stubs et liste de fichiers. */
@@ -607,7 +699,7 @@ async function buildFixture(opts: Options): Promise<void> {
   requireExport(outDir);
   await optimizeFixtureGlbs(outDir, opts.textures);
   writeStubs(outDir, scenes as string[], 'GLBInterpreter');
-  const files = collectFiles(outDir, false);
+  const files = collectFiles(outDir, opts, false);
   if (errors.length) fail();
   fs.writeFileSync(path.join(outDir, 'book.json'), `${JSON.stringify({ bookId, scenes, fixture: true, files }, null, 2)}\n`);
   flushReport();
@@ -695,7 +787,7 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
   writeStubs(outDir, book.scenes, book.title[book.languages[0]]);
   if (errors.length) fail();
 
-  const files = collectFiles(outDir);
+  const files = collectFiles(outDir, opts);
   const builtBook = { ...book, files };
   const checkBook = builtBookSchema.safeParse(builtBook);
   if (!checkBook.success) formatIssues(checkBook.error, 'book.json (sortie) : ').forEach(err);
