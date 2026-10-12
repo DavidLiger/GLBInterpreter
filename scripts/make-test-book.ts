@@ -7,10 +7,11 @@
 // - scène « trex » : GLB avec GLBI_ROOT (glbi_version = 1, glbi_config = chaîne JSON), armature à 2 os, maillage
 //   skinné portant des propriétés src_*, empty « start », clips idle/walk/roar/eat ;
 // - scène « raptor » : GLB sans GLBI_ROOT + scenes/raptor.json (source de développement) ;
-// - images PNG 1×1, sons WAV de 0,1 s, icônes du manifest.
+// - images PNG 1×1, sons WAV de 0,1 s, icône du livre `icon.png` (512 px, Î9).
 import fs from 'node:fs';
 import path from 'node:path';
 import { Document, NodeIO, type Node as GNode } from '@gltf-transform/core';
+import sharp from 'sharp';
 import type { GlbiConfig, Book } from '../src/schema/glbi';
 
 const dir = path.resolve(process.cwd(), process.argv[2] ?? 'books/test-dino');
@@ -150,9 +151,14 @@ async function main(): Promise<void> {
   fs.writeFileSync(path.join(dir, 'scenes/raptor.json'),
     `${JSON.stringify(sceneConfig('raptor', 'Armature_Raptor', L('Vélociraptor', 'Velociraptor', 'Velociraptor')), null, 2)}\n`);
 
-  for (const f of ['images/og.png', 'images/trex-preview.png', 'images/raptor-preview.png', 'icons/walk.png', 'icons/roar.png', 'icons/eat.png', 'icon-192.png', 'icon-512.png']) {
+  for (const f of ['images/og.png', 'images/trex-preview.png', 'images/raptor-preview.png', 'icons/walk.png', 'icons/roar.png', 'icons/eat.png']) {
     fs.writeFileSync(path.join(dir, f), PNG_1X1);
   }
+  // Icône du livre (Î9) : PNG carré ≥ 512 px, motif transparent (disque vert) pour vérifier les versions opaques.
+  await sharp({ create: { width: 512, height: 512, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><circle cx="256" cy="256" r="220" fill="#2e8b57"/></svg>') }])
+    .png()
+    .toFile(path.join(dir, 'icon.png'));
   for (const id of ['trex', 'raptor']) for (const a of ['walk', 'roar', 'eat']) fs.writeFileSync(path.join(dir, `sounds/${id}_${a}.wav`), silentWav());
   fs.writeFileSync(path.join(dir, 'sounds/jungle.wav'), silentWav(0.2));
   console.log(`make-test-book : livre de test écrit dans ${dir}`);

@@ -10,7 +10,9 @@
 //   book.json                    couche livre (spec-extras-blender.md §5)
 //   scenes/<scène>.glb           GLB de la scène ; config dans les extras de l'empty GLBI_ROOT (§2, §4)
 //   scenes/<scène>.json          facultatif : config de développement, utilisée seulement si le GLB n'a pas de GLBI_ROOT
-//   icon-192.png, icon-512.png   facultatifs : icônes du manifest (Î9)
+//   icon.png                     obligatoire (Î9) : icône du livre, PNG carré ≥ 512 px (transparence permise)
+//   icon-maskable.png            facultatif (Î9) : icône « maskable » pleine page (motif dans le cercle central de 80 %) ;
+//                                sans elle, le build inscrit icon.png dans ce cercle (carré de 56 %) sur un fond blanc
 //   images/, icons/, sounds/…    assets référencés par les configs et book.json (seuls ceux-là sont copiés)
 //
 // Ordre (Î7) : la config est lue et validée sur le GLB SOURCE, puis le GLB est optimisé (scripts/glb-pipeline.ts : extras
@@ -22,16 +24,18 @@
 // La limite de 25 MiB est ensuite contrôlée sur les fichiers déployés (les parties).
 //
 // Mode livre, dans out/ : scenes/<scène>.glb, scenes/<scène>.json (config validée + crédits des modèles),
-// assets référencés, manifest.webmanifest, og:image dans index.html, stubs s/<scène>/index.html (D-8.4),
+// assets référencés, manifest.webmanifest et icônes (Î9), og:image et titre d'application dans index.html,
+// stubs s/<scène>/index.html (D-8.4),
 // book.json (livre + liste des fichiers { path, size, sha256, parts? }). QR SVG par scène dans dist/qr/<bookId>/.
-// Mode fixture : GLB de out/ optimisés sur place (empties conservés), stubs d'après src/content/book.json et
-// out/book.json { bookId, scenes, fixture, files }.
+// Mode fixture : GLB de out/ optimisés sur place (empties conservés), manifest et icônes d'après public/icon.png, stubs
+// d'après src/content/book.json et out/book.json { bookId, scenes, fixture, files }.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import type { Document, Node as GNode } from '@gltf-transform/core';
 import QRCode from 'qrcode';
+import sharp from 'sharp';
 import {
   formatMiB,
   optimizeGlbFile,
@@ -539,33 +543,114 @@ function injectOg(outDir: string, book: Book): void {
   fs.writeFileSync(indexFile, html);
 }
 
-function writeWebManifest(sourceDir: string, outDir: string, book: Book): void {
-  const lang = book.languages[0];
-  const icons: { src: string; sizes: string; type: string; purpose: string }[] = [];
-  for (const size of [192, 512]) {
-    const rel = `icon-${size}.png`;
-    if (fs.existsSync(path.join(sourceDir, rel))) {
-      copyIntoOut(sourceDir, outDir, rel);
-      icons.push({ src: rel, sizes: `${size}x${size}`, type: 'image/png', purpose: 'any' });
-    } else {
-      warn(`${rel} absent du dossier source : manifest sans cette icône (icônes du livre : Î9)`);
+// Installation (Î9, O-33, S-21). Couleurs et orientation communes à tous les livres tant que la couche livre
+// (spec-extras-blender.md §5) ne les porte pas.
+const PWA_THEME_COLOR = '#000000';
+const PWA_BACKGROUND_COLOR = '#000000';
+/** Fond des icônes opaques (maskable, apple-touch-icon) : une icône transparente y reste lisible. */
+const ICON_BACKGROUND = '#ffffff';
+const PWA_ORIENTATION = 'any';
+const ICON_MIN_PX = 512;
+
+/** Source d'icône utilisable : PNG (ou autre format lu par sharp) carré d'au moins ICON_MIN_PX px. */
+async function iconSourceOk(file: string, report: (m: string) => void): Promise<boolean> {
+  const name = toPosix(path.relative(ROOT, file)) || file;
+  try {
+    const m = await sharp(file).metadata();
+    if (m.width !== m.height || (m.width ?? 0) < ICON_MIN_PX) {
+      report(`${name} : ${m.width}×${m.height} px, carré ≥ ${ICON_MIN_PX} px attendu`);
+      return false;
     }
+    return true;
+  } catch (e) {
+    report(`${name} : image illisible (${(e as Error).message})`);
+    return false;
   }
+}
+
+interface ManifestIcon {
+  src: string;
+  sizes: string;
+  type: string;
+  purpose: 'any' | 'maskable';
+}
+
+/**
+ * Icônes du livre dans `outDir`, depuis une source carrée ≥ 512 px : `icon.png` (512, favicon), `icon-192.png` et
+ * `icon-512.png` (`any`, transparence conservée), `icon-maskable-192.png` et `icon-maskable-512.png` (`maskable`,
+ * opaques), `apple-touch-icon.png` (180, opaque, iOS remplit la transparence en noir). `maskableSource` : icône
+ * maskable fournie par l'auteur ; sinon `iconSource` inscrite dans la zone sûre (cercle de 80 % de diamètre, donc carré
+ * de 0,8/√2 ≈ 56 % : les coins d'un motif carré restent visibles) sur `ICON_BACKGROUND`.
+ * `strict` : erreur (mode livre) ou avertissement (mode fixture) si la source ne convient pas.
+ */
+async function writeIcons(iconSource: string, maskableSource: string | null, outDir: string, strict: boolean): Promise<ManifestIcon[]> {
+  const report = strict ? err : warn;
+  const label = toPosix(path.relative(ROOT, iconSource)) || iconSource;
+  if (!fs.existsSync(iconSource)) {
+    report(`${label} absent : le livre ne peut pas être ajouté à l'écran d'accueil (icône PNG carrée ≥ ${ICON_MIN_PX} px)`);
+    return [];
+  }
+  if (!(await iconSourceOk(iconSource, report))) return [];
+  if (maskableSource && !(await iconSourceOk(maskableSource, report))) return [];
+
+  const png = (img: ReturnType<typeof sharp>, file: string) => img.png({ compressionLevel: 9 }).toFile(path.join(outDir, file));
+  const transparent = { r: 0, g: 0, b: 0, alpha: 0 };
+  const any = (size: number) => sharp(iconSource).resize(size, size, { fit: 'contain', background: transparent });
+  const maskable = async (size: number) => {
+    if (maskableSource) return sharp(maskableSource).resize(size, size).flatten({ background: ICON_BACKGROUND });
+    const inner = Math.floor((size * 0.8) / Math.SQRT2);
+    const pad = Math.floor((size - inner) / 2);
+    const motif = await any(inner).toBuffer();
+    return sharp({ create: { width: size, height: size, channels: 4, background: ICON_BACKGROUND } })
+      .composite([{ input: motif, left: pad, top: pad }])
+      .flatten({ background: ICON_BACKGROUND });
+  };
+
+  await png(any(512), 'icon.png');
+  const icons: ManifestIcon[] = [];
+  for (const size of [192, 512]) {
+    await png(any(size), `icon-${size}.png`);
+    icons.push({ src: `icon-${size}.png`, sizes: `${size}x${size}`, type: 'image/png', purpose: 'any' });
+  }
+  for (const size of [192, 512]) {
+    await png(await maskable(size), `icon-maskable-${size}.png`);
+    icons.push({ src: `icon-maskable-${size}.png`, sizes: `${size}x${size}`, type: 'image/png', purpose: 'maskable' });
+  }
+  await png(any(180).flatten({ background: ICON_BACKGROUND }), 'apple-touch-icon.png');
+  return icons;
+}
+
+function writeWebManifest(outDir: string, name: string, lang: string, icons: ManifestIcon[]): void {
   const manifest = {
     id: './',
-    name: book.title[lang],
-    short_name: book.title[lang],
+    name,
+    short_name: name,
     lang,
     start_url: './',
     scope: './',
     display: 'fullscreen',
     display_override: ['fullscreen', 'standalone'],
-    orientation: 'any',
-    background_color: '#000000',
-    theme_color: '#000000',
+    orientation: PWA_ORIENTATION,
+    background_color: PWA_BACKGROUND_COLOR,
+    theme_color: PWA_THEME_COLOR,
     icons,
   };
   fs.writeFileSync(path.join(outDir, 'manifest.webmanifest'), `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+/** Nom de l'application sous l'icône iOS (`apple-mobile-web-app-title`) ; les autres balises viennent de layout.tsx. */
+function injectAppTitle(outDir: string, name: string): void {
+  const indexFile = path.join(outDir, 'index.html');
+  let html = fs.readFileSync(indexFile, 'utf8');
+  if (html.includes('name="apple-mobile-web-app-title"')) {
+    html = html.replace(/<meta name="apple-mobile-web-app-title"[^>]*\/?>/, '');
+  }
+  if (!html.includes('</head>')) {
+    err('index.html : balise </head> introuvable, titre d\'application non injecté');
+    return;
+  }
+  html = html.replace('</head>', `<meta name="apple-mobile-web-app-title" content="${escapeHtml(name)}"/></head>`);
+  fs.writeFileSync(indexFile, html);
 }
 
 async function writeQrCodes(qrDir: string, book: Book): Promise<string[]> {
@@ -698,6 +783,8 @@ async function buildFixture(opts: Options): Promise<void> {
   }
   requireExport(outDir);
   await optimizeFixtureGlbs(outDir, opts.textures);
+  writeWebManifest(outDir, 'GLBInterpreter', 'fr', await writeIcons(path.join(ROOT, 'public/icon.png'), null, outDir, false));
+  injectAppTitle(outDir, 'GLBInterpreter');
   writeStubs(outDir, scenes as string[], 'GLBInterpreter');
   const files = collectFiles(outDir, opts, false);
   if (errors.length) fail();
@@ -743,7 +830,10 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
   }
 
   // --- Fichiers sources non utilisés ---
-  const known = new Set<string>(['book.json', 'icon-192.png', 'icon-512.png', ...assets]);
+  const known = new Set<string>(['book.json', 'icon.png', 'icon-maskable.png', ...assets]);
+  if (!fs.existsSync(path.join(sourceDir, 'icon.png'))) err(`icon.png absent du dossier source : icône du livre obligatoire (PNG carré ≥ ${ICON_MIN_PX} px, Î9)`);
+  else await iconSourceOk(path.join(sourceDir, 'icon.png'), err);
+  if (fs.existsSync(path.join(sourceDir, 'icon-maskable.png'))) await iconSourceOk(path.join(sourceDir, 'icon-maskable.png'), err);
   for (const id of book.scenes) known.add(`scenes/${id}.glb`).add(`scenes/${id}.json`);
   const unused = listFiles(sourceDir).filter((f) => !known.has(f));
   if (unused.length && !errors.length) warn(`fichier(s) source non référencé(s), non copié(s) : ${unused.join(', ')}`);
@@ -782,7 +872,10 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
     fs.rmSync(path.join(outDir, 'decoders/basis'), { recursive: true, force: true });
     console.log('build-book : aucune texture KTX2, transcodeur Basis retiré du livre');
   }
-  writeWebManifest(sourceDir, outDir, book);
+  const maskableSource = path.join(sourceDir, 'icon-maskable.png');
+  const icons = await writeIcons(path.join(sourceDir, 'icon.png'), fs.existsSync(maskableSource) ? maskableSource : null, outDir, true);
+  writeWebManifest(outDir, book.title[book.languages[0]], book.languages[0], icons);
+  injectAppTitle(outDir, book.title[book.languages[0]]);
   injectOg(outDir, book);
   writeStubs(outDir, book.scenes, book.title[book.languages[0]]);
   if (errors.length) fail();

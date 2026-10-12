@@ -5,7 +5,7 @@ type Lang = "fr" | "en" | "es";
 
 const translations = {
   fr: {
-    loader: { start: "Cliquer pour commencer", startMobile: "Toucher pour commencer", browserWarning: "⚠️ Pour une expérience optimale, utilisez Chrome ou Brave" },
+    loader: { start: "Cliquer pour commencer", startMobile: "Toucher pour commencer" },
     info: {
       title: "Informations",
       rotate: "Tourner la scène",
@@ -56,7 +56,22 @@ const translations = {
       interrupted: "Le téléchargement précédent s'est arrêté pendant l'étape :",
       newVersion: "Une nouvelle version de l'application est prête.",
       reload: "Recharger",
-      megabytes: "Mo"
+      megabytes: "Mo",
+      iosTitle: "Version iPhone et iPad à venir",
+      ios: "Ce livre fonctionne pour l'instant sur les téléphones et tablettes Android (avec Chrome) et sur ordinateur. La version pour iPhone et iPad est en préparation.",
+      inAppTitle: "Ouvrez le livre dans Chrome",
+      inApp: "Le livre ne peut pas être installé dans le navigateur de {app}. Ouvrez ce lien dans Chrome : bouton ci-dessous, ou menu ⋮ puis « Ouvrir dans le navigateur ».",
+      inAppOther: "Le livre ne peut pas être installé dans le navigateur de {app}. Copiez le lien et ouvrez-le dans Chrome ou dans le navigateur de votre ordinateur.",
+      openInChrome: "Ouvrir dans Chrome",
+      copyLink: "Copier le lien",
+      linkCopied: "Lien copié",
+      firefoxDesktop: "Firefox ne permet pas d'ajouter le livre comme application : il s'ouvrira dans cet onglet, y compris sans connexion.",
+      addToHome: "Ajouter à l'écran d'accueil",
+      addToHomeHint: "Le livre s'ouvrira alors en plein écran depuis son icône, comme une application.",
+      addedToHome: "Le livre est ajouté à l'écran d'accueil.",
+      doneTitle: "Livre installé",
+      done: "Toutes les scènes sont sur cet appareil.",
+      openBook: "Ouvrir le livre"
     },
     webglErrorScreen: {
       title: "Oups, tout le monde s'est endormi !",
@@ -83,7 +98,7 @@ const translations = {
     },
   },
   en: {
-    loader: { start: "Click to start", startMobile: "Tap to start", browserWarning: "⚠️ For optimal experience, use Chrome or Brave" },
+    loader: { start: "Click to start", startMobile: "Tap to start" },
     info: {
       title: "Information",
       rotate: "Rotate scene",
@@ -134,7 +149,22 @@ const translations = {
       interrupted: "The previous download stopped during this step:",
       newVersion: "A new version of the app is ready.",
       reload: "Reload",
-      megabytes: "MB"
+      megabytes: "MB",
+      iosTitle: "iPhone and iPad version coming soon",
+      ios: "For now, this book works on Android phones and tablets (with Chrome) and on computers. The iPhone and iPad version is on its way.",
+      inAppTitle: "Open the book in Chrome",
+      inApp: "The book cannot be installed in the {app} browser. Open this link in Chrome: use the button below, or the ⋮ menu then “Open in browser”.",
+      inAppOther: "The book cannot be installed in the {app} browser. Copy the link and open it in Chrome or in your computer's browser.",
+      openInChrome: "Open in Chrome",
+      copyLink: "Copy link",
+      linkCopied: "Link copied",
+      firefoxDesktop: "Firefox cannot add the book as an app: it will open in this tab, offline too.",
+      addToHome: "Add to home screen",
+      addToHomeHint: "The book will then open full screen from its icon, like an app.",
+      addedToHome: "The book has been added to the home screen.",
+      doneTitle: "Book installed",
+      done: "All the scenes are on this device.",
+      openBook: "Open the book"
     },
     webglErrorScreen: {
       title: "Oops, everyone has fallen asleep!",
@@ -161,7 +191,7 @@ const translations = {
     },
   },
   es: {
-    loader: { start: "Clic para comenzar", startMobile: "Toca para comenzar", browserWarning: "⚠️ Para una experiencia óptima, use Chrome o Brave" },
+    loader: { start: "Clic para comenzar", startMobile: "Toca para comenzar" },
     info: {
       title: "Información",
       rotate: "Girar escena",
@@ -212,7 +242,22 @@ const translations = {
       interrupted: "La descarga anterior se detuvo durante el paso:",
       newVersion: "Hay una nueva versión de la aplicación lista.",
       reload: "Recargar",
-      megabytes: "MB"
+      megabytes: "MB",
+      iosTitle: "Versión para iPhone y iPad próximamente",
+      ios: "Por ahora, este libro funciona en teléfonos y tabletas Android (con Chrome) y en ordenador. La versión para iPhone y iPad está en preparación.",
+      inAppTitle: "Abre el libro en Chrome",
+      inApp: "El libro no se puede instalar en el navegador de {app}. Abre este enlace en Chrome: con el botón de abajo, o el menú ⋮ y luego «Abrir en el navegador».",
+      inAppOther: "El libro no se puede instalar en el navegador de {app}. Copia el enlace y ábrelo en Chrome o en el navegador de tu ordenador.",
+      openInChrome: "Abrir en Chrome",
+      copyLink: "Copiar enlace",
+      linkCopied: "Enlace copiado",
+      firefoxDesktop: "Firefox no permite añadir el libro como aplicación: se abrirá en esta pestaña, también sin conexión.",
+      addToHome: "Añadir a la pantalla de inicio",
+      addToHomeHint: "El libro se abrirá a pantalla completa desde su icono, como una aplicación.",
+      addedToHome: "El libro se ha añadido a la pantalla de inicio.",
+      doneTitle: "Libro instalado",
+      done: "Todas las escenas están en este dispositivo.",
+      openBook: "Abrir el libro"
     },
     webglErrorScreen: {
       title: "¡Vaya, todo el mundo se ha quedado dormido!",

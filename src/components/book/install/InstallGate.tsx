@@ -6,6 +6,10 @@
 // remise à plus tard : la version installée est complète.
 //
 // En `npm run dev`, l'écran est contourné (pas de book.json ni de service worker hors export) : tester dans `out/`.
+//
+// Î9 : avant toute vérification, un iPhone ou un iPad voit l'écran « version iPhone à venir » (D-8.8, à retirer en
+// Î16) et un navigateur intégré (Instagram, Facebook…) l'écran « Ouvrez le livre dans Chrome » (D-6.2 C) : rien n'y est
+// téléchargé. Sur Chrome (Android, ordinateur), le bouton « Ajouter à l'écran d'accueil » utilise `beforeinstallprompt`.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "@/contexts/TranslationContext";
 import { book as compiledBook } from "@/content/book";
@@ -13,12 +17,18 @@ import { bookBaseUrl, fetchRemoteIndex, sameFiles, totalBytes, type BookFilesInd
 import { cacheStorageAvailable, missingFiles, readInstalledIndex, remainingBytes } from "./bookCache";
 import { InstallError, installBook, type InstallErrorKind, type InstallProgress } from "./downloader";
 import { readTrace, type InstallTrace } from "./trace";
+import { chromeIntentUrl, detectPlatform, shareableUrl, type Platform } from "./platform";
+import { getInstallPromptState, promptInstall, useInstallPrompt } from "./installPrompt";
+import { parseSceneHash } from "../sceneRoute";
 
 type Mode = "install" | "update" | "repair";
 
 type State =
   | { s: "checking" }
   | { s: "ready" }
+  | { s: "ios" }
+  | { s: "inapp"; app: string; android: boolean }
+  | { s: "done" }
   | { s: "offline" }
   | { s: "unsupported" }
   | { s: "invalid"; message: string }
@@ -52,6 +62,7 @@ export default function InstallGate({ children }: { children: ReactNode }) {
   const MB = (n: number) => `${toMB(n)} ${t.install.megabytes}`;
   const [state, setState] = useState<State>({ s: "checking" });
   const [trace] = useState<InstallTrace | null>(() => (typeof window === "undefined" ? null : readTrace()));
+  const [platform] = useState<Platform | null>(() => (typeof window === "undefined" ? null : detectPlatform()));
   const abortRef = useRef<AbortController | null>(null);
   /** Dernière progression affichée : gardée à la reprise jusqu'au recomptage de l'acquis (pas de retour à 0 %). */
   const lastProgressRef = useRef<InstallProgress | null>(null);
@@ -61,6 +72,15 @@ export default function InstallGate({ children }: { children: ReactNode }) {
     if (process.env.NODE_ENV === "development") {
       console.info("Installation du livre ignorée en développement (tester l'installation dans le dossier exporté)");
       setState({ s: "ready" });
+      return;
+    }
+    const p = detectPlatform();
+    if (p.ios) {
+      setState({ s: "ios" });
+      return;
+    }
+    if (p.inApp) {
+      setState({ s: "inapp", app: p.inApp, android: p.android });
       return;
     }
     if (!(await cacheStorageAvailable())) {
@@ -128,7 +148,9 @@ export default function InstallGate({ children }: { children: ReactNode }) {
         return;
       }
       await waitForController();
-      setState({ s: "ready" });
+      // Première installation sur Chrome : proposer l'écran d'accueil avant d'ouvrir le livre.
+      const prompt = getInstallPromptState();
+      setState(mode === "install" && prompt.canPrompt && !prompt.installed ? { s: "done" } : { s: "ready" });
     } catch (e) {
       const err = e instanceof InstallError ? e : new InstallError("other", (e as Error)?.message ?? String(e));
       console.error("Installation du livre :", err);
@@ -146,6 +168,19 @@ export default function InstallGate({ children }: { children: ReactNode }) {
         {state.s === "offline" && <Notice title={t.install.offlineTitle} text={t.install.offline} action={t.install.retry} onAction={check} />}
         {state.s === "unsupported" && <Notice title={t.install.unsupportedTitle} text={t.install.unsupported} />}
         {state.s === "invalid" && <Notice title={t.install.invalidTitle} text={state.message} action={t.install.retry} onAction={check} />}
+        {state.s === "ios" && <Notice title={t.install.iosTitle} text={t.install.ios} />}
+        {state.s === "inapp" && <InAppBrowser app={state.app} android={state.android} />}
+
+        {state.s === "done" && (
+          <>
+            <h1 className="text-2xl font-bold">{t.install.doneTitle}</h1>
+            <p className="text-white/80">{t.install.done}</p>
+            <AddToHomeScreen primary />
+            <button onClick={() => setState({ s: "ready" })} className="min-h-11 px-6 py-2 rounded-full bg-white/15">
+              {t.install.openBook}
+            </button>
+          </>
+        )}
 
         {(state.s === "prompt" || state.s === "downloading" || state.s === "failed") && (
           <>
@@ -176,6 +211,7 @@ export default function InstallGate({ children }: { children: ReactNode }) {
               <p className="text-amber-300 text-sm">{t.install.lowSpace}</p>
             )}
             <p className="text-white/60 text-sm">{t.install.wifi}</p>
+            {platform?.firefoxDesktop && <p className="text-white/60 text-sm">{t.install.firefoxDesktop}</p>}
             {trace?.state === "running" && (
               <p className="text-white/50 text-xs">
                 {t.install.interrupted} {trace.step} ({new Date(trace.at).toLocaleString()})
@@ -192,6 +228,7 @@ export default function InstallGate({ children }: { children: ReactNode }) {
                 {t.install.keepCurrent}
               </button>
             )}
+            <AddToHomeScreen />
           </>
         )}
 
@@ -202,6 +239,7 @@ export default function InstallGate({ children }: { children: ReactNode }) {
             <button onClick={() => abortRef.current?.abort()} className="min-h-11 px-6 py-2 rounded-full bg-white/15">
               {t.install.pause}
             </button>
+            <AddToHomeScreen />
           </>
         )}
 
@@ -225,6 +263,7 @@ export default function InstallGate({ children }: { children: ReactNode }) {
             >
               {t.install.resume}
             </button>
+            <AddToHomeScreen />
           </>
         )}
       </div>
@@ -266,6 +305,55 @@ function Notice({ title, text, action, onAction }: { title: string; text: string
           {action}
         </button>
       )}
+    </>
+  );
+}
+
+/** Bouton « Ajouter à l'écran d'accueil » (Chrome) ; rien si le prompt n'est pas disponible ou l'app déjà installée. */
+function AddToHomeScreen({ primary = false }: { primary?: boolean }) {
+  const { t } = useTranslation();
+  const { canPrompt, installed } = useInstallPrompt();
+  if (installed) return primary ? <p className="text-white/80 text-sm">{t.install.addedToHome}</p> : null;
+  if (!canPrompt) return null;
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <button
+        onClick={() => void promptInstall()}
+        className={primary ? "min-h-11 px-8 py-3 rounded-full bg-white text-black font-bold" : "min-h-11 px-6 py-2 rounded-full border border-white/40"}
+      >
+        {t.install.addToHome}
+      </button>
+      <p className="text-white/50 text-xs">{t.install.addToHomeHint}</p>
+    </div>
+  );
+}
+
+/** Navigateur intégré (D-6.2 C) : aucun téléchargement ; ouvrir la même adresse (scène comprise) dans Chrome. */
+function InAppBrowser({ app, android }: { app: string; android: boolean }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const url = shareableUrl(parseSceneHash(window.location.hash));
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      window.prompt(t.install.copyLink, url);
+    }
+  };
+  return (
+    <>
+      <h1 className="text-2xl font-bold">{t.install.inAppTitle}</h1>
+      <p className="text-white/80">{(android ? t.install.inApp : t.install.inAppOther).replace("{app}", app)}</p>
+      {android && (
+        <a href={chromeIntentUrl(url)} className="min-h-11 px-8 py-3 rounded-full bg-white text-black font-bold">
+          {t.install.openInChrome}
+        </a>
+      )}
+      <button onClick={copy} className="min-h-11 px-6 py-2 rounded-full bg-white/15">
+        {copied ? t.install.linkCopied : t.install.copyLink}
+      </button>
+      <p className="text-white/40 text-xs break-all select-all">{url}</p>
     </>
   );
 }

@@ -335,7 +335,7 @@ function WebDioramaLoaderInner({
     };
   }, []);
 
-  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(containerRef, onFullscreenChange);
+  const { isFullscreen, isSupported: fullscreenSupported, toggle: toggleFullscreen } = useFullscreen(containerRef, onFullscreenChange);
   useResize(updateRendererSize);
 
   useEffect(() => {
@@ -1131,7 +1131,7 @@ function WebDioramaLoaderInner({
                 />
               )}
             </AnimatePresence>
-            <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />
+            {fullscreenSupported && <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />}
           </div>
 
           <POIBreadcrumbs

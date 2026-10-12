@@ -1,12 +1,24 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { isDisplayFullscreen } from "@/components/book/install/platform";
+
+/**
+ * U-26 (Î9) : l'API Fullscreen n'existe pas sur iPhone (le « plein écran » iOS est l'app installée, D-8.8) et elle est
+ * inutile quand le livre est ouvert depuis son icône en `display-mode: fullscreen` (manifest du livre).
+ */
+function fullscreenSupported(): boolean {
+  if (typeof document === "undefined" || isDisplayFullscreen()) return false;
+  const d = document as Document & { webkitFullscreenEnabled?: boolean; mozFullScreenEnabled?: boolean; msFullscreenEnabled?: boolean };
+  return !!(d.fullscreenEnabled || d.webkitFullscreenEnabled || d.mozFullScreenEnabled || d.msFullscreenEnabled);
+}
 
 export function useFullscreen(
   targetRef: React.RefObject<HTMLElement | null>,
   onChange?: (isFs: boolean) => void
 ) {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isSupported, setIsSupported] = useState(false);
 
   // onChange vit dans une ref : l'abonnement est posé une seule fois (sinon il est refait,
   // et handleChange() rappelé, à chaque rendu dont le callback est une fonction fléchée en ligne).
@@ -33,6 +45,7 @@ export function useFullscreen(
     document.addEventListener("MSFullscreenChange", handleChange as any);
 
     handleChange(); // init
+    setIsSupported(fullscreenSupported());
 
     return () => {
       document.removeEventListener("fullscreenchange", handleChange);
@@ -45,6 +58,8 @@ export function useFullscreen(
   const toggle = async () => {
     const el = targetRef.current;
     if (!el) return;
+    // Sortie toujours permise ; seule l'entrée dépend du support (U-26).
+    if (!isFullscreen && !fullscreenSupported()) return;
     try {
       if (!isFullscreen) {
         const req = (el.requestFullscreen ??
@@ -64,5 +79,5 @@ export function useFullscreen(
     }
   };
 
-  return { isFullscreen, toggle };
+  return { isFullscreen, isSupported, toggle };
 }

@@ -165,7 +165,10 @@ test('reconstruction du livre : seul le fichier modifié est retéléchargé (in
   await expect(installHeading(page)).toBeHidden({ timeout: 20_000 });
 
   const after = await stats(page);
-  const redownloaded = Object.keys(after).filter((p) => p !== 'book.json' && p !== 'sw.js' && (after[p] ?? 0) > (before[p] ?? 0) && p !== 'index.html');
+  // Fichiers du livre seulement : un média absent du dossier (ex. médias de la fixture non versionnés) est demandé au
+  // réseau à chaque ouverture de scène, et l'écran « Livre installé » (Î9, Chrome) diffère la première ouverture.
+  const bookPaths = new Set(mutated.files.flatMap((f) => [f.path, ...(f.parts ?? []).map((p) => p.path)]));
+  const redownloaded = Object.keys(after).filter((p) => bookPaths.has(p) && p !== 'book.json' && p !== 'sw.js' && (after[p] ?? 0) > (before[p] ?? 0) && p !== 'index.html');
   // Après la mise à jour, la page est rechargée depuis le cache : seuls book.json et index.html sont redemandés au réseau.
   expect(redownloaded).toEqual([]);
   const state = await cacheState(page);

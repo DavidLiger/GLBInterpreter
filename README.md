@@ -45,14 +45,17 @@ Dossier source d'un livre (les chemins d'assets des configs sont relatifs à sa 
 book.json                 couche livre : bookId, title, languages, scenes, origin, ogImage, legal
 scenes/<scène>.glb        config dans les extras de l'empty GLBI_ROOT (glbi_version = 1, glbi_config = chaîne JSON)
 scenes/<scène>.json       facultatif, développement : config utilisée si le GLB n'a pas de GLBI_ROOT
-icon-192.png, icon-512.png  facultatifs : icônes du manifest
+icon.png                  obligatoire : icône du livre, PNG carré ≥ 512 px (transparence permise)
+icon-maskable.png         facultatif : icône « maskable » pleine page (motif dans le cercle central de 80 %)
 images/ icons/ sounds/ …  assets référencés (seuls ceux-là sont copiés)
 ```
 
 Le schéma unique est `src/schema/glbi.ts` (Zod). En mode livre, `out/` reçoit `scenes/<scène>.glb` (optimisé, voir
 ci-dessous),
 `scenes/<scène>.json` (config validée + crédits des modèles tirés des propriétés `src_*` du GLB), les assets,
-`manifest.webmanifest`, les balises `og:` de `index.html`, les stubs `s/<scène>/index.html` et `book.json` (livre +
+`manifest.webmanifest` et les icônes (`icon.png`, `icon-192/512.png`, `icon-maskable-192/512.png`,
+`apple-touch-icon.png`, générées par sharp depuis `icon.png` ; sans `icon-maskable.png`, l'icône est inscrite dans le
+cercle de la zone sûre (carré de 56 %) sur fond blanc), les balises `og:` et `apple-mobile-web-app-title` de `index.html`, les stubs `s/<scène>/index.html` et `book.json` (livre +
 liste des fichiers `{ path, size, sha256 }`). Les QR d'impression (SVG, un par scène, `<origin>/s/<scène>`) sont écrits
 dans `dist/qr/<bookId>/`. Jusqu'à Î10, le lecteur compilé lit encore la cartouche de test : les scènes d'un livre v1 se
 construisent et se valident, mais ne s'ouvrent pas encore.
@@ -131,6 +134,27 @@ Eruda (logs, réseau, stockage) ; elle reste active jusqu'à la fermeture de l'o
 l'installation, le relancement affiche la dernière étape atteinte (clé localStorage `glbi:install-trace`). Le Cache
 Storage et le service worker exigent HTTPS (ou `localhost`) : tester sur l'adresse publiée ou une prévisualisation
 Cloudflare Pages, pas sur `http://<IP locale>`.
+
+## Installation sur l'écran d'accueil et plateformes (Î9)
+
+- Manifest du livre : `display: fullscreen` avec repli `standalone`, `start_url` et `scope` relatifs, icônes `any` et
+  `maskable`. Le mode fixture produit les mêmes fichiers depuis `public/icon.png`.
+- Chrome (Android, ordinateur) : `beforeinstallprompt` est capturé (`install/installPrompt.ts`) ; le bouton « Ajouter à
+  l'écran d'accueil » apparaît sur l'écran d'installation et, après une première installation, sur l'écran « Livre
+  installé ». Rien n'est proposé dans l'app ouverte depuis son icône (`display-mode`).
+- Navigateurs intégrés (Instagram, Facebook, Messenger, TikTok, Snapchat, LinkedIn, Pinterest, X, Threads, WeChat,
+  LINE, vue web Android `; wv`) : aucun téléchargement ; écran « Ouvrez le livre dans Chrome » avec lien `intent:` vers
+  Chrome (Android) qui garde la scène (`s/<scène>/`) et bouton « Copier le lien ».
+- iPhone et iPad (y compris un iPad qui se présente comme un Mac, reconnu par `maxTouchPoints > 1`) : écran « Version
+  iPhone et iPad à venir », aucun téléchargement (D-8.8, à retirer en Î16).
+- Firefox de bureau : mention non bloquante sur l'écran d'installation.
+- Bouton plein écran masqué si l'API Fullscreen n'existe pas (iPhone) ou si le livre est ouvert en
+  `display-mode: fullscreen`.
+
+Tests : `tests/platform.spec.ts` (inclus dans `npm run test:install`) simule les agents utilisateurs ; ils ne
+remplacent ni un téléphone Android réel (jalon J2) ni un iPhone (Î16). Simulation manuelle : outils de développement
+de Chrome > Network conditions > User agent, sur le dossier exporté (en `npm run dev`, l'écran d'installation est
+contourné).
 
 ## Déploiement
 
