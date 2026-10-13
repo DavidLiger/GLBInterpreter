@@ -1,11 +1,11 @@
 // hooks/usePOIEffects.ts
 import * as THREE from "three";
 import { useEffect } from "react";
-import type { POIWithElements } from "@/types/diorama";
+import type { POI } from "@/types/diorama";
 
 export const usePOIEffects = (
   scene: THREE.Scene,
-  poi?: POIWithElements,
+  poi?: POI,
   textureLoader?: THREE.TextureLoader
 ) => {
   useEffect(() => {

@@ -1,0 +1,116 @@
+// Scène lue par le lecteur (Î10, C-01 à C-04, C-17, V-04).
+//
+// Entrée unique du lecteur (`WebDioramaLoader`) : `ReaderScene`.
+//  - scène v1 : `scenes/<id>.json` écrit par `build-book` (type `BuiltScene`, schéma Zod `src/schema/glbi.ts`), lu à
+//    l'exécution et traduit pour le moteur de scène en un `DioramaConfig3D` à **un seul POI nommé `start`** (V-04) :
+//    c'est une traduction de `modules.camera`, pas un retrait ; la navigation entre POI (POI hiérarchiques, `goToPOI`,
+//    transitions, `cameraPath`) reste dans le moteur comme module réservé ;
+//  - fixture de développement (`src/content/fixtures/`) : déjà au format du moteur, hors schéma v1.
+//
+// Le lecteur n'embarque pas Zod (devDependency) : le build a validé la scène ; `parseBuiltScene` refait une
+// vérification de forme minimale des champs lus, pour un message lisible si le dossier n'est pas un livre construit.
+import type { BuiltScene } from "@/schema/glbi";
+import type { DioramaConfig3D, DioramaCredits, POI } from "@/types/diorama";
+
+/** Identifiant du POI de départ (V-04) : seul POI d'une scène v1, premier POI de la fixture. */
+export const START_POI_ID = "start";
+
+export type ReaderScene =
+  | { kind: "v1"; bookId: string; built: BuiltScene; config: DioramaConfig3D }
+  | { kind: "fixture"; bookId: string; config: DioramaConfig3D };
+
+/** Couche livre utile au lecteur (`book.json` construit, sans la liste `files`). */
+export interface ReaderBook {
+  bookId: string;
+  scenes: string[];
+  /** Cartouche de test (`npm run build` sans `--source`) : scènes lues dans `src/content/fixtures/`. */
+  fixture: boolean;
+  title?: { fr: string; en: string; es: string };
+  legal?: { year: number; text: { fr: string; en: string; es: string } };
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+/** Vérification de forme de `book.json` (champs lus par le lecteur). */
+export function parseReaderBook(raw: unknown): ReaderBook {
+  if (!isObj(raw) || typeof raw.bookId !== "string" || !Array.isArray(raw.scenes) || !raw.scenes.every((s) => typeof s === "string")) {
+    throw new Error("book.json : { bookId, scenes } attendu");
+  }
+  return {
+    bookId: raw.bookId,
+    scenes: raw.scenes as string[],
+    fixture: raw.fixture === true,
+    title: isObj(raw.title) ? (raw.title as ReaderBook["title"]) : undefined,
+    legal: isObj(raw.legal) ? (raw.legal as ReaderBook["legal"]) : undefined,
+  };
+}
+
+/** Vérification de forme de `scenes/<id>.json` (contrat complet : `builtSceneSchema`, appliqué au build). */
+export function parseBuiltScene(raw: unknown, sceneId: string): BuiltScene {
+  const where = `scenes/${sceneId}.json`;
+  if (!isObj(raw) || raw.version !== 1) throw new Error(`${where} : version 1 attendue`);
+  const scene = raw.scene;
+  if (!isObj(scene) || scene.id !== sceneId || !isObj(scene.name)) throw new Error(`${where} : scene.id « ${sceneId} » et scene.name attendus`);
+  if (!isObj(raw.modules)) throw new Error(`${where} : modules attendu`);
+  const build = raw.build;
+  if (!isObj(build) || typeof build.glb !== "string" || !Array.isArray(build.modelCredits)) throw new Error(`${where} : build.glb attendu`);
+  const camera = raw.modules.camera;
+  if (camera !== undefined && (!isObj(camera) || typeof camera.target !== "string")) throw new Error(`${where} : modules.camera.target attendu`);
+  return raw as unknown as BuiltScene;
+}
+
+const AUDIO = /\.(mp3|ogg|opus|m4a|aac|wav)$/i;
+
+/**
+ * Crédits au format de l'`InfoModal` actuelle : sons listés, licences des sons et des modèles regroupées.
+ * Provisoire : l'`InfoModal` n'a pas de rubrique « modèles » ni « images » ; les crédits des modèles (`build.modelCredits`,
+ * propriétés `src_*`) et des images sont affichés en Î12 (U-17 à U-19).
+ */
+function toCredits(built: BuiltScene, book: ReaderBook): DioramaCredits {
+  const assets = built.modules.credits?.assets ?? [];
+  const sounds = assets.filter((a) => AUDIO.test(a.asset)).map((a) => ({ title: `${a.title} — ${a.author} (${a.license})`, source: a.source }));
+  const licenses = [...new Set([...assets.map((a) => a.license), ...built.build.modelCredits.flatMap((c) => (c.license ? [c.license] : []))])];
+  return {
+    sounds,
+    licenses: licenses.length ? licenses : undefined,
+    year: book.legal ? String(book.legal.year) : undefined,
+    project: book.title?.fr,
+  };
+}
+
+/**
+ * Traduction d'une scène v1 pour le moteur. `base` préfixe les chemins d'assets (relatifs à la racine du livre, D-8.1) :
+ * vide dans un livre construit, `dev-book/` en `npm run dev` (voir `bookSource.ts`).
+ *
+ * Î10a : le POI `start` porte le cadrage (`modules.camera`) et le son d'ambiance ; il n'a pas d'élément animé.
+ * Les animations du mode `buttons` (`modules.animations`) sont jouées par Î10b à partir de `built`, pas par la ligne
+ * de temps du moteur (module réservé `timeline`).
+ */
+export function sceneToEngineConfig(built: BuiltScene, book: ReaderBook, base = ""): DioramaConfig3D {
+  const at = (p: string | undefined) => (p === undefined ? undefined : `${base}${p}`);
+  const cam = built.modules.camera;
+  const start: POI = {
+    id: START_POI_ID,
+    label: built.scene.name,
+    emptyName: cam?.target ?? START_POI_ID,
+    zoom: cam?.zoom,
+    lookAxis: cam?.lookAxis,
+    minDistance: cam?.minDistance,
+    maxDistance: cam?.maxDistance,
+    minPolarAngle: cam?.minPolarAngle,
+    maxPolarAngle: cam?.maxPolarAngle,
+    minAzimuthAngle: cam?.minAzimuthAngle,
+    maxAzimuthAngle: cam?.maxAzimuthAngle,
+    enableZoom: cam?.enableZoom,
+    ambientSound: at(built.modules.audio?.ambientSound),
+    elements: [],
+  };
+  return {
+    glb: `${base}${built.build.glb}`,
+    name: built.scene.name,
+    loaderImage: at(built.scene.loaderImage),
+    pois: [start],
+    credits: toCredits(built, book),
+    autoplay: false,
+  };
+}

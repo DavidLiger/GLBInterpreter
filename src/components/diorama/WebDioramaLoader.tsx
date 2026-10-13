@@ -8,7 +8,9 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import { OutlineEffect } from 'three/examples/jsm/effects/OutlineEffect.js';
 import dynamic from "next/dynamic";
-import type { DioramaConfig3D, DioramaConfig3DWithVideos } from "@/types/diorama";
+import type { POI } from "@/types/diorama";
+import { START_POI_ID, type ReaderScene } from "@/components/book/readerScene";
+import { findNode, indexSceneNodes } from "./lib/nodeNames";
 import VolumeControl from "./audio/VolumeControl"; 
 import { usePOINavigation } from "./hooks/usePOINavigation";
 import LoaderOverlay from "./ui/LoaderOverlay";
@@ -20,7 +22,6 @@ import { useOrientation } from "./hooks/useOrientation";
 import { useFullscreen } from "./hooks/useFullscreen";
 import { useResize } from "./hooks/useResize";
 import { usePOIAnimations } from "./hooks/usePOIAnimations";
-import { POIWithElements } from "@/types/diorama";
 import POIPlayer from "@/components/diorama/ui/POIPlayer";
 import { usePOIScenePlayer } from "@/components/diorama/hooks/usePOIScenePlayer";
 import DialogueModal from "./ui/DialogueModal";
@@ -46,7 +47,12 @@ const DevTools =
     ? dynamic(() => import("./tools/DevTools"), { ssr: false })
     : null;
 
-export default function WebDioramaLoader({ config, bookId }: { config: DioramaConfig3D; bookId: string }) {
+/**
+ * Lecteur de scène. Entrée unique (C-01 à C-04, Î10) : `ReaderScene` (scène v1 lue dans `scenes/<id>.json`, traduite
+ * pour le moteur, ou fixture de développement). Utilisable hors de `BookApp` (atelier, piste A) : il ne dépend que de
+ * la scène et du dossier du livre servi à côté de la page.
+ */
+export default function WebDioramaLoader({ scene }: { scene: ReaderScene }) {
   const [mounted, setMounted] = useState(false); // ✅ NOUVEAU
 
   // ✅ Attendre le mount côté client
@@ -61,24 +67,19 @@ export default function WebDioramaLoader({ config, bookId }: { config: DioramaCo
 
   return (
     <TranslationProvider>
-      <WebDioramaLoaderWithTranslation config={config} bookId={bookId} />
+      <WebDioramaLoaderWithTranslation scene={scene} />
     </TranslationProvider>
   );
 }
 
 // Î8 : le livre entier est installé et vérifié avant le montage du lecteur (InstallGate, src/components/book/install/) ;
 // plus de vérification de cache ni de modale de téléchargement ici.
-function WebDioramaLoaderWithTranslation({ config, bookId }: { config: DioramaConfig3D; bookId: string }) {
-  return <WebDioramaLoaderInner config={config} bookId={bookId} />;
+function WebDioramaLoaderWithTranslation({ scene }: { scene: ReaderScene }) {
+  return <WebDioramaLoaderInner scene={scene} />;
 }
 
-function WebDioramaLoaderInner({
-  config,
-  bookId,
-}: {
-  config: DioramaConfig3D;
-  bookId: string;
-}) {
+function WebDioramaLoaderInner({ scene: readerScene }: { scene: ReaderScene }) {
+  const { config, bookId } = readerScene;
   const { t, lang } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -267,7 +268,7 @@ function WebDioramaLoaderInner({
     const mmHandler = (e: MediaQueryListEvent) => setIsTouchDevice(e.matches);
     if (mm) {
       if (typeof mm.addEventListener === "function") mm.addEventListener("change", mmHandler);
-      else if (typeof (mm as any).addListener === "function") (mm as any).addListener(mmHandler);
+      else mm.addListener(mmHandler); // Safari < 14
     }
 
     const onResize = () => {
@@ -281,7 +282,7 @@ function WebDioramaLoaderInner({
     return () => {
       if (mm) {
         if (typeof mm.removeEventListener === "function") mm.removeEventListener("change", mmHandler);
-        else if (typeof (mm as any).removeListener === "function") (mm as any).removeListener(mmHandler);
+        else mm.removeListener(mmHandler); // Safari < 14
       }
       window.removeEventListener("resize", onResize);
       window.removeEventListener("orientationchange", onResize);
@@ -357,11 +358,11 @@ function WebDioramaLoaderInner({
     };
   }, [isFullscreen]);
 
-  function findPOIById(pois: POIWithElements[], id: string): POIWithElements | null {
+  function findPOIById(pois: POI[], id: string): POI | null {
     for (const p of pois) {
       if (p.id === id) return p;
       if (p.children) {
-        const found = findPOIById(p.children as POIWithElements[], id);
+        const found = findPOIById(p.children, id);
         if (found) return found;
       }
     }
@@ -372,7 +373,7 @@ function WebDioramaLoaderInner({
     if (!currentPOI) return;
     stopAllAnimations();
 
-    const poi = findPOIById(config.pois as POIWithElements[], currentPOI);
+    const poi = findPOIById(config.pois, currentPOI);
     if (poi && sceneRef.current?.userData?.gltfAnimations) {
       prepareActions(poi, sceneRef.current.userData.gltfAnimations);
     }
@@ -418,7 +419,6 @@ function WebDioramaLoaderInner({
     spritesheetAnimatorRef.current = new SpritesheetAnimator();
 
     // Post-processing config
-    const configWithPP = config as any;
     const toneMappingMap: Record<string, THREE.ToneMapping> = {
       ACESFilmic: THREE.ACESFilmicToneMapping,
       Linear: THREE.LinearToneMapping,
@@ -426,14 +426,14 @@ function WebDioramaLoaderInner({
       Cineon: THREE.CineonToneMapping,
     };
 
-    const ppConfig = configWithPP.postProcessing
+    const ppConfig = config.postProcessing
       ? {
-          ...configWithPP.postProcessing,
-          toneMapping: configWithPP.postProcessing.toneMapping
+          ...config.postProcessing,
+          toneMapping: config.postProcessing.toneMapping
             ? {
-                ...configWithPP.postProcessing.toneMapping,
-                type: configWithPP.postProcessing.toneMapping.type
-                  ? toneMappingMap[configWithPP.postProcessing.toneMapping.type]
+                ...config.postProcessing.toneMapping,
+                type: config.postProcessing.toneMapping.type
+                  ? toneMappingMap[config.postProcessing.toneMapping.type]
                   : THREE.ACESFilmicToneMapping,
               }
             : undefined,
@@ -471,22 +471,22 @@ function WebDioramaLoaderInner({
       let glbUrl = config.glb;
       let objectUrl: string | null = null;
 
-      try {
-        // Lecture directe dans le cache du livre (Î8) ; sans entrée, l'URL passe par le service worker puis le réseau.
-        const cachedBlob = await getAssetFromCache(bookId, config.glb);
-        
-        if (cachedBlob) {
-          console.log("✅ GLB trouvé en cache, création Blob URL");
-          objectUrl = URL.createObjectURL(cachedBlob);
-          glbUrl = objectUrl;
-          
-          // ✅ Progress instantané à 70% car déjà en cache
-          setLoadingProgress(70);
-        } else {
-          console.log("📥 GLB absent du cache du livre, chargement par URL");
+      // Î10 (point de clôture Î8) : quand le service worker contrôle la page, le GLB est chargé par son URL ; le
+      // service worker le sert depuis le Cache Storage (pas de copie Blob + URL objet en plus du tampon du loader).
+      // Sans service worker (premier lancement non contrôlé, navigateur sans SW), lecture directe dans le cache
+      // du livre (Î8) ; sans entrée en cache, l'URL part au réseau.
+      const swControlled = typeof navigator !== "undefined" && !!navigator.serviceWorker?.controller;
+      if (!swControlled) {
+        try {
+          const cachedBlob = await getAssetFromCache(bookId, config.glb);
+          if (cachedBlob) {
+            objectUrl = URL.createObjectURL(cachedBlob);
+            glbUrl = objectUrl;
+            setLoadingProgress(70); // déjà local
+          }
+        } catch (err) {
+          console.warn("⚠️ Erreur accès cache, chargement par URL:", err);
         }
-      } catch (err) {
-        console.warn("⚠️ Erreur accès cache, chargement par URL:", err);
       }
 
       // Effet nettoyé pendant l'attente du cache : ne pas lancer le chargement
@@ -514,38 +514,25 @@ function WebDioramaLoaderInner({
         
           setLoadedScene(scene);
 
-          // 🔧 FIX: Force les murs à être complètement opaques
-          gltf.scene.traverse((child: any) => {
-            if (child.isMesh) {
-              const mesh = child as THREE.Mesh;
-              const mat = mesh.material as THREE.MeshStandardMaterial;
-              
-              // Cibler spécifiquement wall_1 et wall_2
-              if (child.name.includes('wall')) {
-                console.log("🔧 Correction du mur:", child.name);
-                mat.transparent = false;
-                mat.opacity = 1.0;
-                mat.side = THREE.FrontSide; // ← Le fix principal !
-                mat.depthWrite = true;
-                mat.alphaTest = 0;
-                mat.needsUpdate = true;
-              }
-            }
-          });
+          // R-14 (Î10) : correctif « wall » retiré du moteur (matériaux des objets dont le nom contient « wall » forcés
+          // opaques). Un défaut de matériau se corrige dans le .blend, pas par un nom codé dans le lecteur.
 
           // Frustum culling : actif par défaut. Seuls restent exclus les meshes dont la géométrie
           // sort de sa boîte statique : skinnés (sphère figée sur la pose de repos) et morph targets.
           // (three calcule lui-même les bounding volumes à la demande.)
-          gltf.scene.traverse((child: any) => {
-            if (child.isMesh && (child.isSkinnedMesh || child.morphTargetInfluences)) {
+          gltf.scene.traverse((child) => {
+            const mesh = child as THREE.Mesh;
+            if (mesh.isMesh && ((child as THREE.SkinnedMesh).isSkinnedMesh || mesh.morphTargetInfluences)) {
               child.frustumCulled = false;
             }
           });
 
-          // Populate empty refs + mixers
+          // Index des nœuds par nom Blender (point 5, lib/nodeNames.ts : nom d'origine, puis nom assaini par GLTFLoader)
+          indexSceneNodes(gltf.scene, emptyRefs.current);
+
+          // Mixers (propriétaire unique : Î10b, R-13/R-27)
           gltf.scene.traverse((child) => {
             if (!child.name) return;
-            emptyRefs.current[child.name] = child;
 
             if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
               const skinned = child as THREE.SkinnedMesh;
@@ -568,12 +555,12 @@ function WebDioramaLoaderInner({
 
           // ✅ NOUVEAU : Initialiser TOUS les placeholders au chargement
           console.log('🎭 Initialisation de tous les placeholders...');
-          const initAllPlaceholders = (pois: POIWithElements[]) => {
+          const initAllPlaceholders = (pois: POI[]) => {
             pois.forEach(poi => {
               poi.elements?.forEach(el => {
                 if (el.placeholderMesh) {
-                  const animated = emptyRefs.current[el.name];
-                  const placeholder = emptyRefs.current[el.placeholderMesh];
+                  const animated = findNode(emptyRefs.current, el.name);
+                  const placeholder = findNode(emptyRefs.current, el.placeholderMesh);
                   
                   if (animated && placeholder) {
                     animated.visible = false;
@@ -585,27 +572,29 @@ function WebDioramaLoaderInner({
               
               // Récursif pour les children
               if (poi.children) {
-                initAllPlaceholders(poi.children as POIWithElements[]);
+                initAllPlaceholders(poi.children);
               }
             });
           };
           
-          initAllPlaceholders(config.pois as POIWithElements[]);
+          initAllPlaceholders(config.pois);
 
-          applyLights(gltf.scene, emptyRefs.current, (config as DioramaConfig3DWithVideos).lights);
-          applyBulbs(gltf.scene, emptyRefs.current, (config as any).bulbs);
+          applyLights(gltf.scene, emptyRefs.current, config.lights);
+          applyBulbs(gltf.scene, emptyRefs.current, config.bulbs);
 
           // Post-processing
           timers.push(setTimeout(() => {
             if (cancelled) return;
 
-            if (!isMobileDevice) {
+            // Module réservé : actif seulement si la scène le déclare (principe console/cartouche, décision du 12/10).
+            // Avant Î10, un composer par défaut (bloom + SSAO) tournait sur toute scène d'ordinateur.
+            if (!isMobileDevice && config.postProcessing) {
               composerRef.current = setupPostProcessing(renderer, scene, camera, ppConfig);
               updateRendererSizeRef.current(true); // le composer démarre aux dimensions de la fenêtre
             }
 
-            if (configWithPP.emissiveObjects) {
-              setupEmissiveMaterials(scene, configWithPP.emissiveObjects);
+            if (config.emissiveObjects) {
+              setupEmissiveMaterials(scene, config.emissiveObjects);
             }
           }, 100));
 
@@ -622,7 +611,7 @@ function WebDioramaLoaderInner({
             applyVideoTextures(
               gltf.scene, 
               emptyRefs.current, 
-              (config as DioramaConfig3DWithVideos).videos,
+              config.videos,
               videoElementsRef,
               videoTexturesRef
             );
@@ -630,12 +619,14 @@ function WebDioramaLoaderInner({
 
           setLoadingProgress(70);
 
-          const startPOI = (config.pois as POIWithElements[]).find((p) => p.id === "start");
+          // POI de départ (C-17, V-04) : `start`, seul POI d'une scène v1 (traduction de `modules.camera`).
+          const startPOI = config.pois.find((p) => p.id === START_POI_ID);
           setLoadingProgress(100);
 
-          const startObj = emptyRefs.current[startPOI?.emptyName || ""];
+          const startObj = startPOI ? findNode(emptyRefs.current, startPOI.emptyName) : undefined;
+          if (!startObj) console.warn(`POI « ${START_POI_ID} » : empty « ${startPOI?.emptyName ?? "?"} » introuvable dans le GLB`);
           if (startObj && startPOI) {
-            moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI("start"));
+            moveCameraToPOI(startObj, startPOI, false, () => setCurrentPOI(START_POI_ID));
             prepareActions(startPOI, gltf.animations);
           }
 
@@ -766,17 +757,12 @@ function WebDioramaLoaderInner({
   useEffect(() => {
     if (!composerRef.current || !currentPOI) return;
 
-    const poi = findPOIById(config.pois as POIWithElements[], currentPOI);
+    const poi = findPOIById(config.pois, currentPOI);
     if (!poi) return;
 
-    const hasDOFConfig = (poi as any).dofConfig;
-    if (hasDOFConfig) {
+    if (poi.dofConfig) {
       composerRef.current.enableDOF(true);
-      composerRef.current.updateDOF(
-        (poi as any).dofConfig.focus,
-        (poi as any).dofConfig.aperture,
-        (poi as any).dofConfig.maxblur
-      );
+      composerRef.current.updateDOF(poi.dofConfig.focus, poi.dofConfig.aperture, poi.dofConfig.maxblur);
     } else {
       composerRef.current.enableDOF(false);
     }

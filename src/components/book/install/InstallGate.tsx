@@ -12,7 +12,6 @@
 // téléchargé. Sur Chrome (Android, ordinateur), le bouton « Ajouter à l'écran d'accueil » utilise `beforeinstallprompt`.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "@/contexts/TranslationContext";
-import { book as compiledBook } from "@/content/book";
 import { bookBaseUrl, fetchRemoteIndex, sameFiles, totalBytes, type BookFilesIndex } from "./bookIndex";
 import { cacheStorageAvailable, missingFiles, readInstalledIndex, remainingBytes } from "./bookCache";
 import { InstallError, installBook, type InstallErrorKind, type InstallProgress } from "./downloader";
@@ -96,9 +95,6 @@ export default function InstallGate({ children }: { children: ReactNode }) {
       return;
     }
     const installed = await readInstalledIndex(base);
-    if (remote && remote.bookId !== compiledBook.id) {
-      console.warn(`book.json décrit « ${remote.bookId} », le lecteur compilé lit « ${compiledBook.id} » (cartouche de test jusqu'à Î10)`);
-    }
 
     // Hors ligne : seule la version installée compte.
     if (!remote) {

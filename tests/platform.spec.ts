@@ -5,6 +5,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
 const SERVER = 'http://localhost:4173';
+/** Scène du livre de test v1 (Î10 : `npm run build -- --source books/test-dino`). */
+const SCENE = 'trex';
 
 const UA = {
   iphone:
@@ -31,7 +33,7 @@ test.beforeEach(async ({ page }) => {
 test.describe('iPhone', () => {
   test.use({ userAgent: UA.iphone });
   test('écran « version iPhone à venir », rien n\'est téléchargé', async ({ page }) => {
-    await page.goto(`${SERVER}/#/s/street`);
+    await page.goto(`${SERVER}/#/s/${SCENE}`);
     await expect(page.getByRole('heading', { name: 'Version iPhone et iPad à venir' })).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole('button', { name: 'Installer' })).toHaveCount(0);
     await nothingDownloaded(page);
@@ -47,6 +49,9 @@ test.describe('iPad qui se présente comme un Mac', () => {
     await nothingDownloaded(page);
   });
   test('un Mac sans écran tactile installe le livre', async ({ page }) => {
+    // Sans écran tactile, quelle que soit la machine de test : Chromium sous Windows rapporte les points de contact
+    // réels (PC à écran tactile), ce qui ferait passer ce « Mac » pour un iPad.
+    await page.addInitScript(() => Object.defineProperty(Navigator.prototype, 'maxTouchPoints', { get: () => 0 }));
     await page.goto(`${SERVER}/`);
     await expect(page.getByRole('heading', { name: 'Installer le livre' })).toBeVisible({ timeout: 20_000 });
   });
@@ -56,12 +61,12 @@ for (const [name, ua] of [['Instagram', UA.instagramAndroid], ['Facebook', UA.fa
   test.describe(`navigateur intégré ${name} (Android)`, () => {
     test.use({ userAgent: ua });
     test('téléchargement bloqué, lien vers Chrome qui garde la scène', async ({ page }) => {
-      await page.goto(`${SERVER}/depot/#/s/street`);
+      await page.goto(`${SERVER}/depot/#/s/${SCENE}`);
       await expect(page.getByRole('heading', { name: 'Ouvrez le livre dans Chrome' })).toBeVisible({ timeout: 20_000 });
       await expect(page.getByText(`navigateur de ${name}`)).toBeVisible();
       const href = await page.getByRole('link', { name: 'Ouvrir dans Chrome' }).getAttribute('href');
-      expect(href).toContain('intent://localhost:4173/depot/s/street/#Intent;scheme=http;package=com.android.chrome;');
-      await expect(page.getByText(`${SERVER}/depot/s/street/`, { exact: true })).toBeVisible();
+      expect(href).toContain(`intent://localhost:4173/depot/s/${SCENE}/#Intent;scheme=http;package=com.android.chrome;`);
+      await expect(page.getByText(`${SERVER}/depot/s/${SCENE}/`, { exact: true })).toBeVisible();
       await nothingDownloaded(page);
     });
   });

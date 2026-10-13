@@ -4,17 +4,17 @@ import { useTranslation } from "@/contexts/TranslationContext";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import type { TranslatedString } from "@/types/diorama";
+import type { LocalizedText } from "@/schema/glbi";
 
 type DialogueCharacter = {
   id: string;
-  name?: TranslatedString;
+  name?: LocalizedText;
   image: string;
 };
 
 type DialogueLine = {
   time: number;
-  text: TranslatedString | TranslatedString[];
+  text: LocalizedText | LocalizedText[];
   characterId: string;
 };
 
@@ -59,7 +59,7 @@ export default function DialogueModal({
   const currentText = useMemo(() => {
     if (!currentLine) return null;
 
-    // Si c'est un objet TranslatedString simple
+    // Si c'est un objet LocalizedText simple
     if (typeof currentLine.text === "object" && !Array.isArray(currentLine.text)) {
       return currentLine.text;
     }
@@ -67,7 +67,7 @@ export default function DialogueModal({
     // Si c'est une string (cas legacy)
     if (typeof currentLine.text === "string") return currentLine.text;
     
-    // Si c'est un tableau de TranslatedStrings
+    // Si c'est un tableau de LocalizedTexts
     if (Array.isArray(currentLine.text)) {
       const nextLine = dialogue?.lines.find((l) => l.time > currentLine.time);
       const nextTime = nextLine ? nextLine.time : currentLine.time + 5; // durée par défaut

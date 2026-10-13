@@ -3,13 +3,32 @@
 import { useEffect, useRef, useState } from "react";
 import { isDisplayFullscreen } from "@/components/book/install/platform";
 
+/** API Fullscreen préfixée (anciens WebKit, Firefox, Edge) : typée ici plutôt qu'en `any` (C-04, Î10). */
+type VendorDocument = Document & {
+  webkitFullscreenEnabled?: boolean;
+  mozFullScreenEnabled?: boolean;
+  msFullscreenEnabled?: boolean;
+  webkitFullscreenElement?: Element | null;
+  mozFullScreenElement?: Element | null;
+  msFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+  mozCancelFullScreen?: () => Promise<void> | void;
+  msExitFullscreen?: () => Promise<void> | void;
+};
+type VendorElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
+  mozRequestFullScreen?: () => Promise<void> | void;
+  msRequestFullscreen?: () => Promise<void> | void;
+};
+const VENDOR_CHANGE_EVENTS = ["fullscreenchange", "webkitfullscreenchange", "mozfullscreenchange", "MSFullscreenChange"] as const;
+
 /**
  * U-26 (Î9) : l'API Fullscreen n'existe pas sur iPhone (le « plein écran » iOS est l'app installée, D-8.8) et elle est
  * inutile quand le livre est ouvert depuis son icône en `display-mode: fullscreen` (manifest du livre).
  */
 function fullscreenSupported(): boolean {
   if (typeof document === "undefined" || isDisplayFullscreen()) return false;
-  const d = document as Document & { webkitFullscreenEnabled?: boolean; mozFullScreenEnabled?: boolean; msFullscreenEnabled?: boolean };
+  const d = document as VendorDocument;
   return !!(d.fullscreenEnabled || d.webkitFullscreenEnabled || d.mozFullScreenEnabled || d.msFullscreenEnabled);
 }
 
@@ -29,29 +48,19 @@ export function useFullscreen(
 
   useEffect(() => {
     const handleChange = () => {
-      const fs = !!(
-        document.fullscreenElement ||
-        (document as any).webkitFullscreenElement ||
-        (document as any).mozFullScreenElement ||
-        (document as any).msFullscreenElement
-      );
+      const d = document as VendorDocument;
+      const fs = !!(d.fullscreenElement || d.webkitFullscreenElement || d.mozFullScreenElement || d.msFullscreenElement);
       setIsFullscreen(fs);
       onChangeRef.current?.(fs);
     };
 
-    document.addEventListener("fullscreenchange", handleChange);
-    document.addEventListener("webkitfullscreenchange", handleChange as any);
-    document.addEventListener("mozfullscreenchange", handleChange as any);
-    document.addEventListener("MSFullscreenChange", handleChange as any);
+    for (const type of VENDOR_CHANGE_EVENTS) document.addEventListener(type, handleChange);
 
     handleChange(); // init
     setIsSupported(fullscreenSupported());
 
     return () => {
-      document.removeEventListener("fullscreenchange", handleChange);
-      document.removeEventListener("webkitfullscreenchange", handleChange as any);
-      document.removeEventListener("mozfullscreenchange", handleChange as any);
-      document.removeEventListener("MSFullscreenChange", handleChange as any);
+      for (const type of VENDOR_CHANGE_EVENTS) document.removeEventListener(type, handleChange);
     };
   }, []);
 
@@ -62,17 +71,13 @@ export function useFullscreen(
     if (!isFullscreen && !fullscreenSupported()) return;
     try {
       if (!isFullscreen) {
-        const req = (el.requestFullscreen ??
-          (el as any).webkitRequestFullscreen ??
-          (el as any).mozRequestFullScreen ??
-          (el as any).msRequestFullscreen) as any;
-        if (req) await req.call(el);
+        const e = el as VendorElement;
+        const req = e.requestFullscreen ?? e.webkitRequestFullscreen ?? e.mozRequestFullScreen ?? e.msRequestFullscreen;
+        if (req) await req.call(e);
       } else {
-        const exit = (document.exitFullscreen ??
-          (document as any).webkitExitFullscreen ??
-          (document as any).mozCancelFullScreen ??
-          (document as any).msExitFullscreen) as any;
-        if (exit) await exit.call(document);
+        const d = document as VendorDocument;
+        const exit = d.exitFullscreen ?? d.webkitExitFullscreen ?? d.mozCancelFullScreen ?? d.msExitFullscreen;
+        if (exit) await exit.call(d);
       }
     } catch (err) {
       console.warn("Fullscreen API error:", err);

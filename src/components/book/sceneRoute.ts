@@ -12,6 +12,14 @@ export function parseSceneHash(hash: string): string | null {
   return SCENE_ID.test(id) ? id : null;
 }
 
+/** `#/dev/street` → `street` : fixture de développement (Î10), ouverte seulement en `npm run dev`. */
+export function parseDevSceneHash(hash: string): string | null {
+  const m = /^#\/dev\/([^/?#]+)\/?$/.exec(hash);
+  if (!m) return null;
+  const id = decodeURIComponent(m[1]);
+  return SCENE_ID.test(id) ? id : null;
+}
+
 /** `/s/street`, `/depot/s/street/`, `https://hôte/s/street` → `street` (l'hôte et le préfixe sont ignorés). */
 export function sceneIdFromPath(pathOrUrl: string): string | null {
   const m = /\/s\/([^/?#]+)\/?(?:index\.html)?(?:[?#].*)?$/.exec(pathOrUrl);

@@ -198,9 +198,9 @@ const instructions = [
   };
 
   const loadExample = () => {
-    const example = `import type { DioramaConfig3DWithPostProcessing } from "@/types/diorama";
+    const example = `import type { DioramaConfig3D } from "@/types/diorama";
 
-export const street: DioramaConfig3DWithPostProcessing = {
+export const street: DioramaConfig3D = {
   glb: "models/street.glb",
   loaderImage: "icons/dioramas/test_street/street-preview.png",
   autoplay: true,

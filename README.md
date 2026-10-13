@@ -18,12 +18,26 @@ tous les assets, qui fonctionne servi à la racine d'un domaine (`https://hôte/
 
 ```bash
 npm install
-npm run dev            # http://localhost:3000/#/s/street  (les stubs /s/<scène> n'existent qu'après le build)
+npm run book:test-source                                # livre de test v1 books/test-dino (une fois)
+npm run dev:book -- --source books/test-dino            # prépare public/dev-book/ (non versionné), à relancer après
+                                                        # toute modification du dossier source
+npm run dev            # http://localhost:3000/#/s/trex        scène v1 lue dans public/dev-book/
+                       # http://localhost:3000/#/dev/street    fixture de développement (modules réservés)
+                       # (les stubs /s/<scène> n'existent qu'après le build)
 ```
 
-La cartouche de test (`src/content/fixtures/test-street.ts`, déclarée dans `src/content/book.json` et
-`src/content/book.ts`) attend ses médias dans `public/`, non versionnés : `models/street.glb`, `sounds/*.mp3`,
-`videos/test_street/*.mp4`, `spritesheets/spritesheet_TV-screen.webp`, `icons/dioramas/test_street/*.png`.
+Le lecteur n'a pas de configuration compilée (Î10) : il lit à l'exécution `book.json` et `scenes/<scène>.json` du
+dossier du livre (`src/components/book/bookSource.ts`). Une scène v1 est traduite pour le moteur en un POI unique
+`start` (`src/components/book/readerScene.ts`). `npm run dev:book` écrit dans `public/dev-book/` les mêmes scènes et
+assets que le build (GLB optimisés, `scenes/<scène>.json` validés), sans l'application ; `next build` recopie ce dossier
+dans `out/`, `build-book` l'en retire.
+
+La fixture `test-street` (`src/content/fixtures/`, hors schéma v1) reste la référence des modules réservés (POI
+hiérarchiques, `cameraPath`, dialogues, vidéos, spritesheets, lumières, post-processing…). Elle s'ouvre par `#/dev/<scène>`
+en `npm run dev`, et par `#/s/<scène>` dans la cartouche de test exportée (`npm run build` sans `--source`, `book.json`
+`fixture: true`), toujours par import dynamique. Elle attend ses médias dans `public/`, non versionnés :
+`models/street.glb`, `sounds/*.mp3`, `videos/test_street/*.mp4`, `spritesheets/spritesheet_TV-screen.webp`,
+`icons/dioramas/test_street/*.png`.
 
 Les outils de développement (analyse de scène, convertisseur de config, QR, spritesheets,
 réglages de post-processing) n'existent qu'en `npm run dev`. En développement, l'écran « Installer le livre » est
@@ -57,8 +71,8 @@ ci-dessous),
 `apple-touch-icon.png`, générées par sharp depuis `icon.png` ; sans `icon-maskable.png`, l'icône est inscrite dans le
 cercle de la zone sûre (carré de 56 %) sur fond blanc), les balises `og:` et `apple-mobile-web-app-title` de `index.html`, les stubs `s/<scène>/index.html` et `book.json` (livre +
 liste des fichiers `{ path, size, sha256 }`). Les QR d'impression (SVG, un par scène, `<origin>/s/<scène>`) sont écrits
-dans `dist/qr/<bookId>/`. Jusqu'à Î10, le lecteur compilé lit encore la cartouche de test : les scènes d'un livre v1 se
-construisent et se valident, mais ne s'ouvrent pas encore.
+dans `dist/qr/<bookId>/`. Le lecteur lit ces fichiers à l'exécution (Î10) : un même build de l'application sert n'importe
+quel dossier de livre.
 
 ### Optimisation des GLB (`scripts/glb-pipeline.ts`)
 
@@ -114,7 +128,8 @@ Tests automatiques (Chromium et WebKit de Playwright ; WebKit n'est pas Safari i
 
 ```bash
 npx playwright install chromium webkit                         # une fois
-rm -rf .next out && npm run build -- --part-mib 1              # découpe forcée : des parties à recomposer
+npm run book:test-source                                       # livre de test v1 (books/test-dino)
+rm -rf .next out && npm run build -- --source books/test-dino --part-mib 1   # découpe forcée : des parties à recomposer
 npm run test:install
 ```
 

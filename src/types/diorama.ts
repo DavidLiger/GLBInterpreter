@@ -1,4 +1,13 @@
-export type TranslatedString = { fr: string; en: string; es: string };
+// Type interne du moteur de scène (POI, éléments animés, modules réservés de la console).
+//
+// Type unique (C-01 à C-04, Î10) : l'entrée du lecteur est typée par le schéma Zod (`src/schema/glbi.ts`) :
+//   - scène v1 : `BuiltScene` (`scenes/<id>.json` validé au build), traduite en `DioramaConfig3D` par
+//     `sceneToEngineConfig` (`src/components/book/readerScene.ts`) : un seul POI nommé `start` (V-04) ;
+//   - fixture de développement (`src/content/fixtures/`) : écrite directement dans ce type, hors schéma v1, parce
+//     qu'elle utilise les modules réservés (POI hiérarchiques, cameraPath, dialogues, vidéos, lumières, post-processing…).
+// Les textes traduits sont ceux du schéma (`LocalizedText`) ; il n'y a plus d'alias de config (`…WithVideos`,
+// `…WithPostProcessing`, `POIWithElements`) : `DioramaConfig3D` et `POI` portent tous les champs.
+import type { LocalizedText } from "@/schema/glbi";
 
 // 🔹 Type pour éléments animés attachés à un POI
 export type AnimatedElement = {
@@ -22,13 +31,13 @@ export type AnimatedElement = {
 
 export type DialogueCharacter = {
   id: string;              // identifiant unique (ex: "hero", "guide")
-  name?: TranslatedString;           // nom affiché (optionnel)
+  name?: LocalizedText;           // nom affiché (optionnel)
   image: string;           // image/avatar du personnage
 };
 
 export type DialogueLine = {
   time: number;            // moment d’apparition (en secondes)
-  text: TranslatedString | TranslatedString[];          // texte à afficher
+  text: LocalizedText | LocalizedText[];          // texte à afficher
   characterId: string;     // id du personnage qui parle
 };
 
@@ -71,9 +80,13 @@ export interface DOFConfig {
   maxblur?: number;
 }
 
+/**
+ * Point d'intérêt : un empty de la scène (`emptyName`, nom Blender, voir `lib/nodeNames.ts`) et son cadrage orbital.
+ * Convention (C-17, V-04) : le POI de départ s'appelle `start` ; une scène v1 n'a que lui.
+ */
 export type POI = {
   id: string;
-  label: TranslatedString;
+  label: LocalizedText;
   emptyName: string;
   autoplay?: boolean;
   icon?: string;
@@ -99,23 +112,6 @@ export type POI = {
   effects?: POIEffects; 
 };
 
-
-export type POIWithElements = POI & {
-  elements?: AnimatedElement[];
-  cameraPath?: POICameraStep[];
-};
-
-export type OrbitParams = {
-  minDistance?: number;
-  maxDistance?: number;
-  minPolarAngle?: number;
-  maxPolarAngle?: number;
-  minAzimuthAngle?: number;
-  maxAzimuthAngle?: number;
-  enableZoom?: boolean;
-  enablePan?: boolean;
-  dampingFactor?: number;
-};
 
 // Dans src/types/diorama.ts
 export type DioramaVideo = {
@@ -186,9 +182,10 @@ export interface PostProcessingConfig {
   };
 }
 
+/** Configuration d'une scène pour le moteur (voir l'en-tête). */
 export type DioramaConfig3D = {
   glb: string;
-  name: TranslatedString;
+  name: LocalizedText;
   pois: POI[];
   // navigationType: string, 
   videos?: DioramaVideo[];
@@ -198,27 +195,21 @@ export type DioramaConfig3D = {
   toonOutline?: ToonOutlineConfig; // 🔥 nouvel objet
   credits?: DioramaCredits;
   autoplay?: boolean;
-};
-
-export interface DioramaCredits {
-  description?: TranslatedString; // Texte d'intro ou aide
-  music?: { title: string; author?: string; source?: string }[];
-  sounds?: { title: string; source?: string }[];
-  licenses?: string[]; // CC0, CC-BY, etc.
-  year?: string;
-  project?: string;
-}
-
-export type DioramaConfig3DWithVideos = DioramaConfig3D & {
-  videos?: DioramaVideo[];
-  loaderImage?: string;
-};
-
-export interface DioramaConfig3DWithPostProcessing extends DioramaConfig3DWithVideos {
+  /** Module réservé (post-processing). */
   postProcessing?: PostProcessingConfig;
+  /** Module réservé (objets émissifs, avec le post-processing). */
   emissiveObjects?: Array<{
     name: string;
     color: number;
     intensity: number;
   }>;
+};
+
+export interface DioramaCredits {
+  description?: LocalizedText; // Texte d'intro ou aide
+  music?: { title: string; author?: string; source?: string }[];
+  sounds?: { title: string; source?: string }[];
+  licenses?: string[]; // CC0, CC-BY, etc.
+  year?: string;
+  project?: string;
 }

@@ -2,11 +2,15 @@
 // (D-8.7), Cache Storage, reprise après coupure, invalidation par sha256 après reconstruction, hors ligne.
 // Ne remplacent pas Safari iOS (WebKit de Playwright ≠ Safari mobile) : voir README, « Tester l'installation ».
 //
-//   npm run build -- --part-mib 1        découpe tout fichier > 1 MiB : des parties à recomposer même sans gros média
+//   npm run book:test-source                                   livre de test v1 books/test-dino (Î10)
+//   npm run build -- --source books/test-dino --part-mib 1     découpe tout fichier > 1 MiB (l'image de chargement de
+//                                                              « trex », ≈ 3 MiB) : des parties à recomposer
 //   npm run test:install                 Chromium et WebKit (npx playwright install chromium webkit au préalable)
 import { expect, test, type Page } from '@playwright/test';
 
 const SERVER = 'http://localhost:4173';
+/** Scène du livre de test v1 (Î10 : les tests ne tournent plus sur la fixture `street`, hors schéma v1). */
+const SCENE = 'trex';
 
 interface IndexFile {
   path: string;
@@ -22,6 +26,25 @@ async function serverIndex(page: Page): Promise<{ bookId: string; files: IndexFi
 async function stats(page: Page): Promise<Record<string, number>> {
   return (await page.request.get(`${SERVER}/__stats`)).json();
 }
+
+/**
+ * Compteurs du serveur une fois la page au repos : plus aucune requête pendant `quietMs`. Les requêtes du premier
+ * affichage (police de l'écran de chargement, page encore non contrôlée par le service worker) ne doivent pas être
+ * comptées comme des retéléchargements dus à la mise à jour.
+ */
+async function settledStats(page: Page, quietMs = 1500, maxMs = 20_000): Promise<Record<string, number>> {
+  let last = JSON.stringify(await stats(page));
+  for (const t0 = Date.now(); Date.now() - t0 < maxMs; ) {
+    await page.waitForTimeout(quietMs);
+    const now = JSON.stringify(await stats(page));
+    if (now === last) return JSON.parse(now);
+    last = now;
+  }
+  return JSON.parse(last);
+}
+
+/** Lecteur monté sur la scène v1 : écran de chargement (nom de la scène) ou écran WebGL sans GPU. */
+const sceneShown = (page: Page) => page.getByText(/Tyrannosaure|tout le monde s'est endormi/).first();
 
 /** Contenu du cache du livre vu depuis la page. */
 async function cacheState(page: Page) {
@@ -70,7 +93,7 @@ for (const base of ['/', '/depot/']) {
     const index = await serverIndex(page);
     const parted = index.files.filter((f) => f.parts);
 
-    await page.goto(`${SERVER}${base}#/s/street`);
+    await page.goto(`${SERVER}${base}#/s/${SCENE}`);
     await installAndWait(page);
 
     const state = await cacheState(page);
@@ -84,7 +107,7 @@ for (const base of ['/', '/depot/']) {
     expect(state.entries[`${base}book.json`]).toBeTruthy();
 
     // D-8.7 : fichier logique recomposé sous son URL d'origine, parties retirées du cache
-    if (!parted.length) test.info().annotations.push({ type: 'note', description: 'aucun fichier découpé : construire avec --part-mib 1' });
+    expect(parted.length, 'aucun fichier découpé : construire avec --part-mib 1').toBeGreaterThan(0);
     for (const f of parted) {
       expect(await digest(page, `${SERVER}${base}${f.path}`), f.path).toBe(f.sha256);
       for (const p of f.parts!) expect(state.entries[`${base}${p.path}`], p.path).toBeUndefined();
@@ -96,10 +119,16 @@ for (const base of ['/', '/depot/']) {
       return;
     }
     await context.setOffline(true);
+    // Î10 : la scène v1 est lue dans le livre installé (book.json puis scenes/<scène>.json, servis par le service worker)
+    const sceneJson = page.waitForResponse((r) => r.url().endsWith(`${base}scenes/${SCENE}.json`));
     await page.reload();
     await expect(page.getByText('Vérification du livre…')).toBeHidden({ timeout: 20_000 });
     await expect(installHeading(page)).toBeHidden();
     await expect(page.getByText('Connexion requise')).toBeHidden();
+    expect((await sceneJson).status()).toBe(200);
+    // Lecteur monté : nom de la scène sur l'écran de chargement, ou écran WebGL si le navigateur de test n'a pas de GPU
+    await expect(sceneShown(page)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText(/Scène introuvable|Livre illisible/)).toHaveCount(0);
     await context.setOffline(false);
   });
 }
@@ -107,12 +136,12 @@ for (const base of ['/', '/depot/']) {
 test('reprise après coupure : les parties déjà vérifiées ne sont pas retéléchargées', async ({ page }) => {
   const index = await serverIndex(page);
   const target = index.files.find((f) => f.parts);
-  test.skip(!target, 'aucun fichier découpé : construire avec --part-mib 1');
+  expect(target, 'aucun fichier découpé : construire avec --part-mib 1').toBeTruthy();
   const [first, second] = target!.parts!;
   // 3 coupures = toutes les tentatives automatiques échouent
   await page.request.get(`${SERVER}/__fail?path=${encodeURIComponent(second.path)}&times=3`);
 
-  await page.goto(`${SERVER}/#/s/street`);
+  await page.goto(`${SERVER}/#/s/${SCENE}`);
   await expect(installHeading(page)).toBeVisible({ timeout: 20_000 });
   await page.getByRole('button', { name: 'Installer' }).click();
   await expect(page.getByText('La connexion a été interrompue')).toBeVisible({ timeout: 120_000 });
@@ -151,9 +180,10 @@ test('reprise après coupure : les parties déjà vérifiées ne sont pas retél
 });
 
 test('reconstruction du livre : seul le fichier modifié est retéléchargé (invalidation par sha256)', async ({ page }) => {
-  await page.goto(`${SERVER}/#/s/street`);
+  await page.goto(`${SERVER}/#/s/${SCENE}`);
   await installAndWait(page);
-  const before = await stats(page);
+  await expect(sceneShown(page)).toBeVisible({ timeout: 20_000 });
+  const before = await settledStats(page);
 
   await page.request.get(`${SERVER}/__mutate?on=1`);
   const mutated = await serverIndex(page);
@@ -163,8 +193,9 @@ test('reconstruction du livre : seul le fichier modifié est retéléchargé (in
   await page.getByRole('button', { name: 'Mettre à jour' }).click();
   await expect(page.getByRole('heading', { name: 'Mise à jour du livre' })).toBeHidden({ timeout: 60_000 });
   await expect(installHeading(page)).toBeHidden({ timeout: 20_000 });
+  await expect(sceneShown(page)).toBeVisible({ timeout: 20_000 });
 
-  const after = await stats(page);
+  const after = await settledStats(page);
   // Fichiers du livre seulement : un média absent du dossier (ex. médias de la fixture non versionnés) est demandé au
   // réseau à chaque ouverture de scène, et l'écran « Livre installé » (Î9, Chrome) diffère la première ouverture.
   const bookPaths = new Set(mutated.files.flatMap((f) => [f.path, ...(f.parts ?? []).map((p) => p.path)]));

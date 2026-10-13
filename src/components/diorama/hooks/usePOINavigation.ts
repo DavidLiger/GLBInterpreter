@@ -2,7 +2,7 @@
 import { useState, useCallback } from "react";
 import * as THREE from "three";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
-import type { POI, POIWithElements, DioramaConfig3D } from "@/types/diorama";
+import type { POI, DioramaConfig3D } from "@/types/diorama";
 
 export const usePOINavigation = (
   config: DioramaConfig3D,
@@ -140,7 +140,7 @@ export const usePOINavigation = (
   }, [cameraRef, controlsRef]);
 
   const moveCameraDuringAnimation = useCallback(
-    (obj: THREE.Object3D, poi: POIWithElements) => {
+    (obj: THREE.Object3D, poi: POI) => {
       if (!cameraRef.current || !controlsRef.current) return;
 
       const camera = cameraRef.current;

@@ -12,7 +12,8 @@
     "predev": "tsx scripts/copy-decoders.ts",
     "prebuild": "tsx scripts/copy-decoders.ts",
     "glb:report": "tsx scripts/glb-report.ts",
-    "test:install": "playwright test"
+    "test:install": "playwright test",
+    "dev:book": "tsx scripts/build-book.ts --dev"
   },
   "dependencies": {
     "@serwist/next": "^9.2.1",

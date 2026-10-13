@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import * as THREE from "three";
-import type { POIWithElements } from "@/types/diorama";
+import type { POI } from "@/types/diorama";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 
 type UsePOIScenePlayerProps = {
-  poi?: POIWithElements | null;
+  poi?: POI | null;
   autoplayEnabled?: boolean;
   experienceStarted?: boolean;
   animations: THREE.AnimationClip[];
@@ -13,13 +13,13 @@ type UsePOIScenePlayerProps = {
   fadeDuration?: number;
   muted?: boolean;
 
-  goToPOI?: (poi: POIWithElements, smooth?: boolean, duration?: number) => void;
-  findPOIRecursively?: (id: string) => POIWithElements | null;
-  moveCameraToPOI?: (obj: THREE.Object3D, poi: POIWithElements, smooth?: boolean, onComplete?: () => void, duration?: number) => void;
-  moveCameraDuringAnimation?: (obj: THREE.Object3D, poi: POIWithElements) => void;
+  goToPOI?: (poi: POI, smooth?: boolean, duration?: number) => void;
+  findPOIRecursively?: (id: string) => POI | null;
+  moveCameraToPOI?: (obj: THREE.Object3D, poi: POI, smooth?: boolean, onComplete?: () => void, duration?: number) => void;
+  moveCameraDuringAnimation?: (obj: THREE.Object3D, poi: POI) => void;
   emptyRefs?: React.RefObject<Record<string, THREE.Object3D>>;
 
-  findParentPOI?: (childId: string) => POIWithElements | null;
+  findParentPOI?: (childId: string) => POI | null;
   controlsRef?: React.RefObject<OrbitControls | null>;
   cameraRef?: React.RefObject<THREE.PerspectiveCamera | null>;
   startPlaceholderAnimation?: (name: string, frames?: number) => void;
@@ -331,7 +331,7 @@ export const usePOIScenePlayer = ({
     console.log("✅ [seekScene] Terminé, progress set to:", clampedTime); // ✅ LOG
   }, [duration, isPlaying, isPaused]);
 
-  function normalizeCameraPath(poi: POIWithElements) {
+  function normalizeCameraPath(poi: POI) {
   if (!poi.cameraPath?.length) return [];
 
   const steps = [
@@ -354,7 +354,7 @@ export const usePOIScenePlayer = ({
 }
 
 
-function getCameraStepAtTime(poi: POIWithElements, t: number) {
+function getCameraStepAtTime(poi: POI, t: number) {
   const steps = normalizeCameraPath(poi);
   for (let i = 0; i < steps.length - 1; i++) {
     const curr = steps[i];

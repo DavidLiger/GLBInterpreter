@@ -3,6 +3,7 @@
 //   npm run build -- --source <dossier du livre>     next build + livre complet (mode livre)
 //   npm run build                                    next build + cartouche de test (mode fixture, provisoire)
 //   npm run book:check -- --source <dossier>         validation seule, sans next build ni écriture
+//   npm run dev:book -- --source <dossier>           livre de développement dans public/dev-book/ (Î10), lu par `npm run dev`
 //   option --textures auto|ktx2|webp|keep            textures des GLB (défaut auto : KTX2 si `ktx` est installé, sinon WebP)
 //   option --part-mib <n>                            tests seulement : découpe tout fichier > n MiB en parties de n MiB
 //
@@ -28,7 +29,10 @@
 // stubs s/<scène>/index.html (D-8.4),
 // book.json (livre + liste des fichiers { path, size, sha256, parts? }). QR SVG par scène dans dist/qr/<bookId>/.
 // Mode fixture : GLB de out/ optimisés sur place (empties conservés), manifest et icônes d'après public/icon.png, stubs
-// d'après src/content/book.json et out/book.json { bookId, scenes, fixture, files }.
+// d'après src/content/book.json et out/book.json { bookId, scenes, fixture, files }. Le lecteur lit les scènes de la fixture
+// dans src/content/fixtures/ quand book.json porte `fixture: true` (Î10).
+// Mode développement (--dev, Î10), dans public/dev-book/ (non versionné) : book.json (livre, `files` vide), scenes/<scène>.glb
+// optimisés, scenes/<scène>.json et assets référencés ; ni export Next, ni icônes, manifest, stubs, QR ni découpage.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -66,6 +70,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Limites de Cloudflare Pages (architecture, Déploiement). */
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
+/** Dossier du livre lu par `npm run dev` (src/components/book/bookSource.ts, `DEV_BOOK_DIR`, Î10). */
+const DEV_BOOK_OUT = 'public/dev-book';
 const MAX_FILES = 20000;
 /** D-8.7 : taille des parties d'un fichier découpé (marge sous la limite de 25 MiB). */
 const PART_BYTES = 20 * 1024 * 1024;
@@ -113,6 +119,8 @@ interface Options {
   out: string;
   qrDir: string;
   check: boolean;
+  /** Î10 : livre de développement écrit dans public/dev-book/ pour `npm run dev`. */
+  dev: boolean;
   textures: TextureMode;
   /** D-8.7 : seuil de découpage et taille des parties (octets). Défaut : > 25 MiB, parties de 20 MiB. */
   splitAbove: number;
@@ -125,6 +133,7 @@ function parseArgs(argv: string[]): Options {
     out: 'out',
     qrDir: 'dist/qr',
     check: false,
+    dev: false,
     textures: 'auto',
     splitAbove: MAX_FILE_BYTES,
     partBytes: PART_BYTES,
@@ -140,6 +149,7 @@ function parseArgs(argv: string[]): Options {
     else if (a === '--out') opts.out = next();
     else if (a === '--qr-dir') opts.qrDir = next();
     else if (a === '--check') opts.check = true;
+    else if (a === '--dev') opts.dev = true;
     else if (a === '--textures') {
       const t = next() as TextureMode;
       if (!TEXTURE_MODES.includes(t)) throw new Error(`--textures : ${TEXTURE_MODES.join(', ')} attendu (trouvé « ${t} »)`);
@@ -148,7 +158,7 @@ function parseArgs(argv: string[]): Options {
       const n = Number(next());
       if (!(n >= 1 && n <= 20)) throw new Error('--part-mib : nombre de MiB entre 1 et 20 attendu');
       opts.splitAbove = opts.partBytes = Math.floor(n * 1024 * 1024);
-    } else throw new Error(`option inconnue « ${a} » (options : --source, --out, --qr-dir, --check, --textures, --part-mib)`);
+    } else throw new Error(`option inconnue « ${a} » (options : --source, --out, --qr-dir, --check, --dev, --textures, --part-mib)`);
   }
   return opts;
 }
@@ -764,6 +774,12 @@ function requireExport(outDir: string): void {
     fail();
   }
   writingOut = outDir;
+  // `next build` recopie tout public/, y compris le livre de développement (npm run dev:book, Î10) : jamais publié.
+  const devBook = path.join(outDir, path.basename(DEV_BOOK_OUT));
+  if (fs.existsSync(devBook)) {
+    fs.rmSync(devBook, { recursive: true, force: true });
+    console.log(`build-book : ${DEV_BOOK_OUT}/ (livre de développement) retiré du dossier construit`);
+  }
 }
 
 /** Cartouche de test (fixture `test-street`, lue par le lecteur actuel) : GLB optimisés, stubs et liste de fichiers. */
@@ -838,17 +854,16 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
   const unused = listFiles(sourceDir).filter((f) => !known.has(f));
   if (unused.length && !errors.length) warn(`fichier(s) source non référencé(s), non copié(s) : ${unused.join(', ')}`);
 
-  // --- Lecteur compilé (cartouche de test jusqu'à Î10) ---
-  const compiled = readJson(path.join(ROOT, 'src/content/book.json'), 'src/content/book.json') as { scenes?: string[] } | undefined;
-  if (compiled?.scenes && compiled.scenes.join() !== book.scenes.join()) {
-    warn(`le lecteur compilé lit encore la cartouche de test (scènes : ${compiled.scenes.join(', ')}) : les scènes du livre ne s'ouvrent pas avant Î10`);
-  }
-
   if (errors.length) fail();
   if (opts.check) {
     flushReport();
     console.log(`build-book : livre « ${book.bookId} » valide (${scenes.length} scène(s), ${warnings.length} avertissement(s))`);
     for (const s of scenes) console.log(`  ${s.id} : config ${s.source === 'glb' ? 'GLBI_ROOT' : 'JSON de développement'}, ${s.modelCredits.length} crédit(s) de modèle`);
+    return;
+  }
+
+  if (opts.dev) {
+    await writeDevBook(opts, sourceDir, book, scenes, assets);
     return;
   }
 
@@ -892,6 +907,31 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
   const total = files.reduce((sum, f) => sum + f.size, 0);
   console.log(`build-book : livre « ${book.bookId} » : ${scenes.length} scène(s), ${files.length} fichiers (${(total / 1048576).toFixed(1)} MiB) listés dans out/book.json`);
   console.log(`build-book : ${qr.length} QR dans ${toPosix(path.join(opts.qrDir, book.bookId))}/ (${book.origin}/s/<scène>)`);
+}
+
+/**
+ * Livre de développement (Î10) : mêmes scènes et assets que le dossier construit (GLB optimisés, `scenes/<id>.json`
+ * validés), sans l'application. `files` est vide : rien n'est installé ni mis en cache en développement.
+ */
+async function writeDevBook(opts: Options, sourceDir: string, book: Book, scenes: SceneResult[], assets: Set<string>): Promise<void> {
+  const outDir = path.resolve(ROOT, DEV_BOOK_OUT);
+  fs.rmSync(outDir, { recursive: true, force: true });
+  fs.mkdirSync(path.join(outDir, 'scenes'), { recursive: true });
+  writingOut = outDir;
+  const textures = resolveTextureModeOrFail(opts.textures);
+  for (const s of scenes) {
+    const glbRel = `scenes/${s.id}.glb`;
+    if (!(await writeOptimizedScene(sourceDir, outDir, glbRel, s.protect, textures))) continue;
+    const built: BuiltScene = { ...s.config, build: { glb: glbRel, source: s.source, modelCredits: s.modelCredits } };
+    const check = builtSceneSchema.safeParse(built);
+    if (!check.success) formatIssues(check.error, `scenes/${s.id}.json (sortie) : `).forEach(err);
+    fs.writeFileSync(path.join(outDir, `scenes/${s.id}.json`), `${JSON.stringify(built, null, 2)}\n`);
+  }
+  for (const a of [...assets].sort()) copyIntoOut(sourceDir, outDir, a);
+  if (errors.length) fail();
+  fs.writeFileSync(path.join(outDir, 'book.json'), `${JSON.stringify({ ...book, files: [] }, null, 2)}\n`);
+  flushReport();
+  console.log(`build-book : livre de développement « ${book.bookId} » (${scenes.length} scène(s)) dans ${DEV_BOOK_OUT}/ : lancer \`npm run dev\` puis ouvrir #/s/<scène>`);
 }
 
 async function main(): Promise<void> {

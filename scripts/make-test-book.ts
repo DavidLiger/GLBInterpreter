@@ -7,7 +7,9 @@
 // - scène « trex » : GLB avec GLBI_ROOT (glbi_version = 1, glbi_config = chaîne JSON), armature à 2 os, maillage
 //   skinné portant des propriétés src_*, empty « start », clips idle/walk/roar/eat ;
 // - scène « raptor » : GLB sans GLBI_ROOT + scenes/raptor.json (source de développement) ;
-// - images PNG 1×1, sons WAV de 0,1 s, icône du livre `icon.png` (512 px, Î9).
+// - images PNG 1×1, sons WAV de 0,1 s, icône du livre `icon.png` (512 px, Î9) ;
+// - image de chargement de « trex » en bruit aléatoire (≈ 3 MiB, Î10) : avec `--part-mib 1`, au moins un fichier du livre est
+//   découpé, ce qui garde la couverture des tests de recomposition et de reprise (tests/install.spec.ts) sur un livre v1.
 import fs from 'node:fs';
 import path from 'node:path';
 import { Document, NodeIO, type Node as GNode } from '@gltf-transform/core';
@@ -151,9 +153,18 @@ async function main(): Promise<void> {
   fs.writeFileSync(path.join(dir, 'scenes/raptor.json'),
     `${JSON.stringify(sceneConfig('raptor', 'Armature_Raptor', L('Vélociraptor', 'Velociraptor', 'Velociraptor')), null, 2)}\n`);
 
-  for (const f of ['images/og.png', 'images/trex-preview.png', 'images/raptor-preview.png', 'icons/walk.png', 'icons/roar.png', 'icons/eat.png']) {
+  for (const f of ['images/og.png', 'images/raptor-preview.png', 'icons/walk.png', 'icons/roar.png', 'icons/eat.png']) {
     fs.writeFileSync(path.join(dir, f), PNG_1X1);
   }
+  // Bruit pseudo-aléatoire (graine fixe : même fichier à chaque génération) : un PNG incompressible de ≈ 3 MiB.
+  const side = 1024;
+  const noise = Buffer.alloc(side * side * 3);
+  let seed = 0x2545f491;
+  for (let i = 0; i < noise.length; i++) {
+    seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+    noise[i] = seed & 0xff;
+  }
+  await sharp(noise, { raw: { width: side, height: side, channels: 3 } }).png({ compressionLevel: 9 }).toFile(path.join(dir, 'images/trex-preview.png'));
   // Icône du livre (Î9) : PNG carré ≥ 512 px, motif transparent (disque vert) pour vérifier les versions opaques.
   await sharp({ create: { width: 512, height: 512, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
     .composite([{ input: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><circle cx="256" cy="256" r="220" fill="#2e8b57"/></svg>') }])

@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 import * as THREE from "three";
-import type { POIWithElements } from "@/types/diorama";
+import type { POI } from "@/types/diorama";
 import { usePlaceholderSwap } from "./usePlaceholderSwap";
 
 export const usePOIAnimations = (
@@ -64,7 +64,7 @@ export const usePOIAnimations = (
 
   // ────────────── PRÉPARER les actions (SANS jouer) ──────────────
   const prepareActions = useCallback(
-    (poi: POIWithElements, animations: THREE.AnimationClip[]) => {
+    (poi: POI, animations: THREE.AnimationClip[]) => {
       console.log(`🎬 prepareActions pour POI: ${poi.id}`);
       
       poi.elements?.forEach((el) => {

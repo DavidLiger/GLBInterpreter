@@ -3,13 +3,13 @@
 // Contenu de développement uniquement, non destiné à la publication. Les crédits d'origine
 // (musique « Aquatic Ambience », sources de sons non vérifiées) ont été retirés en Î4 ;
 // les crédits réels sont refaits par asset en Î6 (C-16).
-import type { DioramaConfig3DWithPostProcessing } from "@/types/diorama";
+import type { DioramaConfig3D } from "@/types/diorama";
 
 // Chemins relatifs à la racine du livre (D-8.1, Î5) : les fichiers sont servis depuis le dossier exporté
 // (`public/` en développement). Les médias lourds (models/, sounds/, videos/, spritesheets/,
 // icons/dioramas/test_street/) ne sont pas versionnés : à copier localement dans `public/` (voir README).
 
-export const testStreet: DioramaConfig3DWithPostProcessing = {
+export const testStreet: DioramaConfig3D = {
   glb: `models/street.glb`,
   loaderImage: `icons/dioramas/test_street/street-preview.png`,
   autoplay: true, // ← Mode tutoriel automatique ou pas
