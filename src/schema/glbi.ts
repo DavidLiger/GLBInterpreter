@@ -1,5 +1,6 @@
 // src/schema/glbi.ts — contrat unique de la cartouche (D-8.2, Î6).
-// Source : spec-extras-blender.md v1.1, section 4 (`glbi_config`, extras du GLB) et section 5 (`book.json`).
+// Source : spec-extras-blender.md section 4 (objet fusionné publié) et section 5 (`book.json`) ; spec-atelier-glbi.md §3, §4
+// et §6 (couche 3D du GLB, couche éditoriale `scenes/<id>.edit.json`, D-8.9). La fusion est dans `./merge.ts`.
 // Utilisé par `scripts/build-book.ts` (validation au build) ; l'application n'en importe que les types
 // (`import type`), Zod n'entre donc pas dans le bundle du lecteur.
 // Aucune dépendance autre que `zod` : ce fichier est exécuté tel quel par `tsx` depuis les scripts.
@@ -25,8 +26,11 @@ const translated = z
   .min(1, 'traduction vide (V-09)');
 export const localizedTextSchema = z.strictObject({ fr: translated, en: translated, es: translated });
 
-/** Identifiant de scène : même règle que le routeur (`#/s/<scène>`, `src/components/book/sceneRoute.ts`). */
-export const SCENE_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/i;
+/**
+ * Identifiant de scène : même règle que le routeur (`#/s/<scène>`, `src/components/book/sceneRoute.ts`).
+ * Écrit sans drapeau `i` : `z.toJSONSchema` perd les drapeaux des regex (le schéma exporté pour l'addon serait plus strict).
+ */
+export const SCENE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 export const sceneIdSchema = z.string().regex(SCENE_ID_PATTERN, 'identifiant de scène : lettres, chiffres, _ et -');
 
 /** Noms d'objets, d'armatures et de clips (spec §3) : lettres, chiffres et `_`, ni point ni espace. */
@@ -61,44 +65,52 @@ export const audioPathSchema = assetPath('son', AUDIO_EXTENSIONS);
 export const anyAssetPathSchema = assetPath('asset', [...IMAGE_EXTENSIONS, ...AUDIO_EXTENSIONS]);
 
 // ---------------------------------------------------------------------------------------------------------
-// glbi_config (spec §4) — extras de l'empty GLBI_ROOT, ou JSON de développement posé à côté du GLB
+// Objet fusionné (spec-extras-blender.md §4) — `scenes/<id>.json` publié, produit par la fusion des deux couches (D-8.9)
 // ---------------------------------------------------------------------------------------------------------
 
-/** Version des extras (`glbi_version` sur GLBI_ROOT, `version` dans la config) : l'entier 1 (spec §2). */
+/** Version de l'objet fusionné (`version` de `scenes/<id>.json` publié) : l'entier 1 (spec-extras-blender.md §4). */
 export const GLBI_VERSION = 1 as const;
+/** Version de la couche 3D : `GLBI_ROOT.glbi_version` et `glbi_config.version`, l'entier 2 depuis D-8.9 (spec-atelier-glbi.md §3). */
+export const LAYER3D_VERSION = 2 as const;
+/** Version de la couche éditoriale : `version` de `scenes/<id>.edit.json`, l'entier 1 (spec-atelier-glbi.md §4). */
+export const EDIT_LAYER_VERSION = 1 as const;
 export const GLBI_ROOT_NAME = 'GLBI_ROOT';
 
 const radians = z.number().finite();
 
-/** Cadrage orbital du POI unique (spec §4, V-04, V-05). Angles en radians. Sémantique de `zoom` : Î10 (D-3.4). */
-export const cameraModuleSchema = z
-  .strictObject({
-    target: blenderNameSchema,
-    zoom: z.number().finite().nonnegative().optional(),
-    lookAxis: z.enum(['x', 'y', 'z']).optional(),
-    minDistance: z.number().finite().nonnegative().optional(),
-    maxDistance: z.number().finite().positive().optional(),
-    minPolarAngle: radians.min(0).max(Math.PI + 1e-6).optional(),
-    maxPolarAngle: radians.min(0).max(Math.PI + 1e-6).optional(),
-    minAzimuthAngle: radians.min(-2 * Math.PI - 1e-6).max(2 * Math.PI + 1e-6).optional(),
-    maxAzimuthAngle: radians.min(-2 * Math.PI - 1e-6).max(2 * Math.PI + 1e-6).optional(),
-    enableZoom: z.boolean().default(true),
-  })
-  .superRefine((c, ctx) => {
-    // V-05 (interprétation, voir rapport Î6) : bornes ordonnées.
-    const pairs: [keyof typeof c, keyof typeof c][] = [
-      ['minDistance', 'maxDistance'],
-      ['minPolarAngle', 'maxPolarAngle'],
-      ['minAzimuthAngle', 'maxAzimuthAngle'],
-    ];
-    for (const [lo, hi] of pairs) {
-      const a = c[lo];
-      const b = c[hi];
-      if (typeof a === 'number' && typeof b === 'number' && a > b) {
-        ctx.addIssue({ code: 'custom', path: [lo], message: `${String(lo)} (${a}) > ${String(hi)} (${b})` });
-      }
+/** Cadrage de la caméra : partie éditoriale du module caméra (D-8.9), réglée dans l'atelier. Angles en radians. */
+const cameraFramingShape = {
+  zoom: z.number().finite().nonnegative().optional(),
+  lookAxis: z.enum(['x', 'y', 'z']).optional(),
+  minDistance: z.number().finite().nonnegative().optional(),
+  maxDistance: z.number().finite().positive().optional(),
+  minPolarAngle: radians.min(0).max(Math.PI + 1e-6).optional(),
+  maxPolarAngle: radians.min(0).max(Math.PI + 1e-6).optional(),
+  minAzimuthAngle: radians.min(-2 * Math.PI - 1e-6).max(2 * Math.PI + 1e-6).optional(),
+  maxAzimuthAngle: radians.min(-2 * Math.PI - 1e-6).max(2 * Math.PI + 1e-6).optional(),
+  enableZoom: z.boolean().default(true),
+};
+/** Clés du cadrage (couche éditoriale), pour les messages de la fusion. */
+export const CAMERA_FRAMING_KEYS = Object.keys(cameraFramingShape) as (keyof typeof cameraFramingShape)[];
+
+/** V-05 (interprétation, voir rapport Î6) : bornes ordonnées. */
+function orderedBounds(c: { [k: string]: unknown }, ctx: z.RefinementCtx): void {
+  const pairs = [
+    ['minDistance', 'maxDistance'],
+    ['minPolarAngle', 'maxPolarAngle'],
+    ['minAzimuthAngle', 'maxAzimuthAngle'],
+  ] as const;
+  for (const [lo, hi] of pairs) {
+    const a = c[lo];
+    const b = c[hi];
+    if (typeof a === 'number' && typeof b === 'number' && a > b) {
+      ctx.addIssue({ code: 'custom', path: [lo], message: `${lo} (${a}) > ${hi} (${b})` });
     }
-  });
+  }
+}
+
+/** Cadrage orbital du POI unique (spec §4, V-04, V-05). Cible : couche 3D ; cadrage : couche éditoriale (D-8.9). */
+export const cameraModuleSchema = z.strictObject({ target: blenderNameSchema, ...cameraFramingShape }).superRefine(orderedBounds);
 
 /** Clip de repos joué en boucle au chargement (mode `buttons`). */
 export const idleSchema = z.strictObject({
@@ -107,9 +119,12 @@ export const idleSchema = z.strictObject({
   loop: z.boolean().default(true),
 });
 
+/** Identifiant d'action : clé de jointure entre les deux couches (D-8.9). Sans drapeau `i` (voir SCENE_ID_PATTERN). */
+export const actionIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, 'identifiant d’action : lettres, chiffres, _ et -');
+
 /** Une action = un bouton (point 4 validé). */
 export const actionSchema = z.strictObject({
-  id: z.string().regex(/^[a-z0-9][a-z0-9_-]*$/i, 'identifiant d’action : lettres, chiffres, _ et -'),
+  id: actionIdSchema,
   object: blenderNameSchema,
   type: z.enum(['armature', 'mesh']),
   clip: blenderNameSchema,
@@ -120,19 +135,21 @@ export const actionSchema = z.strictObject({
   loop: z.boolean().default(false),
 });
 
+function uniqueActionIds(a: { actions: { id: string }[] }, ctx: z.RefinementCtx): void {
+  const seen = new Set<string>();
+  a.actions.forEach((act, i) => {
+    if (seen.has(act.id)) ctx.addIssue({ code: 'custom', path: ['actions', i, 'id'], message: `id d'action en double « ${act.id} »` });
+    seen.add(act.id);
+  });
+}
+
 export const animationsModuleSchema = z
   .strictObject({
     mode: z.literal('buttons'),
     idle: idleSchema,
     actions: z.array(actionSchema).min(1, 'au moins une action'),
   })
-  .superRefine((a, ctx) => {
-    const seen = new Set<string>();
-    a.actions.forEach((act, i) => {
-      if (seen.has(act.id)) ctx.addIssue({ code: 'custom', path: ['actions', i, 'id'], message: `id d'action en double « ${act.id} »` });
-      seen.add(act.id);
-    });
-  });
+  .superRefine(uniqueActionIds);
 
 export const audioModuleSchema = z.strictObject({
   ambientSound: audioPathSchema.optional(),
@@ -207,6 +224,78 @@ export type AnimationsModule = z.infer<typeof animationsModuleSchema>;
 export type QuizModule = z.infer<typeof quizModuleSchema>;
 export type AssetCredit = z.infer<typeof assetCreditSchema>;
 export type GlbiConfig = z.infer<typeof glbiConfigSchema>;
+
+// ---------------------------------------------------------------------------------------------------------
+// Couches de la configuration d'une scène (D-8.9, spec-atelier-glbi.md §2 à §4). Strictes : un champ écrit dans la
+// mauvaise couche est refusé (messages de la fusion, `./merge.ts`). La fusion des deux doit passer `glbiConfigSchema`.
+// ---------------------------------------------------------------------------------------------------------
+
+/** Action, partie 3D (addon) : identifiant, objet, clip, boucle. */
+export const action3dSchema = z.strictObject({
+  id: actionIdSchema,
+  object: blenderNameSchema,
+  type: z.enum(['armature', 'mesh']),
+  clip: blenderNameSchema,
+  trigger: z.literal('button'),
+  loop: z.boolean().default(false),
+});
+
+/**
+ * Couche 3D : `glbi_config` de `GLBI_ROOT`, écrite par l'addon GLBGenerator (spec-atelier-glbi.md §3).
+ * Exportée en JSON Schema pour l'addon (`npm run schema:export`) : les `superRefine` n'y figurent pas.
+ */
+export const layer3dSchema = z.strictObject({
+  version: z.literal(LAYER3D_VERSION),
+  scene: z.strictObject({ id: sceneIdSchema }),
+  modules: z.strictObject({
+    camera: z.strictObject({ target: blenderNameSchema }).optional(),
+    animations: z
+      .strictObject({
+        mode: z.literal('buttons'),
+        idle: idleSchema,
+        actions: z.array(action3dSchema).min(1, 'au moins une action'),
+      })
+      .superRefine(uniqueActionIds)
+      .optional(),
+  }),
+});
+
+/**
+ * Action, partie éditoriale (atelier). `label` est facultatif dans la couche (saisie en cours dans l'atelier) ; la fusion
+ * exige un libellé pour chaque action du GLB.
+ */
+export const actionEditSchema = z.strictObject({
+  label: localizedTextSchema.optional(),
+  icon: imagePathSchema.optional(),
+  sound: audioPathSchema.optional(),
+});
+
+/**
+ * Couche éditoriale : `scenes/<id>.edit.json`, écrite par l'atelier ou à la main (spec-atelier-glbi.md §4). Arborescence de
+ * l'objet fusionné ; actions indexées par leur `id` (l'ordre appartient au GLB). `scene.name` est facultatif dans la couche,
+ * exigé par la fusion.
+ */
+export const editLayerSchema = z.strictObject({
+  version: z.literal(EDIT_LAYER_VERSION),
+  scene: z
+    .strictObject({
+      name: localizedTextSchema.optional(),
+      loaderImage: imagePathSchema.optional(),
+    })
+    .optional(),
+  modules: z
+    .strictObject({
+      camera: z.strictObject(cameraFramingShape).superRefine(orderedBounds).optional(),
+      animations: z.strictObject({ actions: z.record(actionIdSchema, actionEditSchema) }).optional(),
+      audio: audioModuleSchema.optional(),
+      quiz: quizModuleSchema.optional(),
+      credits: creditsModuleSchema.optional(),
+    })
+    .optional(),
+});
+
+export type Layer3d = z.infer<typeof layer3dSchema>;
+export type EditLayer = z.infer<typeof editLayerSchema>;
 
 // ---------------------------------------------------------------------------------------------------------
 // book.json (spec §5) — couche livre, hors GLB, écrite à la main
@@ -289,7 +378,8 @@ export type ModelCredit = z.infer<typeof modelCreditSchema>;
 export const builtSceneSchema = glbiConfigSchema.extend({
   build: z.strictObject({
     glb: z.string(),
-    source: z.enum(['glb', 'json']),
+    /** Toujours `glb` depuis D-8.9 (repli JSON de développement supprimé, A1). */
+    source: z.literal('glb'),
     modelCredits: z.array(modelCreditSchema),
   }),
 });

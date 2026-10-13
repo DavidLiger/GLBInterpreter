@@ -9,14 +9,15 @@
 //
 // Dossier source d'un livre (chemins d'assets relatifs à sa racine = racine du dossier construit, D-8.1) :
 //   book.json                    couche livre (spec-extras-blender.md §5)
-//   scenes/<scène>.glb           GLB de la scène ; config dans les extras de l'empty GLBI_ROOT (§2, §4)
-//   scenes/<scène>.json          facultatif : config de développement, utilisée seulement si le GLB n'a pas de GLBI_ROOT
+//   scenes/<scène>.glb           GLB de la scène ; couche 3D dans les extras de l'empty GLBI_ROOT (addon, glbi_version 2)
+//   scenes/<scène>.edit.json     couche éditoriale (atelier ou à la main) ; fusionnée avec la couche 3D (D-8.9, src/schema/merge.ts)
+//                                Un scenes/<scène>.json dans le dossier source est une erreur (ancien repli, supprimé en A1).
 //   icon.png                     obligatoire (Î9) : icône du livre, PNG carré ≥ 512 px (transparence permise)
 //   icon-maskable.png            facultatif (Î9) : icône « maskable » pleine page (motif dans le cercle central de 80 %) ;
 //                                sans elle, le build inscrit icon.png dans ce cercle (carré de 56 %) sur un fond blanc
 //   images/, icons/, sounds/…    assets référencés par les configs et book.json (seuls ceux-là sont copiés)
 //
-// Ordre (Î7) : la config est lue et validée sur le GLB SOURCE, puis le GLB est optimisé (scripts/glb-pipeline.ts : extras
+// Ordre (Î7, A1) : les deux couches sont lues (GLB SOURCE et edit.json), fusionnées et validées, puis le GLB est optimisé (scripts/glb-pipeline.ts : extras
 // étrangers retirés, prune, dedup sans MATERIAL, textures KTX2/WebP, Meshopt) vers out/scenes/<scène>.glb ; le GLB écrit est
 // relu et comparé (GLBI_ROOT, clips, src_*, nœuds cités par la config). Un GLB source déjà Meshopt est accepté ; Draco, non.
 // Limite d'hébergement (25 MiB par fichier, D-8.7, Î8) : tout fichier de plus de 25 MiB est découpé en parties de 20 MiB
@@ -54,9 +55,7 @@ import {
   builtBookSchema,
   builtSceneSchema,
   formatIssues,
-  glbiConfigSchema,
   GLBI_ROOT_NAME,
-  GLBI_VERSION,
   SCENE_ID_PATTERN,
   type Book,
   type BookFile,
@@ -65,6 +64,8 @@ import {
   type GlbiConfig,
   type ModelCredit,
 } from '../src/schema/glbi';
+import { mergeLayers } from '../src/schema/merge';
+import { checkSchemaFresh } from './export-schema';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -227,7 +228,6 @@ const escapeHtml = (s: string) =>
 interface SceneResult {
   id: string;
   config: GlbiConfig;
-  source: 'glb' | 'json';
   modelCredits: ModelCredit[];
   /** Assets référencés par la config (chemins relatifs à la racine du livre). */
   assets: Set<string>;
@@ -270,10 +270,15 @@ const SRC_KEYS = { src_name: 'name', src_author: 'author', src_license: 'license
 async function readScene(sourceDir: string, id: string): Promise<SceneResult | null> {
   const label = `scène « ${id} »`;
   const glbRel = `scenes/${id}.glb`;
-  const jsonRel = `scenes/${id}.json`;
+  const editRel = `scenes/${id}.edit.json`;
+  const oldJsonRel = `scenes/${id}.json`;
   const glbFile = path.join(sourceDir, glbRel);
-  const jsonFile = path.join(sourceDir, jsonRel);
+  const editFile = path.join(sourceDir, editRel);
 
+  // D-8.9 (A1) : l'ancienne config de développement à côté du GLB n'est plus lue ; sa présence est une erreur.
+  if (fs.existsSync(path.join(sourceDir, oldJsonRel))) {
+    err(`${oldJsonRel} : ancienne config de développement, plus lue depuis D-8.9 ; à supprimer (couche 3D dans le GLB, couche éditoriale dans ${editRel})`);
+  }
   if (!fs.existsSync(glbFile)) {
     err(`${label} : ${glbRel} absent du dossier source`);
     return null;
@@ -292,46 +297,37 @@ async function readScene(sourceDir: string, id: string): Promise<SceneResult | n
   const byName = new Map<string, GNode[]>();
   for (const n of nodes) byName.set(n.getName(), [...(byName.get(n.getName()) ?? []), n]);
 
-  // --- Source de la config : GLBI_ROOT (principale) ou JSON à côté du GLB (développement) ---
+  // --- Couche 3D : GLBI_ROOT du GLB (seule source) ---
   const glbiRoots = byName.get(GLBI_ROOT_NAME) ?? [];
-  let raw: unknown;
-  let source: 'glb' | 'json';
+  if (glbiRoots.length === 0) {
+    err(`${glbRel} : pas de nœud ${GLBI_ROOT_NAME} ; exporter la scène avec l'addon GLBGenerator`);
+    return null;
+  }
   if (glbiRoots.length > 1) {
     err(`${label} : ${glbiRoots.length} nœuds ${GLBI_ROOT_NAME} dans le GLB (un seul attendu)`);
     return null;
   }
-  if (glbiRoots.length === 1) {
-    source = 'glb';
-    const extras = glbiRoots[0].getExtras() ?? {};
-    const v = extras.glbi_version;
-    if (!(typeof v === 'number' && Number.isInteger(v) && v === GLBI_VERSION)) {
-      err(`${label} : glbi_version doit être l'entier ${GLBI_VERSION} (trouvé : ${JSON.stringify(v)})`);
-    }
-    raw = parseConfigString(extras.glbi_config, label);
-    if (fs.existsSync(jsonFile)) warn(`${label} : ${jsonRel} ignoré, le GLB porte ${GLBI_ROOT_NAME} (source principale)`);
-  } else if (fs.existsSync(jsonFile)) {
-    source = 'json';
-    warn(`${label} : pas de ${GLBI_ROOT_NAME} dans le GLB, config lue dans ${jsonRel} (source de développement)`);
-    raw = readJson(jsonFile, `${label} (${jsonRel})`);
-    if (raw !== undefined && (raw === null || typeof raw !== 'object' || Array.isArray(raw))) {
-      err(`${label} : ${jsonRel} doit contenir un objet JSON`);
-      raw = undefined;
-    }
-  } else {
-    err(`${label} : pas de nœud ${GLBI_ROOT_NAME} dans ${glbRel} (export « Custom Properties » coché ?) ni de ${jsonRel}`);
-    return null;
-  }
-  if (raw === undefined) return null;
+  const extras = glbiRoots[0].getExtras() ?? {};
+  const raw3d = parseConfigString(extras.glbi_config, `${glbRel} (couche 3D)`);
+  if (raw3d === undefined) return null;
 
-  // --- Schéma (V-01 et règles de forme : V-02, V-05, V-09, quiz, modules réservés) ---
-  const parsed = glbiConfigSchema.safeParse(raw);
-  if (!parsed.success) {
-    formatIssues(parsed.error, `${label} : `).forEach(err);
-    return null;
+  // --- Couche éditoriale : scenes/<id>.edit.json (absente : erreur donnée par la fusion) ---
+  let rawEdit: unknown;
+  if (fs.existsSync(editFile)) {
+    rawEdit = readJson(editFile, editRel);
+    if (rawEdit === undefined) return null;
+    if (rawEdit === null || typeof rawEdit !== 'object' || Array.isArray(rawEdit)) {
+      err(`${editRel} : doit contenir un objet JSON`);
+      return null;
+    }
   }
-  const config = parsed.data;
 
-  if (config.scene.id !== id) err(`${label} : scene.id vaut « ${config.scene.id} », attendu « ${id} » (nom du fichier et book.json)`);
+  // --- Fusion et schéma (V-01 et règles de forme : V-02, V-05, V-09, quiz, modules réservés ; spec-atelier-glbi.md §5) ---
+  const merged = mergeLayers(raw3d, rawEdit, { mode: 'strict', sceneId: id, glbiVersion: extras.glbi_version });
+  merged.warnings.forEach(warn);
+  merged.errors.forEach(err);
+  if (!merged.config) return null;
+  const config = merged.config;
 
   // --- V-08 : références d'objets ; V-04 : cible caméra (empty du POI unique) ---
   const findNode = (name: string, what: string): GNode | null => {
@@ -436,7 +432,7 @@ async function readScene(sourceDir: string, id: string): Promise<SceneResult | n
   const used = new Set([...sounds, ...(animations?.actions ?? []).map((a) => a.icon), config.scene.loaderImage].filter(Boolean));
   for (const c of creditList) if (!used.has(c.asset)) warn(`${label} : crédit pour « ${c.asset} », asset non utilisé par la scène`);
 
-  return { id, config, source, modelCredits, assets, protect: referencedNodeNames(config) };
+  return { id, config, modelCredits, assets, protect: referencedNodeNames(config) };
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -794,7 +790,7 @@ async function buildFixture(opts: Options): Promise<void> {
   }
   if (errors.length || opts.check) {
     if (errors.length) fail();
-    console.log('build-book : --check sans --source : rien à valider au-delà de src/content/book.json');
+    console.log('build-book : --check sans --source : src/content/book.json et schema/glbi-layer3d.schema.json à jour');
     return;
   }
   requireExport(outDir);
@@ -850,7 +846,7 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
   if (!fs.existsSync(path.join(sourceDir, 'icon.png'))) err(`icon.png absent du dossier source : icône du livre obligatoire (PNG carré ≥ ${ICON_MIN_PX} px, Î9)`);
   else await iconSourceOk(path.join(sourceDir, 'icon.png'), err);
   if (fs.existsSync(path.join(sourceDir, 'icon-maskable.png'))) await iconSourceOk(path.join(sourceDir, 'icon-maskable.png'), err);
-  for (const id of book.scenes) known.add(`scenes/${id}.glb`).add(`scenes/${id}.json`);
+  for (const id of book.scenes) known.add(`scenes/${id}.glb`).add(`scenes/${id}.edit.json`);
   const unused = listFiles(sourceDir).filter((f) => !known.has(f));
   if (unused.length && !errors.length) warn(`fichier(s) source non référencé(s), non copié(s) : ${unused.join(', ')}`);
 
@@ -858,7 +854,7 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
   if (opts.check) {
     flushReport();
     console.log(`build-book : livre « ${book.bookId} » valide (${scenes.length} scène(s), ${warnings.length} avertissement(s))`);
-    for (const s of scenes) console.log(`  ${s.id} : config ${s.source === 'glb' ? 'GLBI_ROOT' : 'JSON de développement'}, ${s.modelCredits.length} crédit(s) de modèle`);
+    for (const s of scenes) console.log(`  ${s.id} : couche 3D (GLBI_ROOT) + scenes/${s.id}.edit.json, ${s.modelCredits.length} crédit(s) de modèle`);
     return;
   }
 
@@ -876,7 +872,7 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
     const glbRel = `scenes/${s.id}.glb`;
     if (!(await writeOptimizedScene(sourceDir, outDir, glbRel, s.protect, textures))) continue;
     usesKtx2 ||= fs.readFileSync(path.join(outDir, glbRel)).includes('KHR_texture_basisu');
-    const built: BuiltScene = { ...s.config, build: { glb: glbRel, source: s.source, modelCredits: s.modelCredits } };
+    const built: BuiltScene = { ...s.config, build: { glb: glbRel, source: 'glb', modelCredits: s.modelCredits } };
     const check = builtSceneSchema.safeParse(built);
     if (!check.success) formatIssues(check.error, `scenes/${s.id}.json (sortie) : `).forEach(err);
     fs.writeFileSync(path.join(outDir, `scenes/${s.id}.json`), `${JSON.stringify(built, null, 2)}\n`);
@@ -922,7 +918,7 @@ async function writeDevBook(opts: Options, sourceDir: string, book: Book, scenes
   for (const s of scenes) {
     const glbRel = `scenes/${s.id}.glb`;
     if (!(await writeOptimizedScene(sourceDir, outDir, glbRel, s.protect, textures))) continue;
-    const built: BuiltScene = { ...s.config, build: { glb: glbRel, source: s.source, modelCredits: s.modelCredits } };
+    const built: BuiltScene = { ...s.config, build: { glb: glbRel, source: 'glb', modelCredits: s.modelCredits } };
     const check = builtSceneSchema.safeParse(built);
     if (!check.success) formatIssues(check.error, `scenes/${s.id}.json (sortie) : `).forEach(err);
     fs.writeFileSync(path.join(outDir, `scenes/${s.id}.json`), `${JSON.stringify(built, null, 2)}\n`);
@@ -941,6 +937,11 @@ async function main(): Promise<void> {
   } catch (e) {
     console.error(`build-book : ${(e as Error).message}`);
     process.exit(2);
+  }
+  // A1 : le JSON Schema de la couche 3D commité (copié dans l'addon) doit correspondre au Zod.
+  if (opts.check) {
+    const stale = checkSchemaFresh();
+    if (stale) err(stale);
   }
   if (opts.source) await buildBook(opts, opts.source);
   else await buildFixture(opts);

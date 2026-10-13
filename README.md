@@ -51,18 +51,25 @@ Deux modes, même commande (`next build --webpack`, puis `scripts/build-book.ts`
 rm -rf .next out && npm run build                              # cartouche de test (fixture) : stubs + liste de fichiers
 rm -rf .next out && npm run build -- --source <dossier>        # livre au format v1 (spec-extras-blender.md)
 npm run book:check -- --source <dossier>                       # validation seule (sans next build, rien n'est écrit)
+npm run schema:export [-- --addon <dossier glb_generator>]     # JSON Schema de la couche 3D (fichier commité, copie addon)
+npm run test:schema                                            # tests de la fusion des couches (sans navigateur)
 ```
 
 Dossier source d'un livre (les chemins d'assets des configs sont relatifs à sa racine) :
 
 ```
 book.json                 couche livre : bookId, title, languages, scenes, origin, ogImage, legal
-scenes/<scène>.glb        config dans les extras de l'empty GLBI_ROOT (glbi_version = 1, glbi_config = chaîne JSON)
-scenes/<scène>.json       facultatif, développement : config utilisée si le GLB n'a pas de GLBI_ROOT
+scenes/<scène>.glb        couche 3D dans les extras de l'empty GLBI_ROOT (addon : glbi_version = 2, glbi_config = chaîne JSON)
+scenes/<scène>.edit.json  couche éditoriale : textes, icônes, sons, cadrage, quiz, crédits (atelier ou à la main)
 icon.png                  obligatoire : icône du livre, PNG carré ≥ 512 px (transparence permise)
 icon-maskable.png         facultatif : icône « maskable » pleine page (motif dans le cercle central de 80 %)
 images/ icons/ sounds/ …  assets référencés (seuls ceux-là sont copiés)
 ```
+
+La configuration d'une scène est partagée en deux couches (D-8.9, `spec-atelier-glbi.md`) : le build les fusionne
+(`src/schema/merge.ts`) et valide l'objet fusionné. Un GLB sans `GLBI_ROOT`, un GLB de l'addon v0.1 (`glbi_version` 1),
+un `edit.json` absent ou une ancienne config `scenes/<scène>.json` dans le dossier source sont des erreurs.
+`book:check` vérifie aussi que `schema/glbi-layer3d.schema.json` (lu par l'addon) correspond au Zod.
 
 Le schéma unique est `src/schema/glbi.ts` (Zod). En mode livre, `out/` reçoit `scenes/<scène>.glb` (optimisé, voir
 ci-dessous),
@@ -76,7 +83,7 @@ quel dossier de livre.
 
 ### Optimisation des GLB (`scripts/glb-pipeline.ts`)
 
-La config est lue et validée sur le GLB **source**, puis le GLB est optimisé vers `out/scenes/<scène>.glb` :
+La config est lue sur le GLB **source** et dans `edit.json`, fusionnée et validée, puis le GLB est optimisé vers `out/scenes/<scène>.glb` :
 extras de scène hors `glbi_` et de nœud hors `glbi_`/`src_` retirés, `prune` (garde `GLBI_ROOT` et les nœuds cités par la
 config : cible caméra, objets animés), `dedup` sans fusion des matériaux, textures, Meshopt (inclut `quantize`). Le GLB
 écrit est relu : `GLBI_ROOT`, noms des clips et propriétés `src_*` doivent être intacts, sinon le build échoue. Pas de

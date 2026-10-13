@@ -1,12 +1,12 @@
-// scripts/make-test-book.ts — génère un livre de test conforme à spec-extras-blender.md v1.1 (Î6).
+// scripts/make-test-book.ts — génère un livre de test au format à deux couches (D-8.9, spec-atelier-glbi.md §3, §4 ; A1).
 //
 //   npm run book:test-source            → books/test-dino/ (non versionné)
 //   npm run build -- --source books/test-dino
 //
 // Contenu synthétique, sans valeur visuelle : il sert à tester build-book en l'absence de GLB réel produit par l'addon.
-// - scène « trex » : GLB avec GLBI_ROOT (glbi_version = 1, glbi_config = chaîne JSON), armature à 2 os, maillage
-//   skinné portant des propriétés src_*, empty « start », clips idle/walk/roar/eat ;
-// - scène « raptor » : GLB sans GLBI_ROOT + scenes/raptor.json (source de développement) ;
+// - scènes « trex » et « raptor » : GLB avec GLBI_ROOT (glbi_version = 2, glbi_config = couche 3D en chaîne JSON), armature
+//   à 2 os, maillage skinné portant des propriétés src_*, empty « start », clips idle/walk/roar/eat ; couche éditoriale dans
+//   scenes/<scène>.edit.json (textes, icônes, sons, cadrage, quiz, crédits) ;
 // - images PNG 1×1, sons WAV de 0,1 s, icône du livre `icon.png` (512 px, Î9) ;
 // - image de chargement de « trex » en bruit aléatoire (≈ 3 MiB, Î10) : avec `--part-mib 1`, au moins un fichier du livre est
 //   découpé, ce qui garde la couverture des tests de recomposition et de reprise (tests/install.spec.ts) sur un livre v1.
@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Document, NodeIO, type Node as GNode } from '@gltf-transform/core';
 import sharp from 'sharp';
-import type { GlbiConfig, Book } from '../src/schema/glbi';
+import { EDIT_LAYER_VERSION, LAYER3D_VERSION, type Book, type EditLayer, type Layer3d } from '../src/schema/glbi';
 
 const dir = path.resolve(process.cwd(), process.argv[2] ?? 'books/test-dino');
 
@@ -35,8 +35,8 @@ function silentWav(seconds = 0.1, rate = 8000): Buffer {
 
 const L = (fr: string, en: string, es: string) => ({ fr, en, es });
 
-/** GLB minimal : armature `armature` (2 os), maillage skinné, clips donnés, empty `start`, GLBI_ROOT facultatif. */
-async function makeGlb(file: string, armature: string, clips: string[], glbiConfig: GlbiConfig | null): Promise<void> {
+/** GLB minimal : armature `armature` (2 os), maillage skinné, clips donnés, empty `start`, GLBI_ROOT portant la couche 3D. */
+async function makeGlb(file: string, armature: string, clips: string[], layer3d: Layer3d): Promise<void> {
   const doc = new Document();
   const buffer = doc.createBuffer();
   const scene = doc.createScene('Scene');
@@ -83,33 +83,44 @@ async function makeGlb(file: string, armature: string, clips: string[], glbiConf
     doc.createAnimation(name).addSampler(sampler).addChannel(channel);
   }
 
-  if (glbiConfig) {
-    scene.addChild(doc.createNode('GLBI_ROOT').setExtras({ glbi_version: 1, glbi_config: JSON.stringify(glbiConfig) }));
-  }
+  scene.addChild(doc.createNode('GLBI_ROOT').setExtras({ glbi_version: LAYER3D_VERSION, glbi_config: JSON.stringify(layer3d) }));
   await new NodeIO().write(file, doc);
 }
 
-function sceneConfig(id: string, armature: string, name: ReturnType<typeof L>): GlbiConfig {
-  const actions = [
-    { id: 'walk', label: L('Marcher', 'Walk', 'Caminar') },
-    { id: 'roar', label: L('Rugir', 'Roar', 'Rugir') },
-    { id: 'eat', label: L('Manger', 'Eat', 'Comer') },
-  ];
+const ACTIONS = [
+  { id: 'walk', label: L('Marcher', 'Walk', 'Caminar') },
+  { id: 'roar', label: L('Rugir', 'Roar', 'Rugir') },
+  { id: 'eat', label: L('Manger', 'Eat', 'Comer') },
+];
+
+/** Couche 3D (ce qu'écrit l'addon v0.2) : identifiants, objets, clips, boucle, cible caméra. */
+function layer3d(id: string, armature: string): Layer3d {
   return {
-    version: 1,
-    scene: { id, name, loaderImage: `images/${id}-preview.png` },
+    version: LAYER3D_VERSION,
+    scene: { id },
     modules: {
-      camera: {
-        target: 'start', zoom: 0.5, lookAxis: 'x', minDistance: 1, maxDistance: 20,
-        minPolarAngle: 0, maxPolarAngle: 1.57, minAzimuthAngle: -3.14, maxAzimuthAngle: 3.14, enableZoom: true,
-      },
+      camera: { target: 'start' },
       animations: {
         mode: 'buttons',
         idle: { object: armature, clip: 'idle', loop: true },
-        actions: actions.map((a) => ({
-          id: a.id, object: armature, type: 'armature' as const, clip: a.id, trigger: 'button' as const,
-          label: a.label, icon: `icons/${a.id}.png`, sound: `sounds/${id}_${a.id}.wav`, loop: false,
-        })),
+        actions: ACTIONS.map((a) => ({ id: a.id, object: armature, type: 'armature' as const, clip: a.id, trigger: 'button' as const, loop: false })),
+      },
+    },
+  };
+}
+
+/** Couche éditoriale (ce qu'écrit l'atelier) : textes, assets, cadrage, quiz, crédits ; actions indexées par `id`. */
+function editLayer(id: string, name: ReturnType<typeof L>): EditLayer {
+  return {
+    version: EDIT_LAYER_VERSION,
+    scene: { name, loaderImage: `images/${id}-preview.png` },
+    modules: {
+      camera: {
+        zoom: 0.5, lookAxis: 'x', minDistance: 1, maxDistance: 20,
+        minPolarAngle: 0, maxPolarAngle: 1.57, minAzimuthAngle: -3.14, maxAzimuthAngle: 3.14, enableZoom: true,
+      },
+      animations: {
+        actions: Object.fromEntries(ACTIONS.map((a) => [a.id, { label: a.label, icon: `icons/${a.id}.png`, sound: `sounds/${id}_${a.id}.wav` }])),
       },
       audio: { ambientSound: 'sounds/jungle.wav' },
       quiz: {
@@ -123,7 +134,7 @@ function sceneConfig(id: string, armature: string, name: ReturnType<typeof L>): 
       },
       credits: {
         assets: [
-          ...actions.map((a) => ({ asset: `sounds/${id}_${a.id}.wav`, title: `${a.id} (test)`, author: 'GLBInterpreter', license: 'CC0' })),
+          ...ACTIONS.map((a) => ({ asset: `sounds/${id}_${a.id}.wav`, title: `${a.id} (test)`, author: 'GLBInterpreter', license: 'CC0' })),
           { asset: 'sounds/jungle.wav', title: 'Jungle (test)', author: 'GLBInterpreter', license: 'CC0', source: 'https://example.org/jungle' },
         ],
       },
@@ -147,11 +158,14 @@ async function main(): Promise<void> {
   fs.writeFileSync(path.join(dir, 'book.json'), `${JSON.stringify(book, null, 2)}\n`);
 
   const clips = ['idle', 'walk', 'roar', 'eat'];
-  await makeGlb(path.join(dir, 'scenes/trex.glb'), 'Armature_Trex', clips,
-    sceneConfig('trex', 'Armature_Trex', L('Tyrannosaure', 'Tyrannosaurus', 'Tiranosaurio')));
-  await makeGlb(path.join(dir, 'scenes/raptor.glb'), 'Armature_Raptor', clips, null);
-  fs.writeFileSync(path.join(dir, 'scenes/raptor.json'),
-    `${JSON.stringify(sceneConfig('raptor', 'Armature_Raptor', L('Vélociraptor', 'Velociraptor', 'Velociraptor')), null, 2)}\n`);
+  const scenes = [
+    { id: 'trex', armature: 'Armature_Trex', name: L('Tyrannosaure', 'Tyrannosaurus', 'Tiranosaurio') },
+    { id: 'raptor', armature: 'Armature_Raptor', name: L('Vélociraptor', 'Velociraptor', 'Velociraptor') },
+  ];
+  for (const sc of scenes) {
+    await makeGlb(path.join(dir, `scenes/${sc.id}.glb`), sc.armature, clips, layer3d(sc.id, sc.armature));
+    fs.writeFileSync(path.join(dir, `scenes/${sc.id}.edit.json`), `${JSON.stringify(editLayer(sc.id, sc.name), null, 2)}\n`);
+  }
 
   for (const f of ['images/og.png', 'images/raptor-preview.png', 'icons/walk.png', 'icons/roar.png', 'icons/eat.png']) {
     fs.writeFileSync(path.join(dir, f), PNG_1X1);
