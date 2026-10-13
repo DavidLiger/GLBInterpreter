@@ -82,3 +82,5 @@ public/decoders/
 # Tests d'installation (Playwright, Î8)
 /test-results/
 /playwright-report/
+
+*.patch
