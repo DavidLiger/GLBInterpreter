@@ -872,7 +872,7 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
     const glbRel = `scenes/${s.id}.glb`;
     if (!(await writeOptimizedScene(sourceDir, outDir, glbRel, s.protect, textures))) continue;
     usesKtx2 ||= fs.readFileSync(path.join(outDir, glbRel)).includes('KHR_texture_basisu');
-    const built: BuiltScene = { ...s.config, build: { glb: glbRel, source: 'glb', modelCredits: s.modelCredits } };
+    const built: BuiltScene = { ...s.config, build: { glb: glbRel, modelCredits: s.modelCredits } };
     const check = builtSceneSchema.safeParse(built);
     if (!check.success) formatIssues(check.error, `scenes/${s.id}.json (sortie) : `).forEach(err);
     fs.writeFileSync(path.join(outDir, `scenes/${s.id}.json`), `${JSON.stringify(built, null, 2)}\n`);
@@ -918,7 +918,7 @@ async function writeDevBook(opts: Options, sourceDir: string, book: Book, scenes
   for (const s of scenes) {
     const glbRel = `scenes/${s.id}.glb`;
     if (!(await writeOptimizedScene(sourceDir, outDir, glbRel, s.protect, textures))) continue;
-    const built: BuiltScene = { ...s.config, build: { glb: glbRel, source: 'glb', modelCredits: s.modelCredits } };
+    const built: BuiltScene = { ...s.config, build: { glb: glbRel, modelCredits: s.modelCredits } };
     const check = builtSceneSchema.safeParse(built);
     if (!check.success) formatIssues(check.error, `scenes/${s.id}.json (sortie) : `).forEach(err);
     fs.writeFileSync(path.join(outDir, `scenes/${s.id}.json`), `${JSON.stringify(built, null, 2)}\n`);

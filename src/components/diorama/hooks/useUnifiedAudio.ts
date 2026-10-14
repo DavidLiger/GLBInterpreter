@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { POI } from "@/types/diorama";
 
+/** Attente maximale du son de scène avant de lancer la ligne de temps (A-14). */
+const SCENE_AUDIO_WAIT_MS = 5000;
+
 interface AudioState {
   isPlaying: boolean;
   isPaused: boolean;
@@ -132,9 +135,22 @@ export default function useUnifiedAudio({
     }, [muted, volume]);
 
     // ✅ AJOUTER cette fonction pour attendre
+    // A-14 (Î10b) : attente bornée. `canplaythrough` peut ne jamais arriver (préchargement refusé sans geste, iOS) ;
+    // l'animation part alors sans attendre le son. Le lanceur vérifie son jeton après l'attente (usePOIScenePlayer, P-04).
     const waitForSceneAudio = useCallback(async () => {
-    if (sceneAudioReadyRef.current) {
-        await sceneAudioReadyRef.current;
+    const ready = sceneAudioReadyRef.current;
+    if (!ready) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<void>((resolve) => {
+        timer = setTimeout(() => {
+        console.warn("⚠️ [AUDIO] Son de scène pas prêt après 5 s, lancement sans attendre");
+        resolve();
+        }, SCENE_AUDIO_WAIT_MS);
+    });
+    try {
+        await Promise.race([ready, timeout]);
+    } finally {
+        if (timer !== undefined) clearTimeout(timer);
     }
     }, []);
 

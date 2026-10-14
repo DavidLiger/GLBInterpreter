@@ -1,28 +1,45 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import * as THREE from "three";
 import type { POI } from "@/types/diorama";
-import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
+import { findNode } from "../lib/nodeNames";
+import type { FrameTasks } from "../lib/frameTasks";
 
+/**
+ * Lecteur de la ligne de temps d'un POI : module réservé `timeline` (barre de progression, seek, `sceneSound`,
+ * `cameraPath`), utilisé par la fixture `test-street`. Une scène v1 n'a pas d'élément animé dans son POI `start` : ce
+ * lecteur y reste inerte (c'est le mode `buttons`, `lib/buttonsPlayer.ts`, qui joue). Les constats propres au module
+ * `timeline` (P-05, P-10, P-11, P-30, P-32, P-34, A-17, A-18, A-20, A-21) sont reportés.
+ *
+ * Correctifs du moteur commun (Î10b) :
+ *  - P-02 : la fin de la ligne de temps est traitée une seule fois (avant : à chaque image après la fin) ;
+ *  - P-04, R-22 : chaque lancement porte un jeton ; un lancement en attente du son de scène, ou un échange de
+ *    placeholder différé, est abandonné si un autre lancement, un arrêt ou un changement de POI est survenu entre-temps ;
+ *  - P-06 : le suivi image par image est une tâche de la boucle unique (`FrameTasks`), plus un requestAnimationFrame ;
+ *  - P-12 : une action démarre à poids plein (un fondu depuis l'arrêt mélangeait la pose de repos du squelette) ;
+ *  - P-14 : hiérarchie de l'autoplay : `poi.autoplay`, sinon `autoplay` de la scène, sinon non ; seulement pour un POI
+ *    parent qui a des éléments animés, une fois par POI et par session, et si l'interrupteur de l'utilisateur est actif ;
+ *  - caméra : plus de recadrage forcé à chaque changement de POI (il écrasait le cadrage de `moveCameraToPOI`) ; à la fin
+ *    d'une ligne de temps à `cameraPath`, retour au cadrage du POI par `moveCameraToPOI`.
+ */
 type UsePOIScenePlayerProps = {
   poi?: POI | null;
+  /** `autoplay` de la scène (valeur par défaut des POI qui ne le déclarent pas, P-14). */
+  sceneAutoplay?: boolean;
+  /** Interrupteur de l'utilisateur (bouton du lecteur de ligne de temps). */
   autoplayEnabled?: boolean;
   experienceStarted?: boolean;
   animations: THREE.AnimationClip[];
-  mixerRef: Record<string, THREE.AnimationMixer>;
-  actionsRef: React.MutableRefObject<Map<string, THREE.AnimationAction>>; 
-  fadeDuration?: number;
+  actionsRef: React.MutableRefObject<Map<string, THREE.AnimationAction>>;
   muted?: boolean;
 
-  goToPOI?: (poi: POI, smooth?: boolean, duration?: number) => void;
-  findPOIRecursively?: (id: string) => POI | null;
-  moveCameraToPOI?: (obj: THREE.Object3D, poi: POI, smooth?: boolean, onComplete?: () => void, duration?: number) => void;
+  moveCameraToPOI?: (obj: THREE.Object3D, poi: POI, smooth?: boolean, onComplete?: () => void) => void;
   moveCameraDuringAnimation?: (obj: THREE.Object3D, poi: POI) => void;
   emptyRefs?: React.RefObject<Record<string, THREE.Object3D>>;
 
   findParentPOI?: (childId: string) => POI | null;
   controlsRef?: React.RefObject<OrbitControls | null>;
-  cameraRef?: React.RefObject<THREE.PerspectiveCamera | null>;
-  startPlaceholderAnimation?: (name: string, frames?: number) => void;
+  frameTasks: React.RefObject<FrameTasks | null>;
   startAnimationWithSkip?: (
     animatedMeshName: string,
     action: THREE.AnimationAction,
@@ -30,25 +47,29 @@ type UsePOIScenePlayerProps = {
     framesToSkip: number
   ) => void;
   prepareStopAnimation?: (name: string, duration: number, frames?: number) => void;
-  waitForSceneAudioRef?: React.RefObject<(() => Promise<void>) | null>; // ✅ Ref au lieu de fonction directe
+  waitForSceneAudioRef?: React.RefObject<(() => Promise<void>) | null>;
 };
+
+/** Vrai si la ligne de temps du POI se lance seule (P-14). */
+export function shouldAutoplay(poi: POI | null | undefined, sceneAutoplay: boolean | undefined): boolean {
+  if (!poi || !(poi.elements?.length)) return false;
+  return poi.autoplay ?? sceneAutoplay ?? false;
+}
 
 export const usePOIScenePlayer = ({
   poi,
-  autoplayEnabled = true, 
+  sceneAutoplay,
+  autoplayEnabled = true,
   experienceStarted = false,
   animations,
-  mixerRef,
-  actionsRef, 
-  fadeDuration = 0.15,
-  startAnimationWithSkip,
+  actionsRef,
   prepareStopAnimation,
   findParentPOI,
-  emptyRefs, 
+  emptyRefs,
   controlsRef,
   moveCameraToPOI,
   moveCameraDuringAnimation,
-  cameraRef,
+  frameTasks,
   waitForSceneAudioRef,
 }: UsePOIScenePlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -59,7 +80,6 @@ export const usePOIScenePlayer = ({
   const [isWaitingAudio, setIsWaitingAudio] = useState(false);
 
   const activeActionsRef = useRef<THREE.AnimationAction[]>([]);
-  const rafRef = useRef<number | undefined>(undefined);
   const lastSeekTimeRef = useRef(0);
 
   const moveCameraToPOIRef = useRef(moveCameraToPOI);
@@ -70,9 +90,22 @@ export const usePOIScenePlayer = ({
   const lastProgressRef = useRef(0);
   const frameCountRef = useRef(0);
   const hasAutoplayedRef = useRef<Set<string>>(new Set());
+  // P-04, R-22 : jeton du lancement courant ; tout traitement différé vérifie qu'il n'a pas changé
+  const playTokenRef = useRef(0);
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  // P-02 : fin de la ligne de temps déjà traitée pour le lancement courant
+  const endHandledRef = useRef(true);
 
-  // 🔹 Reset stable de la scène
+  const clearTimers = useCallback(() => {
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+  }, []);
+
+  // 🔹 Reset stable de la scène (invalide les lancements en attente)
   const resetSceneStable = useCallback(() => {
+    playTokenRef.current++;
+    clearTimers();
+    endHandledRef.current = true;
     activeActionsRef.current.forEach(a => {
       a.stop();
       a.paused = false;
@@ -82,7 +115,7 @@ export const usePOIScenePlayer = ({
     setIsPaused(false);
     setProgress(0);
     setIsEnded(false);
-  }, []);
+  }, [clearTimers]);
 
   useEffect(() => {
     poiRef.current = poi;
@@ -115,8 +148,7 @@ export const usePOIScenePlayer = ({
     });
 
     if (actionsDurations.length > 0) {
-      const maxDuration = Math.max(...actionsDurations);
-      setDuration(maxDuration);
+      setDuration(Math.max(...actionsDurations));
     }
   }, [poi, animations]);
 
@@ -125,132 +157,115 @@ export const usePOIScenePlayer = ({
     if (!poi) return;
     const isParent = !findParentPOI?.(poi.id);
     if (!isParent) return;
+    if (!poi.elements?.length) return; // pas de ligne de temps (scène v1 : mode `buttons`)
 
-    // ✅ AJOUTER : Attendre l'audio si sceneSound
+    const token = ++playTokenRef.current;
+
+    // Attente du son de scène (bornée, voir useUnifiedAudio.waitForSceneAudio)
     if (poi.sceneSound && waitForSceneAudioRef?.current) {
-      console.log("⏳ [PLAYER] Attente audio prêt...");
       setIsWaitingAudio(true);
-      
       try {
-        await waitForSceneAudioRef.current(); // ✅ Appeler via le ref
-        console.log("✅ [PLAYER] Audio prêt, lancement animations");
+        await waitForSceneAudioRef.current();
       } catch (err) {
         console.error("❌ [PLAYER] Échec audio:", err);
       } finally {
-        setIsWaitingAudio(false);
+        if (token === playTokenRef.current) setIsWaitingAudio(false);
       }
+      // Lancement abandonné : arrêt, autre lancement ou changement de POI pendant l'attente
+      if (token !== playTokenRef.current) return;
     }
 
     if (forceReplay) lastSeekTimeRef.current = 0;
-    resetSceneStable();
-
     const startTime = forceReplay ? 0 : (lastSeekTimeRef.current || 0);
+    resetSceneStable();
+    const runToken = playTokenRef.current;
+
     setProgress(startTime);
     setIsEnded(false);
 
     const actions: THREE.AnimationAction[] = [];
-    
-    poi.elements?.forEach(el => {
-    const action = actionsRef.current.get(el.name);
-    if (!action) {
-      console.warn(`⚠️ Action non préparée pour: ${el.name}`);
-      return;
-    }
 
-    // Reset et configure l'action
-    action.reset();
-    action.setLoop(el.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
-    action.clampWhenFinished = true;
-    action.fadeIn(fadeDuration);
-    
-    // Positionner au temps de départ si reprise
-    if (startTime > 0) {
-      action.time = Math.min(startTime, action.getClip().duration);
-    }
-    
-    // ✅ JOUER D'ABORD
-    action.play();
-    actions.push(action);
-    
-    // ✅ PUIS avancer et swapper (APRÈS play)
-    // ✅ PUIS avancer et swapper (APRÈS quelques frames)
-    if (el.placeholderMesh && el.transitionFrames) {
-      const animated = emptyRefs?.current?.[el.name];
-      const placeholder = emptyRefs?.current?.[el.placeholderMesh];
-      
-      if (animated && placeholder) {
-        // Rester caché pendant X frames
-        animated.visible = false;
-        placeholder.visible = true;
-        
-        // Swapper après le délai
-        const delayMs = (el.transitionFrames / 60) * 1000;
-        setTimeout(() => {
-          animated.visible = true;
-          placeholder.visible = false;
-          console.log(`✅ Swap après ${el.transitionFrames} frames: ${el.name} visible`);
-        }, delayMs);
-        
-        // Préparer le swap inverse si non-looping
-        if (!el.loop && prepareStopAnimation) {
-          prepareStopAnimation(el.name, action.getClip().duration, el.transitionFrames);
+    poi.elements.forEach(el => {
+      const action = actionsRef.current.get(el.name);
+      if (!action) {
+        console.warn(`⚠️ Action non préparée pour: ${el.name}`);
+        return;
+      }
+
+      action.reset();
+      action.setLoop(el.loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
+      action.clampWhenFinished = true;
+      action.setEffectiveWeight(1); // P-12 : pas de fondu depuis la pose de repos
+
+      if (startTime > 0) {
+        action.time = Math.min(startTime, action.getClip().duration);
+      }
+
+      action.play();
+      actions.push(action);
+
+      // Placeholder : l'objet animé reste caché pendant `transitionFrames`, puis prend la place du placeholder
+      if (el.placeholderMesh && el.transitionFrames && emptyRefs?.current) {
+        const animated = findNode(emptyRefs.current, el.name);
+        const placeholder = findNode(emptyRefs.current, el.placeholderMesh);
+
+        if (animated && placeholder) {
+          animated.visible = false;
+          placeholder.visible = true;
+
+          const delayMs = (el.transitionFrames / 60) * 1000;
+          timersRef.current.push(setTimeout(() => {
+            if (runToken !== playTokenRef.current) return;
+            animated.visible = true;
+            placeholder.visible = false;
+          }, delayMs));
+
+          if (!el.loop && prepareStopAnimation) {
+            prepareStopAnimation(el.name, action.getClip().duration, el.transitionFrames);
+          }
         }
       }
-    }
-  });
+    });
 
     if (actions.length === 0) {
       console.warn(`⚠️ Aucune action à jouer pour POI: ${poi.id}`);
       return;
     }
 
-    const maxDuration = Math.max(...actions.map(a => a.getClip().duration));
-    setDuration(maxDuration);
+    setDuration(Math.max(...actions.map(a => a.getClip().duration)));
     activeActionsRef.current = actions;
+    endHandledRef.current = false;
     setIsPlaying(true);
     setIsPaused(false);
-  }, [poi, actionsRef, mixerRef, fadeDuration, resetSceneStable, findParentPOI, startAnimationWithSkip, prepareStopAnimation, waitForSceneAudioRef]);
+  }, [poi, actionsRef, resetSceneStable, findParentPOI, prepareStopAnimation, waitForSceneAudioRef, emptyRefs]);
 
-  // ✅ NOUVEAU : Auto-lancer si POI a autoplay
+  // 🔹 Autoplay (P-14) : une fois par POI et par session
+  const autoplayWanted = !!poi && autoplayEnabled && shouldAutoplay(poi, sceneAutoplay) && !findParentPOI?.(poi.id);
+
+  /** Lancement immédiat de l'autoplay, dans le geste de l'utilisateur (écran de démarrage). */
+  const autoplayNow = useCallback(() => {
+    if (!poi || !autoplayWanted || hasAutoplayedRef.current.has(poi.id)) return;
+    hasAutoplayedRef.current.add(poi.id);
+    playScene();
+  }, [poi, autoplayWanted, playScene]);
+
   useEffect(() => {
-    if (!poi || !autoplayEnabled || !experienceStarted) { // ✅ AJOUTER experienceStarted
-      console.log("⏭️ [AUTOPLAY] Conditions non remplies:", { 
-        poi: !!poi, 
-        autoplayEnabled, 
-        experienceStarted 
-      });
-      return;
-    }
-    
-    // Vérifier qu'on ne l'a pas déjà lancé pour ce POI
-    if (hasAutoplayedRef.current.has(poi.id)) {
-      console.log("⏭️ [AUTOPLAY] Déjà joué pour:", poi.id);
-      return;
-    }
-    
-    // Vérifier que c'est un parent (pas un enfant)
-    const isParent = !findParentPOI?.(poi.id);
-    if (!isParent) {
-      console.log("⏭️ [AUTOPLAY] Ignoré (POI enfant):", poi.id);
-      return;
-    }
-    
+    if (!poi || !autoplayWanted || !experienceStarted) return;
+    if (hasAutoplayedRef.current.has(poi.id)) return;
+
     // Délai pour laisser la caméra se positionner
-    console.log("🎬 [AUTOPLAY] Lancement automatique pour:", poi.id);
     const timer = setTimeout(() => {
-      playScene();
+      if (hasAutoplayedRef.current.has(poi.id)) return;
       hasAutoplayedRef.current.add(poi.id);
+      playScene();
     }, 1000);
-    
-    return () => clearTimeout(timer);
-  }, [poi, autoplayEnabled, experienceStarted, playScene, findParentPOI]); // ✅ Ajouter autoplayEnabled aux deps
 
-  // ✅ NOUVEAU : Reset hasAutoplayedRef quand on désactive/réactive
+    return () => clearTimeout(timer);
+  }, [poi, autoplayWanted, experienceStarted, playScene]);
+
+  // Interrupteur désactivé : l'autoplay pourra rejouer quand il sera réactivé
   useEffect(() => {
-    if (!autoplayEnabled) {
-      // Si on désactive, on peut reset pour permettre re-autoplay plus tard
-      hasAutoplayedRef.current.clear();
-    }
+    if (!autoplayEnabled) hasAutoplayedRef.current.clear();
   }, [autoplayEnabled]);
 
   // 🔹 Replay depuis le début
@@ -259,35 +274,36 @@ export const usePOIScenePlayer = ({
   }, [playScene]);
 
   const stopScene = useCallback(() => {
+    playTokenRef.current++;
+    clearTimers();
+    endHandledRef.current = true;
     activeActionsRef.current.forEach(a => a.stop());
     activeActionsRef.current = [];
 
-    if (poi?.elements) {
+    if (poi?.elements && emptyRefs?.current) {
       poi.elements.forEach(el => {
         if (el.placeholderMesh) {
-          const animated = emptyRefs?.current?.[el.name];
-          const placeholder = emptyRefs?.current?.[el.placeholderMesh];
-          
+          const animated = findNode(emptyRefs.current, el.name);
+          const placeholder = findNode(emptyRefs.current, el.placeholderMesh);
           if (animated && placeholder) {
             animated.visible = false;
             placeholder.visible = true;
-            console.log(`🔄 Reset placeholder: ${el.name}`);
           }
         }
       });
     }
-    
+
     lastSeekTimeRef.current = 0;
     setProgress(0);
     setIsPlaying(false);
     setIsPaused(false);
     setIsEnded(true);
-  }, [poi]);
+  }, [poi, emptyRefs, clearTimers]);
 
   // 🔹 Toggle play/pause
   const togglePlayPause = useCallback(() => {
     const shouldSyncAudio = isPaused || (!isPlaying && !isEnded && lastSeekTimeRef.current > 0);
-    
+
     if (isPaused) {
       activeActionsRef.current.forEach(a => {
         a.paused = false;
@@ -303,181 +319,150 @@ export const usePOIScenePlayer = ({
       activeActionsRef.current.forEach(a => (a.paused = true));
       setIsPaused(true);
     }
-    
-    // ✅ Retourner si on doit sync l'audio et à quel moment
+
     return { shouldSyncAudio, syncTime: lastSeekTimeRef.current };
   }, [isPlaying, isPaused, isEnded, playScene, replayScene]);
 
-
-
   // 🔹 Seek
   const seekScene = useCallback((time: number) => {
-    console.log("🎯 [seekScene] Début, time:", time, "isPlaying:", isPlaying, "isPaused:", isPaused); // ✅ LOG
-    
     const clampedTime = Math.min(time, duration);
     lastSeekTimeRef.current = clampedTime;
 
     activeActionsRef.current.forEach(a => {
-      const clipDuration = a.getClip().duration;
-      a.time = Math.min(clampedTime, clipDuration);
-      console.log("🎯 [seekScene] Action time set to:", a.time); // ✅ LOG
+      a.time = Math.min(clampedTime, a.getClip().duration);
       a.paused = !isPlaying || isPaused;
       if (isPlaying && !isPaused) a.play();
     });
 
     setProgress(clampedTime);
-    setIsEnded(clampedTime >= duration);
-    
-    console.log("✅ [seekScene] Terminé, progress set to:", clampedTime); // ✅ LOG
+    const ended = clampedTime >= duration;
+    setIsEnded(ended);
+    endHandledRef.current = ended || activeActionsRef.current.length === 0; // un seek avant la fin réarme le traitement de fin
   }, [duration, isPlaying, isPaused]);
 
   function normalizeCameraPath(poi: POI) {
-  if (!poi.cameraPath?.length) return [];
+    if (!poi.cameraPath?.length) return [];
 
-  const steps = [
-    { point: poi.emptyName, target: poi.emptyName, time: 0, duration: 0 },
-    ...poi.cameraPath,
-  ];
+    const steps = [
+      { point: poi.emptyName, target: poi.emptyName, time: 0, duration: 0 },
+      ...poi.cameraPath,
+    ];
 
-  const last = poi.cameraPath[poi.cameraPath.length - 1];
+    const last = poi.cameraPath[poi.cameraPath.length - 1];
 
-  // ⚡ Forcer le retour au POI de base
-  steps.push({
-    point: poi.emptyName,
-    target: poi.emptyName,
-    time: (last.time ?? 0) + (last.duration ?? 0),
-    duration: 0.01, // quasi instantané
-    zoom: poi.zoom, // zoom de base
-  });
+    // ⚡ Forcer le retour au POI de base
+    steps.push({
+      point: poi.emptyName,
+      target: poi.emptyName,
+      time: (last.time ?? 0) + (last.duration ?? 0),
+      duration: 0.01, // quasi instantané
+      zoom: poi.zoom, // zoom de base
+    });
 
-  return steps;
-}
-
-
-function getCameraStepAtTime(poi: POI, t: number) {
-  const steps = normalizeCameraPath(poi);
-  for (let i = 0; i < steps.length - 1; i++) {
-    const curr = steps[i];
-    const next = steps[i + 1];
-    const currDuration = curr.duration ?? 0; // 👈 fallback if undefined
-    const currTime = curr.time ?? 0;
-
-    if (t >= currTime && t <= currTime + currDuration) {
-      return { curr, next };
-    }
-  }
-  return null;
-}
-
-
-useEffect(() => {
-  if (!poi || !emptyRefs?.current || !controlsRef?.current || !moveCameraDuringAnimation || !moveCameraToPOI) return;
-
-  // 🔹 Fonction pour reset camera POI de base (utilisateur)
-  const resetCameraToPOI = () => {
-    const baseObj = emptyRefs.current[poi.emptyName];
-    if (!baseObj) return;
-
-    // Déplace la caméra
-    cameraRef?.current!.position.copy(baseObj.position.clone().add(new THREE.Vector3(0, 0, poi.zoom ?? 3)));
-
-    // Débloque OrbitControls
-    if (controlsRef?.current) {
-      controlsRef.current.target.copy(baseObj.position); // cible = POI
-      controlsRef.current.update(); // recalcul
-      controlsRef.current.enabled = true; // s'assurer qu'il est actif
-    }
-  };
-
-  resetCameraToPOI();
-
-  const update = () => {
-  if (activeActionsRef.current.length === 0) {
-    rafRef.current = requestAnimationFrame(update);
-    return;
+    return steps;
   }
 
-  const t = Math.max(...activeActionsRef.current.map(a => a.time));
+  function getCameraStepAtTime(poi: POI, t: number) {
+    const steps = normalizeCameraPath(poi);
+    for (let i = 0; i < steps.length - 1; i++) {
+      const curr = steps[i];
+      const next = steps[i + 1];
+      const currDuration = curr.duration ?? 0;
+      const currTime = curr.time ?? 0;
 
-  frameCountRef.current++;
-  if (frameCountRef.current % 3 === 0) {
-    const newProgress = Math.min(t, durationRef.current); // ✅ durationRef
-    if (Math.abs(newProgress - lastProgressRef.current) > 0.01) {
-      setProgress(newProgress);
-      lastProgressRef.current = newProgress;
-    }
-  }
-
-  // ✅ Utiliser poiRef.current
-  if (poiRef.current?.cameraPath?.length) {
-    const step = getCameraStepAtTime(poiRef.current, t);
-    if (step) {
-      const { curr, next } = step;
-      const pointA = emptyRefs.current[curr.point];
-      const pointB = emptyRefs.current[next.point];
-      const targetA = emptyRefs.current[curr.target || curr.point];
-      const targetB = emptyRefs.current[next.target || next.point];
-
-      if (pointA && pointB && targetA && targetB) {
-        const progressStep = Math.min((t - (curr.time ?? 0)) / (curr.duration ?? 1), 1);
-        const pos = new THREE.Vector3().lerpVectors(pointA.position, pointB.position, progressStep);
-        const look = new THREE.Vector3().lerpVectors(targetA.position, targetB.position, progressStep);
-
-        const tempObj = new THREE.Object3D();
-        tempObj.position.copy(pos);
-        tempObj.lookAt(look);
-
-        if (curr.zoom !== undefined && next.zoom !== undefined) {
-          const zoomDistance = curr.zoom + (next.zoom - curr.zoom) * progressStep;
-          const direction = new THREE.Vector3().subVectors(tempObj.position, look).normalize();
-          tempObj.position.copy(look).addScaledVector(direction, zoomDistance);
-        }
-
-        moveCameraDuringAnimationRef.current?.(tempObj, poiRef.current);
+      if (t >= currTime && t <= currTime + currDuration) {
+        return { curr, next };
       }
     }
+    return null;
   }
 
-  lastSeekTimeRef.current = t;
+  // 🔹 Suivi image par image : tâche de la boucle unique (P-06)
+  useEffect(() => {
+    const tasks = frameTasks.current;
+    if (!poi || !poi.elements?.length || !emptyRefs?.current || !controlsRef?.current || !tasks) return;
 
-  if (t >= durationRef.current) { // ✅ durationRef
+    /** Fin de la ligne de temps : retour au cadrage du POI si une `cameraPath` a déplacé la caméra. */
+    const onEnd = () => {
+      setIsPlaying(false);
+      setIsPaused(false);
+      setIsEnded(true);
+      const p = poiRef.current;
+      if (p?.cameraPath?.length) {
+        const baseObj = findNode(emptyRefs.current, p.emptyName);
+        if (baseObj) moveCameraToPOIRef.current?.(baseObj, p, false);
+      }
+    };
+
+    const update = () => {
+      if (activeActionsRef.current.length === 0) return;
+
+      const t = Math.max(...activeActionsRef.current.map(a => a.time));
+
+      frameCountRef.current++;
+      if (frameCountRef.current % 3 === 0) {
+        const newProgress = Math.min(t, durationRef.current);
+        if (Math.abs(newProgress - lastProgressRef.current) > 0.01) {
+          setProgress(newProgress);
+          lastProgressRef.current = newProgress;
+        }
+      }
+
+      const p = poiRef.current;
+      if (p?.cameraPath?.length && !endHandledRef.current) {
+        const step = getCameraStepAtTime(p, t);
+        if (step) {
+          const { curr, next } = step;
+          const pointA = findNode(emptyRefs.current, curr.point);
+          const pointB = findNode(emptyRefs.current, next.point);
+          const targetA = findNode(emptyRefs.current, curr.target || curr.point);
+          const targetB = findNode(emptyRefs.current, next.target || next.point);
+
+          if (pointA && pointB && targetA && targetB) {
+            // Module réservé `cameraPath` : positions locales des empties, inchangées (Annexe A)
+            const progressStep = Math.min((t - (curr.time ?? 0)) / (curr.duration ?? 1), 1);
+            const pos = new THREE.Vector3().lerpVectors(pointA.position, pointB.position, progressStep);
+            const look = new THREE.Vector3().lerpVectors(targetA.position, targetB.position, progressStep);
+
+            const tempObj = new THREE.Object3D();
+            tempObj.position.copy(pos);
+            tempObj.lookAt(look);
+
+            if (curr.zoom !== undefined && next.zoom !== undefined) {
+              const zoomDistance = curr.zoom + (next.zoom - curr.zoom) * progressStep;
+              const direction = new THREE.Vector3().subVectors(tempObj.position, look).normalize();
+              tempObj.position.copy(look).addScaledVector(direction, zoomDistance);
+            }
+
+            moveCameraDuringAnimationRef.current?.(tempObj, p);
+          }
+        }
+      }
+
+      lastSeekTimeRef.current = t;
+
+      // P-02 : fin traitée une seule fois par lancement
+      if (!endHandledRef.current && t >= durationRef.current) {
+        endHandledRef.current = true;
+        onEnd();
+      }
+    };
+
+    return tasks.add(update);
+  }, [poi, emptyRefs, controlsRef, frameTasks]);
+
+  const cleanup = useCallback(() => {
+    playTokenRef.current++;
+    clearTimers();
+    endHandledRef.current = true;
+    activeActionsRef.current.forEach(a => a.stop());
+    activeActionsRef.current = [];
+
     setIsPlaying(false);
     setIsPaused(false);
-    setIsEnded(true);
-    resetCameraToPOI();
-  }
-
-  rafRef.current = requestAnimationFrame(update);
-};
-
-  rafRef.current = requestAnimationFrame(update);
-  return () => cancelAnimationFrame(rafRef.current!);
-}, [poi, duration, emptyRefs, controlsRef, moveCameraDuringAnimation, moveCameraToPOI]);
-
-
-const cleanup = useCallback(() => {
-  console.log("🔇 Cleanup POI Scene Player");
-  
-  // Stop animations
-  activeActionsRef.current.forEach(a => a.stop());
-  activeActionsRef.current = [];
-  
-  // Cancel RAF
-  if (rafRef.current) {
-    cancelAnimationFrame(rafRef.current);
-    rafRef.current = undefined;
-  }
-  
-  // Reset state
-  setIsPlaying(false);
-  setIsPaused(false);
-  setProgress(0);
-  setIsEnded(false);
-  
-  console.log("✅ POI Scene Player cleanup terminé");
-}, []);
-
-
+    setProgress(0);
+    setIsEnded(false);
+  }, [clearTimers]);
 
   return {
     isPlaying,
@@ -491,6 +476,8 @@ const cleanup = useCallback(() => {
     playScene,
     replayScene,
     stopScene,
+    autoplayNow,
+    autoplayWanted,
     currentSceneSound: poi?.sceneSound,
     cleanup,
   };

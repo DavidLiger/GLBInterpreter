@@ -6,7 +6,8 @@
 // Contenu synthétique, sans valeur visuelle : il sert à tester build-book en l'absence de GLB réel produit par l'addon.
 // - scènes « trex » et « raptor » : GLB avec GLBI_ROOT (glbi_version = 2, glbi_config = couche 3D en chaîne JSON), armature
 //   à 2 os, maillage skinné portant des propriétés src_*, empty « start », clips idle/walk/roar/eat ; couche éditoriale dans
-//   scenes/<scène>.edit.json (textes, icônes, sons, cadrage, quiz, crédits) ;
+//   scenes/<scène>.edit.json (textes, icônes, sons, cadrage, quiz, crédits) ; « raptor » n'a pas de cadrage (valeurs par
+//   défaut du lecteur, Î10b) ; aucune scène n'a de lumière (éclairage de secours, D-8.10) ;
 // - images PNG 1×1, sons WAV de 0,1 s, icône du livre `icon.png` (512 px, Î9) ;
 // - image de chargement de « trex » en bruit aléatoire (≈ 3 MiB, Î10) : avec `--part-mib 1`, au moins un fichier du livre est
 //   découpé, ce qui garde la couverture des tests de recomposition et de reprise (tests/install.spec.ts) sur un livre v1.
@@ -70,7 +71,7 @@ async function makeGlb(file: string, armature: string, clips: string[], layer3d:
   arm.addChild(body);
   scene.addChild(arm);
 
-  const start: GNode = doc.createNode('start').setTranslation([0, 1, 4]);
+  const start: GNode = doc.createNode('start').setTranslation([0, 1, 0]); // au centre du sujet (Î10b : cible du cadrage)
   scene.addChild(start);
 
   for (const [i, name] of clips.entries()) {
@@ -164,7 +165,10 @@ async function main(): Promise<void> {
   ];
   for (const sc of scenes) {
     await makeGlb(path.join(dir, `scenes/${sc.id}.glb`), sc.armature, clips, layer3d(sc.id, sc.armature));
-    fs.writeFileSync(path.join(dir, `scenes/${sc.id}.edit.json`), `${JSON.stringify(editLayer(sc.id, sc.name), null, 2)}\n`);
+    const edit = editLayer(sc.id, sc.name);
+    // « raptor » sans cadrage (Î10b) : couvre les valeurs par défaut du lecteur (sphère englobante, lib/orbitFraming.ts)
+    if (sc.id === 'raptor') delete edit.modules!.camera;
+    fs.writeFileSync(path.join(dir, `scenes/${sc.id}.edit.json`), `${JSON.stringify(edit, null, 2)}\n`);
   }
 
   for (const f of ['images/og.png', 'images/raptor-preview.png', 'icons/walk.png', 'icons/roar.png', 'icons/eat.png']) {

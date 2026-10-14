@@ -32,6 +32,29 @@ dossier du livre (`src/components/book/bookSource.ts`). Une scène v1 est tradui
 assets que le build (GLB optimisés, `scenes/<scène>.json` validés), sans l'application ; `next build` recopie ce dossier
 dans `out/`, `build-book` l'en retire.
 
+### Lecteur d'une scène v1 (Î10b)
+
+- **Mode `buttons`** (`src/components/diorama/lib/buttonsPlayer.ts`) : `idle` en boucle dès le chargement ; un bouton
+  par action, dans l'ordre du GLB ; fondu de 0,25 s ; un clic pendant une action l'interrompt et lance la nouvelle ; un
+  clic sur l'action en cours la relance depuis le début (une action `loop: true` s'arrête au contraire) ; retour à
+  `idle` à la fin. Un seul mixer, sur la racine de la scène. `WebDioramaLoader` expose `onAction({ id, phase })`
+  (`start`, `interrupt`, `end` ; son par action en Î11) et `onEngineReady` (poignée de la scène chargée pour l'atelier ;
+  lecture libre d'un clip : `lib/clipPreview.ts`, hors bundle du livre).
+- **Boucle unique** (`lib/frameTasks.ts`) : un seul `requestAnimationFrame` ; transitions de caméra, ligne de temps de la
+  fixture et outils s'y inscrivent comme tâches.
+- **Cadrage** (`lib/orbitFraming.ts`) : convention d'`OrbitControls`, azimut 0 = caméra sur +Z du glTF, c'est-à-dire la
+  vue de face de Blender (sujet tourné vers −Y dans Blender) ; `zoom` = position dans la plage de distance, de 0
+  (`minDistance`) à 1 (`maxDistance`). Sans cadrage dans `edit.json` : distances 1,5 r à 6 r (r = rayon de la sphère
+  englobante de la scène), `zoom` 0,5, polaire de départ 70° dans [0, 90°], azimut libre ; chaque champ déclaré remplace
+  sa valeur par défaut.
+- **Éclairage** : lampes du GLB (`KHR_lights_punctual`, Lighting Mode Unitless) ; sans aucune lampe, éclairage neutre de
+  secours et avertissement en console (D-8.10).
+
+```bash
+npm run test:engine                                     # cadrage, mode buttons, boucle unique, éclairage (sans navigateur)
+npx tsx scripts/glb-framing.ts <scène.glb> [<scène.edit.json>]   # racines, bornes, cible, lampes, cadrage posé
+```
+
 La fixture `test-street` (`src/content/fixtures/`, hors schéma v1) reste la référence des modules réservés (POI
 hiérarchiques, `cameraPath`, dialogues, vidéos, spritesheets, lumières, post-processing…). Elle s'ouvre par `#/dev/<scène>`
 en `npm run dev`, et par `#/s/<scène>` dans la cartouche de test exportée (`npm run build` sans `--source`, `book.json`
@@ -137,8 +160,11 @@ Tests automatiques (Chromium et WebKit de Playwright ; WebKit n'est pas Safari i
 npx playwright install chromium webkit                         # une fois
 npm run book:test-source                                       # livre de test v1 (books/test-dino)
 rm -rf .next out && npm run build -- --source books/test-dino --part-mib 1   # découpe forcée : des parties à recomposer
-npm run test:install
+npm run test:install                                           # installation, plateformes et mode buttons
 ```
+
+`tests/buttons.spec.ts` (mode `buttons` sur le livre installé : ordre et libellés des boutons, fin d'action, interruption,
+relance, éclairage de secours) demande WebGL 2 ; il est sauté par un navigateur de test qui n'en a pas.
 
 Procédure manuelle hors ligne (O-34), sur le dossier exporté servi par `npx http-server` (voir plus haut) :
 

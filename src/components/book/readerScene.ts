@@ -10,7 +10,7 @@
 // Le lecteur n'embarque pas Zod (devDependency) : le build a validé la scène ; `parseBuiltScene` refait une
 // vérification de forme minimale des champs lus, pour un message lisible si le dossier n'est pas un livre construit.
 import type { BuiltScene } from "@/schema/glbi";
-import type { DioramaConfig3D, DioramaCredits, POI } from "@/types/diorama";
+import type { ButtonsModeConfig, DioramaConfig3D, DioramaCredits, POI } from "@/types/diorama";
 
 /** Identifiant du POI de départ (V-04) : seul POI d'une scène v1, premier POI de la fixture. */
 export const START_POI_ID = "start";
@@ -56,6 +56,17 @@ export function parseBuiltScene(raw: unknown, sceneId: string): BuiltScene {
   if (!isObj(build) || typeof build.glb !== "string" || !Array.isArray(build.modelCredits)) throw new Error(`${where} : build.glb attendu`);
   const camera = raw.modules.camera;
   if (camera !== undefined && (!isObj(camera) || typeof camera.target !== "string")) throw new Error(`${where} : modules.camera.target attendu`);
+  const anim = raw.modules.animations;
+  if (
+    anim !== undefined &&
+    (!isObj(anim) ||
+      !isObj(anim.idle) ||
+      typeof anim.idle.clip !== "string" ||
+      !Array.isArray(anim.actions) ||
+      !anim.actions.every((a) => isObj(a) && typeof a.id === "string" && typeof a.clip === "string" && isObj(a.label)))
+  ) {
+    throw new Error(`${where} : modules.animations (idle.clip, actions[].id, clip, label) attendu`);
+  }
   return raw as unknown as BuiltScene;
 }
 
@@ -78,13 +89,23 @@ function toCredits(built: BuiltScene, book: ReaderBook): DioramaCredits {
   };
 }
 
+/** Mode `buttons` : `idle` et actions dans l'ordre du GLB ; chemins d'icônes résolus par `at`. */
+function toButtons(built: BuiltScene, at: (p: string | undefined) => string | undefined): ButtonsModeConfig | undefined {
+  const anim = built.modules.animations;
+  if (!anim) return undefined;
+  return {
+    idle: { clip: anim.idle.clip, loop: anim.idle.loop ?? true },
+    actions: anim.actions.map((a) => ({ id: a.id, clip: a.clip, loop: a.loop ?? false, label: a.label, icon: at(a.icon) })),
+  };
+}
+
 /**
  * Traduction d'une scène v1 pour le moteur. `base` préfixe les chemins d'assets (relatifs à la racine du livre, D-8.1) :
  * vide dans un livre construit, `dev-book/` en `npm run dev` (voir `bookSource.ts`).
  *
- * Î10a : le POI `start` porte le cadrage (`modules.camera`) et le son d'ambiance ; il n'a pas d'élément animé.
- * Les animations du mode `buttons` (`modules.animations`) sont jouées par Î10b à partir de `built`, pas par la ligne
- * de temps du moteur (module réservé `timeline`).
+ * Le POI `start` porte le cadrage (`modules.camera`) et le son d'ambiance ; il n'a pas d'élément animé.
+ * `modules.animations` devient `buttons` (mode `buttons`, Î10b, `lib/buttonsPlayer.ts`) : joué sur la racine de la
+ * scène, pas par la ligne de temps du moteur (module réservé `timeline`) ; `autoplay` est faux, c'est `idle` qui joue.
  */
 export function sceneToEngineConfig(built: BuiltScene, book: ReaderBook, base = ""): DioramaConfig3D {
   const at = (p: string | undefined) => (p === undefined ? undefined : `${base}${p}`);
@@ -112,5 +133,6 @@ export function sceneToEngineConfig(built: BuiltScene, book: ReaderBook, base = 
     pois: [start],
     credits: toCredits(built, book),
     autoplay: false,
+    buttons: toButtons(built, at),
   };
 }

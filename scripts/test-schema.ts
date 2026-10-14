@@ -1,7 +1,7 @@
 // scripts/test-schema.ts — tests de la fusion des couches (A1, spec-atelier-glbi.md §5, §6). `npm run test:schema`.
 // Sans navigateur ni fichier : cas nominal, chaque cas d'erreur du §5 (message exact), mode `draft`, fraîcheur du JSON Schema.
 import assert from 'node:assert/strict';
-import { glbiConfigSchema, type EditLayer, type Layer3d } from '../src/schema/glbi';
+import { builtSceneSchema, glbiConfigSchema, type EditLayer, type Layer3d } from '../src/schema/glbi';
 import { mergeLayers, type MergeOptions } from '../src/schema/merge';
 import { checkSchemaFresh } from './export-schema';
 
@@ -170,6 +170,23 @@ test('module réservé et règles de forme (V-09, bornes) signalés avec le bon 
   const e2 = clone(EDIT);
   e2.modules!.camera!.minDistance = 30;
   hasError(mergeLayers(clone(LAYER3D), e2, OPTS), 'scenes/trex.edit.json : modules.camera.minDistance : minDistance (30) > maxDistance (20)');
+});
+
+test('zoom borné à [0, 1] (C-08, Î10b) ; build.source retiré de scenes/<id>.json', () => {
+  for (const zoom of [0, 0.5, 1]) {
+    const e = clone(EDIT);
+    e.modules!.camera!.zoom = zoom;
+    const r = mergeLayers(clone(LAYER3D), e, OPTS);
+    assert.deepEqual(r.errors, [], `zoom ${zoom} refusé`);
+  }
+  for (const zoom of [-0.1, 1.5]) {
+    const e = clone(EDIT);
+    e.modules!.camera!.zoom = zoom;
+    const r = mergeLayers(clone(LAYER3D), e, OPTS);
+    assert.ok(r.errors.some((m) => m.includes('modules.camera.zoom')), `zoom ${zoom} accepté : ${r.errors.join(' | ')}`);
+  }
+  const built = builtSceneSchema.safeParse({ ...mergeLayers(clone(LAYER3D), clone(EDIT), OPTS).config, build: { glb: 'scenes/trex.glb', source: 'glb', modelCredits: [] } });
+  assert.equal(built.success, false, 'build.source encore admis');
 });
 
 test('mode draft : objet affichable malgré les erreurs (libellés et nom remplacés par les id)', () => {

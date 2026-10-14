@@ -36,6 +36,11 @@ import { useWebGLContext } from "./hooks/useWebGLContext";
 import { disposeObject, disposeScene, logSceneStats } from "./utils/webglHelpers";
 import { getAssetFromCache } from "@/components/book/install/bookCache";
 import { createGLTFLoader, type GLTFLoaderWithDecoders } from "./lib/gltfDecoders";
+import { FrameTasks } from "./lib/frameTasks";
+import { sceneRadius } from "./lib/orbitFraming";
+import { addFallbackLightsIfNone } from "./lib/fallbackLights";
+import { ButtonsPlayer, type ActionEvent } from "./lib/buttonsPlayer";
+import ActionButtons from "./ui/ActionButtons";
 import useUnifiedAudio from "./hooks/useUnifiedAudio";
 import { applySpritesheets } from "./rendering/applySpritesheet";
 import { SpritesheetAnimator } from "./rendering/SpritesheetAnimator";
@@ -48,11 +53,36 @@ const DevTools =
     : null;
 
 /**
+ * Poignée du lecteur sur la scène chargée (`onEngineReady`), pour l'atelier et les outils de développement : lecture
+ * libre d'un clip (`lib/clipPreview.ts`, hors bundle du livre), diagnostic. Valable jusqu'au déchargement de la scène.
+ */
+export interface ReaderEngine {
+  /** Racine du GLB chargé. */
+  root: THREE.Object3D;
+  /** Clips du GLB. */
+  clips: readonly THREE.AnimationClip[];
+  /** Boucle unique du lecteur (P-06) : tâches exécutées à chaque image. */
+  frameTasks: FrameTasks;
+  /** Mode `buttons` (scène v1), ou `null` (fixture). */
+  buttons: ButtonsPlayer | null;
+  /** Rayon de la sphère englobante (valeurs par défaut du cadrage, `lib/orbitFraming.ts`). */
+  radius: number;
+}
+
+export interface WebDioramaLoaderProps {
+  scene: ReaderScene;
+  /** Mode `buttons` : action lancée, interrompue ou finie (son par action en Î11). */
+  onAction?: (e: ActionEvent) => void;
+  /** Scène chargée (atelier, outils de développement). */
+  onEngineReady?: (engine: ReaderEngine | null) => void;
+}
+
+/**
  * Lecteur de scène. Entrée unique (C-01 à C-04, Î10) : `ReaderScene` (scène v1 lue dans `scenes/<id>.json`, traduite
  * pour le moteur, ou fixture de développement). Utilisable hors de `BookApp` (atelier, piste A) : il ne dépend que de
  * la scène et du dossier du livre servi à côté de la page.
  */
-export default function WebDioramaLoader({ scene }: { scene: ReaderScene }) {
+export default function WebDioramaLoader(props: WebDioramaLoaderProps) {
   const [mounted, setMounted] = useState(false); // ✅ NOUVEAU
 
   // ✅ Attendre le mount côté client
@@ -67,19 +97,27 @@ export default function WebDioramaLoader({ scene }: { scene: ReaderScene }) {
 
   return (
     <TranslationProvider>
-      <WebDioramaLoaderWithTranslation scene={scene} />
+      <WebDioramaLoaderInner {...props} />
     </TranslationProvider>
   );
 }
 
 // Î8 : le livre entier est installé et vérifié avant le montage du lecteur (InstallGate, src/components/book/install/) ;
 // plus de vérification de cache ni de modale de téléchargement ici.
-function WebDioramaLoaderWithTranslation({ scene }: { scene: ReaderScene }) {
-  return <WebDioramaLoaderInner scene={scene} />;
-}
-
-function WebDioramaLoaderInner({ scene: readerScene }: { scene: ReaderScene }) {
+function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady }: WebDioramaLoaderProps) {
   const { config, bookId } = readerScene;
+  // Boucle unique (P-06) et mode `buttons` (Î10b)
+  const frameTasksRef = useRef<FrameTasks>(new FrameTasks());
+  const sceneRadiusRef = useRef<number | null>(null);
+  const buttonsRef = useRef<ButtonsPlayer | null>(null);
+  const [currentAction, setCurrentAction] = useState<string | null>(null);
+  const [actionLog, setActionLog] = useState<string[]>([]);
+  const onActionRef = useRef(onAction);
+  const onEngineReadyRef = useRef(onEngineReady);
+  useEffect(() => {
+    onActionRef.current = onAction;
+    onEngineReadyRef.current = onEngineReady;
+  }, [onAction, onEngineReady]);
   const { t, lang } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -95,6 +133,7 @@ function WebDioramaLoaderInner({ scene: readerScene }: { scene: ReaderScene }) {
     mixerRef, 
     actionsRef,
     initMixers, 
+    createRootMixer,
     prepareActions, 
     stopAllAnimations, 
     updateMixers, 
@@ -129,6 +168,8 @@ function WebDioramaLoaderInner({ scene: readerScene }: { scene: ReaderScene }) {
       cameraRef, 
       controlsRef, 
       emptyRefs,
+      frameTasksRef,
+      sceneRadiusRef,
     () => {
       // ✅ NOUVEAU : Callback appelé AVANT chaque changement de POI
       if (isPlaying) {
@@ -159,28 +200,28 @@ function WebDioramaLoaderInner({ scene: readerScene }: { scene: ReaderScene }) {
   const gltfDecodersRef = useRef<GLTFLoaderWithDecoders | null>(null);
   const waitForSceneAudioRef = useRef<(() => Promise<void>) | null>(null);
   const useTouchIcons = isTouchDevice && (isPortrait || isSmallScreen);
-  const autoplay = config.autoplay ?? false;
   const [autoplayEnabled, setAutoplayEnabled] = useState(true);
 
   usePOIEffects(sceneRef.current!, currentPoi, textureLoader);
 
   const { 
     isPlaying, isPaused, isEnded, isWaitingAudio, progress, duration, 
-    togglePlayPause, seekScene, stopScene,
+    togglePlayPause, seekScene, stopScene, autoplayNow, autoplayWanted,
     currentSceneSound, // ✅ NOUVEAU
     cleanup: cleanupScenePlayer 
   } = usePOIScenePlayer({
     poi: currentPoi,
     animations: sceneRef.current?.userData?.gltfAnimations || [],
-    mixerRef: mixerRef.current,
     actionsRef,
     startAnimationWithSkip,
     muted: false, // ✅ On gère mute dans useUnifiedAudio maintenant
     emptyRefs,
     controlsRef,
+    findParentPOI,
     moveCameraToPOI,
     moveCameraDuringAnimation,
-    goToPOI,
+    frameTasks: frameTasksRef,
+    sceneAutoplay: config.autoplay,
     autoplayEnabled,
     experienceStarted, 
     waitForSceneAudioRef,
@@ -402,6 +443,7 @@ function WebDioramaLoaderInner({ scene: readerScene }: { scene: ReaderScene }) {
     // StrictMode, changement de scène) : drapeau + timers + travail différé après la 1re frame.
     let cancelled = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
+    const frameTasks = frameTasksRef.current;
     let afterFirstFrame: (() => void) | null = null;
 
     const width = window.innerWidth;
@@ -530,28 +572,29 @@ function WebDioramaLoaderInner({ scene: readerScene }: { scene: ReaderScene }) {
           // Index des nœuds par nom Blender (point 5, lib/nodeNames.ts : nom d'origine, puis nom assaini par GLTFLoader)
           indexSceneNodes(gltf.scene, emptyRefs.current);
 
-          // Mixers (propriétaire unique : Î10b, R-13/R-27)
-          gltf.scene.traverse((child) => {
-            if (!child.name) return;
+          // Rayon de la sphère englobante : valeurs par défaut du cadrage (lib/orbitFraming.ts) et éclairage de secours
+          const radius = sceneRadius(gltf.scene);
+          sceneRadiusRef.current = radius;
 
-            if ((child as THREE.SkinnedMesh).isSkinnedMesh) {
-              const skinned = child as THREE.SkinnedMesh;
-              const armature = skinned.skeleton?.bones?.[0]?.parent;
-              if (armature && !mixerRef.current[armature.name]) {
-                mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
-              } else if (!mixerRef.current[skinned.name]) {
-                mixerRef.current[skinned.name] = new THREE.AnimationMixer(skinned);
-              }
-            } else if ((child as THREE.Mesh).isMesh && !mixerRef.current[child.name]) {
-              mixerRef.current[child.name] = new THREE.AnimationMixer(child);
-            } else if (child.type === "Bone" || child.name.toLowerCase().includes("armature")) {
-              if (!mixerRef.current[child.name]) {
-                mixerRef.current[child.name] = new THREE.AnimationMixer(child);
-              }
-            }
-          });
-
-          initMixers(gltf.scene);
+          // Mixers : propriétaire unique `usePOIAnimations` (R-13, R-27, P-25 ; avant Î10b, des mixers étaient aussi
+          // créés ici, pour chaque maillage et chaque os, puis aussitôt remplacés par initMixers).
+          buttonsRef.current?.dispose();
+          buttonsRef.current = null;
+          if (config.buttons) {
+            // Scène v1, mode `buttons` : un seul mixer sur la racine de la scène ; `idle` en boucle dès le chargement
+            const buttons = new ButtonsPlayer(createRootMixer(gltf.scene), gltf.animations, config.buttons, {
+              onAction: (e) => {
+                if (process.env.NODE_ENV === "development") console.info(`[buttons] ${e.id} : ${e.phase}`);
+                setActionLog((log) => [...log.slice(-9), `${e.id}:${e.phase}`]);
+                onActionRef.current?.(e);
+              },
+              onChange: setCurrentAction,
+            });
+            buttonsRef.current = buttons;
+            buttons.start();
+          } else {
+            initMixers(gltf.scene);
+          }
 
           // ✅ NOUVEAU : Initialiser TOUS les placeholders au chargement
           console.log('🎭 Initialisation de tous les placeholders...');
@@ -581,6 +624,8 @@ function WebDioramaLoaderInner({ scene: readerScene }: { scene: ReaderScene }) {
 
           applyLights(gltf.scene, emptyRefs.current, config.lights);
           applyBulbs(gltf.scene, emptyRefs.current, config.bulbs);
+          // D-8.10 : lumières du GLB ou de la fixture ; éclairage neutre seulement s'il n'y en a aucune
+          addFallbackLightsIfNone(scene, radius, config.glb);
 
           // Post-processing
           timers.push(setTimeout(() => {
@@ -632,6 +677,13 @@ function WebDioramaLoaderInner({ scene: readerScene }: { scene: ReaderScene }) {
 
           logSceneStats(scene, renderer);
           setIsLoaded(true);
+          onEngineReadyRef.current?.({
+            root: gltf.scene,
+            clips: gltf.animations,
+            frameTasks: frameTasksRef.current,
+            buttons: buttonsRef.current,
+            radius,
+          });
         },
         (xhr) => {
           if (cancelled) return;
@@ -691,6 +743,9 @@ function WebDioramaLoaderInner({ scene: readerScene }: { scene: ReaderScene }) {
       // delta serait énorme et les animations sauteraient. (Le navigateur suspend déjà les RAF
       // d'un onglet caché : l'ancien test document.hidden n'avait pas d'objet.)
       const delta = Math.min(clock.current.getDelta(), 0.1);
+      // Boucle unique (P-06) : transitions de caméra, ligne de temps, outils ; puis fondus du mode `buttons` et mixers
+      frameTasks.run(delta, performance.now());
+      buttonsRef.current?.tick(delta);
       updateMixers(delta);
       controlsRef.current?.update();
 
@@ -722,6 +777,14 @@ function WebDioramaLoaderInner({ scene: readerScene }: { scene: ReaderScene }) {
       cancelled = true;
       timers.forEach(clearTimeout);
       afterFirstFrame = null;
+
+      // Tâches par image, mode `buttons` et mixers de la scène déchargée
+      onEngineReadyRef.current?.(null);
+      frameTasks.clear();
+      buttonsRef.current?.dispose();
+      buttonsRef.current = null;
+      cleanupMixers();
+      sceneRadiusRef.current = null;
 
       if (animationFrameRef.current !== undefined) {
         cancelAnimationFrame(animationFrameRef.current);
@@ -796,7 +859,10 @@ function WebDioramaLoaderInner({ scene: readerScene }: { scene: ReaderScene }) {
       // 3. Vidéos (éléments + textures) : stopVideos() sait les retrouver, pas besoin de fouiller le DOM
       stopVideos();
 
-      // 4. Animations (cleanupMixers vide aussi mixerRef)
+      // 4. Animations (cleanupMixers vide aussi mixerRef et le mixer racine du mode `buttons`)
+      frameTasksRef.current.clear();
+      buttonsRef.current?.dispose();
+      buttonsRef.current = null;
       stopAllAnimations();
       cleanupMixers();
 
@@ -1079,18 +1145,15 @@ function WebDioramaLoaderInner({ scene: readerScene }: { scene: ReaderScene }) {
                   // ✅ Activer audio
                   enableAudio();
 
-                  // ✅ Procéder selon le mode
-                  if (autoplay) {
-                    console.log("🎬 Mode autoplay : lancement scène");
-                    if (!isFullscreen) toggleFullscreen();
-                    if (!isPlaying) togglePlayPause(); // Lance scène + sceneSound
-                    setShowLoaderOverlay(false);
-                  } else {
-                    console.log("🎵 Mode normal : activation ambient");
-                    if (!isFullscreen) toggleFullscreen();
-                    if (muted) toggleMute(); // Active ambient
-                    setShowLoaderOverlay(false);
+                  if (!isFullscreen) toggleFullscreen();
+                  // Ligne de temps (fixture) : autoplay lancé dans le geste, une seule fois (P-14). Scène v1 : `idle`
+                  // joue déjà depuis le chargement ; le geste ne sert qu'à débloquer l'audio.
+                  if (autoplayWanted) {
+                    autoplayNow(); // lance la scène et son sceneSound
+                  } else if (muted) {
+                    toggleMute(); // Active ambient
                   }
+                  setShowLoaderOverlay(false);
                   setExperienceStarted(true);
                 }}
               />
@@ -1136,6 +1199,16 @@ function WebDioramaLoaderInner({ scene: readerScene }: { scene: ReaderScene }) {
               scene={loadedScene}
               glbUrl={config.glb}
               onOpenChange={setDevToolOpen}
+            />
+          )}
+
+          {config.buttons && isLoaded && !showLoaderOverlay && (
+            <ActionButtons
+              actions={config.buttons.actions}
+              lang={lang}
+              currentId={currentAction}
+              log={actionLog}
+              onTrigger={(id) => buttonsRef.current?.trigger(id)}
             />
           )}
 

@@ -1,17 +1,27 @@
 import { useRef, useCallback } from "react";
 import * as THREE from "three";
 import type { POI } from "@/types/diorama";
+import { findNode } from "../lib/nodeNames";
 import { usePlaceholderSwap } from "./usePlaceholderSwap";
 
+/**
+ * Propriétaire unique des mixers et des actions du lecteur (R-13, R-27, P-25, Î10b).
+ *
+ * - Fixture (ligne de temps, module réservé `timeline`) : un mixer par armature skinnée ou maillage à morph targets
+ *   (`initMixers`), complété à la demande par `prepareActions` ; actions indexées par nom d'élément.
+ * - Scène v1 (mode `buttons`) : un seul mixer sur la racine de la scène (`createRootMixer`), utilisé par
+ *   `lib/buttonsPlayer.ts` ; pas de mixer par armature (deux mixers sur les mêmes os se contrediraient).
+ * Tous sont mis à jour par `updateMixers`, appelé une fois par image dans la boucle unique (P-06), et libérés par
+ * `cleanup` (`stopAllAction` puis `uncacheRoot` : actions et liaisons ne survivent pas à la scène, part de P-26).
+ */
 export const usePOIAnimations = (
   emptyRefs: React.RefObject<Record<string, THREE.Object3D>>
 ) => {
   const mixerRef = useRef<Record<string, THREE.AnimationMixer>>({});
   const actionsRef = useRef<Map<string, THREE.AnimationAction>>(new Map());
+  const rootMixerRef = useRef<THREE.AnimationMixer | null>(null);
 
-  // ✅ Hook placeholder
   // On déstructure : l'objet retourné par usePlaceholderSwap change à chaque rendu, ses fonctions non.
-  // Dépendre de l'objet rendait instables prepareActions / stopAllAnimations / cleanup.
   const {
     initPlaceholder,
     resetAll: resetAllPlaceholders,
@@ -22,125 +32,97 @@ export const usePOIAnimations = (
     transitionFrames: 5
   });
 
-  // ────────────── Init Mixers ──────────────
+  const releaseMixer = (mixer: THREE.AnimationMixer) => {
+    mixer.stopAllAction();
+    mixer.uncacheRoot(mixer.getRoot());
+  };
+
+  // ────────────── Mixers de la fixture (un par armature / maillage à morph targets) ──────────────
   const initMixers = useCallback((scene: THREE.Object3D) => {
-    console.log('🎭 initMixers appelé');
-    
-    console.log('🧹 Reset mixers existants:', Object.keys(mixerRef.current).length);
-    Object.values(mixerRef.current).forEach(mixer => {
-      mixer.stopAllAction();
-    });
+    Object.values(mixerRef.current).forEach(releaseMixer);
     mixerRef.current = {};
-    
-    let mixerCount = 0;
-    
+    actionsRef.current.clear();
+
     scene.traverse((child) => {
       if (!child.name) return;
-
-      if (child.type === "SkinnedMesh" && child.parent) {
+      if ((child as THREE.SkinnedMesh).isSkinnedMesh && child.parent) {
         const armature = child.parent;
-        if (armature && !mixerRef.current[armature.name]) {
-          mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
-          mixerCount++;
-          console.log('✅ Mixer créé (SkinnedMesh):', armature.name);
-        }
-      }
-      else if (child.type === "Mesh") {
+        if (!mixerRef.current[armature.name]) mixerRef.current[armature.name] = new THREE.AnimationMixer(armature);
+      } else if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
-        
-        if (mesh.morphTargetInfluences && mesh.morphTargetInfluences.length > 0) {
-          if (!mixerRef.current[child.name]) {
-            mixerRef.current[child.name] = new THREE.AnimationMixer(mesh);
-            mixerCount++;
-            console.log('✅ Mixer créé (MorphTargets):', child.name);
-          }
+        if (mesh.morphTargetInfluences?.length && !mixerRef.current[child.name]) {
+          mixerRef.current[child.name] = new THREE.AnimationMixer(mesh);
         }
       }
     });
-    
-    console.log(`🎭 Total mixers créés: ${mixerCount}`);
-    console.log(`🎭 Total mixers dans ref: ${Object.keys(mixerRef.current).length}`);
   }, []);
 
-  // ────────────── PRÉPARER les actions (SANS jouer) ──────────────
+  // ────────────── Mixer unique sur la racine de la scène (mode `buttons`) ──────────────
+  const createRootMixer = useCallback((root: THREE.Object3D) => {
+    if (rootMixerRef.current) releaseMixer(rootMixerRef.current);
+    rootMixerRef.current = new THREE.AnimationMixer(root);
+    return rootMixerRef.current;
+  }, []);
+
+  // ────────────── Préparer les actions d'un POI (sans jouer) ──────────────
   const prepareActions = useCallback(
     (poi: POI, animations: THREE.AnimationClip[]) => {
-      console.log(`🎬 prepareActions pour POI: ${poi.id}`);
-      
       poi.elements?.forEach((el) => {
-        const target = emptyRefs.current[el.name];
+        const target = findNode(emptyRefs.current, el.name);
         if (!target) return console.warn(`⚠️ Objet non trouvé : ${el.name}`);
 
-        // ✅ Initialiser placeholder si configuré
-        if (el.placeholderMesh) {
-          console.log(`🎭 Init placeholder pour: ${el.name} -> ${el.placeholderMesh}`);
-          initPlaceholder(el.name, el.placeholderMesh);
-        }
+        if (el.placeholderMesh) initPlaceholder(el.name, el.placeholderMesh);
 
-        // Trouver un mixer existant ou créer
         let mixer = mixerRef.current[target.name];
         if (!mixer) {
           mixer = new THREE.AnimationMixer(target);
           mixerRef.current[target.name] = mixer;
         }
 
-        // Trouver le clip correspondant
-        const clip = animations.find(
-          (a) => a.name.toLowerCase() === el.clipName.toLowerCase()
-        );
+        const clip = animations.find((a) => a.name === el.clipName) ?? animations.find((a) => a.name.toLowerCase() === el.clipName.toLowerCase());
         if (!clip) return console.warn(`⚠️ Clip non trouvé : ${el.clipName}`);
 
-        // ✅ Créer l'action et la STOCKER dans actionsRef
-        // (reset/loop/clamp appliqués au lancement par usePOIScenePlayer.playScene)
-        const action = mixer.clipAction(clip);
-        
-        // ✅ CLEF IMPORTANTE : Stocker avec el.name, PAS clip.name
-        actionsRef.current.set(el.name, action);
-        
-        console.log(`✅ Action préparée (pas jouée): ${el.name} -> ${clip.name}`);
+        // Clé : nom de l'élément (reset/loop/clamp appliqués au lancement par usePOIScenePlayer.playScene)
+        actionsRef.current.set(el.name, mixer.clipAction(clip));
       });
     },
     [emptyRefs, initPlaceholder]
   );
 
-  // ────────────── Stopper toutes les animations ──────────────
+  // ────────────── Stopper les animations des POI ──────────────
   const stopAllAnimations = useCallback(() => {
-    console.log('🛑 Stop all animations');
-    
     resetAllPlaceholders();
-
-    Object.values(mixerRef.current).forEach((mixer) => {
-      mixer.stopAllAction();
-    });
-    
-    actionsRef.current.clear(); // ✅ Vider aussi les actions préparées
+    Object.values(mixerRef.current).forEach((mixer) => mixer.stopAllAction());
+    actionsRef.current.clear();
   }, [resetAllPlaceholders]);
 
-  // ────────────── Update pour animate() ──────────────
+  // ────────────── Mise à jour, une fois par image (boucle unique) ──────────────
   const updateMixers = useCallback((delta: number) => {
-    Object.values(mixerRef.current).forEach((m) => m.update(delta));
+    for (const m of Object.values(mixerRef.current)) m.update(delta);
+    rootMixerRef.current?.update(delta);
   }, []);
 
-  // ────────────── Cleanup complet ──────────────
+  // ────────────── Nettoyage complet ──────────────
   const cleanup = useCallback(() => {
-    console.log('🧹 Cleanup mixers:', Object.keys(mixerRef.current).length);
-    
     cleanupPlaceholders();
-    
-    Object.values(mixerRef.current).forEach(mixer => {
-      mixer.stopAllAction();
-    });
+    Object.values(mixerRef.current).forEach(releaseMixer);
     mixerRef.current = {};
     actionsRef.current.clear();
+    if (rootMixerRef.current) {
+      releaseMixer(rootMixerRef.current);
+      rootMixerRef.current = null;
+    }
   }, [cleanupPlaceholders]);
 
-  return { 
-    mixerRef, 
-    actionsRef, // ✅ Exposé
-    initMixers, 
-    prepareActions, // ✅ Renommé depuis playPOIAnimations
-    stopAllAnimations, 
-    updateMixers, 
+  return {
+    mixerRef,
+    actionsRef,
+    rootMixerRef,
+    initMixers,
+    createRootMixer,
+    prepareActions,
+    stopAllAnimations,
+    updateMixers,
     cleanup,
     startAnimationWithSkip,
   };

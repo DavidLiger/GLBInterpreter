@@ -60,7 +60,7 @@ export const testStreet: DioramaConfig3D = {
       emptyName: "start",
       icon: `icons/dioramas/test_street/start.png`,
       sceneSound: `sounds/goofy_Ahh_trap_short.mp3`,
-      zoom: 0.5, // règlages de la cmera sur ce POI (jusqu'à enableZoom)
+      zoom: 0, // Î10b : position dans la plage [minDistance, maxDistance] (0 = au plus près) ; réglages de la caméra sur ce POI (jusqu'à enableZoom)
       lookAxis: "x",
       minDistance: 1,
       maxDistance: 20,
@@ -221,7 +221,7 @@ export const testStreet: DioramaConfig3D = {
       emptyName: "window",
       icon: `icons/dioramas/test_street/window.png`,
       ambientSound: `sounds/kids_playing.mp3`,
-      zoom: 0.2,
+      zoom: 1, // Î10b : au plus loin de la plage (distance d'avant Î10b : maxDistance)
       lookAxis: "x",
       minDistance: 0.05,
       maxDistance: 0.1,
@@ -257,7 +257,7 @@ export const testStreet: DioramaConfig3D = {
           emptyName: "apartment",
           icon: `icons/dioramas/test_street/apartment.png`,
           ambientSound: `sounds/tv_background.mp3`,
-          zoom: 0.2,
+          zoom: 1, // Î10b : au plus loin de la plage (distance d'avant Î10b : maxDistance)
           lookAxis: "x",
           minDistance: 0.01,
           maxDistance: 0.05,
@@ -286,7 +286,7 @@ export const testStreet: DioramaConfig3D = {
               emptyName: "coffre",
               icon: `icons/dioramas/test_street/coffre.png`,
               ambientSound: `sounds/snoring_guy.mp3`,
-              zoom: 0.05,
+              zoom: 1, // Î10b : au plus loin de la plage (distance d'avant Î10b : maxDistance)
               lookAxis: "x",
               minDistance: 0.01,
               maxDistance: 0.05,
@@ -308,7 +308,7 @@ export const testStreet: DioramaConfig3D = {
           emptyName: "door",
           icon: `icons/dioramas/test_street/apartment.png`,
           ambientSound: `sounds/tv_background.mp3`,
-          zoom: 0.2,
+          zoom: 1, // Î10b : au plus loin de la plage (distance d'avant Î10b : maxDistance)
           lookAxis: "x",
           minDistance: 0.01,
           maxDistance: 0.05,
@@ -336,7 +336,7 @@ export const testStreet: DioramaConfig3D = {
       icon: `icons/dioramas/test_street/window.png`,
       ambientSound: `sounds/kids_playing.mp3`,
       sceneSound: `sounds/bonjour_exuberant.mp3`,
-      zoom: 0.2,
+      zoom: 1, // Î10b : au plus loin de la plage (distance d'avant Î10b : maxDistance)
       lookAxis: "x",
       minDistance: 0.05,
       maxDistance: 0.1,

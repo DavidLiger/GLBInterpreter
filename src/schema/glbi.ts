@@ -80,7 +80,9 @@ const radians = z.number().finite();
 
 /** Cadrage de la caméra : partie éditoriale du module caméra (D-8.9), réglée dans l'atelier. Angles en radians. */
 const cameraFramingShape = {
-  zoom: z.number().finite().nonnegative().optional(),
+  /** Position de départ dans la plage de distance : 0 = `minDistance`, 1 = `maxDistance` (0,5 si absent, lecteur) ; décision du 13/10, C-08. */
+  zoom: z.number().finite().min(0).max(1).optional(),
+  /** Vue de départ sans bornes d'azimut : `x` = caméra sur +X (profil), `y` ou `z` = de face (lecteur, `lib/orbitFraming.ts`). */
   lookAxis: z.enum(['x', 'y', 'z']).optional(),
   minDistance: z.number().finite().nonnegative().optional(),
   maxDistance: z.number().finite().positive().optional(),
@@ -378,8 +380,6 @@ export type ModelCredit = z.infer<typeof modelCreditSchema>;
 export const builtSceneSchema = glbiConfigSchema.extend({
   build: z.strictObject({
     glb: z.string(),
-    /** Toujours `glb` depuis D-8.9 (repli JSON de développement supprimé, A1). */
-    source: z.literal('glb'),
     modelCredits: z.array(modelCreditSchema),
   }),
 });

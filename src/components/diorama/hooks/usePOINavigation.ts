@@ -1,14 +1,21 @@
 // hooks/usePOINavigation.ts
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import * as THREE from "three";
 import type { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 import type { POI, DioramaConfig3D } from "@/types/diorama";
+import { findNode } from "../lib/nodeNames";
+import type { FrameTasks } from "../lib/frameTasks";
+import { applyOrbitConstraints, orbitPosition, resolveOrbit, type OrbitConstraints } from "../lib/orbitFraming";
 
 export const usePOINavigation = (
   config: DioramaConfig3D,
   cameraRef: React.RefObject<THREE.PerspectiveCamera | null>,
   controlsRef: React.RefObject<OrbitControls | null>,
   emptyRefs: React.RefObject<Record<string, THREE.Object3D>>,
+  /** Boucle unique du lecteur (P-06) : la transition de caméra y est une tâche. */
+  frameTasks: React.RefObject<FrameTasks | null>,
+  /** Rayon de la sphère englobante de la scène chargée (valeurs par défaut du cadrage). */
+  sceneRadiusRef: React.RefObject<number | null>,
   onPOIChange?: () => void 
 ) => {
   const [currentPOI, setCurrentPOI] = useState<string | null>(null);
@@ -42,14 +49,17 @@ export const usePOINavigation = (
     return search(config.pois);
   }, [config.pois]);
 
-  // ────────────── Caméra / déplacement AMÉLIORÉ ──────────────
+  // ────────────── Caméra : transition (tâche de la boucle unique, P-06) ──────────────
+  // Une seule transition à la fois : une nouvelle transition annule la précédente (avant Î10b, deux transitions
+  // pouvaient courir ensemble, chacune avec son requestAnimationFrame).
+  const cancelMoveRef = useRef<(() => void) | null>(null);
+
   const animateCameraMove = useCallback((
     fromPos: THREE.Vector3,
     toPos: THREE.Vector3,
     fromTarget: THREE.Vector3,
     toTarget: THREE.Vector3,
-    fromOrbit?: any,
-    toPOI?: POI,
+    finalConstraints: OrbitConstraints,
     duration = 700,
     onComplete?: () => void
   ) => {
@@ -57,19 +67,10 @@ export const usePOINavigation = (
     const controls = controlsRef.current;
     if (!camera || !controls) return;
 
-    // ✅ Sauvegarder les contraintes initiales
-    const savedConstraints = {
-      minDistance: controls.minDistance,
-      maxDistance: controls.maxDistance,
-      minPolarAngle: controls.minPolarAngle,
-      maxPolarAngle: controls.maxPolarAngle,
-      minAzimuthAngle: controls.minAzimuthAngle,
-      maxAzimuthAngle: controls.maxAzimuthAngle,
-      enableZoom: controls.enableZoom,
-      enablePan: controls.enablePan,
-    };
+    cancelMoveRef.current?.();
+    cancelMoveRef.current = null;
 
-    // ✅ Désactiver les contraintes pendant l'animation
+    // Contraintes levées pendant la transition, posées à la fin
     controls.minDistance = 0;
     controls.maxDistance = Infinity;
     controls.minPolarAngle = 0;
@@ -77,68 +78,46 @@ export const usePOINavigation = (
     controls.minAzimuthAngle = -Infinity;
     controls.maxAzimuthAngle = Infinity;
 
-    // ✅ Calculer les quaternions pour interpolation smooth de la rotation
-    const startQuaternion = new THREE.Quaternion();
-    const endQuaternion = new THREE.Quaternion();
-    
-    // Direction initiale
-    const startDir = new THREE.Vector3().subVectors(fromTarget, fromPos).normalize();
-    const startMatrix = new THREE.Matrix4().lookAt(fromPos, fromTarget, camera.up);
-    startQuaternion.setFromRotationMatrix(startMatrix);
-    
-    // Direction finale
-    const endDir = new THREE.Vector3().subVectors(toTarget, toPos).normalize();
-    const endMatrix = new THREE.Matrix4().lookAt(toPos, toTarget, camera.up);
-    endQuaternion.setFromRotationMatrix(endMatrix);
+    // Interpolation de la rotation par quaternions (SLERP)
+    const startQuaternion = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(fromPos, fromTarget, camera.up));
+    const endQuaternion = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(toPos, toTarget, camera.up));
+    const currentQuat = new THREE.Quaternion();
 
-    const startTime = performance.now();
-    
-    // ✅ Améliorer l'easing (plus smooth)
     const easeInOutQuart = (t: number) =>
       t < 0.5 ? 8 * t * t * t * t : 1 - Math.pow(-2 * t + 2, 4) / 2;
 
-    let animationFrame: number;
-
-    const step = (time: number) => {
-      const elapsed = time - startTime;
-      const tRaw = Math.min(elapsed / duration, 1);
+    let startTime: number | null = null;
+    const step = (_dt: number, now: number) => {
+      if (startTime === null) startTime = now;
+      const tRaw = Math.min((now - startTime) / duration, 1);
       const t = easeInOutQuart(tRaw);
 
-      // ✅ Interpoler position
       camera.position.lerpVectors(fromPos, toPos, t);
-      
-      // ✅ Interpoler rotation avec quaternion (SLERP = smooth)
-      const currentQuat = new THREE.Quaternion().slerpQuaternions(startQuaternion, endQuaternion, t);
-      camera.quaternion.copy(currentQuat);
-      
-      // ✅ Interpoler target
+      camera.quaternion.copy(currentQuat.slerpQuaternions(startQuaternion, endQuaternion, t));
       controls.target.lerpVectors(fromTarget, toTarget, t);
-
       controls.update();
 
-      if (tRaw < 1) {
-        animationFrame = requestAnimationFrame(step);
-      } else {
-        // ✅ Réappliquer les contraintes finales à la fin
-        controls.minDistance = toPOI?.minDistance ?? savedConstraints.minDistance;
-        controls.maxDistance = toPOI?.maxDistance ?? savedConstraints.maxDistance;
-        controls.minPolarAngle = toPOI?.minPolarAngle ?? savedConstraints.minPolarAngle;
-        controls.maxPolarAngle = toPOI?.maxPolarAngle ?? savedConstraints.maxPolarAngle;
-        controls.minAzimuthAngle = toPOI?.minAzimuthAngle ?? savedConstraints.minAzimuthAngle;
-        controls.maxAzimuthAngle = toPOI?.maxAzimuthAngle ?? savedConstraints.maxAzimuthAngle;
-        controls.enableZoom = toPOI?.enableZoom ?? savedConstraints.enableZoom;
-        controls.enablePan = toPOI?.enablePan ?? savedConstraints.enablePan;
-        controls.dampingFactor = toPOI?.dampingFactor ?? 0.05;
-        
-        controls.update();
-        
-        if (onComplete) onComplete();
-      }
+      if (tRaw < 1) return true;
+      cancelMoveRef.current = null;
+      applyOrbitConstraints(controls, finalConstraints);
+      controls.update();
+      onComplete?.();
+      return false;
     };
 
-    animationFrame = requestAnimationFrame(step);
-  }, [cameraRef, controlsRef]);
+    const tasks = frameTasks.current;
+    if (!tasks) return;
+    cancelMoveRef.current = tasks.add(step);
+  }, [cameraRef, controlsRef, frameTasks]);
 
+  /** Cadrage complet du POI (valeurs déclarées, sinon valeurs par défaut sur la sphère englobante de la scène). */
+  const frameFor = useCallback((poi: POI) => resolveOrbit(poi, sceneRadiusRef.current ?? 1), [sceneRadiusRef]);
+
+  /**
+   * Caméra pendant une animation à `cameraPath` (module réservé) : `obj` porte la position et l'orientation calculées par
+   * le lecteur de ligne de temps. Même règle de `zoom` que le cadrage du POI (décision du 13/10) : la distance à la
+   * cible vaut `minDistance + zoom × (maxDistance − minDistance)` quand le POI déclare `zoom`.
+   */
   const moveCameraDuringAnimation = useCallback(
     (obj: THREE.Object3D, poi: POI) => {
       if (!cameraRef.current || !controlsRef.current) return;
@@ -146,134 +125,53 @@ export const usePOINavigation = (
       const camera = cameraRef.current;
       const controls = controlsRef.current;
 
-      const toPos = obj.position.clone();
-
-      const lookAt = new THREE.Vector3();
-      obj.getWorldDirection(lookAt);
-      lookAt.add(obj.position);
+      const toPos = obj.getWorldPosition(new THREE.Vector3());
+      const lookAt = obj.getWorldDirection(new THREE.Vector3()).add(toPos);
 
       camera.position.copy(toPos);
       camera.lookAt(lookAt);
       controls.target.copy(lookAt);
-      controls.update();
 
-      controls.minDistance = poi.minDistance ?? 1;
-      controls.maxDistance = poi.maxDistance ?? 20;
-      controls.minPolarAngle = poi.minPolarAngle ?? 0;
-      controls.maxPolarAngle = poi.maxPolarAngle ?? Math.PI / 2;
-      controls.minAzimuthAngle = poi.minAzimuthAngle ?? -Math.PI;
-      controls.maxAzimuthAngle = poi.maxAzimuthAngle ?? Math.PI;
-      controls.enableZoom = poi.enableZoom ?? true;
+      const frame = frameFor(poi);
+      applyOrbitConstraints(controls, frame);
 
-      if (poi.zoom !== undefined && poi.zoom !== 1) {
-        const dir = new THREE.Vector3()
-          .subVectors(camera.position, controls.target)
-          .normalize()
-          .multiplyScalar(poi.zoom);
-        camera.position.copy(controls.target.clone().add(dir));
+      if (poi.zoom !== undefined) {
+        const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize().multiplyScalar(frame.distance);
+        camera.position.copy(controls.target).add(dir);
       }
 
       controls.update();
     },
-    [cameraRef, controlsRef]
+    [cameraRef, controlsRef, frameFor]
   );
 
+  /**
+   * Cadrage orbital d'un POI (P-17 à P-21) : cible = position **monde** de l'empty (P-20) ; vue de départ et bornes
+   * calculées par `resolveOrbit` dans la convention d'`OrbitControls` (`lib/orbitFraming.ts`).
+   */
   const moveCameraToPOI = useCallback(
     (obj: THREE.Object3D, poi: POI, smooth = true, onComplete?: () => void) => {
       const camera = cameraRef.current;
       const controls = controlsRef.current;
       if (!camera || !controls) return;
 
-      const minDist = poi.minDistance ?? 2;
-      const maxDist = poi.maxDistance ?? 20;
-      const targetDistance = poi.zoom 
-        ? Math.max(minDist, Math.min(maxDist, poi.zoom))
-        : (minDist + maxDist) / 2;
-
-      const targetPos = obj.position.clone();
-
-      const minPolar = poi.minPolarAngle ?? 0;
-      const maxPolar = poi.maxPolarAngle ?? Math.PI;
-      const minAzimuth = poi.minAzimuthAngle;
-      const maxAzimuth = poi.maxAzimuthAngle;
-
-      // ✅ Angle polaire moyen
-      const targetPolar = (minPolar + maxPolar) / 2;
-      
-      // ✅ AMÉLIORATION : Calcul intelligent de l'azimuth
-      let targetAzimuth = 0;
-      
-      if (minAzimuth !== undefined && maxAzimuth !== undefined) {
-        // Gérer le cas où l'angle traverse 0 (ex: -0.5 à 0.5)
-        let diff = maxAzimuth - minAzimuth;
-        
-        // Normaliser la différence dans [-π, π]
-        while (diff > Math.PI) diff -= 2 * Math.PI;
-        while (diff < -Math.PI) diff += 2 * Math.PI;
-        
-        // Calculer l'angle moyen
-        targetAzimuth = minAzimuth + diff / 2;
-        
-        // Normaliser dans [-π, π]
-        while (targetAzimuth > Math.PI) targetAzimuth -= 2 * Math.PI;
-        while (targetAzimuth < -Math.PI) targetAzimuth += 2 * Math.PI;
-      } else if (poi.lookAxis) {
-        // Fallback sur lookAxis si angles non définis
-        switch (poi.lookAxis) {
-          case "z": targetAzimuth = Math.PI / 2; break;
-          default: targetAzimuth = 0; // "x", "y"
-        }
-      }
-
-      // ✅ Position finale en coordonnées sphériques
-      const finalPos = new THREE.Vector3(
-        targetDistance * Math.sin(targetPolar) * Math.cos(-targetAzimuth),
-        targetDistance * Math.cos(targetPolar),
-        targetDistance * Math.sin(targetPolar) * Math.sin(-targetAzimuth)
-      ).add(targetPos);
+      const frame = frameFor(poi);
+      const targetPos = obj.getWorldPosition(new THREE.Vector3());
+      const finalPos = orbitPosition(targetPos, frame);
 
       if (smooth) {
-        const currentOrbit: any = {
-          minDistance: controls.minDistance,
-          maxDistance: controls.maxDistance,
-          minPolarAngle: controls.minPolarAngle,
-          maxPolarAngle: controls.maxPolarAngle,
-          minAzimuthAngle: controls.minAzimuthAngle,
-          maxAzimuthAngle: controls.maxAzimuthAngle,
-          enableZoom: controls.enableZoom,
-          enablePan: controls.enablePan,
-          dampingFactor: controls.dampingFactor,
-        };
-
-        animateCameraMove(
-          camera.position.clone(),
-          finalPos,
-          controls.target.clone(),
-          targetPos,
-          currentOrbit,
-          poi,
-          700,
-          onComplete
-        );
+        animateCameraMove(camera.position.clone(), finalPos, controls.target.clone(), targetPos, frame, 700, onComplete);
       } else {
+        cancelMoveRef.current?.();
+        cancelMoveRef.current = null;
         camera.position.copy(finalPos);
         controls.target.copy(targetPos);
-        Object.assign(controls, {
-          minDistance: poi.minDistance ?? controls.minDistance,
-          maxDistance: poi.maxDistance ?? controls.maxDistance,
-          minPolarAngle: poi.minPolarAngle ?? controls.minPolarAngle,
-          maxPolarAngle: poi.maxPolarAngle ?? controls.maxPolarAngle,
-          minAzimuthAngle: poi.minAzimuthAngle ?? controls.minAzimuthAngle,
-          maxAzimuthAngle: poi.maxAzimuthAngle ?? controls.maxAzimuthAngle,
-          enableZoom: poi.enableZoom ?? controls.enableZoom,
-          enablePan: poi.enablePan ?? controls.enablePan,
-          dampingFactor: poi.dampingFactor ?? controls.dampingFactor,
-        });
+        applyOrbitConstraints(controls, frame);
         controls.update();
-        if (onComplete) onComplete();
+        onComplete?.();
       }
     },
-    [cameraRef, controlsRef, animateCameraMove]
+    [cameraRef, controlsRef, animateCameraMove, frameFor]
   );
 
   // ────────────── Navigation principale AMÉLIORÉE ──────────────
@@ -281,7 +179,7 @@ export const usePOINavigation = (
     (poi: POI) => {
       onPOIChange?.();
 
-      const targetObj = emptyRefs.current[poi.emptyName];
+      const targetObj = findNode(emptyRefs.current, poi.emptyName);
       if (!targetObj) return;
 
       const current = currentPOI;

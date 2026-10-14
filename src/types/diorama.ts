@@ -14,7 +14,8 @@ export type AnimatedElement = {
   name: string;      // Nom de l'objet ou armature dans la scène
   type: "armature" | "mesh"; 
   clipName: string;  // Nom du clip à jouer
-  autoplay: boolean; 
+  /** Facultatif, sans effet (C-05, Î10b) : l'autoplay se règle sur le POI ou la scène (`usePOIScenePlayer`, P-14). */
+  autoplay?: boolean;
   loop: boolean;
   placeholderMesh?: string; // ✅ NOUVEAU : nom du mesh placeholder
   transitionFrames?: number;
@@ -51,6 +52,7 @@ export type POICameraStep = {
   target?: string;     // (optionnel) Empty vers lequel orienter la caméra
   time: number;        // Temps en secondes où le mouvement commence
   duration?: number;   // Durée de la transition (en secondes)
+  /** Distance caméra–cible en unités de scène (module réservé `cameraPath`) ; différent de `POI.zoom`, compris entre 0 et 1. */
   zoom?: number;
 };
 
@@ -92,6 +94,10 @@ export type POI = {
   icon?: string;
   ambientSound?: string;
   sceneSound?: string;  
+  /**
+   * Position de départ dans la plage de distance, de 0 (`minDistance`) à 1 (`maxDistance`), 0,5 par défaut (décision du
+   * 13/10, P-21). Cadrage et valeurs par défaut : `lib/orbitFraming.ts` (angles en radians, azimut 0 = vue de face Blender).
+   */
   zoom?: number;
   lookAxis?: "x" | "y" | "z";
   minDistance?: number;
@@ -194,7 +200,13 @@ export type DioramaConfig3D = {
   bulbs?: DioramaBulb[];
   toonOutline?: ToonOutlineConfig; // 🔥 nouvel objet
   credits?: DioramaCredits;
+  /**
+   * Lecture automatique de la ligne de temps des POI (module réservé `timeline`, fixture) : valeur par défaut des POI qui
+   * ne déclarent pas `autoplay` (P-14). Faux pour une scène v1 : c'est `idle` qui joue (mode `buttons`).
+   */
   autoplay?: boolean;
+  /** Mode `buttons` d'une scène v1 (`modules.animations`, traduit par `sceneToEngineConfig`) ; absent de la fixture. */
+  buttons?: ButtonsModeConfig;
   /** Module réservé (post-processing). */
   postProcessing?: PostProcessingConfig;
   /** Module réservé (objets émissifs, avec le post-processing). */
@@ -203,6 +215,21 @@ export type DioramaConfig3D = {
     color: number;
     intensity: number;
   }>;
+};
+
+/** Bouton du mode `buttons` : clip et boucle (couche 3D), libellé et icône (couche éditoriale, chemin déjà résolu). */
+export type ButtonsModeAction = {
+  id: string;
+  clip: string;
+  loop: boolean;
+  label: LocalizedText;
+  icon?: string;
+};
+
+/** Mode `buttons` (spec-extras-blender.md §4) : `idle` en boucle, un bouton par action dans l'ordre du GLB. */
+export type ButtonsModeConfig = {
+  idle: { clip: string; loop: boolean };
+  actions: ButtonsModeAction[];
 };
 
 export interface DioramaCredits {
