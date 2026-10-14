@@ -3,12 +3,13 @@
 //   npx tsx scripts/glb-framing.ts <scenes/<id>.glb> [<scenes/<id>.edit.json>]
 //
 // Affiche : nœuds racines (translation, rotation en degrés d'Euler XYZ, échelle) ; boîte englobante monde des maillages
-// (pose de repos, **skinning appliqué** comme au rendu : un maillage skinné est placé par ses os, pas par son nœud) et rayon de la sphère englobante ; cible caméra de GLBI_ROOT (position monde) ; lampes
+// (**skinning appliqué** comme au rendu : un maillage skinné est placé par ses os, pas par son nœud), en pose de repos et en
+// pose `idle` (première image, celle qu'affiche le lecteur au chargement et sur laquelle il mesure son rayon) ; rayon de la sphère englobante ; cible caméra de GLBI_ROOT (position monde) ; lampes
 // KHR_lights_punctual (type, intensité) ; cadrage que posera le lecteur (`lib/orbitFraming.ts`), avec le cadrage de
 // `edit.json` s'il est donné, sinon les valeurs par défaut. Sert à écarter un modèle couché, à une autre échelle, ou une
 // cible mal placée.
 import fs from 'node:fs';
-import type { Node as GNode, Scene as GScene } from '@gltf-transform/core';
+import type { Document as GDocument, Node as GNode, Scene as GScene } from '@gltf-transform/core';
 import type { Light } from '@gltf-transform/extensions';
 import * as THREE from 'three';
 import { getIO } from './glb-pipeline';
@@ -76,6 +77,35 @@ function renderBounds(scene: GScene): THREE.Box3 {
   return box;
 }
 
+/**
+ * Applique aux nœuds la première image du clip `name` (translation, rotation, échelle), comme `mixer.update(0)` dans le
+ * lecteur. Renvoie faux si le clip n'existe pas.
+ */
+function applyFirstFrame(doc: GDocument, name: string): boolean {
+  const anim = doc.getRoot().listAnimations().find((a) => a.getName() === name);
+  if (!anim) return false;
+  for (const ch of anim.listChannels()) {
+    const node = ch.getTargetNode();
+    const sampler = ch.getSampler();
+    const out = sampler?.getOutput();
+    if (!node || !sampler || !out) continue;
+    const idx = sampler.getInterpolation() === 'CUBICSPLINE' ? 1 : 0; // tangente d'entrée, valeur, tangente de sortie
+    const path = ch.getTargetPath();
+    if (path === 'translation') node.setTranslation(out.getElement(idx, [0, 0, 0]) as [number, number, number]);
+    else if (path === 'rotation') node.setRotation(out.getElement(idx, [0, 0, 0, 1]) as [number, number, number, number]);
+    else if (path === 'scale') node.setScale(out.getElement(idx, [1, 1, 1]) as [number, number, number]);
+  }
+  return true;
+}
+
+function describeBox(label: string, box: THREE.Box3): number {
+  const size = box.getSize(new THREE.Vector3()).toArray();
+  const radius = box.isEmpty() ? 1 : box.getBoundingSphere(new THREE.Sphere()).radius;
+  console.log(`Boîte englobante monde, ${label} (glTF, Y en haut, face +Z) : min ${v3(box.min.toArray())}, max ${v3(box.max.toArray())}, taille ${v3(size)}`);
+  console.log(`  rayon de la sphère englobante : ${radius.toFixed(3)}`);
+  return radius;
+}
+
 async function main() {
   const [glbPath, editPath] = process.argv.slice(2);
   if (!glbPath) {
@@ -94,23 +124,33 @@ async function main() {
     console.log(`  ${n.getName() || '(sans nom)'} : translation ${v3(n.getTranslation())}, rotation (${deg(e.x)}, ${deg(e.y)}, ${deg(e.z)}), échelle ${v3(n.getScale())}`);
   }
 
-  const box = renderBounds(scene);
-  const b = { min: box.min.toArray(), max: box.max.toArray() };
-  const size = [0, 1, 2].map((i) => b.max[i] - b.min[i]);
-  const radius = Math.hypot(...size) / 2;
-  console.log(`Boîte englobante monde (glTF, Y en haut, face +Z) : min ${v3(b.min)}, max ${v3(b.max)}, taille ${v3(size)}`);
-  console.log(`Rayon de la sphère englobante : ${radius.toFixed(3)}`);
-  if (size[1] < Math.max(size[0], size[2]) * 0.35) console.log('  note : boîte très plate en hauteur (modèle couché, ou sujet allongé)');
-
   const glbiRoot = root.listNodes().find((n) => n.getName() === 'GLBI_ROOT');
   let targetName: string | undefined;
+  let idleClip: string | undefined;
   try {
     const cfg = JSON.parse(String((glbiRoot?.getExtras() as { glbi_config?: string } | undefined)?.glbi_config ?? '{}'));
     targetName = cfg?.modules?.camera?.target;
+    idleClip = cfg?.modules?.animations?.idle?.clip;
   } catch {
     console.log('GLBI_ROOT : glbi_config illisible');
   }
   const target: GNode | undefined = targetName ? root.listNodes().find((n) => n.getName() === targetName) : undefined;
+
+  // Pose de repos, puis pose `idle` (première image) : c'est elle que mesure le lecteur
+  const restBox = renderBounds(scene);
+  describeBox('pose de repos', restBox);
+  let box = restBox;
+  let radius: number;
+  if (idleClip && applyFirstFrame(doc, idleClip)) {
+    box = renderBounds(scene);
+    radius = describeBox(`pose « ${idleClip} » (première image, mesurée par le lecteur)`, box);
+  } else {
+    console.log(idleClip ? `  clip « ${idleClip} » absent : pose de repos seule` : '  pas de clip idle déclaré : pose de repos seule');
+    radius = box.isEmpty() ? 1 : box.getBoundingSphere(new THREE.Sphere()).radius;
+  }
+  const size = box.getSize(new THREE.Vector3());
+  if (size.y < Math.max(size.x, size.z) * 0.35) console.log('  note : boîte très plate en hauteur (modèle couché, ou sujet allongé)');
+
   const targetPos = new THREE.Vector3(...(target ? target.getWorldTranslation() : [0, 0, 0]));
   const center = box.getCenter(new THREE.Vector3());
   console.log(targetName ? `Cible caméra « ${targetName} » : ${target ? `position monde ${v3(targetPos.toArray())}, locale ${v3(target.getTranslation())}` : 'INTROUVABLE'}` : 'Pas de cible caméra dans GLBI_ROOT');

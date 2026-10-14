@@ -85,6 +85,26 @@ test('rayon de la sphère englobante (positions monde)', () => {
   assert.equal(sceneRadius(new THREE.Group()), 1);
 });
 
+test('rayon mesuré sur la pose courante d’un maillage skinné (boîte recalculée, pas celle du repos)', () => {
+  const root = new THREE.Group();
+  const arm = new THREE.Group();
+  arm.scale.setScalar(0.018); // armature importée en centimètres
+  root.add(arm);
+  const geo = new THREE.BoxGeometry(100, 100, 100);
+  const n = geo.attributes.position.count;
+  geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(new Array(n * 4).fill(0), 4));
+  geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(Array.from({ length: n * 4 }, (_, i) => (i % 4 === 0 ? 1 : 0)), 4));
+  const mesh = new THREE.SkinnedMesh(geo, new THREE.MeshBasicMaterial());
+  const bone = new THREE.Bone();
+  arm.add(bone, mesh);
+  root.updateMatrixWorld(true);
+  mesh.bind(new THREE.Skeleton([bone]));
+  const rest = sceneRadius(root); // cube de 1,8 m
+  assert.ok(near(rest, Math.sqrt(3) * 0.9, 1e-3), `repos ${rest}`);
+  bone.scale.setScalar(2 / 1.8); // pose : cube de 2 m
+  assert.ok(near(sceneRadius(root), Math.sqrt(3), 1e-3), `pose ${sceneRadius(root)}`);
+});
+
 // ────────────── Mode buttons ──────────────
 console.log('Mode buttons');
 

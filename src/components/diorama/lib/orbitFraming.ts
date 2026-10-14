@@ -13,7 +13,8 @@
 //
 // Valeurs par défaut (décision du 14/10), champ par champ, quand `modules.camera` (couche éditoriale) ne les donne pas :
 //   - distances : `minDistance = 1,5 × r`, `maxDistance = 6 × r`, `r` = rayon de la sphère englobante de la scène
-//     chargée ; départ à `zoom` 0,5, donc 3,75 × r ;
+//     chargée, mesuré sur la pose affichée au chargement (première image d'`idle` pour une scène v1, pas la pose de repos
+//     de l'armature) ; départ à `zoom` 0,5, donc 3,75 × r ;
 //   - angle polaire : bornes [0, π/2] (pas de vue sous le sol) ; départ à 70° (20° au-dessus de l'horizontale), ou au
 //     milieu des bornes polaires si l'une d'elles est déclarée ;
 //   - azimut : pas de borne ; départ à 0 (face), ou au milieu des bornes si les deux sont déclarées. Le milieu est
@@ -67,9 +68,16 @@ export const ORBIT_DEFAULTS = {
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const num = (v: number | undefined): v is number => typeof v === "number" && Number.isFinite(v);
 
-/** Rayon de la sphère englobante de `root` (au moins 1e-3 ; 1 si la scène est vide). */
+/**
+ * Rayon de la sphère englobante de `root` dans sa pose **courante** (au moins 1e-3 ; 1 si la scène est vide). Les maillages
+ * skinnés sont mesurés avec leurs os (`SkinnedMesh.computeBoundingBox`, recalculé ici : la boîte mise en cache par three
+ * serait celle d'une pose antérieure).
+ */
 export function sceneRadius(root: THREE.Object3D): number {
   root.updateMatrixWorld(true);
+  root.traverse((o) => {
+    if ((o as THREE.SkinnedMesh).isSkinnedMesh) (o as THREE.SkinnedMesh).computeBoundingBox();
+  });
   const box = new THREE.Box3().setFromObject(root);
   if (box.isEmpty()) return 1;
   const r = box.getBoundingSphere(new THREE.Sphere()).radius;

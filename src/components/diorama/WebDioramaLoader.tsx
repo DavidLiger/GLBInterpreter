@@ -572,10 +572,6 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady }: 
           // Index des nœuds par nom Blender (point 5, lib/nodeNames.ts : nom d'origine, puis nom assaini par GLTFLoader)
           indexSceneNodes(gltf.scene, emptyRefs.current);
 
-          // Rayon de la sphère englobante : valeurs par défaut du cadrage (lib/orbitFraming.ts) et éclairage de secours
-          const radius = sceneRadius(gltf.scene);
-          sceneRadiusRef.current = radius;
-
           // Mixers : propriétaire unique `usePOIAnimations` (R-13, R-27, P-25 ; avant Î10b, des mixers étaient aussi
           // créés ici, pour chaque maillage et chaque os, puis aussitôt remplacés par initMixers).
           buttonsRef.current?.dispose();
@@ -592,9 +588,17 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady }: 
             });
             buttonsRef.current = buttons;
             buttons.start();
+            // Première image d'`idle` appliquée avant toute mesure : la pose de repos de l'armature peut différer de la
+            // pose affichée (raptor réel : couché sur le flanc au repos, redressé par `idle`)
+            buttons.mixer.update(0);
           } else {
             initMixers(gltf.scene);
           }
+
+          // Rayon de la sphère englobante, mesuré sur la pose affichée au chargement (première image d'`idle` pour une
+          // scène v1) : valeurs par défaut du cadrage (lib/orbitFraming.ts) et éclairage de secours
+          const radius = sceneRadius(gltf.scene);
+          sceneRadiusRef.current = radius;
 
           // ✅ NOUVEAU : Initialiser TOUS les placeholders au chargement
           console.log('🎭 Initialisation de tous les placeholders...');
