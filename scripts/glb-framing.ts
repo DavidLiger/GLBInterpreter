@@ -7,7 +7,9 @@
 // pose `idle` (première image, celle qu'affiche le lecteur au chargement et sur laquelle il mesure son rayon) ; rayon de la sphère englobante ; cible caméra de GLBI_ROOT (position monde) ; lampes
 // KHR_lights_punctual (type, intensité) ; cadrage que posera le lecteur (`lib/orbitFraming.ts`), avec le cadrage de
 // `edit.json` s'il est donné, sinon les valeurs par défaut. Sert à écarter un modèle couché, à une autre échelle, ou une
-// cible mal placée.
+// cible mal placée. Contrôle aussi les poids de skinning (somme différente de 1, sommets sans os, influences au-delà de 4) :
+// un sommet dont les poids ne font pas 1 est tiré vers l'origine au rendu (pointes vers le sol). À lancer sur le GLB source
+// et sur le GLB optimisé (`public/dev-book/scenes/<id>.glb` ou `out/scenes/<id>.glb`) pour savoir où le défaut apparaît.
 import fs from 'node:fs';
 import type { Document as GDocument, Node as GNode, Scene as GScene } from '@gltf-transform/core';
 import type { Light } from '@gltf-transform/extensions';
@@ -98,6 +100,63 @@ function applyFirstFrame(doc: GDocument, name: string): boolean {
   return true;
 }
 
+/** Poids de skinning : sommets dont la somme s'écarte de 1, sommets sans influence, jeux d'influences au-delà de 4. */
+function checkSkinWeights(scene: GScene): void {
+  const nodes: GNode[] = [];
+  scene.traverse((n) => {
+    nodes.push(n);
+  });
+  let any = false;
+  for (const node of nodes) {
+    const mesh = node.getMesh();
+    const skin = node.getSkin();
+    if (!mesh || !skin) continue;
+    any = true;
+    const jointCount = skin.listJoints().length;
+    let vertices = 0;
+    let off = 0;
+    let zero = 0;
+    let badJoint = 0;
+    let minSum = Infinity;
+    let maxSum = -Infinity;
+    const extraSets = new Set<string>();
+    for (const prim of mesh.listPrimitives()) {
+      const sets: [string, string][] = [];
+      for (let k = 0; prim.getAttribute(`WEIGHTS_${k}`); k++) {
+        sets.push([`JOINTS_${k}`, `WEIGHTS_${k}`]);
+        if (k > 0) extraSets.add(`WEIGHTS_${k}`);
+      }
+      const pos = prim.getAttribute('POSITION');
+      if (!pos || !sets.length) continue;
+      const j = [0, 0, 0, 0];
+      const w = [0, 0, 0, 0];
+      for (let i = 0; i < pos.getCount(); i++) {
+        let sum = 0;
+        for (const [ja, wa] of sets) {
+          prim.getAttribute(wa)!.getElement(i, w);
+          prim.getAttribute(ja)?.getElement(i, j);
+          for (let c = 0; c < 4; c++) {
+            sum += w[c];
+            if (w[c] > 0 && j[c] >= jointCount) badJoint++;
+          }
+        }
+        vertices++;
+        minSum = Math.min(minSum, sum);
+        maxSum = Math.max(maxSum, sum);
+        if (sum === 0) zero++;
+        else if (Math.abs(sum - 1) > 0.01) off++;
+      }
+    }
+    console.log(
+      `  ${node.getName()} : ${vertices} sommets, ${jointCount} os ; somme des poids de ${minSum.toFixed(3)} à ${maxSum.toFixed(3)} ; ` +
+        `${off} sommet(s) à somme ≠ 1 (écart > 1 %), ${zero} sans os${badJoint ? `, ${badJoint} influence(s) vers un os inexistant` : ''}` +
+        `${extraSets.size ? ` ; plus de 4 influences (${[...extraSets].join(', ')}), lues par three seulement pour les 4 premières` : ''}`,
+    );
+    if (off || zero || badJoint) console.log('    → ces sommets sont tirés vers l\'origine au rendu (pointes)');
+  }
+  if (!any) console.log('  aucun maillage skinné');
+}
+
 function describeBox(label: string, box: THREE.Box3): number {
   const size = box.getSize(new THREE.Vector3()).toArray();
   const radius = box.isEmpty() ? 1 : box.getBoundingSphere(new THREE.Sphere()).radius;
@@ -158,6 +217,9 @@ async function main() {
     const inside = box.containsPoint(targetPos);
     console.log(`  centre de la boîte ${v3(center.toArray())} ; cible ${inside ? 'dans la boîte' : 'HORS de la boîte (la caméra tournera autour d\'un point extérieur au sujet)'}`);
   }
+
+  console.log('Poids de skinning :');
+  checkSkinWeights(scene);
 
   const lights = root.listNodes().flatMap((n) => {
     const l = n.getExtension<Light>('KHR_lights_punctual');
