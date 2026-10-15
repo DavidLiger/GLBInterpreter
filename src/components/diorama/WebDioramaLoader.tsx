@@ -75,6 +75,11 @@ export interface WebDioramaLoaderProps {
   onAction?: (e: ActionEvent) => void;
   /** Scène chargée (atelier, outils de développement). */
   onEngineReady?: (engine: ReaderEngine | null) => void;
+  /**
+   * Atelier (A2) : lecteur rendu dans le conteneur de la page (position absolue) au lieu de l'écran entier, sans passage
+   * en plein écran au démarrage, sans bouton plein écran ni outils de développement. Sans cette prop, rien ne change.
+   */
+  embedded?: boolean;
 }
 
 /**
@@ -104,7 +109,7 @@ export default function WebDioramaLoader(props: WebDioramaLoaderProps) {
 
 // Î8 : le livre entier est installé et vérifié avant le montage du lecteur (InstallGate, src/components/book/install/) ;
 // plus de vérification de cache ni de modale de téléchargement ici.
-function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady }: WebDioramaLoaderProps) {
+function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, embedded = false }: WebDioramaLoaderProps) {
   const { config, bookId } = readerScene;
   // Boucle unique (P-06) et mode `buttons` (Î10b)
   const frameTasksRef = useRef<FrameTasks>(new FrameTasks());
@@ -1098,14 +1103,18 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady }: 
   return (
     <div
       ref={containerRef}
-      style={{
-        height: "100dvh",
-        position: "fixed",
-        top: 0,
-        left: 0,
-        width: "100vw",
-        overflow: "hidden",
-      }}
+      style={
+        embedded
+          ? { position: "absolute", inset: 0, overflow: "hidden" }
+          : {
+              height: "100dvh",
+              position: "fixed",
+              top: 0,
+              left: 0,
+              width: "100vw",
+              overflow: "hidden",
+            }
+      }
       className="bg-black"
     >
           {/* ✅ NOUVEAU : Badge mode dev */}
@@ -1143,13 +1152,14 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady }: 
                 sceneName={config.name[lang]}
                 loaderImage={config.loaderImage}
                 fontClassName="font-handy"
+                embedded={embedded}
                 onStart={() => {
                   window.scrollTo(0, 0);
 
                   // ✅ Activer audio
                   enableAudio();
 
-                  if (!isFullscreen) toggleFullscreen();
+                  if (!embedded && !isFullscreen) toggleFullscreen();
                   // Ligne de temps (fixture) : autoplay lancé dans le geste, une seule fois (P-14). Scène v1 : `idle`
                   // joue déjà depuis le chargement ; le geste ne sert qu'à débloquer l'audio.
                   if (autoplayWanted) {
@@ -1184,7 +1194,7 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady }: 
                 />
               )}
             </AnimatePresence>
-            {fullscreenSupported && <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />}
+            {!embedded && fullscreenSupported && <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />}
           </div>
 
           <POIBreadcrumbs
@@ -1197,7 +1207,7 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady }: 
             viewportHeight={viewportHeight}
           />
 
-          {DevTools && (
+          {DevTools && !embedded && (
             <DevTools
               composer={composerRef.current}
               scene={loadedScene}

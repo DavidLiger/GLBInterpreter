@@ -37,37 +37,37 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import type { Document, Node as GNode } from '@gltf-transform/core';
 import QRCode from 'qrcode';
 import sharp from 'sharp';
 import {
   formatMiB,
   optimizeGlbFile,
-  readGlbFile,
-  referencedNodeNames,
   resolveTextureMode,
   TEXTURE_MODES,
   type TextureMode,
 } from './glb-pipeline';
 import {
-  bookSchema,
   builtBookSchema,
   builtSceneSchema,
   formatIssues,
-  GLBI_ROOT_NAME,
   SCENE_ID_PATTERN,
   type Book,
   type BookFile,
   type BookFilePart,
   type BuiltScene,
-  type GlbiConfig,
-  type ModelCredit,
 } from '../src/schema/glbi';
-import { mergeLayers } from '../src/schema/merge';
 import { checkSchemaFresh } from './export-schema';
-
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+import {
+  checkBookSource,
+  ICON_MIN_PX,
+  iconSourceOk,
+  listFiles,
+  readJson as readJsonReport,
+  Report,
+  ROOT,
+  toPosix,
+  type SceneResult,
+} from './book-check';
 
 /** Limites de Cloudflare Pages (architecture, Déploiement). */
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
@@ -84,10 +84,11 @@ const EXCLUDED_FROM_FILES = [/^book\.json$/, /^sw\.js(\.map)?$/, /^swe-worker-[^
 // Rapport : erreurs (bloquantes) et avertissements
 // ---------------------------------------------------------------------------------------------------------
 
-const errors: string[] = [];
-const warnings: string[] = [];
-const err = (m: string) => errors.push(m);
-const warn = (m: string) => warnings.push(m);
+// Contrôles partagés avec l'atelier (scripts/book-check.ts, A2) : même rapport, mêmes textes.
+const report = new Report();
+const { errors, warnings } = report;
+const err = (m: string) => report.error(m);
+const warn = (m: string) => report.warning(m);
 /** Dossier construit en cours d'écriture (après `requireExport`) : un échec le laisse incomplet. */
 let writingOut: string | null = null;
 
@@ -168,21 +169,6 @@ function parseArgs(argv: string[]): Options {
 // Fichiers
 // ---------------------------------------------------------------------------------------------------------
 
-const toPosix = (p: string) => p.split(path.sep).join('/');
-
-function listFiles(dir: string): string[] {
-  const outList: string[] = [];
-  const walk = (d: string) => {
-    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
-      const full = path.join(d, e.name);
-      if (e.isDirectory()) walk(full);
-      else if (e.isFile()) outList.push(toPosix(path.relative(dir, full)));
-    }
-  };
-  walk(dir);
-  return outList.sort();
-}
-
 /** Empreinte lue par blocs (un GLB découpé peut peser plusieurs centaines de Mo). */
 function sha256(file: string): string {
   const h = crypto.createHash('sha256');
@@ -196,14 +182,7 @@ function sha256(file: string): string {
   return h.digest('hex');
 }
 
-function readJson(file: string, label: string): unknown {
-  try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch (e) {
-    err(`${label} : JSON illisible (${(e as Error).message})`);
-    return undefined;
-  }
-}
+const readJson = (file: string, label: string): unknown => readJsonReport(file, label, err);
 
 /** Copie `rel` de la source vers le dossier construit ; refuse d'écraser un fichier différent de l'application. */
 function copyIntoOut(sourceDir: string, outDir: string, rel: string): void {
@@ -220,220 +199,6 @@ function copyIntoOut(sourceDir: string, outDir: string, rel: string): void {
 
 const escapeHtml = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-// ---------------------------------------------------------------------------------------------------------
-// Lecture d'une scène (GLB + config)
-// ---------------------------------------------------------------------------------------------------------
-
-interface SceneResult {
-  id: string;
-  config: GlbiConfig;
-  modelCredits: ModelCredit[];
-  /** Assets référencés par la config (chemins relatifs à la racine du livre). */
-  assets: Set<string>;
-  /** Nœuds cités par la config (cible caméra, objets animés) : protégés de `prune` à l'optimisation. */
-  protect: string[];
-}
-
-/** Valeur de `glbi_config` : chaîne JSON qui doit donner un objet (`JSON.parse("1.0")` renvoie 1 sans exception). */
-function parseConfigString(raw: unknown, label: string): unknown {
-  if (typeof raw !== 'string') {
-    err(`${label} : glbi_config doit être une chaîne JSON (trouvé : ${raw === undefined ? 'absent' : typeof raw})`);
-    return undefined;
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (e) {
-    err(`${label} : glbi_config n'est pas du JSON valide (${(e as Error).message})`);
-    return undefined;
-  }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    err(`${label} : glbi_config doit contenir un objet JSON (trouvé : ${Array.isArray(parsed) ? 'tableau' : JSON.stringify(parsed)})`);
-    return undefined;
-  }
-  return parsed;
-}
-
-function descendants(node: GNode): Set<GNode> {
-  const set = new Set<GNode>();
-  const walk = (n: GNode) => {
-    set.add(n);
-    n.listChildren().forEach(walk);
-  };
-  walk(node);
-  return set;
-}
-
-const SRC_KEYS = { src_name: 'name', src_author: 'author', src_license: 'license', src_url: 'url' } as const;
-
-async function readScene(sourceDir: string, id: string): Promise<SceneResult | null> {
-  const label = `scène « ${id} »`;
-  const glbRel = `scenes/${id}.glb`;
-  const editRel = `scenes/${id}.edit.json`;
-  const oldJsonRel = `scenes/${id}.json`;
-  const glbFile = path.join(sourceDir, glbRel);
-  const editFile = path.join(sourceDir, editRel);
-
-  // D-8.9 (A1) : l'ancienne config de développement à côté du GLB n'est plus lue ; sa présence est une erreur.
-  if (fs.existsSync(path.join(sourceDir, oldJsonRel))) {
-    err(`${oldJsonRel} : ancienne config de développement, plus lue depuis D-8.9 ; à supprimer (couche 3D dans le GLB, couche éditoriale dans ${editRel})`);
-  }
-  if (!fs.existsSync(glbFile)) {
-    err(`${label} : ${glbRel} absent du dossier source`);
-    return null;
-  }
-
-  let doc: Document;
-  try {
-    doc = await readGlbFile(glbFile);
-  } catch (e) {
-    err(`${label} : ${glbRel} illisible (${(e as Error).message})`);
-    return null;
-  }
-
-  const root = doc.getRoot();
-  const nodes = root.listNodes();
-  const byName = new Map<string, GNode[]>();
-  for (const n of nodes) byName.set(n.getName(), [...(byName.get(n.getName()) ?? []), n]);
-
-  // --- Couche 3D : GLBI_ROOT du GLB (seule source) ---
-  const glbiRoots = byName.get(GLBI_ROOT_NAME) ?? [];
-  if (glbiRoots.length === 0) {
-    err(`${glbRel} : pas de nœud ${GLBI_ROOT_NAME} ; exporter la scène avec l'addon GLBGenerator`);
-    return null;
-  }
-  if (glbiRoots.length > 1) {
-    err(`${label} : ${glbiRoots.length} nœuds ${GLBI_ROOT_NAME} dans le GLB (un seul attendu)`);
-    return null;
-  }
-  const extras = glbiRoots[0].getExtras() ?? {};
-  const raw3d = parseConfigString(extras.glbi_config, `${glbRel} (couche 3D)`);
-  if (raw3d === undefined) return null;
-
-  // --- Couche éditoriale : scenes/<id>.edit.json (absente : erreur donnée par la fusion) ---
-  let rawEdit: unknown;
-  if (fs.existsSync(editFile)) {
-    rawEdit = readJson(editFile, editRel);
-    if (rawEdit === undefined) return null;
-    if (rawEdit === null || typeof rawEdit !== 'object' || Array.isArray(rawEdit)) {
-      err(`${editRel} : doit contenir un objet JSON`);
-      return null;
-    }
-  }
-
-  // --- Fusion et schéma (V-01 et règles de forme : V-02, V-05, V-09, quiz, modules réservés ; spec-atelier-glbi.md §5) ---
-  const merged = mergeLayers(raw3d, rawEdit, { mode: 'strict', sceneId: id, glbiVersion: extras.glbi_version });
-  merged.warnings.forEach(warn);
-  merged.errors.forEach(err);
-  if (!merged.config) return null;
-  const config = merged.config;
-
-  // --- V-08 : références d'objets ; V-04 : cible caméra (empty du POI unique) ---
-  const findNode = (name: string, what: string): GNode | null => {
-    const found = byName.get(name) ?? [];
-    if (found.length === 0) {
-      err(`${label} : ${what} « ${name} » introuvable dans le GLB (V-08)`);
-      return null;
-    }
-    if (found.length > 1) warn(`${label} : ${found.length} nœuds nommés « ${name} » (noms uniques attendus, spec §3)`);
-    return found[0];
-  };
-
-  const { camera, animations } = config.modules;
-  if (camera) {
-    const t = findNode(camera.target, 'camera.target');
-    if (t?.getMesh()) warn(`${label} : camera.target « ${camera.target} » porte un maillage (un empty est attendu, V-04)`);
-  }
-
-  // --- Clips : contrôle dans les deux sens (spec §3) ---
-  const glbAnims = root.listAnimations();
-  const glbClipNames = glbAnims.map((a) => a.getName());
-  for (const d of new Set(glbClipNames.filter((n, i) => glbClipNames.indexOf(n) !== i))) err(`${label} : clip « ${d} » en double dans le GLB`);
-
-  if (animations) {
-    const skinJoints = new Set(root.listSkins().flatMap((s) => s.listJoints()));
-    const refs: { object: string; clip: string; type: 'armature' | 'mesh' | null; where: string }[] = [
-      { object: animations.idle.object, clip: animations.idle.clip, type: null, where: 'animations.idle' },
-      ...animations.actions.map((a, i) => ({ object: a.object, clip: a.clip, type: a.type, where: `animations.actions.${i} (« ${a.id} »)` })),
-    ];
-    for (const r of refs) {
-      const node = findNode(r.object, `${r.where}.object`);
-      const anim = glbAnims.find((a) => a.getName() === r.clip);
-      if (!anim) {
-        err(`${label} : ${r.where} : clip « ${r.clip} » absent du GLB`);
-        continue;
-      }
-      if (!node) continue;
-      const sub = descendants(node);
-      if (r.type === 'armature' && ![...sub].some((n) => skinJoints.has(n))) {
-        warn(`${label} : ${r.where} : « ${r.object} » déclaré armature mais aucun os de skin sous ce nœud`);
-      }
-      if (r.type === 'mesh' && !node.getMesh()) warn(`${label} : ${r.where} : « ${r.object} » déclaré mesh mais sans maillage`);
-      const animated = anim.listChannels().some((c) => {
-        const t = c.getTargetNode();
-        return t !== null && sub.has(t);
-      });
-      if (!animated) warn(`${label} : ${r.where} : le clip « ${r.clip} » n'anime ni « ${r.object} » ni ses descendants`);
-    }
-    const declared = new Set(refs.map((r) => r.clip));
-    const undeclared = glbClipNames.filter((n) => !declared.has(n));
-    if (undeclared.length) warn(`${label} : clip(s) du GLB non déclaré(s) : ${undeclared.join(', ')}`);
-    if (glbClipNames.length === 1 && glbClipNames[0] === 'Animation' && !declared.has('Animation')) {
-      err(`${label} : le GLB n'a qu'un clip « Animation » : export Blender avec Animation Mode = Actions obligatoire (spec §2)`);
-    }
-  } else if (glbClipNames.length) {
-    warn(`${label} : ${glbClipNames.length} clip(s) dans le GLB mais pas de module animations`);
-  }
-
-  // --- Hygiène : les extras de scène hors glbi_ et de nœud hors glbi_/src_ sont retirés à l'optimisation (Î7),
-  //     listés dans le journal d'écriture de la scène.
-
-  // --- Crédits des modèles : propriétés src_* des nœuds (D-8.5), dédoublonnées ---
-  const credits = new Map<string, ModelCredit>();
-  for (const n of nodes) {
-    const ex = n.getExtras() ?? {};
-    const c: ModelCredit = {};
-    for (const [k, field] of Object.entries(SRC_KEYS)) {
-      const v = ex[k];
-      if (typeof v === 'string' && v.trim()) c[field] = v.trim();
-    }
-    if (!Object.keys(c).length) continue;
-    const key = JSON.stringify([c.name, c.author, c.license, c.url]);
-    if (!credits.has(key)) credits.set(key, c);
-  }
-  const modelCredits = [...credits.values()];
-  if (!modelCredits.length) warn(`${label} : aucun crédit de modèle (propriétés src_*) dans le GLB`);
-  for (const c of modelCredits) {
-    if (!c.author || !c.license) warn(`${label} : crédit de modèle incomplet ${JSON.stringify(c)} (src_author et src_license attendus)`);
-  }
-
-  // --- Assets référencés ---
-  const assets = new Set<string>();
-  if (config.scene.loaderImage) assets.add(config.scene.loaderImage);
-  const sounds = new Set<string>();
-  for (const a of animations?.actions ?? []) {
-    if (a.icon) assets.add(a.icon);
-    if (a.sound) {
-      assets.add(a.sound);
-      sounds.add(a.sound);
-    }
-  }
-  if (config.modules.audio?.ambientSound) {
-    assets.add(config.modules.audio.ambientSound);
-    sounds.add(config.modules.audio.ambientSound);
-  }
-  const creditList = config.modules.credits?.assets ?? [];
-  for (const c of creditList) assets.add(c.asset);
-
-  // V-10 : chaque son a un crédit ; crédit sans usage = avertissement
-  const credited = new Set(creditList.map((c) => c.asset));
-  for (const s of sounds) if (!credited.has(s)) err(`${label} : son « ${s} » sans entrée dans modules.credits.assets (V-10)`);
-  const used = new Set([...sounds, ...(animations?.actions ?? []).map((a) => a.icon), config.scene.loaderImage].filter(Boolean));
-  for (const c of creditList) if (!used.has(c.asset)) warn(`${label} : crédit pour « ${c.asset} », asset non utilisé par la scène`);
-
-  return { id, config, modelCredits, assets, protect: referencedNodeNames(config) };
-}
 
 // ---------------------------------------------------------------------------------------------------------
 // Sorties
@@ -556,23 +321,6 @@ const PWA_BACKGROUND_COLOR = '#000000';
 /** Fond des icônes opaques (maskable, apple-touch-icon) : une icône transparente y reste lisible. */
 const ICON_BACKGROUND = '#ffffff';
 const PWA_ORIENTATION = 'any';
-const ICON_MIN_PX = 512;
-
-/** Source d'icône utilisable : PNG (ou autre format lu par sharp) carré d'au moins ICON_MIN_PX px. */
-async function iconSourceOk(file: string, report: (m: string) => void): Promise<boolean> {
-  const name = toPosix(path.relative(ROOT, file)) || file;
-  try {
-    const m = await sharp(file).metadata();
-    if (m.width !== m.height || (m.width ?? 0) < ICON_MIN_PX) {
-      report(`${name} : ${m.width}×${m.height} px, carré ≥ ${ICON_MIN_PX} px attendu`);
-      return false;
-    }
-    return true;
-  } catch (e) {
-    report(`${name} : image illisible (${(e as Error).message})`);
-    return false;
-  }
-}
 
 interface ManifestIcon {
   src: string;
@@ -764,12 +512,47 @@ function removeFixtureMedia(outDir: string): void {
   if (removed.length) console.log(`build-book : médias de la cartouche de test retirés du dossier du livre : ${removed.join(', ')}`);
 }
 
+/**
+ * Atelier exclu du livre (A2, D-8.9) : aucun fichier du dossier construit ne contient de code de l'atelier
+ * (src/app/atelier/page.atelier.tsx, src/atelier/**, scripts/atelier/). Recherche de la route et des marqueurs dans tous les
+ * fichiers texte. `ATELIER_MARKER` est la constante de src/atelier/api.ts.
+ */
+const ATELIER_MARKER = 'glbi-atelier-a2';
+const ATELIER_TRACES = [ATELIER_MARKER, '/atelier/__api/', '__api/events', 'page.atelier'];
+const TEXT_FILE = /\.(html?|js|mjs|cjs|css|json|txt|webmanifest|map|svg|xml)$/i;
+
+function checkNoAtelier(outDir: string): void {
+  const found: string[] = [];
+  for (const rel of listFiles(outDir)) {
+    if (/^atelier(\/|\.html$)/.test(rel)) {
+      found.push(rel);
+      continue;
+    }
+    if (!TEXT_FILE.test(rel)) continue;
+    const text = fs.readFileSync(path.join(outDir, rel), 'utf8');
+    if (ATELIER_TRACES.some((t) => text.includes(t))) found.push(rel);
+  }
+  if (found.length) {
+    err(
+      `code de l'atelier dans le dossier construit (${found.slice(0, 5).join(', ')}${found.length > 5 ? ', …' : ''}) : ` +
+        'ne jamais lancer next build avec ATELIER=1 ; supprimer out/ et relancer npm run build',
+    );
+  }
+}
+
 function requireExport(outDir: string): void {
+  if (process.env.ATELIER === '1') {
+    // Avec ATELIER=1, next.config.ts déclare la page de l'atelier et exporte dans .next-atelier/ (dossier de l'atelier).
+    err("ATELIER=1 défini : variable réservée à npm run atelier ; la retirer, supprimer out/ et .next-atelier/, puis relancer npm run build");
+    fail();
+  }
   if (!fs.existsSync(path.join(outDir, 'index.html'))) {
     err(`${toPosix(path.relative(ROOT, outDir)) || outDir}/index.html absent : lancer \`next build\` avant (ou \`npm run build\`)`);
     fail();
   }
   writingOut = outDir;
+  checkNoAtelier(outDir);
+  if (errors.length) fail();
   // `next build` recopie tout public/, y compris le livre de développement (npm run dev:book, Î10) : jamais publié.
   const devBook = path.join(outDir, path.basename(DEV_BOOK_OUT));
   if (fs.existsSync(devBook)) {
@@ -810,45 +593,10 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
   const sourceDir = path.resolve(process.cwd(), sourceArg);
   const outDir = path.resolve(ROOT, opts.out);
   console.log(`build-book : livre ${toPosix(sourceDir)}${opts.check ? ' (validation seule)' : ''}`);
-  if (!fs.existsSync(path.join(sourceDir, 'book.json'))) {
-    err(`${toPosix(sourceDir)}/book.json absent`);
-    fail();
-  }
-
-  // --- Couche livre ---
-  const rawBook = readJson(path.join(sourceDir, 'book.json'), 'book.json');
-  if (rawBook === undefined) fail();
-  const parsedBook = bookSchema.safeParse(rawBook);
-  if (!parsedBook.success) {
-    formatIssues(parsedBook.error, 'book.json : ').forEach(err);
-    fail();
-  }
-  const book = parsedBook.data;
-
-  // --- Scènes ---
-  const scenes: SceneResult[] = [];
-  for (const id of book.scenes) {
-    const r = await readScene(sourceDir, id);
-    if (r) scenes.push(r);
-  }
-
-  // --- V-03 : existence des assets ; contrôle de taille des sources ---
-  const assets = new Set<string>(scenes.flatMap((s) => [...s.assets]));
-  if (book.ogImage) assets.add(book.ogImage);
-  else warn('book.json : pas de ogImage (aperçu de partage)');
-  for (const a of [...assets].sort()) {
-    const f = path.join(sourceDir, a);
-    if (!fs.existsSync(f) || !fs.statSync(f).isFile()) err(`asset « ${a} » introuvable dans le dossier source (V-03)`);
-  }
-
-  // --- Fichiers sources non utilisés ---
-  const known = new Set<string>(['book.json', 'icon.png', 'icon-maskable.png', ...assets]);
-  if (!fs.existsSync(path.join(sourceDir, 'icon.png'))) err(`icon.png absent du dossier source : icône du livre obligatoire (PNG carré ≥ ${ICON_MIN_PX} px, Î9)`);
-  else await iconSourceOk(path.join(sourceDir, 'icon.png'), err);
-  if (fs.existsSync(path.join(sourceDir, 'icon-maskable.png'))) await iconSourceOk(path.join(sourceDir, 'icon-maskable.png'), err);
-  for (const id of book.scenes) known.add(`scenes/${id}.glb`).add(`scenes/${id}.edit.json`);
-  const unused = listFiles(sourceDir).filter((f) => !known.has(f));
-  if (unused.length && !errors.length) warn(`fichier(s) source non référencé(s), non copié(s) : ${unused.join(', ')}`);
+  // Contrôles partagés avec l'atelier (scripts/book-check.ts) : book.json, scènes, V-03, icônes, fichiers non référencés.
+  const checked = await checkBookSource(sourceDir, report);
+  if (!checked) fail();
+  const { book, scenes, assets } = checked;
 
   if (errors.length) fail();
   if (opts.check) {

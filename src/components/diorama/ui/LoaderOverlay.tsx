@@ -16,6 +16,8 @@ interface LoaderOverlayProps {
   loaderImage?: string;
   fontClassName?: string;
   onStart?: () => void;
+  /** Atelier (A2) : hauteur du conteneur du lecteur au lieu de celle de la fenêtre. */
+  embedded?: boolean;
 }
 
 export default function LoaderOverlay({
@@ -27,6 +29,7 @@ export default function LoaderOverlay({
   loaderImage,
   fontClassName,
   onStart,
+  embedded = false,
 }: LoaderOverlayProps) {
   const [showOverlay, setShowOverlay] = useState(true);
   const [isReady, setIsReady] = useState(false);
@@ -64,7 +67,7 @@ export default function LoaderOverlay({
       {showOverlay && (
         <motion.div
           className="absolute inset-0 flex flex-col bg-black z-[100]"
-          style={{ height: viewportHeight ?? '100vh' }}
+          style={{ height: embedded ? '100%' : viewportHeight ?? '100vh' }}
           initial={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.45 }}

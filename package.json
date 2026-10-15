@@ -16,7 +16,8 @@
     "dev:book": "tsx scripts/build-book.ts --dev",
     "schema:export": "tsx scripts/export-schema.ts",
     "test:schema": "tsx scripts/test-schema.ts",
-    "test:engine": "tsx scripts/test-engine.ts"
+    "test:engine": "tsx scripts/test-engine.ts",
+    "atelier": "tsx scripts/atelier/server.ts"
   },
   "dependencies": {
     "@serwist/next": "^9.2.1",

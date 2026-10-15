@@ -9,6 +9,12 @@ import type { NextConfig } from "next";
 //   pas de precache de `public/` (entrées absolues non transformables).
 const isProd = process.env.NODE_ENV === 'production';
 
+// Atelier de configuration (A2, spec-atelier-glbi.md §9) : `npm run atelier` lance `next dev` avec ATELIER=1. La page
+// src/app/atelier/page.atelier.tsx n'est une page que si l'extension `atelier.tsx` est déclarée, donc jamais dans le build
+// d'un livre (contrôlé en fin de build par scripts/build-book.ts). Dossier de travail distinct : le verrou de `next dev`
+// (un seul par dossier) laisse alors `npm run dev` et l'atelier tourner en même temps.
+const isAtelier = process.env.ATELIER === '1';
+
 const withSerwist = withSerwistInit({
   swSrc: 'src/sw.ts',
   swDest: 'public/sw.js',
@@ -30,6 +36,7 @@ const nextConfig: NextConfig = {
   },
   // `next dev` (Turbopack) : configuration vide requise à côté de la config webpack de Serwist.
   turbopack: {},
+  ...(isAtelier ? { pageExtensions: ['tsx', 'ts', 'jsx', 'js', 'atelier.tsx'], distDir: '.next-atelier' } : {}),
 };
 
 export default withSerwist(nextConfig);
