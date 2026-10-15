@@ -1,7 +1,7 @@
 "use client";
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
-type Lang = "fr" | "en" | "es";
+export type Lang = "fr" | "en" | "es";
 
 const translations = {
   fr: {
@@ -293,7 +293,19 @@ interface TranslationContextType {
 
 const TranslationContext = createContext<TranslationContextType | null>(null);
 
-export function TranslationProvider({ children }: { children: ReactNode }) {
+/**
+ * `lang` et `onLangChange` (atelier, A3) : langue imposée par la page et changement de langue fait dans le lecteur (sélecteur
+ * de l'écran de chargement) renvoyé à la page. Sans ces props (livre publié), rien ne change.
+ */
+export function TranslationProvider({
+  children,
+  lang: forcedLang,
+  onLangChange,
+}: {
+  children: ReactNode;
+  lang?: Lang;
+  onLangChange?: (lang: Lang) => void;
+}) {
   // ✅ Fonction pour détecter la langue
   const detectLanguage = (): Lang => {
     if (typeof window === "undefined") return "fr"; // SSR fallback
@@ -315,7 +327,7 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
     return "fr";
   };
   
-  const [lang, setLangState] = useState<Lang>(() => detectLanguage()); // ✅ Initialiser avec la fonction
+  const [lang, setLangState] = useState<Lang>(() => forcedLang ?? detectLanguage()); // ✅ Initialiser avec la fonction
   
   // ✅ Détecter la langue au mount (côté client uniquement)
   useEffect(() => {
@@ -324,6 +336,11 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
       setLangState(detected);
     }
   }, []);
+
+  // Atelier : langue d'aperçu de la page (après la détection ci-dessus, qu'elle remplace).
+  useEffect(() => {
+    if (forcedLang) setLangState(forcedLang);
+  }, [forcedLang]);
   
   // ✅ Fonction pour changer la langue + sauvegarder
   const setLang = (newLang: Lang) => {
@@ -331,6 +348,7 @@ export function TranslationProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") {
       localStorage.setItem("webdiorama-lang", newLang);
     }
+    onLangChange?.(newLang);
   };
   
   // ✅ TOUJOURS render le provider (pas de return null)

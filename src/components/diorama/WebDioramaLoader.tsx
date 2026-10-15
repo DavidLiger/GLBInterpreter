@@ -1,6 +1,6 @@
 "use client";
 
-import { TranslationProvider, useTranslation } from "@/contexts/TranslationContext";
+import { TranslationProvider, useTranslation, type Lang } from "@/contexts/TranslationContext";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import * as THREE from "three";
@@ -80,6 +80,12 @@ export interface WebDioramaLoaderProps {
    * en plein écran au démarrage, sans bouton plein écran ni outils de développement. Sans cette prop, rien ne change.
    */
   embedded?: boolean;
+  /**
+   * Atelier (A3) : langue d'aperçu imposée par la page, et langue choisie dans le lecteur (sélecteur de l'écran de
+   * chargement) renvoyée à la page. Sans ces props, le lecteur garde sa langue (enregistrée, sinon celle du navigateur).
+   */
+  lang?: Lang;
+  onLangChange?: (lang: Lang) => void;
 }
 
 /**
@@ -101,7 +107,7 @@ export default function WebDioramaLoader(props: WebDioramaLoaderProps) {
   }
 
   return (
-    <TranslationProvider>
+    <TranslationProvider lang={props.lang} onLangChange={props.onLangChange}>
       <WebDioramaLoaderInner {...props} />
     </TranslationProvider>
   );

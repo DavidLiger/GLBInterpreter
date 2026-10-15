@@ -36,7 +36,8 @@ const nextConfig: NextConfig = {
   },
   // `next dev` (Turbopack) : configuration vide requise à côté de la config webpack de Serwist.
   turbopack: {},
-  ...(isAtelier ? { pageExtensions: ['tsx', 'ts', 'jsx', 'js', 'atelier.tsx'], distDir: '.next-atelier' } : {}),
+  // A3 : indicateur de développement de Next (« N ») masqué dans l'atelier, il recouvrait le lecteur.
+  ...(isAtelier ? { pageExtensions: ['tsx', 'ts', 'jsx', 'js', 'atelier.tsx'], distDir: '.next-atelier', devIndicators: false as const } : {}),
 };
 
 export default withSerwist(nextConfig);

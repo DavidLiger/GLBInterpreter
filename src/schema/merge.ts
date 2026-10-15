@@ -58,8 +58,11 @@ const LAYER3D_KEYS = new Set<string>(['id', 'target', 'mode', 'idle', 'object', 
 
 const where = (p: readonly PropertyKey[]) => (p.length ? p.map(String).join('.') : '(racine)');
 
-/** Messages d'une couche refusée par son schéma, avec renvoi vers la bonne couche pour une clé mal placée. */
-function layerIssues(error: z.ZodError, layer: '3d' | 'edit', glbFile: string, editFile: string): string[] {
+/**
+ * Messages d'une couche refusée par son schéma, avec renvoi vers la bonne couche pour une clé mal placée. Exporté pour
+ * l'atelier (A3) : refus d'une écriture de `edit.json`, mêmes textes qu'au build.
+ */
+export function layerIssues(error: z.ZodError, layer: '3d' | 'edit', glbFile: string, editFile: string): string[] {
   const file = layer === '3d' ? `${glbFile} (couche 3D)` : editFile;
   const out: string[] = [];
   for (const i of error.issues) {

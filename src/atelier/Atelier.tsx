@@ -1,21 +1,38 @@
 "use client";
 
-// Atelier de configuration, A2 (lecture seule) — spec-atelier-glbi.md §9 et §10.
-// Barre du haut (livre, scène dans l'ordre de book.json, langue d'aperçu), lecteur réel au centre (`WebDioramaLoader`
-// sur l'objet fusionné `draft`, mode `buttons`), onglets Rapport et Diagnostic. Le serveur (scripts/atelier/server.ts)
-// prévient la page de toute modification du dossier source (SSE) : rapport relu, lecteur remonté si la scène affichée
-// dépend du fichier modifié (réexport du GLB depuis Blender, edit.json, assets).
+// Atelier de configuration — A2 (lecture seule), A3 (écriture de la couche éditoriale) ; spec-atelier-glbi.md §9 et §10.
+// Barre du haut (livre, scène dans l'ordre de book.json, langue d'aperçu, « modifié, non enregistré », Enregistrer et
+// Ctrl+S), lecteur réel au centre (`WebDioramaLoader` sur l'objet fusionné `draft`, mode `buttons`), onglets à droite.
+// La saisie vit dans la page (editModel.ts) : seuls ses champs complets sont envoyés à l'aperçu (fusion `draft` et rapport
+// recalculés par le serveur) et écrits par Enregistrer (pas d'enregistrement automatique). Le serveur prévient la page de
+// toute modification du dossier source (SSE) : un réexport depuis Blender recharge la scène sans perdre la saisie.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import WebDioramaLoader, { type ReaderEngine } from "@/components/diorama/WebDioramaLoader";
-import { ATELIER_MARKER, type BookResponse, type ChangeEvent, type SceneResponse } from "./api";
+import type { ModelCredit } from "@/schema/glbi";
+import { ATELIER_MARKER, type BookResponse, type ChangeEvent, type PreviewResponse, type ReportLine, type SaveResponse, type SceneResponse } from "./api";
 import DiagnosticTab from "./DiagnosticTab";
+import { ActionsTab, AmbianceTab, assetOptions, CreditsTab, QuizTab, SceneTab, type GlbAction } from "./EditTabs";
+import { formatEditLayer, glbActionIds } from "./editLayerFile";
+import { formFromEdit, layerFromForm, usedAssets, type EditForm, type FieldRef, type Lang, type TabId } from "./editModel";
 import ReportTab from "./ReportTab";
+import { fieldOfMessage } from "./reportLinks";
 import { readerSceneOf, sceneFiles } from "./readerFromScene";
 
-type Lang = "fr" | "en" | "es";
 const LANGS: Lang[] = ["fr", "en", "es"];
-/** Clé de langue du lecteur (TranslationContext) : la langue d'aperçu y est écrite avant de remonter le lecteur. */
+/** Clé de langue du lecteur (TranslationContext) : langue d'aperçu gardée d'une session à l'autre. */
 const LANG_KEY = "webdiorama-lang";
+/** Délai entre la dernière frappe et l'aperçu (fusion `draft` et rapport recalculés par le serveur). */
+const PREVIEW_DELAY_MS = 350;
+
+const TABS: { id: TabId; label: string }[] = [
+  { id: "scene", label: "Scène" },
+  { id: "actions", label: "Actions" },
+  { id: "ambiance", label: "Ambiance" },
+  { id: "quiz", label: "Quiz" },
+  { id: "credits", label: "Crédits" },
+  { id: "rapport", label: "Rapport" },
+  { id: "diagnostic", label: "Diagnostic" },
+];
 
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path, { cache: "no-store" });
@@ -24,21 +41,34 @@ async function getJson<T>(path: string): Promise<T> {
   return body as T;
 }
 
+async function sendJson<T>(method: "PUT" | "POST", path: string, body: unknown): Promise<{ status: number; body: T }> {
+  const res = await fetch(path, { method, cache: "no-store", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  return { status: res.status, body: (await res.json().catch(() => ({ ok: false, error: `${path} : HTTP ${res.status}`, messages: [] }))) as T };
+}
+
 function hashScene(): string | null {
   const m = /^#\/s\/([^/]+)$/.exec(window.location.hash);
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-/** Langue d'aperçu enregistrée ; sinon le français, écrit pour que le lecteur ne suive pas la langue du navigateur. */
+/** Langue d'aperçu enregistrée ; sinon le français. */
 function readLang(): Lang {
   try {
     const v = localStorage.getItem(LANG_KEY);
     if (v === "fr" || v === "en" || v === "es") return v;
-    localStorage.setItem(LANG_KEY, "fr");
   } catch {
-    // stockage indisponible : le lecteur suit la langue du navigateur
+    // stockage indisponible
   }
   return "fr";
+}
+
+/** Actions de la couche 3D brute, dans l'ordre du GLB (lecture seule). */
+function glbActionsOf(layer3d: unknown): GlbAction[] {
+  const actions = (layer3d as { modules?: { animations?: { actions?: unknown } } } | null)?.modules?.animations?.actions;
+  if (!Array.isArray(actions)) return [];
+  return actions
+    .filter((a): a is { id: string; clip?: unknown; loop?: unknown } => !!a && typeof a === "object" && typeof (a as { id?: unknown }).id === "string")
+    .map((a) => ({ id: a.id, clip: typeof a.clip === "string" ? a.clip : "?", loop: a.loop === true }));
 }
 
 export default function Atelier() {
@@ -50,13 +80,23 @@ export default function Atelier() {
   const [lang, setLang] = useState<Lang>("fr");
   const [reload, setReload] = useState(0);
   const [engine, setEngine] = useState<ReaderEngine | null>(null);
-  const [tab, setTab] = useState<"rapport" | "diagnostic">("rapport");
+  const [tab, setTab] = useState<TabId>("rapport");
   const [live, setLive] = useState(false);
-  const [lastChange, setLastChange] = useState<string | null>(null);
+  // Saisie (A3)
+  const [form, setFormState] = useState<EditForm | null>(null);
+  const [preview, setPreview] = useState<(PreviewResponse & { key: string }) | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<{ error: string; messages: string[] } | null>(null);
+  const [diskChanged, setDiskChanged] = useState(false);
+  const [focus, setFocus] = useState<{ field: string; n: number } | null>(null);
+
   const sceneIdRef = useRef<string | null>(null);
   const sceneRef = useRef<SceneResponse | null>(null);
+  const dirtyRef = useRef(false);
   sceneIdRef.current = sceneId;
   sceneRef.current = scene;
+
+  const setForm = useCallback((update: (f: EditForm) => EditForm) => setFormState((f) => (f ? update(f) : f)), []);
 
   const loadBook = useCallback(async () => {
     try {
@@ -70,12 +110,14 @@ export default function Atelier() {
     }
   }, []);
 
-  const loadScene = useCallback(async (id: string) => {
+  /** Relit la scène ; le formulaire est repris du fichier seulement s'il n'y a pas de saisie non enregistrée. */
+  const loadScene = useCallback(async (id: string, resetForm = false) => {
     try {
       const s = await getJson<SceneResponse>(`__api/scene/${encodeURIComponent(id)}`);
       if (sceneIdRef.current !== id) return null;
       setScene(s);
       setSceneError(null);
+      if (resetForm || !dirtyRef.current) setFormState(formFromEdit(s.edit));
       return s;
     } catch (e) {
       if (sceneIdRef.current === id) setSceneError((e as Error).message);
@@ -98,8 +140,13 @@ export default function Atelier() {
     if (!sceneId) return;
     setScene(null);
     setEngine(null);
+    setFormState(null);
+    setPreview(null);
+    setSaveError(null);
+    setDiskChanged(false);
+    dirtyRef.current = false;
     if (hashScene() !== sceneId) history.replaceState(null, "", `#/s/${encodeURIComponent(sceneId)}`);
-    void loadScene(sceneId);
+    void loadScene(sceneId, true);
   }, [sceneId, loadScene]);
 
   // Modifications du dossier source (serveur, SSE).
@@ -109,7 +156,7 @@ export default function Atelier() {
     es.addEventListener("hello", (e) => {
       setLive(true);
       const g = (JSON.parse((e as MessageEvent).data) as { generation: number }).generation;
-      // Reconnexion après un redémarrage du serveur : tout relire.
+      // Reconnexion après un redémarrage du serveur : tout relire (la saisie non enregistrée est gardée).
       if (generation !== null && g !== generation) {
         void loadBook();
         if (sceneIdRef.current) void loadScene(sceneIdRef.current).then((s) => s && setReload((r) => r + 1));
@@ -119,48 +166,176 @@ export default function Atelier() {
     es.addEventListener("change", (e) => {
       const ev = JSON.parse((e as MessageEvent).data) as ChangeEvent;
       generation = ev.generation;
-      setLastChange(`${new Date().toLocaleTimeString("fr-FR")} : ${ev.files.join(", ")}`);
       const before = sceneRef.current;
       const deps = before ? sceneFiles(before) : new Set<string>();
       void loadBook();
       const id = sceneIdRef.current;
-      if (id) {
-        void loadScene(id).then((after) => {
-          if (!after) return;
-          const touched = ev.files.some((f) => deps.has(f) || sceneFiles(after).has(f));
-          if (touched) setReload((r) => r + 1);
-        });
-      }
+      if (!id) return;
+      const editRel = `scenes/${id}.edit.json`;
+      // edit.json modifié hors de l'atelier pendant une saisie : la saisie est gardée, signalée.
+      if (!ev.byAtelier && ev.files.includes(editRel) && dirtyRef.current) setDiskChanged(true);
+      void loadScene(id).then((after) => {
+        if (!after) return;
+        // Enregistrement fait par la page : l'aperçu montre déjà ce contenu, pas de rechargement du lecteur.
+        const own = ev.byAtelier && ev.files.every((f) => f === editRel);
+        const touched = ev.files.some((f) => deps.has(f) || sceneFiles(after).has(f));
+        if (touched && !own) setReload((r) => r + 1);
+      });
     });
     es.onerror = () => setLive(false);
     return () => es.close();
   }, [loadBook, loadScene]);
 
-  const changeLang = (l: Lang) => {
+  const changeLang = useCallback((l: Lang) => {
     try {
       localStorage.setItem(LANG_KEY, l);
     } catch {
-      // aperçu en français seulement
+      // langue d'aperçu non gardée
     }
     setLang(l);
+  }, []);
+
+  // --- Saisie : couche enregistrable, champs incomplets, état « modifié » ---
+  const glbActions = useMemo(() => glbActionsOf(scene?.layer3d), [scene?.layer3d]);
+  const glbIds = useMemo(() => glbActionIds(scene?.layer3d), [scene?.layer3d]);
+  const editable = !!scene?.inBook;
+  const { layer, incomplete } = useMemo(() => (form ? layerFromForm(form) : { layer: null, incomplete: [] }), [form]);
+  const layerText = layer ? formatEditLayer(layer, glbIds) : "";
+  const fileText = scene ? formatEditLayer(scene.edit ?? { version: 1 }, glbIds) : "";
+  const dirty = !!form && editable && (layerText !== fileText || incomplete.length > 0);
+  const canSave = !!form && editable && !saving && (dirty || scene?.edit === null || !!scene?.editIgnored);
+  dirtyRef.current = dirty;
+
+  // Aperçu de la saisie : fusion `draft` et rapport recalculés par le serveur avec la couche saisie.
+  const layerRef = useRef(layerText);
+  layerRef.current = layerText;
+  useEffect(() => {
+    if (!scene || !layer || !editable || layerText === fileText) {
+      setPreview(null);
+      return;
+    }
+    const key = layerText;
+    const id = scene.id;
+    const t = setTimeout(() => {
+      void sendJson<PreviewResponse>("POST", `__api/scene/${encodeURIComponent(id)}/preview`, layer).then((r) => {
+        if (r.status === 200 && layerRef.current === key && sceneIdRef.current === id) setPreview({ ...r.body, key });
+      });
+    }, PREVIEW_DELAY_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `layer` suit `layerText`
+  }, [layerText, fileText, scene?.id, scene?.generation, editable]);
+
+  const activePreview = preview && preview.key === layerText && preview.scene.id === scene?.id ? preview : null;
+  const shown = activePreview ? activePreview.scene : scene;
+  const report = activePreview ? activePreview.report : (book?.report ?? []);
+  const summary = activePreview ? activePreview.summary : (book?.summary ?? "");
+
+  // --- Enregistrer (bouton et Ctrl+S) ---
+  const save = useCallback(async () => {
+    if (!canSave || !layer || !scene) return;
+    if (diskChanged && !window.confirm(`${scene.id}.edit.json a été modifié hors de l'atelier : l'écraser avec la saisie ?`)) return;
+    setSaving(true);
+    try {
+      const r = await sendJson<SaveResponse>("PUT", `__api/scene/${encodeURIComponent(scene.id)}/edit`, layer);
+      if (r.body.ok) {
+        setSaveError(null);
+        setDiskChanged(false);
+        await loadScene(scene.id);
+      } else {
+        setSaveError({ error: r.body.error, messages: r.body.messages });
+      }
+    } catch (e) {
+      setSaveError({ error: (e as Error).message, messages: [] });
+    } finally {
+      setSaving(false);
+    }
+  }, [canSave, layer, scene, diskChanged, loadScene]);
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void saveRef.current();
+      }
+    };
+    const onLeave = (e: BeforeUnloadEvent) => {
+      if (!dirtyRef.current) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("beforeunload", onLeave);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("beforeunload", onLeave);
+    };
+  }, []);
+
+  const changeScene = (id: string) => {
+    if (dirtyRef.current && !window.confirm(`Modifications non enregistrées sur « ${sceneId} » : les abandonner ?`)) return;
+    setSceneId(id);
   };
 
-  // Le lecteur ne change de scène que par remontage (clé) : nouvelle scène, langue, réexport, edit.json modifié.
-  const draftKey = scene ? JSON.stringify([scene.id, scene.draft, scene.diagnostic.rootNode, scene.diagnostic.error]) : "";
+  // --- Rapport → champ ---
+  const goto = useCallback((ref: FieldRef) => {
+    setTab(ref.tab);
+    setFocus((f) => ({ field: ref.field, n: (f?.n ?? 0) + 1 }));
+  }, []);
+  useEffect(() => {
+    if (!focus) return;
+    const el = document.querySelector<HTMLElement>(`[data-field="${CSS.escape(focus.field)}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.querySelector<HTMLElement>("input, select, textarea")?.focus({ preventScroll: true });
+    const prev = el.style.outline;
+    el.style.outline = "2px solid #0ea5e9";
+    const t = setTimeout(() => (el.style.outline = prev), 1500);
+    return () => clearTimeout(t);
+  }, [focus]);
+  const linkOf = useCallback(
+    (l: ReportLine) => (form && scene && editable && l.scene === scene.id ? fieldOfMessage(l.message, scene.id, form, glbIds) : null),
+    [form, scene, editable, glbIds],
+  );
+
+  // --- Lecteur : remonté seulement pour une nouvelle scène, un fichier modifié, l'écran de chargement ou l'ambiance ;
+  //     libellés, icônes, nom et image de chargement suivent la saisie sans remontage ; langue imposée par la barre.
+  const draftKey = shown ? JSON.stringify([shown.id, shown.draft, shown.diagnostic.rootNode, shown.diagnostic.error]) : "";
   const reader = useMemo(
-    () => (scene && book ? readerSceneOf(scene, book) : null),
+    () => (shown && book ? readerSceneOf(shown, book) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [draftKey, reload],
   );
   const onEngineReady = useCallback((e: ReaderEngine | null) => setEngine(e), []);
-  const readerKey = `${scene?.id ?? ""}|${lang}|${reload}`;
+  const ambient = shown?.draft?.modules.audio?.ambientSound ?? "";
+  const readerKey = `${scene?.id ?? ""}|${reload}|${ambient}`;
   useEffect(() => setEngine(null), [readerKey]);
 
-  const errors = book?.report.filter((l) => l.level === "error").length ?? 0;
-  const warnings = (book?.report.length ?? 0) - errors;
+  const errors = report.filter((l) => l.level === "error").length;
+  const warnings = report.length - errors;
   const title = book?.book?.title?.fr ?? book?.book?.bookId ?? "livre";
   const bookScenes = book?.scenes.filter((s) => s.inBook) ?? [];
   const extraScenes = book?.scenes.filter((s) => !s.inBook) ?? [];
+  const assets = useMemo(() => assetOptions(book?.assets ?? {}), [book?.assets]);
+  const used = useMemo(() => (form ? usedAssets(form, glbIds) : []), [form, glbIds]);
+  const lastChange = book?.lastChange;
+  const modelCredits = useMemo(() => {
+    const seen = new Map<string, ModelCredit>();
+    for (const { credit: c } of scene?.diagnostic.srcCredits ?? []) {
+      const k = JSON.stringify([c.name, c.author, c.license, c.url]);
+      if (!seen.has(k)) seen.set(k, c);
+    }
+    return [...seen.values()];
+  }, [scene?.diagnostic.srcCredits]);
+
+  const editTab = (node: React.ReactNode) =>
+    !scene ? (
+      <p className="text-sm text-neutral-400">…</p>
+    ) : !editable ? (
+      <p className="text-sm text-neutral-400">« {scene.id} » n&apos;est pas dans book.json : diagnostic seul, pas de couche éditoriale.</p>
+    ) : form ? (
+      node
+    ) : null;
 
   return (
     <div className="fixed inset-0 flex flex-col bg-neutral-950 text-neutral-100" style={{ fontFamily: "system-ui, sans-serif" }} data-atelier={ATELIER_MARKER}>
@@ -173,12 +348,7 @@ export default function Atelier() {
         </div>
         <label className="flex items-center gap-2">
           Scène
-          <select
-            className="rounded bg-neutral-800 px-2 py-1"
-            value={sceneId ?? ""}
-            onChange={(e) => setSceneId(e.target.value)}
-            data-testid="scene-select"
-          >
+          <select className="rounded bg-neutral-800 px-2 py-1" value={sceneId ?? ""} onChange={(e) => changeScene(e.target.value)} data-testid="scene-select">
             {bookScenes.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.id}
@@ -217,10 +387,24 @@ export default function Atelier() {
         >
           {errors} erreur(s), {warnings} avertissement(s)
         </button>
-        <span className="ml-auto flex items-center gap-2 text-xs text-neutral-400">
+        <div className="ml-auto flex items-center gap-3">
+          {editable && (
+            <span className={`text-xs ${dirty ? "text-amber-300" : "text-neutral-500"}`} data-testid="dirty">
+              {dirty ? "● modifié, non enregistré" : scene?.edit === null ? "edit.json absent" : "enregistré"}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => void save()}
+            disabled={!canSave}
+            title="Enregistrer scenes/<scène>.edit.json (Ctrl+S)"
+            className="rounded bg-sky-700 px-3 py-1 text-sm font-semibold hover:bg-sky-600 disabled:bg-neutral-800 disabled:text-neutral-500"
+            data-testid="save"
+          >
+            {saving ? "Enregistrement…" : "Enregistrer"}
+          </button>
           <span className={`inline-block h-2 w-2 rounded-full ${live ? "bg-emerald-500" : "bg-red-500"}`} title={live ? "surveillance active" : "serveur déconnecté"} />
-          lecture seule (A2)
-        </span>
+        </div>
       </header>
 
       <main className="flex min-h-0 flex-1">
@@ -228,11 +412,11 @@ export default function Atelier() {
         <div className="relative min-w-0 flex-1 overflow-hidden bg-black" style={{ transform: "translateZ(0)" }} data-testid="reader-area">
           {bookError && <Centered>Livre illisible : {bookError}</Centered>}
           {sceneError && <Centered>{sceneError}</Centered>}
-          {!bookError && !sceneError && scene && !reader && <Centered>{scene.glb} illisible : {scene.diagnostic.error}</Centered>}
+          {!bookError && !sceneError && shown && !reader && <Centered>{shown.glb} illisible : {shown.diagnostic.error}</Centered>}
           {reader && (
             <>
-              <WebDioramaLoader key={readerKey} scene={reader.reader} embedded onEngineReady={onEngineReady} />
-              {(reader.diagnosticOnly || scene?.editIgnored) && (
+              <WebDioramaLoader key={readerKey} scene={reader.reader} embedded onEngineReady={onEngineReady} lang={lang} onLangChange={changeLang} />
+              {(reader.diagnosticOnly || shown?.editIgnored) && (
                 <p className="absolute left-1/2 top-2 z-[60] -translate-x-1/2 rounded bg-amber-900/90 px-3 py-1 text-xs text-amber-100" data-testid="reader-notice">
                   {reader.diagnosticOnly
                     ? "Couche 3D inutilisable : diagnostic seul (voir Rapport)"
@@ -244,26 +428,70 @@ export default function Atelier() {
         </div>
 
         <aside className="flex w-[30rem] max-w-[45%] flex-col border-l border-neutral-800">
-          <nav className="flex border-b border-neutral-800 text-sm">
-            {(["rapport", "diagnostic"] as const).map((t) => (
+          <nav className="flex flex-wrap border-b border-neutral-800 text-sm">
+            {TABS.map((t) => (
               <button
-                key={t}
+                key={t.id}
                 type="button"
-                onClick={() => setTab(t)}
-                className={`flex-1 px-3 py-2 capitalize ${tab === t ? "bg-neutral-800 font-semibold" : "hover:bg-neutral-900"}`}
-                data-tab={t}
+                onClick={() => setTab(t.id)}
+                className={`flex-1 px-2 py-2 ${tab === t.id ? "bg-neutral-800 font-semibold" : "hover:bg-neutral-900"}`}
+                data-tab={t.id}
               >
-                {t === "rapport" ? "Rapport" : "Diagnostic"}
+                {t.label}
               </button>
             ))}
           </nav>
+          {(saveError || diskChanged || (scene?.editIgnored && editable)) && (
+            <div className="flex flex-col gap-2 border-b border-neutral-800 px-4 py-2 text-xs">
+              {saveError && (
+                <div className="rounded bg-red-950 px-3 py-2 text-red-200" data-testid="save-error">
+                  <p className="font-semibold">{saveError.error}</p>
+                  {saveError.messages.map((m, i) => (
+                    <p key={i} className="font-mono">
+                      {m}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {diskChanged && (
+                <div className="rounded bg-amber-950 px-3 py-2 text-amber-200">
+                  edit.json a été modifié hors de l&apos;atelier ; ta saisie non enregistrée est gardée (Enregistrer l&apos;écrasera).{" "}
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => {
+                      if (!scene || !window.confirm("Abandonner la saisie et reprendre edit.json du disque ?")) return;
+                      setDiskChanged(false);
+                      dirtyRef.current = false;
+                      setFormState(formFromEdit(scene.edit));
+                    }}
+                  >
+                    Reprendre le fichier du disque
+                  </button>
+                </div>
+              )}
+              {scene?.editIgnored && editable && (
+                <p className="rounded bg-amber-950 px-3 py-2 text-amber-200">
+                  edit.json actuel refusé par son schéma (voir Rapport) : le formulaire reprend ce qui est lisible ; Enregistrer réécrit le fichier depuis le formulaire.
+                </p>
+              )}
+            </div>
+          )}
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            {book && tab === "rapport" && <ReportTab book={book} scene={scene} />}
+            {tab === "scene" && editTab(form && <SceneTab form={form} setForm={setForm} assets={assets} onShowLoader={() => setReload((r) => r + 1)} />)}
+            {tab === "actions" && editTab(form && <ActionsTab form={form} setForm={setForm} glbActions={glbActions} assets={assets} />)}
+            {tab === "ambiance" && editTab(form && <AmbianceTab form={form} setForm={setForm} assets={assets} />)}
+            {tab === "quiz" && editTab(form && <QuizTab form={form} setForm={setForm} />)}
+            {tab === "credits" && editTab(form && <CreditsTab form={form} setForm={setForm} used={used} modelCredits={modelCredits} />)}
+            {book && tab === "rapport" && (
+              <ReportTab report={report} summary={summary} scene={shown} incomplete={editable ? incomplete : []} previewing={!!activePreview} linkOf={linkOf} onGoto={goto} />
+            )}
             {tab === "diagnostic" && (scene ? <DiagnosticTab key={readerKey} scene={scene} engine={engine} /> : <p className="text-sm text-neutral-400">…</p>)}
           </div>
           {lastChange && (
             <p className="border-t border-neutral-800 px-4 py-2 text-xs text-neutral-400" data-testid="last-change">
-              Dernière modification : {lastChange}
+              Dernière modification : {new Date(lastChange.at).toLocaleTimeString("fr-FR")} : {lastChange.files.join(", ")}
+              {lastChange.byAtelier ? " (enregistré par l'atelier)" : ""}
             </p>
           )}
         </aside>

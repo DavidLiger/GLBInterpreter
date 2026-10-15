@@ -66,10 +66,10 @@ Les outils de développement (analyse de scène, QR, spritesheets,
 réglages de post-processing) n'existent qu'en `npm run dev`. En développement, l'écran « Installer le livre » est
 contourné (pas de `book.json` ni de service worker) : l'installation se teste dans le dossier exporté (voir plus bas).
 
-## Atelier de configuration (piste A, A2 : lecture seule)
+## Atelier de configuration (piste A, A2 et A3)
 
 ```bash
-npm run atelier -- --source books/test-dino            # http://127.0.0.1:4100/atelier/, ouvert dans le navigateur
+npm run atelier -- --source books/test-dino            # http://127.0.0.1:4100/atelier/, ouvert si aucun onglet ne se reconnecte
 npm run atelier -- --source <dossier> --port 4300 --no-open
 ```
 
@@ -80,19 +80,26 @@ dans le livre publié. La page (`src/app/atelier/page.atelier.tsx`, code dans `s
 l'extension `atelier.tsx` (`next.config.ts`) ; le build échoue si un fichier de `out/` contient du code de l'atelier.
 
 - Barre du haut : livre, scène (ordre de `book.json` ; les GLB de `scenes/` absents de `book.json` sont ouverts en diagnostic
-  seul), langue d'aperçu FR/EN/ES.
+  seul), langue d'aperçu FR/EN/ES (synchronisée avec le sélecteur de l'écran de chargement du lecteur), « modifié, non
+  enregistré », **Enregistrer** (et Ctrl+S) ; pas d'enregistrement automatique.
+- Onglets Scène (nom, image de chargement), Actions (libellé, icône, son par action du GLB ; orphelins à rattacher ou
+  supprimer), Ambiance, Quiz, Crédits (état par son et image, V-10 ; `src_*` en lecture seule) : seuls les champs complets
+  sont enregistrés ; un champ commencé mais incomplet (traduction manquante, quiz ou crédit inachevé) reste dans la page et est
+  listé en tête du Rapport.
 - Centre : le lecteur réel (`WebDioramaLoader`, prop `embedded`) sur l'objet fusionné `draft` (`mergeLayers`, A1) : libellé
   manquant remplacé par l'identifiant de l'action ; `edit.json` refusé par son schéma = aperçu avec la couche 3D seule ; GLB sans
   `GLBI_ROOT` (ou couche 3D inutilisable) = scène affichée sans module, pour le diagnostic.
 - Rapport : erreurs et avertissements du livre entier, par origine (GLB, `edit.json`, fusion, contrôles du build), avec les
-  mêmes contrôles et les mêmes textes que `npm run book:check` (code partagé : `scripts/book-check.ts`).
+  mêmes contrôles et les mêmes textes que `npm run book:check` (code partagé : `scripts/book-check.ts`) ; recalculé avec la
+  saisie non enregistrée ; une ligne sur la couche éditoriale de la scène affichée mène au champ concerné.
 - Diagnostic : poids, générateur, extensions, `GLBI_ROOT` et `glbi_version`, clips (durée, pistes, déclarés ou non) avec
   lecture libre (boucle, vitesse 0 à 2×, mode boutons suspendu), skins et nombre d'os, nœuds porteurs d'extras, crédits `src_*`.
 - Réexport depuis Blender : le dossier source est relu toutes les 500 ms ; un fichier modifié est pris en compte quand il n'a
   plus bougé pendant deux relevés (un GLB, quand son en-tête annonce sa taille : écriture terminée) ; le rapport est recalculé
-  et le lecteur remonté si la scène affichée dépend du fichier.
+  et le lecteur remonté si la scène affichée dépend du fichier ; la saisie non enregistrée est gardée.
 
-Lecture seule en A2 : aucun fichier n'est écrit (l'enregistrement de `scenes/<id>.edit.json` arrive en A3). `next dev` de
+Seule écriture : `scenes/<id>.edit.json` d'une scène de `book.json`, validé par `editLayerSchema`, écrit au format de
+`spec-atelier-glbi.md` §4 (fichier temporaire puis renommage) ; jamais le GLB, jamais hors du dossier source. `next dev` de
 l'atelier travaille dans `.next-atelier/` : `npm run dev` peut tourner en même temps ; un seul atelier à la fois par copie du
 repo. La fixture `test-street` n'est pas un livre v1 : l'atelier ne l'ouvre pas.
 

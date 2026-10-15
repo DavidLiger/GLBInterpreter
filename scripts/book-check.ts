@@ -149,8 +149,14 @@ function mergeOrigin(message: string, id: string): ReportOrigin {
 /**
  * Lit et contrôle une scène du dossier source.
  * Renvoie `null` si la scène n'est pas utilisable (erreurs dans `report`).
+ * `editOverride` (atelier, A3) : couche éditoriale saisie et non enregistrée, contrôlée à la place de `scenes/<id>.edit.json`.
  */
-export async function readScene(sourceDir: string, id: string, report: Report): Promise<SceneResult | null> {
+export async function readScene(
+  sourceDir: string,
+  id: string,
+  report: Report,
+  editOverride?: { value: unknown },
+): Promise<SceneResult | null> {
   const label = `scène « ${id} »`;
   const err = (m: string, origin: ReportOrigin = 'build') => report.error(m, origin, id);
   const warn = (m: string, origin: ReportOrigin = 'build') => report.warning(m, origin, id);
@@ -198,7 +204,9 @@ export async function readScene(sourceDir: string, id: string, report: Report): 
 
   // --- Couche éditoriale : scenes/<id>.edit.json (absente : erreur donnée par la fusion) ---
   let rawEdit: unknown;
-  if (fs.existsSync(editFile)) {
+  if (editOverride) {
+    rawEdit = editOverride.value;
+  } else if (fs.existsSync(editFile)) {
     rawEdit = readJson(editFile, editRel, (m) => err(m, 'edit'));
     if (rawEdit === undefined) return null;
     if (rawEdit === null || typeof rawEdit !== 'object' || Array.isArray(rawEdit)) {
@@ -331,11 +339,14 @@ export interface BookCheck {
   assets: Set<string>;
 }
 
+/** Lecture d'une scène par `checkBookSource` : `readScene` par défaut ; l'atelier (A3) rejoue ses résultats en cache. */
+export type ReadSceneFn = (sourceDir: string, id: string, report: Report) => Promise<SceneResult | null>;
+
 /**
  * Contrôles d'un dossier source de livre, dans l'ordre de `build-book` : book.json, scènes, V-03, icônes, fichiers non
  * référencés. Renvoie `null` si book.json est absent, illisible ou invalide (contrôles arrêtés, comme `build-book`).
  */
-export async function checkBookSource(sourceDir: string, report: Report): Promise<BookCheck | null> {
+export async function checkBookSource(sourceDir: string, report: Report, readSceneFn: ReadSceneFn = readScene): Promise<BookCheck | null> {
   const err = (m: string) => report.error(m);
   const warn = (m: string) => report.warning(m);
   if (!fs.existsSync(path.join(sourceDir, 'book.json'))) {
@@ -356,7 +367,7 @@ export async function checkBookSource(sourceDir: string, report: Report): Promis
   // --- Scènes ---
   const scenes: SceneResult[] = [];
   for (const id of book.scenes) {
-    const r = await readScene(sourceDir, id, report);
+    const r = await readSceneFn(sourceDir, id, report);
     if (r) scenes.push(r);
   }
 

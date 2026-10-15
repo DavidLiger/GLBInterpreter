@@ -41,6 +41,15 @@ export interface BookResponse {
   summary: string;
   /** Compteur de relectures (change à chaque modification du dossier source). */
   generation: number;
+  /** Dernière modification du dossier source vue par le serveur depuis son lancement (A3). */
+  lastChange: LastChange | null;
+}
+
+/** Modification du dossier source : date (ms), fichiers, écriture faite par l'atelier lui-même ou non. */
+export interface LastChange {
+  at: number;
+  files: string[];
+  byAtelier: boolean;
 }
 
 export interface ClipInfo {
@@ -85,7 +94,7 @@ export interface GlbDiagnostic {
   error: string | null;
 }
 
-/** `GET /atelier/__api/scene/<id>` */
+/** `GET /atelier/__api/scene/<id>` ; aussi `scene` de l'aperçu (`POST …/preview`), calculé avec la saisie. */
 export interface SceneResponse {
   id: string;
   inBook: boolean;
@@ -116,4 +125,21 @@ export interface ChangeEvent {
   /** Fichiers ajoutés, modifiés ou supprimés (relatifs au dossier source). */
   files: string[];
   generation: number;
+  /** Écriture de `edit.json` par l'atelier (Enregistrer), pas une modification extérieure. */
+  byAtelier: boolean;
 }
+
+/**
+ * `POST /atelier/__api/scene/<id>/preview` (A3) : corps = couche éditoriale saisie (non enregistrée). Rapport du livre et
+ * scène (fusion `draft`) calculés avec cette couche à la place de `scenes/<id>.edit.json`.
+ */
+export interface PreviewResponse {
+  scene: SceneResponse;
+  report: ReportLine[];
+  summary: string;
+}
+
+/** `PUT /atelier/__api/scene/<id>/edit` (A3) : corps = couche éditoriale à écrire. */
+export type SaveResponse =
+  | { ok: true; unchanged: boolean; generation: number }
+  | { ok: false; error: string; messages: string[] };

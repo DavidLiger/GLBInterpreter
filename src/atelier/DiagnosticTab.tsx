@@ -114,7 +114,7 @@ export default function DiagnosticTab({ scene, engine }: { scene: SceneResponse;
             <span className="w-10 tabular-nums">{speed.toFixed(2)}×</span>
           </label>
           <button type="button" onClick={stop} disabled={!playing} className="rounded bg-neutral-700 px-2 py-1 disabled:opacity-40">
-            Arrêter (retour au mode boutons)
+            {engine?.buttons ? "Arrêter (retour au mode boutons)" : "Arrêter"}
           </button>
         </div>
         {!engine && <p className="mb-2 text-xs text-neutral-400">Lecture libre disponible une fois la scène chargée.</p>}
