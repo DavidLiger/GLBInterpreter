@@ -167,7 +167,9 @@ test('reprise après coupure : les parties déjà vérifiées ne sont pas retél
   await page.getByRole('button', { name: 'Reprendre' }).click();
   const seen: number[] = [];
   for (let i = 0; i < 10 && (await installHeading(page).isVisible()); i++) {
-    const m = /(\d+) %/.exec((await page.getByText(/Téléchargement… \d+ %/).textContent().catch(() => '')) ?? '');
+    // Délai court : le texte disparaît quand le téléchargement repris se termine entre deux lectures (point de clôture
+    // d'Î11, corrigé en Î12) ; sans délai, la lecture attendait jusqu'à la fin du test.
+    const m = /(\d+) %/.exec((await page.getByText(/Téléchargement… \d+ %/).textContent({ timeout: 100 }).catch(() => '')) ?? '');
     if (m) seen.push(Number(m[1]));
     await page.waitForTimeout(30);
   }

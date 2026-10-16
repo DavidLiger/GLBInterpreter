@@ -204,9 +204,9 @@ const escapeHtml = (s: string) =>
 // Sorties
 // ---------------------------------------------------------------------------------------------------------
 
-function stubHtml(sceneId: string, title: string): string {
+function stubHtml(sceneId: string, title: string, lang: string): string {
   return `<!doctype html>
-<html lang="fr"><head><meta charset="utf-8"><meta name="robots" content="noindex">
+<html lang="${escapeHtml(lang)}"><head><meta charset="utf-8"><meta name="robots" content="noindex">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <script>location.replace(location.pathname.replace(/s\\/[^/]+\\/?(index\\.html)?$/, '') + '#/s/${sceneId}');</script>
@@ -216,7 +216,7 @@ function stubHtml(sceneId: string, title: string): string {
 }
 
 /** Stubs `s/<scène>/index.html` (D-8.4) : redirection vers `<racine du dossier>#/s/<scène>`, sous `/` comme sous `/<dépôt>/`. */
-function writeStubs(outDir: string, sceneIds: readonly string[], title: string): void {
+function writeStubs(outDir: string, sceneIds: readonly string[], title: string, lang: string): void {
   for (const id of sceneIds) {
     if (!SCENE_ID_PATTERN.test(id)) {
       err(`identifiant de scène invalide « ${id} »`);
@@ -224,7 +224,31 @@ function writeStubs(outDir: string, sceneIds: readonly string[], title: string):
     }
     const dir = path.join(outDir, 's', id);
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'index.html'), stubHtml(id, title));
+    fs.writeFileSync(path.join(dir, 'index.html'), stubHtml(id, title, lang));
+  }
+}
+
+/**
+ * Î12 (S-20) : `index.html` et `404.html` dans la langue et au titre du livre. `<html lang>` vient de `layout.tsx`
+ * (`fr`) : il prend la première langue du livre ; `<title>` (absent des métadonnées Next) est ajouté. Le lecteur les
+ * met ensuite à jour dans la langue choisie.
+ */
+function localizeShell(outDir: string, title: string, lang: string): void {
+  for (const name of ['index.html', '404.html']) {
+    const file = path.join(outDir, name);
+    if (!fs.existsSync(file)) {
+      if (name === 'index.html') err('index.html absent : langue et titre non posés');
+      continue;
+    }
+    let html = fs.readFileSync(file, 'utf8');
+    if (!/<html lang="[^"]*"/.test(html) || !html.includes('</head>')) {
+      err(`${name} : <html lang> ou </head> introuvable, langue et titre non posés`);
+      continue;
+    }
+    html = html.replace(/<html lang="[^"]*"/, `<html lang="${escapeHtml(lang)}"`);
+    html = html.replace(/<title>[^<]*<\/title>/g, '');
+    html = html.replace('</head>', `<title>${escapeHtml(title)}</title></head>`);
+    fs.writeFileSync(file, html);
   }
 }
 
@@ -580,7 +604,8 @@ async function buildFixture(opts: Options): Promise<void> {
   await optimizeFixtureGlbs(outDir, opts.textures);
   writeWebManifest(outDir, 'GLBInterpreter', 'fr', await writeIcons(path.join(ROOT, 'public/icon.png'), null, outDir, false));
   injectAppTitle(outDir, 'GLBInterpreter');
-  writeStubs(outDir, scenes as string[], 'GLBInterpreter');
+  localizeShell(outDir, 'GLBInterpreter', 'fr');
+  writeStubs(outDir, scenes as string[], 'GLBInterpreter', 'fr');
   const files = collectFiles(outDir, opts, false);
   if (errors.length) fail();
   fs.writeFileSync(path.join(outDir, 'book.json'), `${JSON.stringify({ bookId, scenes, fixture: true, files }, null, 2)}\n`);
@@ -635,8 +660,9 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
   const icons = await writeIcons(path.join(sourceDir, 'icon.png'), fs.existsSync(maskableSource) ? maskableSource : null, outDir, true);
   writeWebManifest(outDir, book.title[book.languages[0]], book.languages[0], icons);
   injectAppTitle(outDir, book.title[book.languages[0]]);
+  localizeShell(outDir, book.title[book.languages[0]], book.languages[0]);
   injectOg(outDir, book);
-  writeStubs(outDir, book.scenes, book.title[book.languages[0]]);
+  writeStubs(outDir, book.scenes, book.title[book.languages[0]], book.languages[0]);
   if (errors.length) fail();
 
   const files = collectFiles(outDir, opts);

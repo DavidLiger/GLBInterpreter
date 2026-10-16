@@ -62,10 +62,16 @@ export function isInstalledApp(): boolean {
 /**
  * Ouverte en `display-mode: fullscreen` par le manifest du livre : l'API Fullscreen est alors inutile. Le plein écran
  * demandé par l'API (bouton du lecteur) donne aussi `display-mode: fullscreen` dans Chrome : il est exclu ici.
- * Limite : le plein écran F11 d'un navigateur de bureau n'est pas distingué de l'app installée.
+ *
+ * Î12 : sur ordinateur, `display-mode: fullscreen` vient du plein écran F11 du navigateur, pas du manifest (Chrome de
+ * bureau ouvre une application installée en `standalone` même si le manifest demande `fullscreen`) : seul un appareil
+ * mobile (Android, ou agent utilisateur `Mobile`) est considéré comme ouvert depuis son icône en plein écran. Le bouton
+ * plein écran du lecteur reste donc proposé sous F11, et l'écran d'installation n'y croit plus le livre installé.
+ * iOS ignore `display: fullscreen` (D-8.8, Î16).
  */
 export function isDisplayFullscreen(): boolean {
   if (typeof window === 'undefined' || apiFullscreen()) return false;
+  if (!/Android|Mobile/i.test(navigator.userAgent)) return false;
   return !!window.matchMedia?.('(display-mode: fullscreen)').matches;
 }
 

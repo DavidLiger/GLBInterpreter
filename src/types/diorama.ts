@@ -239,11 +239,31 @@ export type ButtonsModeConfig = {
   actions: ButtonsModeAction[];
 };
 
+/** Une ligne de crédit (Î12) : œuvre, auteur, licence, source (adresse ou mention). */
+export interface CreditEntry {
+  title: string;
+  author?: string;
+  license?: string;
+  source?: string;
+}
+
+/**
+ * Crédits affichés par l'`InfoModal` (Î12, U-17 à U-19). Scène v1 : modèles (`build.modelCredits`, propriétés `src_*`
+ * du GLB), sons et images (`modules.credits.assets`), mention légale et année du livre (`book.json` `legal`).
+ * `music`, `licenses` et `project` (texte simple) restent pour la fixture.
+ */
 export interface DioramaCredits {
   description?: LocalizedText; // Texte d'intro ou aide
-  music?: { title: string; author?: string; source?: string }[];
-  sounds?: { title: string; source?: string }[];
+  models?: CreditEntry[];
+  music?: CreditEntry[];
+  sounds?: CreditEntry[];
+  images?: CreditEntry[];
+  /** Autres fichiers crédités (ni son ni image). */
+  other?: CreditEntry[];
   licenses?: string[]; // CC0, CC-BY, etc.
   year?: string;
-  project?: string;
+  /** Titre du livre (scène v1, traduit) ou du projet (fixture). */
+  project?: string | LocalizedText;
+  /** Mention légale du livre (`book.json` `legal.text`). */
+  legal?: LocalizedText;
 }

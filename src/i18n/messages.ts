@@ -1,0 +1,468 @@
+// Module i18n unique du lecteur (Î12, S-15, S-40, S-41, U-04) : toutes les chaînes d'interface, en français, anglais et
+// espagnol (livre 1 en 3 langues, décision du 07/10). Les textes du livre (noms de scènes, libellés des boutons
+// d'animation, quiz, crédits) ne sont pas ici : ils viennent de la couche éditoriale (`scenes/<id>.json`, `book.json`).
+//
+// `fr` fixe la forme ; `en` et `es` sont typés par elle : une clé manquante ou en trop est une erreur de compilation.
+// La langue choisie est enregistrée sous `LANG_STORAGE_KEY` (clé reprise par l'atelier, à ne pas renommer).
+
+export type Lang = "fr" | "en" | "es";
+export const LANGS: readonly Lang[] = ["fr", "en", "es"];
+export const LANG_STORAGE_KEY = "webdiorama-lang";
+
+/** Nom de chaque langue dans sa propre langue (sélecteur de langue). */
+export const LANG_NAMES: Record<Lang, string> = { fr: "Français", en: "English", es: "Español" };
+
+/** Locale de mise en forme des dates. */
+export const LOCALES: Record<Lang, string> = { fr: "fr-FR", en: "en-GB", es: "es-ES" };
+
+export const isLang = (v: unknown): v is Lang => typeof v === "string" && (LANGS as readonly string[]).includes(v);
+
+/** Langue enregistrée, sinon celle du navigateur, sinon le français. */
+export function detectLanguage(): Lang {
+  if (typeof window === "undefined") return "fr";
+  try {
+    const saved = localStorage.getItem(LANG_STORAGE_KEY);
+    if (isLang(saved)) return saved;
+  } catch {
+    /* stockage indisponible : langue du navigateur */
+  }
+  const nav = (navigator.languages?.length ? navigator.languages : [navigator.language]).map((l) => l?.split("-")[0]);
+  return nav.find(isLang) ?? "fr";
+}
+
+const fr = {
+  common: {
+    close: "Fermer",
+    retry: "Réessayer",
+    reload: "Recharger",
+    backHome: "Retour à l'accueil",
+  },
+  lang: {
+    label: "Langue",
+  },
+  home: {
+    subtitle: "Choisissez une scène.",
+  },
+  unknownScene: {
+    title: "Scène introuvable",
+    message: "Ce code ne correspond à aucune scène de ce livre.",
+  },
+  notFound: {
+    title: "Page introuvable",
+    message: "Cette adresse ne correspond à aucune page du livre. Scannez à nouveau le QR code de la page.",
+  },
+  appError: {
+    title: "Une erreur est survenue",
+    message: "L'application a rencontré un problème inattendu.",
+  },
+  loader: {
+    start: "Cliquer pour commencer",
+    startMobile: "Toucher pour commencer",
+    loading: "Chargement de la scène",
+  },
+  actions: {
+    group: "Animations",
+  },
+  rotate: {
+    hint: "Tourner le téléphone pour agrandir la scène",
+  },
+  fullscreen: {
+    enter: "Plein écran",
+    exit: "Quitter le plein écran",
+  },
+  info: {
+    title: "Informations",
+    rotate: "Tourner la scène",
+    zoom: "Zoomer",
+    poi: "Cliquer sur les icônes des lieux",
+    actions: "Lancer une animation avec les boutons du bas",
+    sound: "Régler le volume, couper le son",
+    subtitles: "Afficher / masquer les textes",
+    rotateMobile: "(glisser avec un doigt)",
+    rotateDesktop: "(cliquer-glisser avec la souris)",
+    zoomMobile: "(pincer avec deux doigts)",
+    zoomDesktop: "(molette de la souris)",
+    recommendedBrowsers: "Navigateur recommandé : Chrome (Android et ordinateur).",
+    credits: "Crédits",
+    models: "Modèles 3D",
+    music: "Musiques",
+    sounds: "Sons",
+    images: "Images",
+    licenses: "Licences :",
+    license: "licence",
+  },
+  install: {
+    checking: "Vérification du livre…",
+    title: "Installer le livre",
+    updateTitle: "Mise à jour du livre",
+    repairTitle: "Compléter le livre",
+    intro: "Toutes les scènes du livre sont téléchargées une seule fois sur cet appareil. Ensuite, le livre fonctionne sans connexion.",
+    updateIntro: "Une nouvelle version du livre est disponible. Seuls les fichiers modifiés sont téléchargés.",
+    repairIntro: "Des fichiers du livre manquent sur cet appareil. Ils doivent être retéléchargés.",
+    bookSize: "Taille du livre :",
+    toDownload: "À télécharger :",
+    available: "Espace disponible :",
+    lowSpace: "L'espace disponible semble insuffisant. Libérez de la place si le téléchargement échoue.",
+    wifi: "Conseil : utilisez le Wi-Fi et laissez l'application ouverte pendant le téléchargement.",
+    install: "Installer",
+    update: "Mettre à jour",
+    keepCurrent: "Continuer avec la version installée",
+    downloading: "Téléchargement…",
+    files: "fichiers",
+    pause: "Mettre en pause",
+    resume: "Reprendre",
+    retry: "Réessayer",
+    paused: "Téléchargement en pause. Ce qui est déjà téléchargé est conservé.",
+    errorNetwork: "La connexion a été interrompue. Ce qui est déjà téléchargé est conservé.",
+    errorIntegrity: "Un fichier reçu est incorrect. Réessayez ; si le problème continue, le livre en ligne est peut-être en cours de mise à jour.",
+    errorQuota: "Espace de stockage insuffisant sur l'appareil. Libérez de la place puis reprenez.",
+    errorOther: "Le téléchargement a échoué.",
+    offlineTitle: "Connexion requise",
+    offline: "Le livre n'est pas encore installé sur cet appareil. Connectez-vous à Internet pour l'installer.",
+    unsupportedTitle: "Installation impossible",
+    unsupported: "Ce navigateur ne permet pas d'installer le livre (navigation privée ou adresse non sécurisée). Ouvrez le lien dans Safari ou Chrome.",
+    invalidTitle: "Livre illisible",
+    interrupted: "Le téléchargement précédent s'est arrêté pendant l'étape :",
+    newVersion: "Une nouvelle version de l'application est prête.",
+    reload: "Recharger",
+    megabytes: "Mo",
+    iosTitle: "Version iPhone et iPad à venir",
+    ios: "Ce livre fonctionne pour l'instant sur les téléphones et tablettes Android (avec Chrome) et sur ordinateur. La version pour iPhone et iPad est en préparation.",
+    inAppTitle: "Ouvrez le livre dans Chrome",
+    inApp: "Le livre ne peut pas être installé dans le navigateur de {app}. Ouvrez ce lien dans Chrome : bouton ci-dessous, ou menu ⋮ puis « Ouvrir dans le navigateur ».",
+    inAppOther: "Le livre ne peut pas être installé dans le navigateur de {app}. Copiez le lien et ouvrez-le dans Chrome ou dans le navigateur de votre ordinateur.",
+    openInChrome: "Ouvrir dans Chrome",
+    copyLink: "Copier le lien",
+    linkCopied: "Lien copié",
+    firefoxDesktop: "Firefox ne permet pas d'ajouter le livre comme application : il s'ouvrira dans cet onglet, y compris sans connexion.",
+    addToHome: "Ajouter à l'écran d'accueil",
+    addToHomeHint: "Le livre s'ouvrira alors en plein écran depuis son icône, comme une application.",
+    addedToHome: "Le livre est ajouté à l'écran d'accueil.",
+    doneTitle: "Livre installé",
+    done: "Toutes les scènes sont sur cet appareil.",
+    openBook: "Ouvrir le livre",
+  },
+  webglErrorScreen: {
+    title: "Oups, tout le monde s'est endormi !",
+    technicalMessageWebglError: "(Le contexte 3D a fait une sieste)",
+    technicalMessageWebglNotError: "(Le navigateur n'a pas voulu se réveiller)",
+    boutonTitle: "Allez, debout là-dedans !",
+    boutonSubTitle: "Relancer l'application",
+    technicalNote: "💡 Si le problème persiste, fermez complètement l'onglet, puis le navigateur, et rouvrez le lien.",
+  },
+  volume: {
+    button: "Volume",
+    panel: "Réglage du volume",
+    slider: "Volume",
+    mute: "Couper le son",
+    unmute: "Remettre le son",
+    muted: "son coupé",
+  },
+  restart: {
+    title: "Scène en pause",
+    message: "La scène a été mise en pause pour économiser la mémoire.",
+    button: "⚡ Relancer la scène",
+  },
+  loadError: {
+    title: "Impossible de charger la scène",
+    message: "Vérifiez votre connexion puis réessayez. Si le problème persiste, fermez l'onglet et rouvrez le lien.",
+    button: "Recharger la scène",
+  },
+  // Réservé au quiz (Î13) : chaînes fixées ici pour que le livre 1 les ait dans les 3 langues.
+  quiz: {
+    tryAgain: "Essaie encore !",
+    skip: "Passer",
+  },
+};
+
+export type Messages = typeof fr;
+
+const en: Messages = {
+  common: {
+    close: "Close",
+    retry: "Try again",
+    reload: "Reload",
+    backHome: "Back to the home page",
+  },
+  lang: {
+    label: "Language",
+  },
+  home: {
+    subtitle: "Choose a scene.",
+  },
+  unknownScene: {
+    title: "Scene not found",
+    message: "This code does not match any scene in this book.",
+  },
+  notFound: {
+    title: "Page not found",
+    message: "This address does not match any page of the book. Scan the page's QR code again.",
+  },
+  appError: {
+    title: "Something went wrong",
+    message: "The app ran into an unexpected problem.",
+  },
+  loader: {
+    start: "Click to start",
+    startMobile: "Tap to start",
+    loading: "Loading the scene",
+  },
+  actions: {
+    group: "Animations",
+  },
+  rotate: {
+    hint: "Turn your phone to make the scene bigger",
+  },
+  fullscreen: {
+    enter: "Full screen",
+    exit: "Exit full screen",
+  },
+  info: {
+    title: "Information",
+    rotate: "Rotate the scene",
+    zoom: "Zoom",
+    poi: "Click on the location icons",
+    actions: "Play an animation with the buttons at the bottom",
+    sound: "Set the volume, mute the sound",
+    subtitles: "Show / hide text",
+    rotateMobile: "(swipe with one finger)",
+    rotateDesktop: "(click and drag with the mouse)",
+    zoomMobile: "(pinch with two fingers)",
+    zoomDesktop: "(mouse wheel)",
+    recommendedBrowsers: "Recommended browser: Chrome (Android and computer).",
+    credits: "Credits",
+    models: "3D models",
+    music: "Music",
+    sounds: "Sounds",
+    images: "Images",
+    licenses: "Licenses:",
+    license: "license",
+  },
+  install: {
+    checking: "Checking the book…",
+    title: "Install the book",
+    updateTitle: "Book update",
+    repairTitle: "Complete the book",
+    intro: "All the book's scenes are downloaded once to this device. After that, the book works offline.",
+    updateIntro: "A new version of the book is available. Only changed files are downloaded.",
+    repairIntro: "Some of the book's files are missing on this device. They must be downloaded again.",
+    bookSize: "Book size:",
+    toDownload: "To download:",
+    available: "Available space:",
+    lowSpace: "Available space looks too small. Free up some space if the download fails.",
+    wifi: "Tip: use Wi-Fi and keep the app open during the download.",
+    install: "Install",
+    update: "Update",
+    keepCurrent: "Continue with the installed version",
+    downloading: "Downloading…",
+    files: "files",
+    pause: "Pause",
+    resume: "Resume",
+    retry: "Try again",
+    paused: "Download paused. What has already been downloaded is kept.",
+    errorNetwork: "The connection was interrupted. What has already been downloaded is kept.",
+    errorIntegrity: "A received file is incorrect. Try again; if it keeps happening, the online book may be being updated.",
+    errorQuota: "Not enough storage space on the device. Free up some space, then resume.",
+    errorOther: "The download failed.",
+    offlineTitle: "Connection required",
+    offline: "The book is not installed on this device yet. Connect to the Internet to install it.",
+    unsupportedTitle: "Installation not possible",
+    unsupported: "This browser cannot install the book (private browsing or insecure address). Open the link in Safari or Chrome.",
+    invalidTitle: "Unreadable book",
+    interrupted: "The previous download stopped during this step:",
+    newVersion: "A new version of the app is ready.",
+    reload: "Reload",
+    megabytes: "MB",
+    iosTitle: "iPhone and iPad version coming soon",
+    ios: "For now, this book works on Android phones and tablets (with Chrome) and on computers. The iPhone and iPad version is on its way.",
+    inAppTitle: "Open the book in Chrome",
+    inApp: "The book cannot be installed in the {app} browser. Open this link in Chrome: use the button below, or the ⋮ menu then “Open in browser”.",
+    inAppOther: "The book cannot be installed in the {app} browser. Copy the link and open it in Chrome or in your computer's browser.",
+    openInChrome: "Open in Chrome",
+    copyLink: "Copy link",
+    linkCopied: "Link copied",
+    firefoxDesktop: "Firefox cannot add the book as an app: it will open in this tab, offline too.",
+    addToHome: "Add to home screen",
+    addToHomeHint: "The book will then open full screen from its icon, like an app.",
+    addedToHome: "The book has been added to the home screen.",
+    doneTitle: "Book installed",
+    done: "All the scenes are on this device.",
+    openBook: "Open the book",
+  },
+  webglErrorScreen: {
+    title: "Oops, everyone has fallen asleep!",
+    technicalMessageWebglError: "(The 3D context took a nap)",
+    technicalMessageWebglNotError: "(The browser did not want to wake up)",
+    boutonTitle: "Come on, wake up in there!",
+    boutonSubTitle: "Restart the app",
+    technicalNote: "💡 If the problem persists, close the tab completely, then the browser, and reopen the link.",
+  },
+  volume: {
+    button: "Volume",
+    panel: "Volume settings",
+    slider: "Volume",
+    mute: "Mute",
+    unmute: "Unmute",
+    muted: "muted",
+  },
+  restart: {
+    title: "Scene on hold",
+    message: "The scene has been paused to save memory.",
+    button: "⚡ Restart the scene",
+  },
+  loadError: {
+    title: "The scene could not be loaded",
+    message: "Check your connection and try again. If the problem persists, close the tab and reopen the link.",
+    button: "Reload the scene",
+  },
+  quiz: {
+    tryAgain: "Try again!",
+    skip: "Continue",
+  },
+};
+
+const es: Messages = {
+  common: {
+    close: "Cerrar",
+    retry: "Reintentar",
+    reload: "Recargar",
+    backHome: "Volver al inicio",
+  },
+  lang: {
+    label: "Idioma",
+  },
+  home: {
+    subtitle: "Elige una escena.",
+  },
+  unknownScene: {
+    title: "Escena no encontrada",
+    message: "Este código no corresponde a ninguna escena de este libro.",
+  },
+  notFound: {
+    title: "Página no encontrada",
+    message: "Esta dirección no corresponde a ninguna página del libro. Vuelve a escanear el código QR de la página.",
+  },
+  appError: {
+    title: "Se ha producido un error",
+    message: "La aplicación ha encontrado un problema inesperado.",
+  },
+  loader: {
+    start: "Clic para comenzar",
+    startMobile: "Toca para comenzar",
+    loading: "Cargando la escena",
+  },
+  actions: {
+    group: "Animaciones",
+  },
+  rotate: {
+    hint: "Gira el teléfono para ver la escena más grande",
+  },
+  fullscreen: {
+    enter: "Pantalla completa",
+    exit: "Salir de la pantalla completa",
+  },
+  info: {
+    title: "Información",
+    rotate: "Girar la escena",
+    zoom: "Zoom",
+    poi: "Hacer clic en los iconos de los lugares",
+    actions: "Lanzar una animación con los botones de abajo",
+    sound: "Ajustar el volumen, silenciar el sonido",
+    subtitles: "Mostrar / ocultar los textos",
+    rotateMobile: "(deslizar con un dedo)",
+    rotateDesktop: "(hacer clic y arrastrar con el ratón)",
+    zoomMobile: "(pellizcar con dos dedos)",
+    zoomDesktop: "(rueda del ratón)",
+    recommendedBrowsers: "Navegador recomendado: Chrome (Android y ordenador).",
+    credits: "Créditos",
+    models: "Modelos 3D",
+    music: "Música",
+    sounds: "Sonidos",
+    images: "Imágenes",
+    licenses: "Licencias:",
+    license: "licencia",
+  },
+  install: {
+    checking: "Comprobando el libro…",
+    title: "Instalar el libro",
+    updateTitle: "Actualización del libro",
+    repairTitle: "Completar el libro",
+    intro: "Todas las escenas del libro se descargan una sola vez en este dispositivo. Después, el libro funciona sin conexión.",
+    updateIntro: "Hay una nueva versión del libro. Solo se descargan los archivos modificados.",
+    repairIntro: "Faltan archivos del libro en este dispositivo. Hay que volver a descargarlos.",
+    bookSize: "Tamaño del libro:",
+    toDownload: "Por descargar:",
+    available: "Espacio disponible:",
+    lowSpace: "El espacio disponible parece insuficiente. Libera espacio si la descarga falla.",
+    wifi: "Consejo: usa wifi y deja la aplicación abierta durante la descarga.",
+    install: "Instalar",
+    update: "Actualizar",
+    keepCurrent: "Seguir con la versión instalada",
+    downloading: "Descargando…",
+    files: "archivos",
+    pause: "Pausar",
+    resume: "Reanudar",
+    retry: "Reintentar",
+    paused: "Descarga en pausa. Lo ya descargado se conserva.",
+    errorNetwork: "Se interrumpió la conexión. Lo ya descargado se conserva.",
+    errorIntegrity: "Un archivo recibido es incorrecto. Reinténtalo; si sigue ocurriendo, puede que el libro en línea se esté actualizando.",
+    errorQuota: "No hay espacio suficiente en el dispositivo. Libera espacio y reanuda.",
+    errorOther: "La descarga ha fallado.",
+    offlineTitle: "Se necesita conexión",
+    offline: "El libro aún no está instalado en este dispositivo. Conéctate a Internet para instalarlo.",
+    unsupportedTitle: "Instalación imposible",
+    unsupported: "Este navegador no puede instalar el libro (navegación privada o dirección no segura). Abre el enlace en Safari o Chrome.",
+    invalidTitle: "Libro ilegible",
+    interrupted: "La descarga anterior se detuvo durante el paso:",
+    newVersion: "Hay una nueva versión de la aplicación lista.",
+    reload: "Recargar",
+    megabytes: "MB",
+    iosTitle: "Versión para iPhone y iPad próximamente",
+    ios: "Por ahora, este libro funciona en teléfonos y tabletas Android (con Chrome) y en ordenador. La versión para iPhone y iPad está en preparación.",
+    inAppTitle: "Abre el libro en Chrome",
+    inApp: "El libro no se puede instalar en el navegador de {app}. Abre este enlace en Chrome: con el botón de abajo, o el menú ⋮ y luego «Abrir en el navegador».",
+    inAppOther: "El libro no se puede instalar en el navegador de {app}. Copia el enlace y ábrelo en Chrome o en el navegador de tu ordenador.",
+    openInChrome: "Abrir en Chrome",
+    copyLink: "Copiar enlace",
+    linkCopied: "Enlace copiado",
+    firefoxDesktop: "Firefox no permite añadir el libro como aplicación: se abrirá en esta pestaña, también sin conexión.",
+    addToHome: "Añadir a la pantalla de inicio",
+    addToHomeHint: "El libro se abrirá a pantalla completa desde su icono, como una aplicación.",
+    addedToHome: "El libro se ha añadido a la pantalla de inicio.",
+    doneTitle: "Libro instalado",
+    done: "Todas las escenas están en este dispositivo.",
+    openBook: "Abrir el libro",
+  },
+  webglErrorScreen: {
+    title: "¡Vaya, todo el mundo se ha quedado dormido!",
+    technicalMessageWebglError: "(El contexto 3D se ha tomado un descanso)",
+    technicalMessageWebglNotError: "(El navegador no se ha querido despertar)",
+    boutonTitle: "¡Vamos, arriba!",
+    boutonSubTitle: "Reiniciar la aplicación",
+    technicalNote: "💡 Si el problema persiste, cierra completamente la pestaña, luego el navegador, y vuelve a abrir el enlace.",
+  },
+  volume: {
+    button: "Volumen",
+    panel: "Ajuste del volumen",
+    slider: "Volumen",
+    mute: "Silenciar",
+    unmute: "Activar el sonido",
+    muted: "sonido silenciado",
+  },
+  restart: {
+    title: "Escena en pausa",
+    message: "La escena se ha pausado para ahorrar memoria.",
+    button: "⚡ Reiniciar la escena",
+  },
+  loadError: {
+    title: "No se pudo cargar la escena",
+    message: "Comprueba tu conexión e inténtalo de nuevo. Si el problema persiste, cierra la pestaña y vuelve a abrir el enlace.",
+    button: "Recargar la escena",
+  },
+  quiz: {
+    tryAgain: "¡Inténtalo de nuevo!",
+    skip: "Continuar",
+  },
+};
+
+export const MESSAGES: Record<Lang, Messages> = { fr, en, es };

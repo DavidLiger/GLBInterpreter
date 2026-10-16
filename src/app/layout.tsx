@@ -7,9 +7,10 @@ import "./globals.css";
 // Chemins relatifs (D-8.4) : le dossier exporté doit fonctionner sous `/` comme sous `/<dépôt>/`.
 // Balises Apple écrites telles quelles (`other`) : `appleWebApp.capable` de Next ne produit que `mobile-web-app-capable`.
 // Fichiers et balises seulement : le parcours iOS est en Î16 (D-8.8).
+// Î12 : ni `title` ni `description` ici. Le titre est celui du livre : `<title>` posé au build dans `index.html` et
+// `404.html` (première langue du livre, scripts/build-book.ts), puis tenu à jour dans la langue choisie (BookApp). Un
+// titre de métadonnées Next serait aussi écrit dans les données de rendu et rétabli à l'hydratation.
 export const metadata: Metadata = {
-  title: 'GLBInterpreter',
-  description: 'Lecteur 3D pour livres augmentés.',
   manifest: './manifest.webmanifest',
   icons: { icon: './icon.png', apple: './apple-touch-icon.png' },
   other: {
@@ -19,8 +20,11 @@ export const metadata: Metadata = {
   },
 };
 
+// Î12 : `viewport-fit=cover` pour occuper tout l'écran sous l'encoche ; l'interface se place dans les zones sûres
+// (`env(safe-area-inset-*)`, globals.css).
 export const viewport: Viewport = {
   themeColor: '#000000',
+  viewportFit: 'cover',
 };
 
 // Police déclarée ici et non dans le CSS compilé : une URL de `public/` dans le CSS serait résolue depuis
@@ -33,7 +37,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr">
+    // `lang` et `<title>` : réécrits au build d'après la première langue et le titre du livre (scripts/build-book.ts),
+    // puis tenus à jour à l'exécution dans la langue choisie (TranslationContext, BookApp) : l'attribut diffère alors du
+    // rendu statique, d'où `suppressHydrationWarning`.
+    <html lang="fr" suppressHydrationWarning>
       <head>
         <style dangerouslySetInnerHTML={{ __html: fontFaces }} />
       </head>

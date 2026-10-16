@@ -1,11 +1,26 @@
 "use client";
 
-import React from "react";
-import { motion, AnimatePresence } from "framer-motion";
+// Fenêtre « Informations » (Î12, U-02, U-17 à U-19) : primitive `<dialog>` modale (`ui/Dialog.tsx`) : focus dans la
+// fenêtre, Échap, clic sur le fond ou bouton « Fermer » (traduit, 44 px) la ferment, focus rendu au bouton qui l'a
+// ouverte. Aide limitée aux gestes que la scène propose (scène v1 : tourner, zoomer si permis, boutons d'animation,
+// son). Crédits : modèles 3D, sons, images (et musiques de la fixture), chacun avec auteur et licence ; titre, mention
+// légale et année du livre (l'année n'est plus « 2025 » par défaut). Contrastes relevés (texte secondaire ≥ 4,5:1 sur
+// le fond du panneau).
+import React, { useId } from "react";
 import { Info, X } from "lucide-react";
-import type { DioramaCredits } from "@/types/diorama";
+import type { CreditEntry, DioramaCredits } from "@/types/diorama";
 import { useTranslation } from "@/contexts/TranslationContext";
+import Dialog from "@/components/ui/Dialog";
 import LanguageSelector from "./LanguageSelector";
+
+/** Gestes et contrôles présents dans la scène (aide de la fenêtre). */
+export interface InfoHelp {
+  zoom: boolean;
+  buttons: boolean;
+  sound: boolean;
+  poi: boolean;
+  subtitles: boolean;
+}
 
 interface InfoModalProps {
   show: boolean;
@@ -13,142 +28,125 @@ interface InfoModalProps {
   credits?: DioramaCredits;
   isMobile: boolean;
   poiIcon?: string;
+  help: InfoHelp;
 }
 
-export default function InfoModal({ show, onClose, credits, isMobile, poiIcon }: InfoModalProps) {
-  // Images selon device
+export default function InfoModal({ show, onClose, credits, isMobile, poiIcon, help }: InfoModalProps) {
   const rotateIcon = isMobile ? "icons/dioramas/UI/one-finger.png" : "icons/dioramas/UI/mouse-left-click.png";
   const zoomIcon = isMobile ? "icons/dioramas/UI/two-fingers.png" : "icons/dioramas/UI/mouse-scroll.png";
-  const soundIcon = "icons/dioramas/UI/sound.png"
-  const subtitlesIcon = "icons/dioramas/UI/chat_on.png"
   const { t, lang } = useTranslation();
+  const titleId = useId();
+
+  const project = typeof credits?.project === "string" ? credits.project : credits?.project?.[lang];
+  const sections: [string, CreditEntry[] | undefined][] = [
+    [t.info.models, credits?.models],
+    [t.info.sounds, credits?.sounds],
+    [t.info.music, credits?.music],
+    [t.info.images, credits?.images],
+    [t.info.credits, credits?.other],
+  ];
+  const hasCredits = sections.some(([, list]) => list?.length) || !!credits?.licenses?.length;
 
   return (
-    <AnimatePresence>
-        {show && (
-        <motion.div
-            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-        >
-            <motion.div
-            className="relative bg-zinc-900 text-white rounded-2xl shadow-xl w-[90%] max-w-md p-6 max-h-[80vh] flex flex-col"
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            >
-            <div className="absolute top-3 right-10">
-                <LanguageSelector />
-            </div>
-            
-            <button
-                onClick={onClose}
-                className="absolute top-3 right-3 z-[101] text-white/70 hover:text-white"
-                aria-label="Fermer"
-            >
-                <X size={20} />
-            </button>
+    <Dialog open={show} onClose={onClose} labelledBy={titleId} className="glbi-dialog" testId="info-modal">
+      <div className="glbi-panel flex max-h-[inherit] flex-col p-5" style={{ maxHeight: "calc(100dvh - var(--safe-top) - var(--safe-bottom))" }}>
+        <div className="mb-3 flex items-start gap-2">
+          <h2 id={titleId} className="flex flex-1 flex-row items-center gap-2 pt-2 text-xl font-semibold">
+            <Info size={24} aria-hidden="true" /> {t.info.title}
+          </h2>
+          <button type="button" onClick={onClose} className="glbi-icon-btn bg-white/10 hover:bg-white/20" aria-label={t.common.close} data-testid="info-close">
+            <X size={22} aria-hidden="true" />
+          </button>
+        </div>
+        <div className="mb-4">
+          <LanguageSelector />
+        </div>
 
-            <div className="overflow-y-auto pr-1">
-                <h2 className="text-xl font-semibold mb-4 flex flex-row gap-2">
-                <Info size={24} /> {t.info.title}
-                </h2>
+        <div className="overflow-y-auto pr-1">
+          {credits?.description && <p className="mb-4 text-sm text-white/90">{credits.description[lang]}</p>}
 
-                <p className="text-xs text-gray-500 mt-4">
-                    {t.info.recommendedBrowsers}
+          <ul className="space-y-3 text-sm leading-relaxed">
+            <HelpLine icon={rotateIcon}>
+              {t.info.rotate} {isMobile ? t.info.rotateMobile : t.info.rotateDesktop}
+            </HelpLine>
+            {help.zoom && (
+              <HelpLine icon={zoomIcon}>
+                {t.info.zoom} {isMobile ? t.info.zoomMobile : t.info.zoomDesktop}
+              </HelpLine>
+            )}
+            {help.buttons && <HelpLine glyph="▶">{t.info.actions}</HelpLine>}
+            {help.poi && (
+              <HelpLine icon={poiIcon} glyph="📍">
+                {t.info.poi}
+              </HelpLine>
+            )}
+            {help.sound && <HelpLine icon="icons/dioramas/UI/sound.png">{t.info.sound}</HelpLine>}
+            {help.subtitles && <HelpLine icon="icons/dioramas/UI/chat_on.png">{t.info.subtitles}</HelpLine>}
+          </ul>
+
+          <p className="mt-4 text-xs text-zinc-300">{t.info.recommendedBrowsers}</p>
+
+          {(hasCredits || project || credits?.legal) && (
+            <section aria-label={t.info.credits} className="mt-4 border-t border-white/25 pt-4 text-sm" data-testid="info-credits">
+              <h3 className="mb-2 font-semibold">{t.info.credits}</h3>
+              <div className="space-y-3">
+                {sections.map(([label, list]) =>
+                  list?.length ? (
+                    <div key={label}>
+                      <h4 className="font-semibold text-white/95">{label}</h4>
+                      <ul className="ml-4 list-disc space-y-1 text-zinc-200">
+                        {list.map((c, i) => (
+                          <li key={i}>
+                            <CreditLine entry={c} licenseWord={t.info.license} />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null,
+                )}
+                {credits?.licenses?.length ? (
+                  <p className="text-xs text-zinc-300">
+                    {t.info.licenses} {credits.licenses.join(", ")}
+                  </p>
+                ) : null}
+              </div>
+              {(project || credits?.legal || credits?.year) && (
+                <p className="mt-4 text-center text-xs text-zinc-300" data-testid="info-legal">
+                  {[project, [credits?.legal?.[lang], credits?.year].filter(Boolean).join(" ")].filter(Boolean).join(" — ")}
                 </p>
+              )}
+            </section>
+          )}
+        </div>
+      </div>
+    </Dialog>
+  );
+}
 
-                {credits?.description && (
-                <p className="text-sm text-white/90 mb-4">{credits.description[lang]}</p>
-                )}
-
-                <div className="space-y-2 text-sm leading-relaxed">
-                <div className="flex items-center gap-2">
-                    <img src={rotateIcon} alt="Rotation" className="w-7 h-7" />
-                    <span>{t.info.rotate} {isMobile ? t.info.rotateMobile : t.info.rotateDesktop}</span>
-                </div>
-                
-                <div className="flex items-center gap-1">
-                    <img src={zoomIcon} alt="Zoom" className="w-8 h-8" />
-                    <span>{t.info.zoom} {isMobile ? t.info.zoomMobile : t.info.zoomDesktop}</span>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                    {poiIcon ? (
-                    <motion.img
-                        src={poiIcon}
-                        alt="POI"
-                        className="w-6 h-6 object-contain"
-                        animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                    />
-                    ) : (
-                    <span>📍</span>
-                    )}
-                    <span>{t.info.poi}</span>
-                </div>
-
-                <div className="flex items-center gap-4">
-                    <img src={soundIcon} alt="Sound" className="w-5 h-4" />
-                    <span>{t.info.sound}</span>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                    <img src={subtitlesIcon} alt="Subtitles" className="w-6 h-6" />
-                    <span>{t.info.subtitles}</span>
-                </div>
-                </div>
-
-                {credits && (
-                <>
-                    <hr className="border-white/20 my-4" />
-                    <div className="text-sm space-y-2">
-                    {credits.music && credits.music.length > 0 && (
-                        <div>
-                        <p className="font-semibold">{t.info.music}</p>
-                        <ul className="ml-3 list-disc">
-                            {credits.music.map((m, i) => (
-                            <li key={i}>
-                                {m.title}
-                                {m.author && ` — ${m.author}`}
-                                {m.source && <span className="text-white/60"> ({m.source})</span>}
-                            </li>
-                            ))}
-                        </ul>
-                        </div>
-                    )}
-
-                    {credits.sounds && credits.sounds.length > 0 && (
-                        <div>
-                        <p className="font-semibold mt-3">{t.info.sounds}</p>
-                        <ul className="ml-3 list-disc">
-                            {credits.sounds.map((s, i) => (
-                            <li key={i}>
-                                {s.title}
-                                {s.source && <span className="text-white/60"> ({s.source})</span>}
-                            </li>
-                            ))}
-                        </ul>
-                        </div>
-                    )}
-                    <div className="flex flex-col gap-1 text-center mt-3">
-                        {credits.licenses && (
-                        <p className="text-xs text-white/60">
-                            {t.info.licenses} {credits.licenses.join(", ")}
-                        </p>
-                        )}
-                        <p className="text-xs text-white/50">
-                        {credits.project ?? "Projet Diorama"} – © {credits.year ?? "2025"}
-                        </p>
-                    </div>
-                    </div>
-                </>
-                )}
-            </div>
-            </motion.div>
-        </motion.div>
+function HelpLine({ icon, glyph, children }: { icon?: string; glyph?: string; children: React.ReactNode }) {
+  return (
+    <li className="flex items-center gap-3">
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center" aria-hidden="true">
+        {icon ? (
+          // eslint-disable-next-line @next/next/no-img-element -- export statique (D-7.5)
+          <img src={icon} alt="" className="max-h-8 max-w-8 object-contain" draggable={false} />
+        ) : (
+          <span className="text-lg">{glyph}</span>
         )}
-    </AnimatePresence>
-    );
+      </span>
+      <span>{children}</span>
+    </li>
+  );
+}
+
+/** « Titre — Auteur (licence CC0) · source » ; la source est affichée en texte (pas de lien qui ferait quitter l'application). */
+function CreditLine({ entry, licenseWord }: { entry: CreditEntry; licenseWord: string }) {
+  return (
+    <>
+      <span className="text-white">{entry.title}</span>
+      {entry.author && ` — ${entry.author}`}
+      {entry.license && <span className="text-zinc-300"> ({licenseWord} {entry.license})</span>}
+      {entry.source && <span className="block break-all text-xs text-zinc-300">{entry.source}</span>}
+    </>
+  );
 }

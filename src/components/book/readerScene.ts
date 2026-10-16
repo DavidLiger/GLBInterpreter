@@ -10,7 +10,7 @@
 // Le lecteur n'embarque pas Zod (devDependency) : le build a validé la scène ; `parseBuiltScene` refait une
 // vérification de forme minimale des champs lus, pour un message lisible si le dossier n'est pas un livre construit.
 import type { BuiltScene } from "@/schema/glbi";
-import type { ButtonsModeConfig, DioramaConfig3D, DioramaCredits, POI } from "@/types/diorama";
+import type { ButtonsModeConfig, CreditEntry, DioramaConfig3D, DioramaCredits, POI } from "@/types/diorama";
 
 /** Identifiant du POI de départ (V-04) : seul POI d'une scène v1, premier POI de la fixture. */
 export const START_POI_ID = "start";
@@ -71,21 +71,35 @@ export function parseBuiltScene(raw: unknown, sceneId: string): BuiltScene {
 }
 
 const AUDIO = /\.(mp3|ogg|opus|m4a|aac|wav)$/i;
+const IMAGE = /\.(png|jpe?g|webp|gif|svg|avif)$/i;
 
 /**
- * Crédits au format de l'`InfoModal` actuelle : sons listés, licences des sons et des modèles regroupées.
- * Provisoire : l'`InfoModal` n'a pas de rubrique « modèles » ni « images » ; les crédits des modèles (`build.modelCredits`,
- * propriétés `src_*`) et des images sont affichés en Î12 (U-17 à U-19).
+ * Crédits de l'`InfoModal` (Î12, U-17 à U-19) : modèles (`build.modelCredits`, propriétés `src_*` des nœuds du GLB,
+ * doublons retirés), puis assets crédités par la couche éditoriale (`modules.credits.assets`), rangés en sons, images
+ * et autres d'après l'extension ; titre, mention légale et année du livre (`book.json`). Chaque ligne porte sa licence.
  */
 function toCredits(built: BuiltScene, book: ReaderBook): DioramaCredits {
   const assets = built.modules.credits?.assets ?? [];
-  const sounds = assets.filter((a) => AUDIO.test(a.asset)).map((a) => ({ title: `${a.title} — ${a.author} (${a.license})`, source: a.source }));
-  const licenses = [...new Set([...assets.map((a) => a.license), ...built.build.modelCredits.flatMap((c) => (c.license ? [c.license] : []))])];
+  const entry = (a: (typeof assets)[number]): CreditEntry => ({ title: a.title, author: a.author, license: a.license, source: a.source });
+  const seen = new Set<string>();
+  const models: CreditEntry[] = [];
+  for (const c of built.build.modelCredits) {
+    const e: CreditEntry = { title: c.name?.trim() || "—", author: c.author?.trim() || undefined, license: c.license?.trim() || undefined, source: c.url?.trim() || undefined };
+    const key = JSON.stringify(e);
+    if (!c.name && !c.author && !c.license && !c.url) continue;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    models.push(e);
+  }
+  const nonEmpty = <T,>(list: T[]) => (list.length ? list : undefined);
   return {
-    sounds,
-    licenses: licenses.length ? licenses : undefined,
+    models: nonEmpty(models),
+    sounds: nonEmpty(assets.filter((a) => AUDIO.test(a.asset)).map(entry)),
+    images: nonEmpty(assets.filter((a) => IMAGE.test(a.asset)).map(entry)),
+    other: nonEmpty(assets.filter((a) => !AUDIO.test(a.asset) && !IMAGE.test(a.asset)).map(entry)),
     year: book.legal ? String(book.legal.year) : undefined,
-    project: book.title?.fr,
+    legal: book.legal?.text,
+    project: book.title,
   };
 }
 

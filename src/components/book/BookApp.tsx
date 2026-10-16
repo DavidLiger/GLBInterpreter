@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import WebDioramaLoader from "@/components/diorama/WebDioramaLoader";
-import { TranslationProvider } from "@/contexts/TranslationContext";
+import { TranslationProvider, useTranslation } from "@/contexts/TranslationContext";
+import LanguageSelector from "@/components/diorama/ui/LanguageSelector";
 import DebugConsole from "./DebugConsole";
 import InstallGate from "./install/InstallGate";
 import ServiceWorkerRegister from "./ServiceWorkerRegister";
@@ -56,10 +57,18 @@ function BookRoute({ hash }: { hash: string }) {
 
   if (book.s === "loading") return <Black />;
   if (book.s === "error") return <BookError message={book.message} />;
-  if (hash === "" || hash === "#" || hash === "#/" || hash === "#/debug") return <BookHome book={book.value} />;
+  return <BookRouteLoaded hash={hash} reader={book.value} />;
+}
+
+function BookRouteLoaded({ hash, reader }: { hash: string; reader: ReaderBook | null }) {
+  useDocumentTitle(reader);
+  return <BookPage hash={hash} reader={reader} />;
+}
+
+function BookPage({ hash, reader }: { hash: string; reader: ReaderBook | null }) {
+  if (hash === "" || hash === "#" || hash === "#/" || hash === "#/debug") return <BookHome book={reader} />;
 
   const sceneId = parseSceneHash(hash);
-  const reader = book.value;
   if (!sceneId || !reader) return <UnknownScene />;
   // `key` : changement de scène = démontage complet du lecteur (comme un changement de page auparavant).
   return <SceneRoute key={sceneId} load={() => loadReaderScene(reader, sceneId)} />;
@@ -73,17 +82,28 @@ function SceneRoute({ load }: { load: () => Promise<ReaderScene | null> }) {
   return <WebDioramaLoader scene={state.value} />;
 }
 
+/** Titre du document : titre du livre dans la langue du lecteur (Î12 ; au build, celui de la première langue). */
+function useDocumentTitle(book: ReaderBook | null) {
+  const { lang } = useTranslation();
+  useEffect(() => {
+    const title = book?.title?.[lang];
+    if (title) document.title = title;
+  }, [book, lang]);
+}
+
+type SceneName = { fr: string; en: string; es: string };
+
 /** Noms des scènes pour l'accueil provisoire (lus dans les scènes elles-mêmes). */
-function useSceneNames(book: ReaderBook | null): Record<string, string> {
-  const [names, setNames] = useState<Record<string, string>>({});
+function useSceneNames(book: ReaderBook | null): Record<string, SceneName | undefined> {
+  const [names, setNames] = useState<Record<string, SceneName | undefined>>({});
   useEffect(() => {
     if (!book) return;
     let alive = true;
     Promise.all(
       book.scenes.map((id) =>
         loadReaderScene(book, id).then(
-          (s) => [id, s?.config.name.fr ?? id] as const,
-          () => [id, id] as const,
+          (s) => [id, s?.config.name] as const,
+          () => [id, undefined] as const,
         ),
       ),
     ).then((pairs) => {
@@ -96,19 +116,34 @@ function useSceneNames(book: ReaderBook | null): Record<string, string> {
   return names;
 }
 
-const linkClass = "px-6 py-3 rounded-full bg-white/15 hover:bg-white/25 transition";
+const linkClass = "glbi-btn glbi-btn-secondary px-6 py-3";
 
+/** Écran plein du livre (accueil, erreurs) : zones sûres, sélecteur de langue en haut à droite. */
+function Screen({ children }: { children: React.ReactNode }) {
+  return (
+    <main className="glbi-safe-padding relative min-h-dvh flex flex-col items-center justify-center gap-4 bg-black text-white text-center" style={{ paddingTop: "calc(var(--safe-top) + 3.75rem)" }}>
+      <div className="glbi-corner-top-right">
+        <LanguageSelector />
+      </div>
+      {children}
+    </main>
+  );
+}
+
+// Accueil provisoire (le menu de collection arrive en Î13) : titre du livre et noms des scènes dans la langue du
+// lecteur. Le message sans livre et la fixture ne s'affichent qu'en développement (textes de développeur, en français).
 function BookHome({ book }: { book: ReaderBook | null }) {
+  const { t, lang } = useTranslation();
   const names = useSceneNames(book);
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-4 bg-black text-white p-6 text-center">
-      <h1 className="text-2xl font-bold">{book?.title?.fr ?? "GLBInterpreter"}</h1>
-      <p className="text-white/70">Lecteur 3D pour livres augmentés.</p>
+    <Screen>
+      <h1 className="text-2xl font-bold">{book?.title?.[lang] ?? "GLBInterpreter"}</h1>
+      {book && <p className="text-white/80">{t.home.subtitle}</p>}
       {book ? (
         <nav className="flex flex-col gap-3">
           {book.scenes.map((id) => (
             <a key={id} href={sceneHref(id)} className={linkClass}>
-              {names[id] ?? id}
+              {names[id]?.[lang] ?? id}
             </a>
           ))}
         </nav>
@@ -128,7 +163,7 @@ function BookHome({ book }: { book: ReaderBook | null }) {
           ))}
         </nav>
       )}
-    </main>
+    </Screen>
   );
 }
 
@@ -137,25 +172,31 @@ function Black() {
 }
 
 function UnknownScene() {
+  const { t } = useTranslation();
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-4 bg-black text-white p-6 text-center">
-      <h1 className="text-2xl font-bold">Scène introuvable</h1>
-      <p className="text-white/70">Ce code ne correspond à aucune scène de ce livre.</p>
+    <Screen>
+      <h1 className="text-2xl font-bold">{t.unknownScene.title}</h1>
+      <p className="text-white/80">{t.unknownScene.message}</p>
       <a href="#/" className={linkClass}>
-        Retour à l&apos;accueil
+        {t.common.backHome}
       </a>
-    </main>
+    </Screen>
   );
 }
 
+// Livre illisible (book.json ou scène invalide) : le détail technique reste en français (message du lecteur, pour
+// le diagnostic), le titre et le bouton sont traduits.
 function BookError({ message }: { message: string }) {
+  const { t } = useTranslation();
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-4 bg-black text-white p-6 text-center">
-      <h1 className="text-2xl font-bold">Livre illisible</h1>
-      <p className="text-white/70 max-w-md">{message}</p>
+    <Screen>
+      <h1 className="text-2xl font-bold">{t.install.invalidTitle}</h1>
+      <p className="text-white/80 max-w-md break-words" lang="fr">
+        {message}
+      </p>
       <button type="button" onClick={() => window.location.reload()} className={linkClass}>
-        Recharger
+        {t.common.reload}
       </button>
-    </main>
+    </Screen>
   );
 }

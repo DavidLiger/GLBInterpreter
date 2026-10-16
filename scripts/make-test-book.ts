@@ -154,6 +154,8 @@ function editLayer(id: string, name: ReturnType<typeof L>): EditLayer {
         assets: [
           ...ACTIONS.map((a) => ({ asset: `sounds/${id}_${a.id}.wav`, title: `${a.id} (test)`, author: 'GLBInterpreter', license: 'CC0' })),
           { asset: 'sounds/jungle.wav', title: 'Jungle (test)', author: 'GLBInterpreter', license: 'CC0', source: 'https://example.org/jungle' },
+          // Î12 : une image créditée (rubrique « Images » de la fenêtre Informations).
+          { asset: 'icons/walk.png', title: 'Icône marcher (test)', author: 'GLBInterpreter', license: 'CC-BY 4.0', source: 'https://example.org/icons' },
         ],
       },
     },

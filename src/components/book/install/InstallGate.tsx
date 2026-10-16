@@ -10,8 +10,17 @@
 // Î9 : avant toute vérification, un iPhone ou un iPad voit l'écran « version iPhone à venir » (D-8.8, à retirer en
 // Î16) et un navigateur intégré (Instagram, Facebook…) l'écran « Ouvrez le livre dans Chrome » (D-6.2 C) : rien n'y est
 // téléchargé. Sur Chrome (Android, ordinateur), le bouton « Ajouter à l'écran d'accueil » utilise `beforeinstallprompt`.
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+//
+// Î12 (U-02) : chaque écran est rendu par la primitive `<dialog>` (`ui/Dialog.tsx`) en mode non modal et non fermable :
+// rôle « dialogue » nommé par le titre de l'écran, focus posé sur ce titre à chaque changement d'écran (annoncé par les
+// lecteurs d'écran), Échap sans effet. Non modal : rien du livre n'est monté derrière, et l'invite de mise à jour du
+// service worker comme la console de débogage (`#/debug`) doivent rester utilisables. Sélecteur de langue en haut à
+// droite ; contenu dans les zones sûres ; boutons au style du livre (44 px).
+import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "@/contexts/TranslationContext";
+import { LOCALES } from "@/i18n/messages";
+import Dialog from "@/components/ui/Dialog";
+import LanguageSelector from "@/components/diorama/ui/LanguageSelector";
 import { bookBaseUrl, fetchRemoteIndex, sameFiles, totalBytes, type BookFilesIndex } from "./bookIndex";
 import { cacheStorageAvailable, missingFiles, readInstalledIndex, remainingBytes } from "./bookCache";
 import { InstallError, installBook, type InstallErrorKind, type InstallProgress } from "./downloader";
@@ -35,7 +44,11 @@ type State =
   | { s: "downloading"; index: BookFilesIndex; mode: Mode; progress: InstallProgress | null }
   | { s: "failed"; index: BookFilesIndex; mode: Mode; kind: InstallErrorKind; detail: string };
 
-const toMB = (n: number) => (n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0);
+/** Taille en Mo au format de la langue (Î12 : « 6,9 Mo » en français et en espagnol, « 6.9 MB » en anglais). */
+const toMB = (n: number, lang: keyof typeof LOCALES) => {
+  const digits = n < 10 * 1048576 ? 1 : 0;
+  return (n / 1048576).toLocaleString(LOCALES[lang], { minimumFractionDigits: digits, maximumFractionDigits: digits });
+};
 
 async function availableSpace(): Promise<number | null> {
   try {
@@ -56,15 +69,26 @@ async function waitForController(ms = 3000): Promise<void> {
   if (!navigator.serviceWorker.controller) console.warn("Service worker absent : les fichiers sont lus dans le cache par la page seulement");
 }
 
+const primary = "glbi-btn glbi-btn-primary px-8 py-3 font-bold";
+const secondary = "glbi-btn glbi-btn-secondary";
+
 export default function InstallGate({ children }: { children: ReactNode }) {
-  const { t } = useTranslation();
-  const MB = (n: number) => `${toMB(n)} ${t.install.megabytes}`;
+  const { t, lang } = useTranslation();
+  const titleId = useId();
+  const titleRef = useRef<HTMLElement | null>(null);
+  const MB = (n: number) => `${toMB(n, lang)} ${t.install.megabytes}`;
   const [state, setState] = useState<State>({ s: "checking" });
   const [trace] = useState<InstallTrace | null>(() => (typeof window === "undefined" ? null : readTrace()));
   const [platform] = useState<Platform | null>(() => (typeof window === "undefined" ? null : detectPlatform()));
   const abortRef = useRef<AbortController | null>(null);
   /** Dernière progression affichée : gardée à la reprise jusqu'au recomptage de l'acquis (pas de retour à 0 %). */
   const lastProgressRef = useRef<InstallProgress | null>(null);
+  /** Titre du livre lu dans `book.json` (réseau ou version installée) : titre du document pendant l'installation. */
+  const [bookTitle, setBookTitle] = useState<Partial<Record<string, string>> | null>(null);
+  useEffect(() => {
+    const title = bookTitle?.[lang];
+    if (title) document.title = title;
+  }, [bookTitle, lang]);
 
   const check = useCallback(async () => {
     setState({ s: "checking" });
@@ -95,6 +119,7 @@ export default function InstallGate({ children }: { children: ReactNode }) {
       return;
     }
     const installed = await readInstalledIndex(base);
+    setBookTitle(titleOf(remote ?? installed?.index));
 
     // Hors ligne : seule la version installée compte.
     if (!remote) {
@@ -154,25 +179,44 @@ export default function InstallGate({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Écran changé : focus sur son titre (pas à chaque progression du téléchargement).
+  const screen = state.s === "prompt" || state.s === "downloading" || state.s === "failed" ? `${state.s}:${state.mode}` : state.s;
+  useEffect(() => {
+    if (screen !== "ready") titleRef.current?.focus({ preventScroll: true });
+  }, [screen]);
+
   if (state.s === "ready") return <>{children}</>;
 
-  return (
-    <main className="fixed inset-0 z-[9999] overflow-y-auto bg-black text-white">
-      <div className="min-h-full flex flex-col items-center justify-center gap-5 p-6 text-center max-w-md mx-auto">
-        {state.s === "checking" && <p className="text-white/80">{t.install.checking}</p>}
+  const title = (text: string) => (
+    <h1 id={titleId} ref={(el) => void (titleRef.current = el)} tabIndex={-1} className="text-2xl font-bold outline-none">
+      {text}
+    </h1>
+  );
 
-        {state.s === "offline" && <Notice title={t.install.offlineTitle} text={t.install.offline} action={t.install.retry} onAction={check} />}
-        {state.s === "unsupported" && <Notice title={t.install.unsupportedTitle} text={t.install.unsupported} />}
-        {state.s === "invalid" && <Notice title={t.install.invalidTitle} text={state.message} action={t.install.retry} onAction={check} />}
-        {state.s === "ios" && <Notice title={t.install.iosTitle} text={t.install.ios} />}
-        {state.s === "inapp" && <InAppBrowser app={state.app} android={state.android} />}
+  return (
+    <Dialog open modal={false} labelledBy={titleId} className="glbi-screen" testId="install-gate">
+      <div className="glbi-corner-top-right z-10">
+        <LanguageSelector />
+      </div>
+      <div className="glbi-safe-padding min-h-full flex flex-col items-center justify-center gap-5 text-center max-w-md mx-auto" style={{ paddingTop: "calc(var(--safe-top) + 3.75rem)" }}>
+        {state.s === "checking" && (
+          <p id={titleId} ref={(el) => void (titleRef.current = el)} tabIndex={-1} className="text-white/80 outline-none">
+            {t.install.checking}
+          </p>
+        )}
+
+        {state.s === "offline" && <Notice title={title(t.install.offlineTitle)} text={t.install.offline} action={t.install.retry} onAction={check} />}
+        {state.s === "unsupported" && <Notice title={title(t.install.unsupportedTitle)} text={t.install.unsupported} />}
+        {state.s === "invalid" && <Notice title={title(t.install.invalidTitle)} text={state.message} action={t.install.retry} onAction={check} />}
+        {state.s === "ios" && <Notice title={title(t.install.iosTitle)} text={t.install.ios} />}
+        {state.s === "inapp" && <InAppBrowser title={title(t.install.inAppTitle)} app={state.app} android={state.android} />}
 
         {state.s === "done" && (
           <>
-            <h1 className="text-2xl font-bold">{t.install.doneTitle}</h1>
+            {title(t.install.doneTitle)}
             <p className="text-white/80">{t.install.done}</p>
             <AddToHomeScreen primary />
-            <button onClick={() => setState({ s: "ready" })} className="min-h-11 px-6 py-2 rounded-full bg-white/15">
+            <button type="button" onClick={() => setState({ s: "ready" })} className={secondary}>
               {t.install.openBook}
             </button>
           </>
@@ -180,9 +224,7 @@ export default function InstallGate({ children }: { children: ReactNode }) {
 
         {(state.s === "prompt" || state.s === "downloading" || state.s === "failed") && (
           <>
-            <h1 className="text-2xl font-bold">
-              {state.mode === "update" ? t.install.updateTitle : state.mode === "repair" ? t.install.repairTitle : t.install.title}
-            </h1>
+            {title(state.mode === "update" ? t.install.updateTitle : state.mode === "repair" ? t.install.repairTitle : t.install.title)}
             <p className="text-white/80">
               {state.mode === "update" ? t.install.updateIntro : state.mode === "repair" ? t.install.repairIntro : t.install.intro}
             </p>
@@ -210,17 +252,14 @@ export default function InstallGate({ children }: { children: ReactNode }) {
             {platform?.firefoxDesktop && <p className="text-white/60 text-sm">{t.install.firefoxDesktop}</p>}
             {trace?.state === "running" && (
               <p className="text-white/50 text-xs">
-                {t.install.interrupted} {trace.step} ({new Date(trace.at).toLocaleString()})
+                {t.install.interrupted} {trace.step} ({formatDate(trace.at, lang)})
               </p>
             )}
-            <button
-              onClick={() => start(state.index, state.mode)}
-              className="min-h-11 px-8 py-3 rounded-full bg-white text-black font-bold"
-            >
+            <button type="button" onClick={() => start(state.index, state.mode)} className={primary}>
               {state.mode === "update" ? t.install.update : t.install.install}
             </button>
             {state.mode === "update" && (
-              <button onClick={() => setState({ s: "ready" })} className="min-h-11 px-6 py-2 text-white/70 underline">
+              <button type="button" onClick={() => setState({ s: "ready" })} className="glbi-btn glbi-btn-link">
                 {t.install.keepCurrent}
               </button>
             )}
@@ -232,7 +271,7 @@ export default function InstallGate({ children }: { children: ReactNode }) {
           <>
             <ProgressBar progress={state.progress} />
             <p className="text-white/60 text-sm">{t.install.wifi}</p>
-            <button onClick={() => abortRef.current?.abort()} className="min-h-11 px-6 py-2 rounded-full bg-white/15">
+            <button type="button" onClick={() => abortRef.current?.abort()} className={secondary}>
               {t.install.pause}
             </button>
             <AddToHomeScreen />
@@ -252,24 +291,38 @@ export default function InstallGate({ children }: { children: ReactNode }) {
                       ? t.install.errorQuota
                       : t.install.errorOther}
             </p>
-            {state.kind !== "aborted" && <p className="text-white/40 text-xs break-all">{state.detail}</p>}
-            <button
-              onClick={() => start(state.index, state.mode)}
-              className="min-h-11 px-8 py-3 rounded-full bg-white text-black font-bold"
-            >
+            {state.kind !== "aborted" && <p className="text-white/60 text-xs break-all">{state.detail}</p>}
+            <button type="button" onClick={() => start(state.index, state.mode)} className={primary}>
               {t.install.resume}
             </button>
             <AddToHomeScreen />
           </>
         )}
       </div>
-    </main>
+    </Dialog>
   );
 }
 
+/** Titre traduit de `book.json` (champ `title` du livre, absent de la cartouche de test). */
+function titleOf(index: BookFilesIndex | null | undefined): Partial<Record<string, string>> | null {
+  const title = (index as { title?: unknown } | null | undefined)?.title;
+  return title && typeof title === "object" ? (title as Partial<Record<string, string>>) : null;
+}
+
+/** Date de la trace d'installation dans la langue du lecteur (au lieu du format du navigateur). */
+function formatDate(iso: string, lang: keyof typeof LOCALES): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  try {
+    return d.toLocaleString(LOCALES[lang], { dateStyle: "short", timeStyle: "short" });
+  } catch {
+    return d.toLocaleString(LOCALES[lang]);
+  }
+}
+
 function ProgressBar({ progress }: { progress: InstallProgress | null }) {
-  const { t } = useTranslation();
-  const MB = (n: number) => `${toMB(n)} ${t.install.megabytes}`;
+  const { t, lang } = useTranslation();
+  const MB = (n: number) => `${toMB(n, lang)} ${t.install.megabytes}`;
   const ratio = progress && progress.totalBytes > 0 ? Math.min(1, progress.doneBytes / progress.totalBytes) : 0;
   return (
     <div className="w-full flex flex-col gap-2" aria-live="polite">
@@ -279,6 +332,7 @@ function ProgressBar({ progress }: { progress: InstallProgress | null }) {
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(ratio * 100)}
+        aria-label={t.install.downloading}
       >
         <div className="h-full bg-white transition-[width] duration-200" style={{ width: `${ratio * 100}%` }} />
       </div>
@@ -286,18 +340,18 @@ function ProgressBar({ progress }: { progress: InstallProgress | null }) {
         {t.install.downloading} {Math.round(ratio * 100)} %
         {progress && ` — ${MB(progress.doneBytes)} / ${MB(progress.totalBytes)} — ${progress.doneFiles}/${progress.totalFiles} ${t.install.files}`}
       </p>
-      {progress?.current && <p className="text-xs text-white/40 break-all">{progress.current}</p>}
+      {progress?.current && <p className="text-xs text-white/60 break-all">{progress.current}</p>}
     </div>
   );
 }
 
-function Notice({ title, text, action, onAction }: { title: string; text: string; action?: string; onAction?: () => void }) {
+function Notice({ title, text, action, onAction }: { title: ReactNode; text: string; action?: string; onAction?: () => void }) {
   return (
     <>
-      <h1 className="text-2xl font-bold">{title}</h1>
+      {title}
       <p className="text-white/80">{text}</p>
       {action && onAction && (
-        <button onClick={onAction} className="min-h-11 px-8 py-3 rounded-full bg-white text-black font-bold">
+        <button type="button" onClick={onAction} className={primary}>
           {action}
         </button>
       )}
@@ -306,17 +360,14 @@ function Notice({ title, text, action, onAction }: { title: string; text: string
 }
 
 /** Bouton « Ajouter à l'écran d'accueil » (Chrome) ; rien si le prompt n'est pas disponible ou l'app déjà installée. */
-function AddToHomeScreen({ primary = false }: { primary?: boolean }) {
+function AddToHomeScreen({ primary: isPrimary = false }: { primary?: boolean }) {
   const { t } = useTranslation();
   const { canPrompt, installed } = useInstallPrompt();
-  if (installed) return primary ? <p className="text-white/80 text-sm">{t.install.addedToHome}</p> : null;
+  if (installed) return isPrimary ? <p className="text-white/80 text-sm">{t.install.addedToHome}</p> : null;
   if (!canPrompt) return null;
   return (
     <div className="flex flex-col items-center gap-2">
-      <button
-        onClick={() => void promptInstall()}
-        className={primary ? "min-h-11 px-8 py-3 rounded-full bg-white text-black font-bold" : "min-h-11 px-6 py-2 rounded-full border border-white/40"}
-      >
+      <button type="button" onClick={() => void promptInstall()} className={isPrimary ? primary : "glbi-btn glbi-btn-outline"}>
         {t.install.addToHome}
       </button>
       <p className="text-white/50 text-xs">{t.install.addToHomeHint}</p>
@@ -325,7 +376,7 @@ function AddToHomeScreen({ primary = false }: { primary?: boolean }) {
 }
 
 /** Navigateur intégré (D-6.2 C) : aucun téléchargement ; ouvrir la même adresse (scène comprise) dans Chrome. */
-function InAppBrowser({ app, android }: { app: string; android: boolean }) {
+function InAppBrowser({ title, app, android }: { title: ReactNode; app: string; android: boolean }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const url = shareableUrl(parseSceneHash(window.location.hash));
@@ -339,17 +390,17 @@ function InAppBrowser({ app, android }: { app: string; android: boolean }) {
   };
   return (
     <>
-      <h1 className="text-2xl font-bold">{t.install.inAppTitle}</h1>
+      {title}
       <p className="text-white/80">{(android ? t.install.inApp : t.install.inAppOther).replace("{app}", app)}</p>
       {android && (
-        <a href={chromeIntentUrl(url)} className="min-h-11 px-8 py-3 rounded-full bg-white text-black font-bold">
+        <a href={chromeIntentUrl(url)} className={primary}>
           {t.install.openInChrome}
         </a>
       )}
-      <button onClick={copy} className="min-h-11 px-6 py-2 rounded-full bg-white/15">
+      <button type="button" onClick={copy} className={secondary}>
         {copied ? t.install.linkCopied : t.install.copyLink}
       </button>
-      <p className="text-white/40 text-xs break-all select-all">{url}</p>
+      <p className="text-white/60 text-xs break-all select-all">{url}</p>
     </>
   );
 }

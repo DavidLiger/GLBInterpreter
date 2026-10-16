@@ -2,8 +2,16 @@
 
 "use client";
 
+// Écran de chargement et « Toucher pour commencer » (Î12).
+// - Hauteur (U-21) : celle du lecteur (`100 %`), qui occupe déjà `100dvh` (ou le conteneur de l'atelier) ; plus de
+//   mesure de `visualViewport` à chaque redimensionnement, qui laissait une bande quand la barre du navigateur bougeait.
+// - Image : `loaderImage` de la scène, sinon l'icône du livre (`icon.png`, présente dans tout livre) ; une image
+//   introuvable est masquée au lieu d'afficher une image cassée (`scene-preview.png` n'a jamais existé).
+// - Sortie en fondu : le composant est la racine animée sous l'`AnimatePresence` du lecteur (avant Î12, une seconde
+//   `AnimatePresence` interne, toujours ouverte, empêchait la sortie de jouer, U-01).
+// - Zones sûres : contenu hors encoche ; sélecteur de langue en haut à droite.
 import React, { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useTranslation } from "@/contexts/TranslationContext";
 import LanguageSelector from "./LanguageSelector";
 
@@ -16,9 +24,12 @@ interface LoaderOverlayProps {
   loaderImage?: string;
   fontClassName?: string;
   onStart?: () => void;
-  /** Atelier (A2) : hauteur du conteneur du lecteur au lieu de celle de la fenêtre. */
+  /** Atelier (A2) : rendu dans le conteneur du lecteur (hauteur `100 %` dans les deux cas) ; pas de focus automatique. */
   embedded?: boolean;
 }
+
+/** Icône du livre, à la racine de tout dossier de livre (Î9) : image de repli du chargement. */
+const FALLBACK_IMAGE = "icon.png";
 
 export default function LoaderOverlay({
   isPortrait,
@@ -31,25 +42,14 @@ export default function LoaderOverlay({
   onStart,
   embedded = false,
 }: LoaderOverlayProps) {
-  const [showOverlay, setShowOverlay] = useState(true);
   const [isReady, setIsReady] = useState(false);
-  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
+  const [imageSrc, setImageSrc] = useState<string | null>(loaderImage ?? FALLBACK_IMAGE);
   const { t } = useTranslation();
 
+  // Image changée (atelier : saisie de l'image de chargement)
   useEffect(() => {
-    const updateVH = () => {
-      setViewportHeight(window.visualViewport?.height || window.innerHeight);
-    };
-    updateVH();
-    window.addEventListener("resize", updateVH);
-    window.addEventListener("orientationchange", updateVH);
-    window.visualViewport?.addEventListener("resize", updateVH);
-    return () => {
-      window.removeEventListener("resize", updateVH);
-      window.removeEventListener("orientationchange", updateVH);
-      window.visualViewport?.removeEventListener("resize", updateVH);
-    };
-  }, []);
+    setImageSrc(loaderImage ?? FALLBACK_IMAGE);
+  }, [loaderImage]);
 
   useEffect(() => {
     if (isLoaded) {
@@ -58,114 +58,114 @@ export default function LoaderOverlay({
     }
   }, [isLoaded]);
 
-  const handleStart = () => {
-    if (onStart) onStart();
-  };
+  const progress = Math.max(0, Math.min(100, Math.round(loadingProgress)));
+  const compact = !isPortrait && isMobile;
 
   return (
-    <AnimatePresence>
-      {showOverlay && (
-        <motion.div
-          className="absolute inset-0 flex flex-col bg-black z-[100]"
-          style={{ height: embedded ? '100%' : viewportHeight ?? '100vh' }}
-          initial={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.45 }}
-        >
-          {/* ✅ Header avec LanguageSelector */}
-          <div className="absolute top-4 right-4 z-10">
-            <LanguageSelector />
-          </div>
+    <motion.div
+      className="absolute inset-0 flex flex-col bg-black z-[100]"
+      style={{ height: "100%" }}
+      initial={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.45 }}
+      data-testid="loader-overlay"
+    >
+      <div className="glbi-corner-top-right z-10">
+        <LanguageSelector />
+      </div>
 
-          {/* ✅ Contenu principal - Layout flex optimisé */}
-          {/* ✅ Contenu principal - Layout flex optimisé */}
-          <div className="flex-1 flex flex-col justify-between items-center px-4" 
-            style={{
-              paddingTop: isPortrait && isMobile ? '68px' : '32px', // ✅ Plus d'espace = titre descend
-              paddingBottom: isPortrait && isMobile ? '44px' : '16px' // ✅ Moins d'espace = bouton monte
-            }}
-          >
-            {/* ✅ Section haute : Titre */}
-            <div className="w-full text-center">
-              <h1 
-                className={`${fontClassName} text-white font-bold`}
-                style={{
-                  fontSize: isPortrait 
-                    ? 'clamp(24px, 6vw, 42px)'
-                    : isMobile 
-                      ? 'clamp(16px, 3.5vw, 24px)'
-                      : 'clamp(18px, 4vw, 32px)'
-                }}
-              >
-                {sceneName ?? 'Scene Diorama'}
-              </h1>
-            </div>
+      <div
+        className="flex-1 flex flex-col justify-between items-center min-h-0"
+        style={{
+          // Sélecteur de langue en haut à droite : place réservée au-dessus du titre, ou à côté sur un téléphone couché.
+          paddingTop: `calc(var(--safe-top) + ${compact ? "8px" : "3.75rem"})`,
+          paddingBottom: `calc(var(--safe-bottom) + ${isPortrait && isMobile ? "32px" : "8px"})`,
+          paddingLeft: "calc(var(--safe-left) + 0.5rem)",
+          paddingRight: "calc(var(--safe-right) + 0.5rem)",
+        }}
+      >
+        {/* Titre */}
+        <div className="w-full text-center" style={compact ? { paddingLeft: "9rem", paddingRight: "9rem" } : undefined}>
+          {sceneName && (
+            <h1
+              className={`${fontClassName ?? ""} text-white font-bold`}
+              style={{
+                fontSize: isPortrait ? "clamp(24px, 6vw, 42px)" : isMobile ? "clamp(16px, 3.5vw, 24px)" : "clamp(18px, 4vw, 32px)",
+              }}
+            >
+              {sceneName}
+            </h1>
+          )}
+        </div>
 
-            {/* ✅ Section centrale : Image */}
-            <div className="flex-1 flex items-center justify-center w-full max-w-2xl">
-              <motion.img
-                src={loaderImage ?? 'icons/dioramas/UI/scene-preview.png'}
-                alt="Scene Preview"
-                className="object-contain"
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.4 }}
-                style={{
-                  maxWidth: isPortrait ? '85%' : '70%',
-                  maxHeight: !isPortrait && isMobile
-                    ? '45vh'
-                    : isPortrait 
-                      ? '50vh' 
-                      : '60vh',
-                }}
-              />
-            </div>
+        {/* Image */}
+        <div className="flex-1 min-h-0 flex items-center justify-center w-full max-w-2xl py-2">
+          {imageSrc && (
+            <motion.img
+              src={imageSrc}
+              alt=""
+              className="object-contain max-h-full"
+              onError={() => setImageSrc((cur) => (cur !== FALLBACK_IMAGE ? FALLBACK_IMAGE : null))}
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.4 }}
+              style={{
+                maxWidth: isPortrait ? "85%" : "70%",
+                maxHeight: compact ? "45vh" : isPortrait ? "50vh" : "60vh",
+              }}
+            />
+          )}
+        </div>
 
-            {/* ✅ Section basse : Progress bar ou bouton */}
-            <div className="w-full flex flex-col items-center gap-3">
-              {isReady ? (
-                <motion.button
-                  onClick={handleStart}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="px-8 py-3 bg-green-500 text-black font-semibold rounded-full shadow-lg uppercase tracking-wider"
-                  style={{
-                    fontSize: !isPortrait && isMobile ? '11px' : isPortrait ? '14px' : '12px'
-                  }}
+        {/* Progression ou bouton */}
+        <div className="w-full flex flex-col items-center gap-3">
+          {isReady ? (
+            <motion.button
+              type="button"
+              autoFocus={!embedded}
+              onClick={() => onStart?.()}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.98 }}
+              className="glbi-btn px-8 bg-green-500 text-black shadow-lg uppercase tracking-wider"
+              style={{ fontSize: compact ? "12px" : isPortrait ? "14px" : "13px" }}
+            >
+              {isMobile ? t.loader.startMobile : t.loader.start}
+            </motion.button>
+          ) : (
+            <div className="w-full max-w-sm flex flex-col items-center gap-2">
+              <div className="relative w-full">
+                <motion.p
+                  className="absolute -top-7 text-sm font-bold text-gray-300 whitespace-nowrap"
+                  initial={{ left: 0 }}
+                  animate={{ left: `${progress}%` }}
+                  transition={{ duration: 0.3 }}
+                  style={{ transform: "translateX(-50%)" }}
+                  aria-hidden="true"
                 >
-                  {isMobile ? t.loader.startMobile : t.loader.start}
-                </motion.button>
-              ) : (
-                <div className="w-full max-w-sm flex flex-col items-center gap-2">
-                  {/* Barre de progression */}
-                  <div className="relative w-full">
-                    <motion.p
-                      className="absolute -top-7 text-sm font-bold text-gray-400 whitespace-nowrap"
-                      initial={{ left: 0 }}
-                      animate={{ left: `${loadingProgress}%` }}
-                      transition={{ duration: 0.3 }}
-                      style={{ transform: 'translateX(-50%)' }}
-                    >
-                      {loadingProgress}%
-                    </motion.p>
-                    
-                    <div className="w-full h-3 bg-gray-700 rounded-full overflow-hidden">
-                      <motion.div
-                        className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${loadingProgress}%` }}
-                        transition={{ duration: 0.3 }}
-                      />
-                    </div>
-                  </div>
+                  {progress}%
+                </motion.p>
+                <div
+                  className="w-full h-3 bg-gray-700 rounded-full overflow-hidden"
+                  role="progressbar"
+                  aria-label={t.loader.loading}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={progress}
+                >
+                  <motion.div
+                    className="h-full bg-gradient-to-r from-blue-500 to-purple-500"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.3 }}
+                  />
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+          )}
+        </div>
+      </div>
+    </motion.div>
   );
 }

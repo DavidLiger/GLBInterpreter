@@ -207,6 +207,9 @@ npm run test:install                                           # installation, p
 
 `tests/buttons.spec.ts` (mode `buttons` sur le livre installé : ordre et libellés des boutons, fin d'action, interruption,
 relance, éclairage de secours) demande WebGL 2 ; il est sauté par un navigateur de test qui n'en a pas.
+`tests/ui.spec.ts` (Î12 : boutons d'animation, fenêtre Informations et crédits, écrans d'installation, langues FR, EN,
+ES, `lang` et titre, 404 et stubs, téléphone émulé) demande aussi WebGL 2 pour ses tests de scène ;
+`UI_SHOTS=<dossier> npx playwright test tests/ui.spec.ts` enregistre des captures d'écran des étapes.
 
 Procédure manuelle hors ligne (O-34), sur le dossier exporté servi par `npx http-server` (voir plus haut) :
 

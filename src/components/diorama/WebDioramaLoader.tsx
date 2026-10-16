@@ -27,7 +27,7 @@ import { usePOIScenePlayer } from "@/components/diorama/hooks/usePOIScenePlayer"
 import DialogueModal from "./ui/DialogueModal";
 import DialogueButton from "./ui/DialogueButton";
 import InfoButton from "./ui/InfoButton";
-import InfoModal from "./ui/InfoModal";
+import InfoModal, { type InfoHelp } from "./ui/InfoModal";
 import POIBreadcrumbs from "./ui/POIBreadcrumbs";
 import { setupPostProcessing, setupEmissiveMaterials } from "./rendering/setupPostProcessing";
 import { usePOIEffects } from "./hooks/usePOIEffects";
@@ -140,7 +140,9 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
   const { t, lang } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
-  const { isPortrait, showRotateHint } = useOrientation(5000);
+  // Indice de rotation (Î12, U-23) : activé une fois la scène visible (`experienceStarted`, posé plus bas), hors atelier.
+  const [rotateHintEnabled, setRotateHintEnabled] = useState(false);
+  const { isPortrait, showRotateHint, dismissRotateHint } = useOrientation(5000, rotateHintEnabled);
   const [loadingProgress, setLoadingProgress] = useState(0);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
@@ -313,6 +315,22 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
     }
     return active.icon;
   }, [currentPOI, findPOIRecursively, findParentPOI]);
+
+  // Aide de la fenêtre Informations (Î12) : gestes et contrôles que la scène propose.
+  const infoHelp = useMemo<InfoHelp>(() => {
+    const v1 = readerScene.kind === "v1";
+    const start = config.pois[0];
+    const hasPoiTree = config.pois.length > 1 || config.pois.some((p) => (p.children?.length ?? 0) > 0);
+    return {
+      zoom: start?.enableZoom !== false,
+      buttons: !!config.buttons?.actions.length,
+      sound: v1 ? !!config.ambientSound || !!config.buttons?.actions.some((a) => a.sound) : true,
+      poi: !v1 && hasPoiTree,
+      subtitles: !v1 && config.pois.some(function hasDialogue(p): boolean {
+        return !!p.dialogue || (p.children ?? []).some(hasDialogue);
+      }),
+    };
+  }, [readerScene.kind, config]);
 
   useEffect(() => {
     devToolOpenRef.current = devToolOpen;
@@ -1078,14 +1096,14 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
             
             {/* Titre principal */}
             <h2 className="text-2xl font-bold text-white mb-3">
-              {t.webglErrorScreen?.title}
+              {t.webglErrorScreen.title}
             </h2>
             
             {/* Message d'erreur technique (petit) */}
             <p className="text-sm text-gray-400 mb-6 italic">
               {webglError === "lost"
-                ? `${t.webglErrorScreen?.technicalMessageWebglError}`
-                : `${t.webglErrorScreen?.technicalMessageWebglNotError}`}
+                ? `${t.webglErrorScreen.technicalMessageWebglError}`
+                : `${t.webglErrorScreen.technicalMessageWebglNotError}`}
             </p>
             
             {/* Bouton principal */}
@@ -1094,20 +1112,17 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
                 console.log("🔄 Rechargement complet de la page...");
                 window.location.reload();
               }}
-              className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 mb-4"
+              className="min-h-11 px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 mb-4"
             >
-              {t.webglErrorScreen?.boutonTitle}
-                          {/* Sous-titre */}
-              <p className="text-xs text-gray-100">
-                ( {t.webglErrorScreen?.boutonSubTitle} )
-              </p>
+              <span className="block">{t.webglErrorScreen.boutonTitle}</span>
+              <span className="block text-xs text-gray-100">( {t.webglErrorScreen.boutonSubTitle} )</span>
             </button>
             
 
             
             {/* Note technique (très petit) */}
             <p className="text-sm font-bold text-gray-300 mt-4 max-w-xs mx-auto animate-pulse">
-              {t.webglErrorScreen?.technicalNote}
+              {t.webglErrorScreen.technicalNote}
             </p>
           </div>
         </div>
@@ -1121,16 +1136,16 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
         <div className="text-center p-8 max-w-md">
           <div className="text-6xl mb-6 animate-pulse">💤</div>
           <h2 className="text-2xl font-bold text-white mb-4">
-            {t.restart?.title || "Scène en pause"}
+            {t.restart.title}
           </h2>
           <p className="text-gray-300 mb-6">
-            {t.restart?.message || "La scène a été mise en pause pour économiser la mémoire."}
+            {t.restart.message}
           </p>
           <button
             onClick={() => window.location.reload()}
-            className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg"
+            className="glbi-btn px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold shadow-lg"
           >
-            {t.restart?.button || "⚡ Relancer la scène"}
+            {t.restart.button}
           </button>
         </div>
       </div>
@@ -1170,7 +1185,7 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
                 <p className="text-gray-300 mb-6">{t.loadError.message}</p>
                 <button
                   onClick={() => window.location.reload()}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95"
+                  className="min-h-11 px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95"
                 >
                   {t.loadError.button}
                 </button>
@@ -1205,31 +1220,31 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
                   }
                   setShowLoaderOverlay(false);
                   setExperienceStarted(true);
+                  if (!embedded) setRotateHintEnabled(true);
                 }}
               />
             )}
           </AnimatePresence>
 
-          {showRotateHint && <RotateHint show={true} />}
+          <RotateHint show={showRotateHint} onDismiss={dismissRotateHint} />
 
-          <div className="absolute top-2 right-2 z-50 flex flex-row gap-2 items-end">
+          <div className="glbi-corner-top-right z-50 flex flex-row gap-2 items-end">
             <InfoButton onClick={() => setShowInfoModal(true)} />
           </div>
 
-          <div className="absolute bottom-3 right-2 z-50 flex flex-row gap-2 items-end">
+          <div className="glbi-corner-bottom-right z-50 flex flex-row gap-2 items-end">
             {currentPoi && currentPoi.dialogue && (
               <DialogueButton visible={showDialogue} onToggle={() => setShowDialogue((v) => !v)} />
             )}
-            <AnimatePresence>
-              {startSoundReady && (
-                <VolumeControl
-                  volume={audioSettings.volume}
-                  muted={audioSettings.muted}
-                  onVolumeChange={setAudioVolume}
-                  onToggleMute={toggleMute}
-                />
-              )}
-            </AnimatePresence>
+            {/* Sans `AnimatePresence` : VolumeControl n'a pas d'animation de sortie (U-01). */}
+            {startSoundReady && (
+              <VolumeControl
+                volume={audioSettings.volume}
+                muted={audioSettings.muted}
+                onVolumeChange={setAudioVolume}
+                onToggleMute={toggleMute}
+              />
+            )}
             {!embedded && fullscreenSupported && <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />}
           </div>
 
@@ -1302,6 +1317,7 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
             credits={config.credits}
             isMobile={useTouchIcons}
             poiIcon={activePOIIcon}
+            help={infoHelp}
           />
 
           {/* Reste de votre UI (RotateHint, InfoButton, etc.) */}

@@ -1,11 +1,14 @@
 "use client";
 
-// Boutons du mode `buttons` (Î10b) : un bouton par action, dans l'ordre du GLB ; libellé dans la langue courante,
-// icône si elle est déclarée. Volontairement simples : cibles tactiles ≥ 44 px, `aria-pressed`, traductions de
-// l'interface et style du livre relèvent d'Î12.
+// Boutons du mode `buttons` (Î10b, finis en Î12) : un bouton par action, dans l'ordre du GLB ; libellé de la couche
+// éditoriale dans la langue courante, icône si elle est déclarée (décorative : le libellé nomme le bouton).
+// Accessibilité : groupe nommé, action en cours annoncée par `aria-pressed`, cibles d'au moins 44 px (U-03), focus
+// visible, clavier natif (Tab, Entrée, Espace). Placement dans les zones sûres sans recouvrir les contrôles du coin
+// (classe `glbi-actions`, globals.css).
 import React from "react";
 import type { ButtonsModeAction } from "@/types/diorama";
 import type { LocalizedText } from "@/schema/glbi";
+import { useTranslation } from "@/contexts/TranslationContext";
 
 type Props = {
   actions: ButtonsModeAction[];
@@ -17,11 +20,13 @@ type Props = {
 };
 
 export default function ActionButtons({ actions, lang, currentId, log = [], onTrigger }: Props) {
+  const { t } = useTranslation();
   if (!actions.length) return null;
   return (
     <div
-      className="absolute left-1/2 -translate-x-1/2 z-40 flex flex-row flex-wrap justify-center gap-2 px-2"
-      style={{ bottom: "max(0.75rem, env(safe-area-inset-bottom))", maxWidth: "calc(100vw - 7rem)" }}
+      role="group"
+      aria-label={t.actions.group}
+      className="glbi-actions z-40"
       data-testid="action-buttons"
       data-current-action={currentId ?? ""}
       data-action-log={log.join(" ")}
@@ -33,14 +38,13 @@ export default function ActionButtons({ actions, lang, currentId, log = [], onTr
             key={a.id}
             type="button"
             data-action-id={a.id}
+            aria-pressed={active}
             onClick={() => onTrigger(a.id)}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-white font-bold shadow-lg transition ${
-              active ? "bg-amber-500" : "bg-black/60 hover:bg-black/80"
-            }`}
+            className="glbi-action"
           >
             {a.icon && (
               // eslint-disable-next-line @next/next/no-img-element -- export statique (D-7.5)
-              <img src={a.icon} alt="" className="h-6 w-6 object-contain" draggable={false} />
+              <img src={a.icon} alt="" className="h-7 w-7 object-contain" draggable={false} />
             )}
             <span>{a.label[lang] ?? a.label.fr}</span>
           </button>
