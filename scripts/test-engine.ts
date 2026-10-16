@@ -1,6 +1,7 @@
 // scripts/test-engine.ts — tests du moteur sans navigateur (Î10b). `npm run test:engine`.
 // Cadrage orbital (`lib/orbitFraming.ts`), mode `buttons` (`lib/buttonsPlayer.ts`), boucle unique (`lib/frameTasks.ts`),
-// éclairage de secours (`lib/fallbackLights.ts`), lecture libre d'un clip (`lib/clipPreview.ts`), onglet Caméra de l'atelier (`src/atelier/cameraForm.ts`, A4).
+// éclairage de secours (`lib/fallbackLights.ts`), lecture libre d'un clip (`lib/clipPreview.ts`), onglet Caméra de l'atelier (`src/atelier/cameraForm.ts`, A4),
+// audio Web Audio (`lib/audioEngine.ts`, Î11 : AudioContext simulé, aucun son réel).
 // Les mixers tournent sur une scène three minimale (un os animé), le temps est avancé à la main.
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -11,6 +12,9 @@ import { addFallbackLightsIfNone, FALLBACK_LIGHTS_NAME } from '../src/components
 import { ClipPreview } from '../src/components/diorama/lib/clipPreview';
 import { applyFramingInPlace, cameraFormFromRaw, cameraLayerOf, framingOf, takeFromView, viewOf, withFields } from '../src/atelier/cameraForm';
 import { editLayerSchema } from '../src/schema/glbi';
+import {
+  AudioEngine, audioSettingsKey, effectiveVolume, parseAudioSettings, withMuteToggled, withVolume, type AudioContextLike,
+} from '../src/components/diorama/lib/audioEngine';
 
 let failed = 0;
 function test(name: string, fn: () => void) {
@@ -403,6 +407,223 @@ test('cadrage posé en place : bornes sur les contrôles, caméra à la vue de d
   assert.equal(controls.minAzimuthAngle, -Infinity);
   assert.equal(controls.enableZoom, true);
 });
+
+// ────────────── Audio (Î11) ──────────────
+console.log('Audio Web Audio');
+
+/** AudioContext simulé : sources jouées, gains, tampons « décodés » (le chemin du son). */
+class FakeParam {
+  value = 1;
+  setTargetAtTime(v: number) { this.value = v; }
+  setValueAtTime(v: number) { this.value = v; }
+  linearRampToValueAtTime(v: number) { this.value = v; }
+}
+class FakeNode {
+  gain = new FakeParam();
+  connect() {}
+  disconnect() {}
+}
+class FakeSource extends FakeNode {
+  buffer: { path: string } | null = null;
+  loop = false;
+  onended: (() => void) | null = null;
+  started = false;
+  stopped = false;
+  constructor(private readonly ctx: FakeCtx) { super(); }
+  start() { this.started = true; this.ctx.sources.push(this); }
+  stop() { if (!this.stopped) { this.stopped = true; this.onended?.(); } }
+}
+class FakeCtx {
+  state: AudioContextState = 'suspended';
+  currentTime = 0;
+  destination = new FakeNode();
+  sources: FakeSource[] = [];
+  gains: FakeNode[] = [];
+  decoded: string[] = [];
+  closed = false;
+  resume() { this.state = 'running'; return Promise.resolve(); }
+  close() { this.state = 'closed'; this.closed = true; return Promise.resolve(); }
+  createGain() { const g = new FakeNode(); this.gains.push(g); return g; }
+  createBuffer() { return { path: '(muet)' }; }
+  createBufferSource() { return new FakeSource(this); }
+  decodeAudioData(data: ArrayBuffer) {
+    const path = new TextDecoder().decode(data);
+    if (path.endsWith('.bad')) return Promise.reject(new Error('EncodingError'));
+    this.decoded.push(path);
+    return Promise.resolve({ path });
+  }
+  /** Sons réellement joués (hors tampon muet du déblocage), encore actifs. */
+  playing() { return this.sources.filter((s) => s.buffer?.path !== '(muet)' && !s.stopped).map((s) => `${s.buffer?.path}${s.loop ? ' (boucle)' : ''}`); }
+}
+const flush = () => new Promise((r) => setTimeout(r, 0));
+const asyncTests: Array<[string, () => Promise<void>]> = [];
+const testAsync = (name: string, fn: () => Promise<void>) => asyncTests.push([name, fn]);
+
+function memStorage(init: Record<string, string> = {}) {
+  const m = new Map(Object.entries(init));
+  return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v), m };
+}
+function audioRig(opts: { storage?: ReturnType<typeof memStorage>; loads?: string[] } = {}) {
+  const ctx = new FakeCtx();
+  const loads = opts.loads ?? [];
+  const warnings: string[] = [];
+  const engine = new AudioEngine({
+    bookId: 'test-dino',
+    createContext: () => ctx as unknown as AudioContextLike,
+    loadBytes: async (p) => {
+      loads.push(p);
+      return p.includes('absent') ? null : (new TextEncoder().encode(p).buffer as ArrayBuffer);
+    },
+    storage: opts.storage ?? memStorage(),
+    warn: (m) => warnings.push(m),
+  });
+  engine.setSounds({
+    ambient: 'sounds/jungle.wav',
+    actions: { walk: { sound: 'sounds/walk.wav', loop: true }, roar: { sound: 'sounds/roar.wav', loop: false }, eat: { sound: 'sounds/eat.wav', loop: false } },
+  });
+  return { ctx, engine, loads, warnings };
+}
+
+test('réglages : curseur à 0 = sourdine sans perdre le volume ; démuet rend le dernier volume non nul', () => {
+  const s0 = parseAudioSettings(null);
+  assert.deepEqual(s0, { volume: 0.7, muted: false });
+  const s1 = withVolume(s0, 0.4);
+  assert.deepEqual(s1, { volume: 0.4, muted: false });
+  const s2 = withVolume(s1, 0);
+  assert.deepEqual(s2, { volume: 0.4, muted: true });
+  assert.equal(effectiveVolume(s2), 0);
+  assert.deepEqual(withMuteToggled(s2), { volume: 0.4, muted: false });
+  assert.deepEqual(withVolume(s1, 3), { volume: 1, muted: false });
+  assert.deepEqual(parseAudioSettings('{"volume":0,"muted":true}'), { volume: 0.7, muted: true });
+  assert.deepEqual(parseAudioSettings('illisible'), { volume: 0.7, muted: false });
+});
+
+testAsync('préchargement avant le geste, décodage et ambiance en boucle au déblocage, gain maître = volume', async () => {
+  const { ctx, engine, loads } = audioRig();
+  await flush();
+  assert.deepEqual(loads.sort(), ['sounds/eat.wav', 'sounds/jungle.wav', 'sounds/roar.wav', 'sounds/walk.wav']);
+  assert.equal(ctx.decoded.length, 0, 'rien de décodé avant le geste');
+  engine.unlock();
+  assert.equal(ctx.state, 'running');
+  await flush(); await flush();
+  assert.equal(ctx.decoded.length, 4);
+  assert.deepEqual(ctx.playing(), ['sounds/jungle.wav (boucle)']);
+  assert.ok(near(ctx.gains[0].gain.value, 0.7), 'gain maître au volume par défaut');
+});
+
+testAsync('son par action : start joue, interrupt coupe, relance de la même action, un seul son d’action à la fois', async () => {
+  const { ctx, engine } = audioRig();
+  engine.unlock();
+  await flush(); await flush();
+  engine.onAction('eat', 'start');
+  await flush();
+  assert.deepEqual(ctx.playing(), ['sounds/jungle.wav (boucle)', 'sounds/eat.wav']);
+  engine.onAction('eat', 'interrupt');
+  engine.onAction('roar', 'start');
+  await flush();
+  assert.deepEqual(ctx.playing(), ['sounds/jungle.wav (boucle)', 'sounds/roar.wav']);
+  engine.onAction('roar', 'interrupt');
+  engine.onAction('roar', 'start');
+  await flush();
+  assert.deepEqual(ctx.playing(), ['sounds/jungle.wav (boucle)', 'sounds/roar.wav'], 'relance : un seul roar');
+  assert.equal(ctx.sources.filter((s) => s.buffer?.path === 'sounds/roar.wav').length, 2);
+});
+
+testAsync('end d’une action sans boucle : le son est coupé à la fin du clip (décision du 16/10)', async () => {
+  const { ctx, engine } = audioRig();
+  engine.unlock();
+  await flush(); await flush();
+  engine.onAction('roar', 'start');
+  await flush();
+  assert.deepEqual(ctx.playing(), ['sounds/jungle.wav (boucle)', 'sounds/roar.wav']);
+  engine.onAction('roar', 'end');
+  assert.deepEqual(ctx.playing(), ['sounds/jungle.wav (boucle)']);
+});
+
+testAsync('action en boucle : le son boucle avec elle et s’arrête quand son bouton l’arrête (end)', async () => {
+  const { ctx, engine } = audioRig();
+  engine.unlock();
+  await flush(); await flush();
+  engine.onAction('walk', 'start');
+  await flush();
+  assert.deepEqual(ctx.playing(), ['sounds/jungle.wav (boucle)', 'sounds/walk.wav (boucle)']);
+  engine.onAction('walk', 'end');
+  assert.deepEqual(ctx.playing(), ['sounds/jungle.wav (boucle)']);
+});
+
+testAsync('son pas encore décodé : part s’il est toujours en cours, pas si l’action a été interrompue entre-temps', async () => {
+  const { ctx, engine } = audioRig();
+  engine.unlock();
+  engine.onAction('eat', 'start'); // décodage en cours
+  engine.onAction('eat', 'interrupt');
+  await flush(); await flush();
+  assert.deepEqual(ctx.playing(), ['sounds/jungle.wav (boucle)']);
+  engine.onAction('roar', 'start');
+  await flush(); await flush();
+  assert.deepEqual(ctx.playing(), ['sounds/jungle.wav (boucle)', 'sounds/roar.wav']);
+});
+
+testAsync('avant le geste : aucun son ; action sans son : rien ; son absent ou format refusé : avertissement, pas d’erreur', async () => {
+  const { ctx, engine, warnings } = audioRig();
+  engine.onAction('roar', 'start');
+  await flush();
+  assert.equal(ctx.sources.length, 0);
+  engine.onAction('roar', 'end');
+  engine.setSounds({ ambient: 'sounds/absent.wav', actions: { roar: { sound: 'sounds/roar.bad', loop: false } } });
+  engine.unlock();
+  engine.onAction('jump', 'start');
+  engine.onAction('roar', 'start');
+  await flush(); await flush(); await flush();
+  assert.deepEqual(ctx.playing(), []);
+  assert.ok(warnings.some((w) => w.includes('décodage impossible de « sounds/roar.bad »')), warnings.join(' | '));
+});
+
+testAsync('génération : sons changés (atelier), anciens oubliés, ambiance relancée ; dispose ferme le contexte', async () => {
+  const { ctx, engine, loads } = audioRig();
+  engine.unlock();
+  await flush(); await flush();
+  engine.setSounds({ ambient: 'sounds/river.wav', actions: { roar: { sound: 'sounds/roar.wav', loop: false } } });
+  await flush(); await flush();
+  assert.deepEqual(ctx.playing(), ['sounds/river.wav (boucle)']);
+  assert.equal(loads.filter((p) => p === 'sounds/roar.wav').length, 1, 'son déjà décodé : pas relu');
+  engine.dispose();
+  assert.deepEqual(ctx.playing(), []);
+  assert.ok(ctx.closed);
+  engine.onAction('roar', 'start');
+  engine.unlock();
+  assert.equal(ctx.sources.filter((s) => s.buffer?.path === 'sounds/roar.wav').length, 0);
+});
+
+testAsync('volume et sourdine : gain maître, persistance par livre, relus par un nouveau moteur', async () => {
+  const storage = memStorage();
+  const { ctx, engine } = audioRig({ storage });
+  engine.unlock();
+  const seen: unknown[] = [];
+  engine.subscribe((s) => seen.push(s));
+  engine.setVolume(0.25);
+  assert.ok(near(ctx.gains[0].gain.value, 0.25));
+  engine.setVolume(0);
+  assert.equal(ctx.gains[0].gain.value, 0);
+  assert.equal(storage.m.get(audioSettingsKey('test-dino')), '{"volume":0.25,"muted":true}');
+  engine.toggleMute();
+  assert.ok(near(ctx.gains[0].gain.value, 0.25));
+  assert.equal(seen.length, 3);
+  engine.dispose();
+  const again = audioRig({ storage });
+  assert.deepEqual(again.engine.getSettings(), { volume: 0.25, muted: false });
+  again.engine.unlock();
+  assert.ok(near(again.ctx.gains[0].gain.value, 0.25));
+});
+
+for (const [name, fn] of asyncTests) {
+  try {
+    await fn();
+    console.log(`  ✓ ${name}`);
+  } catch (e) {
+    failed++;
+    console.error(`  ✗ ${name}\n    ${(e as Error).message}`);
+  }
+}
 
 if (failed) {
   console.error(`\n${failed} test(s) en échec`);

@@ -86,6 +86,14 @@ const translations = {
       preparing: "Préparation de la scène...",
       optimizing: "Optimisation mémoire GPU"
     },
+    volume: {
+      button: "Volume",
+      panel: "Réglage du volume",
+      slider: "Volume",
+      mute: "Couper le son",
+      unmute: "Remettre le son",
+      muted: "son coupé",
+    },
     restart: {
       title: "Scène en pause",
       message: "La scène a été mise en pause pour économiser la mémoire.",
@@ -179,6 +187,14 @@ const translations = {
       preparing: "Preparing the stage...",
       optimizing: "GPU memory optimisation"
     },
+    volume: {
+      button: "Volume",
+      panel: "Volume settings",
+      slider: "Volume",
+      mute: "Mute",
+      unmute: "Unmute",
+      muted: "muted",
+    },
     restart: {
       title: "Scene on hold",
       message: "The scene has been paused to save memory.",
@@ -271,6 +287,14 @@ const translations = {
       sleep: "Modo de espera...",
       preparing: "Preparación del escenario...",
       optimizing: "Optimización de la memoria GPU"
+    },
+    volume: {
+      button: "Volumen",
+      panel: "Ajuste del volumen",
+      slider: "Volumen",
+      mute: "Silenciar",
+      unmute: "Activar el sonido",
+      muted: "sonido silenciado",
     },
     restart: {
       title: "Escena en pausa",

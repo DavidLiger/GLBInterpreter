@@ -207,6 +207,11 @@ export type DioramaConfig3D = {
   autoplay?: boolean;
   /** Mode `buttons` d'une scène v1 (`modules.animations`, traduit par `sceneToEngineConfig`) ; absent de la fixture. */
   buttons?: ButtonsModeConfig;
+  /**
+   * Son d'ambiance d'une scène v1 (`modules.audio.ambientSound`, chemin déjà résolu), joué en boucle en Web Audio (Î11,
+   * `lib/audioEngine.ts`). Les ambiances par POI de la fixture (`POI.ambientSound`) restent lues par `useUnifiedAudio`.
+   */
+  ambientSound?: string;
   /** Module réservé (post-processing). */
   postProcessing?: PostProcessingConfig;
   /** Module réservé (objets émissifs, avec le post-processing). */
@@ -224,6 +229,8 @@ export type ButtonsModeAction = {
   loop: boolean;
   label: LocalizedText;
   icon?: string;
+  /** Son de l'action (couche éditoriale, chemin déjà résolu), joué en Web Audio (Î11, `lib/audioEngine.ts`). */
+  sound?: string;
 };
 
 /** Mode `buttons` (spec-extras-blender.md §4) : `idle` en boucle, un bouton par action dans l'ordre du GLB. */

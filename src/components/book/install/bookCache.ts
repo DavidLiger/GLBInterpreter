@@ -119,7 +119,11 @@ export async function cleanupAfterInstall(index: BookFilesIndex, base = bookBase
 export async function getAssetFromCache(bookId: string, path: string): Promise<Blob | null> {
   if (typeof caches === 'undefined') return null;
   try {
-    const res = await (await caches.open(cacheNameFor(bookId))).match(bookUrl(path));
+    // `caches.has` d'abord : `caches.open` créerait un cache vide pour un livre non installé (développement, atelier ;
+    // avant Î11, un cache `book-folio@/` naissait ainsi à chaque son de la fixture)
+    const name = cacheNameFor(bookId);
+    if (!(await caches.has(name))) return null;
+    const res = await (await caches.open(name)).match(bookUrl(path));
     return res ? await res.blob() : null;
   } catch {
     return null;

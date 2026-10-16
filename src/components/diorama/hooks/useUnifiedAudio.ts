@@ -1,4 +1,13 @@
 // src/components/diorama/hooks/useUnifiedAudio.ts
+//
+// Audio de la fixture (modules réservés : ligne de temps `timeline` avec `sceneSound` et seek, ambiances par POI de la
+// navigation entre POI), en `HTMLAudioElement`. Une scène v1 n'y passe pas : son par action et ambiance en Web Audio
+// (`lib/audioEngine.ts`, Î11). Volume et sourdine viennent du moteur Web Audio (réglages communs, persistés par livre).
+//
+// Nettoyage Î11 (A-04, A-22, A-23, A-25, A-26, A-29) : un élément remplacé ou nettoyé est libéré (lecture arrêtée,
+// écouteurs retirés, source retirée sans viser l'URL de la page, URL `blob:` révoquée) et n'est plus gardé dans une liste
+// qui grossit ; le cache lu est celui du livre (`bookId`, et non plus `'folio'` codé en dur, A-05, A-10) ; un préchargement
+// remplacé par un plus récent est abandonné (génération, A-13) et n'est plus relancé à chaque changement de volume.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { POI } from "@/types/diorama";
@@ -17,543 +26,361 @@ interface UseUnifiedAudioProps {
   pois: POI[];
   currentPOI: string | null;
   audioState: AudioState;
+  /** Livre dont le Cache Storage est lu (`ReaderScene.bookId`). */
+  bookId: string;
+  /** Réglages communs (moteur Web Audio, `useBookAudio`) : volume effectif et sourdine. */
+  volume: number;
+  muted: boolean;
 }
 
-export default function useUnifiedAudio({ 
-  pois, 
-  currentPOI, 
-  audioState 
-}: UseUnifiedAudioProps) {
-  
+/** URL `blob:` créée pour un élément (révoquée à sa libération). */
+const blobUrls = new WeakMap<HTMLAudioElement, string>();
+/** Écouteurs posés sur un élément (retirés à sa libération). */
+const listeners = new WeakMap<HTMLAudioElement, Array<[string, EventListener]>>();
+
+function listen(audio: HTMLAudioElement, type: string, fn: EventListener) {
+  audio.addEventListener(type, fn);
+  const l = listeners.get(audio) ?? [];
+  l.push([type, fn]);
+  listeners.set(audio, l);
+}
+
+/**
+ * Libère un élément audio (A-04) : arrêt, écouteurs retirés (avant tout : sans cela, retirer la source déclenchait
+ * l'écouteur d'erreur du préchargement), source retirée par `removeAttribute` (un `src = ''` fait charger l'URL de la
+ * page), URL `blob:` révoquée.
+ */
+function releaseAudio(audio: HTMLAudioElement) {
+  audio.pause();
+  for (const [type, fn] of listeners.get(audio) ?? []) audio.removeEventListener(type, fn);
+  listeners.delete(audio);
+  audio.removeAttribute("src");
+  audio.load();
+  const url = blobUrls.get(audio);
+  if (url) URL.revokeObjectURL(url);
+  blobUrls.delete(audio);
+}
+
+/** Source d'un son : copie du Cache Storage du livre (URL `blob:`), sinon son URL. */
+async function setSourceFromBook(audio: HTMLAudioElement, bookId: string, path: string) {
+  try {
+    const { getAssetFromCache } = await import("@/components/book/install/bookCache");
+    const blob = await getAssetFromCache(bookId, path);
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      blobUrls.set(audio, url);
+      audio.src = url;
+      return;
+    }
+  } catch {
+    /* cache indisponible : URL */
+  }
+  audio.src = path;
+}
+
+function findPOIRecursively(poisList: POI[], id: string): POI | null {
+  for (const poi of poisList) {
+    if (poi.id === id) return poi;
+    if (poi.children) {
+      const found = findPOIRecursively(poi.children, id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+export default function useUnifiedAudio({ pois, currentPOI, audioState, bookId, volume, muted }: UseUnifiedAudioProps) {
   const ambientAudioRefs = useRef<Record<string, HTMLAudioElement>>({});
   const sceneAudioRef = useRef<HTMLAudioElement | null>(null);
-  const allAudiosRef = useRef<HTMLAudioElement[]>([]);
-  const [muted, setMuted] = useState(false);
-  const [volume, setVolume] = useState(0.3);
+  const allAudiosRef = useRef<Set<HTMLAudioElement>>(new Set());
+  const volumeRef = useRef({ volume, muted });
+  volumeRef.current = { volume, muted };
   const [startSoundReady, setStartSoundReady] = useState(false);
   const previousPOIRef = useRef<string | null>(null);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const playPromisesRef = useRef<Map<string, Promise<void>>>(new Map());
   const preloadedSceneAudioRef = useRef<HTMLAudioElement | null>(null);
   const sceneAudioReadyRef = useRef<Promise<void> | null>(null);
+  const preloadGenRef = useRef(0);
+  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-    // ══════════════════════════════════════
-    // 1. CRÉATION LAZY DES AUDIOS (au lieu de preload)
-    // ══════════════════════════════════════
-    useEffect(() => {
-        // ✅ On ne fait rien au montage, on crée les audios au moment du play
-        // setStartSoundReady(true);
-        
-        return () => {
-            // Cleanup
-            Object.values(ambientAudioRefs.current).forEach(audio => {
-                audio.pause();
-                audio.src = '';
-            });
-            allAudiosRef.current.forEach(audio => {
-                audio.pause();
-                audio.src = '';
-            });
-        };
-    }, []);
+  /** Élément suivi (volume commun appliqué, libéré au nettoyage). */
+  const track = useCallback((audio: HTMLAudioElement) => {
+    audio.muted = volumeRef.current.muted;
+    audio.volume = volumeRef.current.volume;
+    allAudiosRef.current.add(audio);
+    return audio;
+  }, []);
+  const untrack = useCallback((audio: HTMLAudioElement | null) => {
+    if (!audio) return;
+    releaseAudio(audio);
+    allAudiosRef.current.delete(audio);
+  }, []);
 
-    // ✅ AJOUTER une fonction pour activer après interaction
-    const enableAudio = useCallback(() => {
-        console.log("🔓 [AUDIO] Activation après interaction utilisateur");
-        setStartSoundReady(true);
-    }, []);
+  // Libération au démontage du lecteur (A-04)
+  useEffect(() => {
+    const all = allAudiosRef.current;
+    const ambients = ambientAudioRefs;
+    const preloadGen = preloadGenRef; // compteur : l'incrément abandonne le préchargement en cours
+    const transitionTimer = transitionTimerRef;
+    return () => {
+      clearTimeout(transitionTimer.current);
+      preloadGen.current++;
+      all.forEach(releaseAudio);
+      all.clear();
+      ambients.current = {};
+    };
+  }, []);
 
-    // ══════════════════════════════════════
-    // 2. FONCTION HELPER pour créer/récupérer audio
-    // ══════════════════════════════════════
-    const getOrCreateAmbientAudio = useCallback((poiId: string, audioUrl: string) => {
-        if (ambientAudioRefs.current[poiId]) {
-            const existing = ambientAudioRefs.current[poiId];
-            if (existing.src === audioUrl || existing.src.endsWith(audioUrl)) {
-                return existing;
-            } else {
-                existing.pause();
-                existing.src = '';
-            }
-        }
-        
-        const audio = new Audio();
-        audio.src = audioUrl;
-        audio.loop = true;
-        audio.muted = false;  // ✅ Valeur fixe
-        audio.volume = 0.3;   // ✅ Valeur fixe
-        audio.preload = "auto";
-        ambientAudioRefs.current[poiId] = audio;
-        allAudiosRef.current.push(audio);
-        return audio;
-    }, []); // ✅ AUCUNE dépendance !
+  /** Geste de l'écran de démarrage : l'audio de la fixture peut jouer. */
+  const enableAudio = useCallback(() => {
+    setStartSoundReady(true);
+  }, []);
 
-    // ✅ AJOUTER cette nouvelle fonction après getOrCreateAmbientAudio
-    const preloadSceneAudio = useCallback(async (sceneSound: string) => {
-    console.log("📦 [AUDIO] Préchargement scène:", sceneSound);
-    
-    if (preloadedSceneAudioRef.current && preloadedSceneAudioRef.current.src.includes(sceneSound)) {
-        console.log("✅ [AUDIO] Déjà préchargé");
+  const getOrCreateAmbientAudio = useCallback(
+    (poiId: string, audioUrl: string) => {
+      const existing = ambientAudioRefs.current[poiId];
+      if (existing) {
+        if (existing.src === audioUrl || existing.src.endsWith(audioUrl)) return existing;
+        untrack(existing);
+      }
+      const audio = new Audio();
+      audio.src = audioUrl;
+      audio.loop = true;
+      audio.preload = "auto";
+      ambientAudioRefs.current[poiId] = track(audio);
+      return audio;
+    },
+    [track, untrack],
+  );
+
+  // Préchargement du son de scène (ligne de temps)
+  const preloadSceneAudio = useCallback(
+    async (sceneSound: string) => {
+      const current = preloadedSceneAudioRef.current;
+      if (current && current.dataset.sound === sceneSound) return;
+
+      // Génération (A-13) : un préchargement remplacé par un plus récent est abandonné et libéré
+      const gen = ++preloadGenRef.current;
+      if (current && current !== sceneAudioRef.current) untrack(current);
+      preloadedSceneAudioRef.current = null;
+
+      const audio = new Audio();
+      audio.dataset.sound = sceneSound;
+      audio.loop = false;
+      await setSourceFromBook(audio, bookId, sceneSound);
+      if (gen !== preloadGenRef.current) {
+        releaseAudio(audio);
         return;
-    }
-    
-    const audio = new Audio();
-    audio.loop = false;
-    audio.muted = muted;
-    audio.volume = volume;
-    
-    try {
-        const { getAssetFromCache } = await import('@/components/book/install/bookCache');
-        const cachedBlob = await getAssetFromCache('folio', sceneSound);
-        
-        if (cachedBlob) {
-        audio.src = URL.createObjectURL(cachedBlob);
-        } else {
-        audio.src = sceneSound;
-        }
-    } catch {
-        audio.src = sceneSound;
-    }
-    
-    sceneAudioReadyRef.current = new Promise((resolve, reject) => {
-        audio.addEventListener('canplaythrough', () => {
-        console.log("✅ [AUDIO] Scène prête:", sceneSound);
-        preloadedSceneAudioRef.current = audio;
-        allAudiosRef.current.push(audio);
-        resolve();
-        }, { once: true });
-        
-        audio.addEventListener('error', (e) => {
-        console.error("❌ [AUDIO] Erreur préchargement:", e);
-        reject(e);
-        }, { once: true });
-        
-        audio.load();
-    });
-    
-    await sceneAudioReadyRef.current;
-    }, [muted, volume]);
+      }
+      track(audio);
 
-    // ✅ AJOUTER cette fonction pour attendre
-    // A-14 (Î10b) : attente bornée. `canplaythrough` peut ne jamais arriver (préchargement refusé sans geste, iOS) ;
-    // l'animation part alors sans attendre le son. Le lanceur vérifie son jeton après l'attente (usePOIScenePlayer, P-04).
-    const waitForSceneAudio = useCallback(async () => {
+      sceneAudioReadyRef.current = new Promise((resolve, reject) => {
+        listen(audio, "canplaythrough", () => {
+          if (gen !== preloadGenRef.current) return;
+          preloadedSceneAudioRef.current = audio;
+          resolve();
+        });
+        listen(audio, "error", () => {
+          // Échec réel du chargement (fichier absent : 404, format refusé) : code MediaError et adresse demandée
+          console.error(
+            `❌ [AUDIO] Erreur préchargement « ${sceneSound} » (MediaError ${audio.error?.code ?? "?"}, ${audio.currentSrc || audio.src})`,
+          );
+          reject(audio.error);
+        });
+        audio.load();
+      });
+
+      await sceneAudioReadyRef.current;
+    },
+    [bookId, track, untrack],
+  );
+
+  // A-14 (Î10b) : attente bornée. `canplaythrough` peut ne jamais arriver (préchargement refusé sans geste, iOS) ;
+  // l'animation part alors sans attendre le son. Le lanceur vérifie son jeton après l'attente (usePOIScenePlayer, P-04).
+  const waitForSceneAudio = useCallback(async () => {
     const ready = sceneAudioReadyRef.current;
     if (!ready) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<void>((resolve) => {
-        timer = setTimeout(() => {
+      timer = setTimeout(() => {
         console.warn("⚠️ [AUDIO] Son de scène pas prêt après 5 s, lancement sans attendre");
         resolve();
-        }, SCENE_AUDIO_WAIT_MS);
+      }, SCENE_AUDIO_WAIT_MS);
     });
     try {
-        await Promise.race([ready, timeout]);
+      await Promise.race([ready, timeout]);
     } finally {
-        if (timer !== undefined) clearTimeout(timer);
+      if (timer !== undefined) clearTimeout(timer);
     }
-    }, []);
+  }, []);
 
-    // ══════════════════════════════════════
-    // 3. GESTION AMBIENT (avec création lazy)
-    // ══════════════════════════════════════
-    useEffect(() => {
-        console.log("🎵 [AMBIENT] Check:", { 
-            currentPOI, 
-            startSoundReady, 
-            isPlaying: audioState.isPlaying, 
-            isEnded: audioState.isEnded,
-            muted,
-            isTransitioning
+  // Ambiance du POI courant (hors scène)
+  useEffect(() => {
+    if (isTransitioning || !currentPOI || !startSoundReady) return;
+
+    const poiHasChanged = previousPOIRef.current !== currentPOI;
+    const isScenePlaying = audioState.isPlaying && !audioState.isEnded;
+
+    // Arrêt de l'ambiance de l'ancien POI (après sa promesse de lecture)
+    if (previousPOIRef.current && poiHasChanged) {
+      const oldId = previousPOIRef.current;
+      const oldAmbient = ambientAudioRefs.current[oldId];
+      if (oldAmbient) {
+        const stop = () => {
+          oldAmbient.pause();
+          oldAmbient.currentTime = 0;
+        };
+        const oldPromise = playPromisesRef.current.get(oldId);
+        if (oldPromise) oldPromise.then(stop, stop).finally(() => playPromisesRef.current.delete(oldId));
+        else stop();
+      }
+    }
+
+    // Scène en cours : pas d'ambiance
+    if (isScenePlaying) {
+      previousPOIRef.current = currentPOI;
+      return;
+    }
+
+    const poi = findPOIRecursively(pois, currentPOI);
+    if (poi?.ambientSound) {
+      const ambient = getOrCreateAmbientAudio(currentPOI, poi.ambientSound);
+      const playPromise = ambient
+        .play()
+        .catch((err) => {
+          console.error("❌ [AMBIENT] Erreur play:", err);
+        })
+        .finally(() => {
+          playPromisesRef.current.delete(currentPOI);
         });
-        
-        if (isTransitioning) {
-            console.log("⏸️ [AMBIENT] Transition en cours, skip");
-            return;
-        }
-
-        if (!currentPOI || !startSoundReady) {
-            console.log("⏸️ [AMBIENT] Early return (pas de POI ou pas ready)");
-            return;
-        }
-
-        const poiHasChanged = previousPOIRef.current !== currentPOI;
-        const isScenePlaying = audioState.isPlaying && !audioState.isEnded;
-        
-        console.log("🎵 [AMBIENT] isScenePlaying:", isScenePlaying);
-        
-        // ✅ Arrêter ancien POI avec gestion de la promesse
-        if (previousPOIRef.current && poiHasChanged) {
-            const oldAmbient = ambientAudioRefs.current[previousPOIRef.current];
-            if (oldAmbient) {
-                console.log("⏹️ [AMBIENT] Stop ancien:", previousPOIRef.current);
-                
-                const oldPromise = playPromisesRef.current.get(previousPOIRef.current);
-                if (oldPromise) {
-                    oldPromise
-                        .then(() => {
-                            oldAmbient.pause();
-                            oldAmbient.currentTime = 0;
-                        })
-                        .catch(() => {
-                            oldAmbient.pause();
-                            oldAmbient.currentTime = 0;
-                        })
-                        .finally(() => {
-                            playPromisesRef.current.delete(previousPOIRef.current!);
-                        });
-                } else {
-                    oldAmbient.pause();
-                    oldAmbient.currentTime = 0;
-                }
-            }
-        }
-        
-        // ✅ SIMPLIFIÉ : Si scène en cours, NE JAMAIS jouer l'ambient
-        if (isScenePlaying) {
-            console.log("⏸️ [AMBIENT] Scène en cours, skip ambient");
-            previousPOIRef.current = currentPOI;
-            return;
-        }
-        
-        // ✅ Sinon, jouer l'ambient du POI actuel
-        const poi = pois.find(p => p.id === currentPOI) || 
-                    findPOIRecursively(pois, currentPOI);
-        
-        if (poi?.ambientSound) {
-            const ambient = getOrCreateAmbientAudio(currentPOI, poi.ambientSound);
-            
-            console.log("▶️ [AMBIENT] Play:", currentPOI, "muted:", muted);
-            ambient.muted = muted;
-            ambient.volume = volume;
-            
-            // ✅ Stocker la promesse
-            const playPromise = ambient.play()
-                .catch((err) => {
-                    console.error("❌ [AMBIENT] Erreur play:", err);
-                })
-                .finally(() => {
-                    playPromisesRef.current.delete(currentPOI);
-                });
-            
-            playPromisesRef.current.set(currentPOI, playPromise);
-        } else {
-            console.warn("⚠️ [AMBIENT] Pas d'ambientSound pour POI:", currentPOI);
-        }
-
-        previousPOIRef.current = currentPOI;
-    }, [currentPOI, muted, startSoundReady, audioState.isPlaying, audioState.isEnded, pois, getOrCreateAmbientAudio, isTransitioning]);
-
-    // Helper pour trouver POI récursivement
-    function findPOIRecursively(poisList: POI[], id: string): POI | null {
-    for (const poi of poisList) {
-        if (poi.id === id) return poi;
-        if (poi.children) {
-        const found = findPOIRecursively(poi.children, id);
-        if (found) return found;
-        }
-    }
-    return null;
+      playPromisesRef.current.set(currentPOI, playPromise);
     }
 
-    // Détecter changement POI pendant scène :
+    previousPOIRef.current = currentPOI;
+  }, [currentPOI, startSoundReady, audioState.isPlaying, audioState.isEnded, pois, getOrCreateAmbientAudio, isTransitioning]);
 
-    useEffect(() => {
-    // ✅ Si le POI change pendant qu'une scène joue, stopper la scène
-    if (sceneAudioRef.current && !sceneAudioRef.current.paused) {
-        console.log("🔄 [SCENE] POI changé pendant lecture → Stop scene audio");
+  // Changement de POI pendant une scène : arrêt du son de scène
+  useEffect(() => {
+    const a = sceneAudioRef.current;
+    if (a && !a.paused) {
+      a.pause();
+      a.currentTime = 0;
+      sceneAudioRef.current = null;
+    }
+  }, [currentPOI]);
+
+  // Son de scène synchronisé avec le lecteur de la ligne de temps (création, lecture, pause)
+  useEffect(() => {
+    const isScenePlaying = audioState.isPlaying && !audioState.isEnded;
+
+    if (isScenePlaying && !audioState.isPaused && audioState.currentSceneSound) {
+      Object.values(ambientAudioRefs.current).forEach((audio) => audio.pause());
+
+      const pre = preloadedSceneAudioRef.current;
+      if (pre && pre.dataset.sound === audioState.currentSceneSound) {
+        if (sceneAudioRef.current !== pre) sceneAudioRef.current = pre;
+        if (pre.paused) pre.play().catch(() => {});
+        return;
+      }
+
+      // Pas de préchargement prêt : nouvel élément (l'ancien est libéré)
+      untrack(sceneAudioRef.current);
+      const audio = new Audio();
+      audio.dataset.sound = audioState.currentSceneSound;
+      audio.loop = false;
+      sceneAudioRef.current = track(audio);
+      const sound = audioState.currentSceneSound;
+      void (async () => {
+        await setSourceFromBook(audio, bookId, sound);
+        if (sceneAudioRef.current !== audio) return;
+        listen(audio, "loadedmetadata", () => {
+          audio.play().catch(() => {});
+        });
+        audio.load();
+      })();
+    } else if (audioState.isPaused && sceneAudioRef.current) {
+      if (!sceneAudioRef.current.paused) sceneAudioRef.current.pause();
+    } else if (audioState.isEnded && !isTransitioning) {
+      if (sceneAudioRef.current) {
         sceneAudioRef.current.pause();
         sceneAudioRef.current.currentTime = 0;
         sceneAudioRef.current = null;
+      }
+      if (currentPOI) {
+        const poi = findPOIRecursively(pois, currentPOI);
+        if (poi?.ambientSound) {
+          const ambient = getOrCreateAmbientAudio(currentPOI, poi.ambientSound);
+          if (ambient.paused) ambient.play().catch(() => {});
+        }
+      }
     }
-    }, [currentPOI]);
+  }, [
+    audioState.isPlaying,
+    audioState.isPaused,
+    audioState.isEnded,
+    audioState.currentSceneSound,
+    currentPOI,
+    pois,
+    getOrCreateAmbientAudio,
+    isTransitioning,
+    bookId,
+    track,
+    untrack,
+  ]); // volume et sourdine : effet séparé
 
-    // ══════════════════════════════════════
-    // 3. GESTION SCENE SOUND (sync avec player)
-    // ══════════════════════════════════════
+  // Volume et sourdine communs appliqués à tous les éléments de la fixture. Sur iOS, `HTMLAudioElement.volume` est
+  // ignoré (A-28) : seule la sourdine y agit (fixture seulement ; une scène v1 passe par le gain Web Audio).
+  useEffect(() => {
+    for (const audio of allAudiosRef.current) {
+      audio.volume = volume;
+      audio.muted = muted;
+    }
+  }, [volume, muted]);
 
-    // ✅ useEffect pour CRÉER/PLAY/PAUSE uniquement (PAS de volume/mute/seek ici)
-    useEffect(() => {
-        const isScenePlaying = audioState.isPlaying && !audioState.isEnded;
-        
-        // ─── Démarrage scène ───
-        if (isScenePlaying && !audioState.isPaused && audioState.currentSceneSound) {
-            Object.values(ambientAudioRefs.current).forEach(audio => {
-                audio.pause();
-            });
-
-            // Si l'audio existe déjà ET c'est le même src
-            // if (sceneAudioRef.current && sceneAudioRef.current.src.includes(audioState.currentSceneSound)) {
-            //     if (sceneAudioRef.current.paused) {
-            //         console.log("▶️ [SCENE] Resume");
-            //         sceneAudioRef.current.play().catch(() => {});
-            //     }
-            //     return; // ✅ NE PAS recréer
-            // }
-
-            if (preloadedSceneAudioRef.current && 
-                    preloadedSceneAudioRef.current.src.includes(audioState.currentSceneSound)) {
-                console.log("▶️ [SCENE] Utilisation audio préchargé");
-                
-                if (sceneAudioRef.current !== preloadedSceneAudioRef.current) {
-                    sceneAudioRef.current = preloadedSceneAudioRef.current;
-                }
-                
-                if (sceneAudioRef.current.paused) {
-                    sceneAudioRef.current.play().catch(() => {});
-                }
-                return;
-            }
-            
-            // Sinon, créer nouvel audio
-            console.log("🆕 [SCENE] Création nouvel audio");
-
-            if (sceneAudioRef.current) {
-                sceneAudioRef.current.pause();
-                sceneAudioRef.current.src = '';
-            }
-
-            const audio = new Audio();  // ✅ PAS d'URL ici
-            audio.loop = false;
-            audio.muted = muted;
-            audio.volume = volume;
-            sceneAudioRef.current = audio;
-            allAudiosRef.current.push(audio);
-
-            // ✅ CHARGER DEPUIS CACHE
-            (async () => {
-                try {
-                    const { getAssetFromCache } = await import('@/components/book/install/bookCache');
-                    const bookId = 'folio';
-                    
-                    const cachedBlob = await getAssetFromCache(bookId, audioState.currentSceneSound!);
-                    
-                    if (cachedBlob) {
-                        console.log("✅ [SCENE] Chargé depuis cache (Blob URL)");
-                        const blobUrl = URL.createObjectURL(cachedBlob);
-                        audio.src = blobUrl;
-                    } else {
-                        console.log("⚠️ [SCENE] Pas en cache, URL directe");
-                        audio.src = audioState.currentSceneSound!;
-                    }
-                    
-                    audio.load();
-                    
-                    audio.addEventListener('loadedmetadata', () => {
-                        console.log("▶️ [SCENE] Métadonnées chargées, play");
-                        audio.play().catch(() => {});
-                    }, { once: true });
-                    
-                } catch (error) {
-                    console.error("❌ Erreur cache:", error);
-                    audio.src = audioState.currentSceneSound!;
-                    audio.load();
-                    audio.addEventListener('loadedmetadata', () => {
-                        audio.play().catch(() => {});
-                    }, { once: true });
-                }
-            })();
-        }
-        // ─── Pause scène ───
-        else if (audioState.isPaused && sceneAudioRef.current) {
-            if (!sceneAudioRef.current.paused) {
-                console.log("⏸️ [SCENE] Pause");
-                sceneAudioRef.current.pause();
-            }
-        }
-        // ─── Fin de scène ───
-        else if (audioState.isEnded && !isTransitioning) {
-            console.log("🏁 [SCENE] Fin");
-            
-            if (sceneAudioRef.current) {
-                sceneAudioRef.current.pause();
-                sceneAudioRef.current.currentTime = 0;
-                sceneAudioRef.current = null;
-            }
-
-            if (currentPOI) {
-                const poi = pois.find(p => p.id === currentPOI) || 
-                            findPOIRecursively(pois, currentPOI);
-                
-                if (poi?.ambientSound) {
-                    const ambient = getOrCreateAmbientAudio(currentPOI, poi.ambientSound);
-                    ambient.muted = muted;
-                    ambient.volume = volume; // ✅ AJOUTER
-                    if (ambient.paused) {
-                        ambient.play().catch(() => {});
-                    }
-                }
-            }
-        }
-    }, [
-        audioState.isPlaying, 
-        audioState.isPaused, 
-        audioState.isEnded, 
-        audioState.currentSceneSound, // ✅ SEULEMENT ces deps !
-        currentPOI,
-        pois,
-        getOrCreateAmbientAudio,
-        isTransitioning
-    ]); // ✅ RETIRER: volume, muted, currentTime
-
-    // ✅ useEffect séparé pour VOLUME et MUTE
-    useEffect(() => {
-        if (sceneAudioRef.current) {
-            sceneAudioRef.current.volume = volume;
-            sceneAudioRef.current.muted = muted;
-        }
-    }, [volume, muted]);
-
-    // ✅ NOUVEAU : Appliquer le volume à tous les audios
-    const applyVolumeToAll = useCallback((vol: number, shouldMute: boolean) => {
-        Object.values(ambientAudioRefs.current).forEach(audio => {
-            audio.volume = vol;
-            audio.muted = shouldMute; // ✅ Appliquer muted aussi
-        });
-        
-        if (sceneAudioRef.current) {
-            sceneAudioRef.current.volume = vol;
-            sceneAudioRef.current.muted = shouldMute; // ✅ Appliquer muted aussi
-        }
-    }, []);
-
-    // ✅ NOUVEAU : Setter de volume
-    const setAudioVolume = useCallback((vol: number) => {
-        const clampedVolume = Math.max(0, Math.min(1, vol));
-        const shouldBeMuted = clampedVolume === 0;
-        
-        setVolume(clampedVolume);
-        setMuted(shouldBeMuted);
-        
-        // ✅ Appliquer volume ET muted ensemble
-        applyVolumeToAll(clampedVolume, shouldBeMuted);
-    }, [applyVolumeToAll]);
-
-  // ══════════════════════════════════════
-  // 4. TOGGLE MUTE GLOBAL
-  // ══════════════════════════════════════
-    const toggleMute = useCallback(() => {
-        setMuted(prev => {
-            const next = !prev;
-            
-            // ✅ Utiliser applyVolumeToAll pour appliquer partout
-            applyVolumeToAll(volume, next);
-
-            if (!next && currentPOI && !audioState.isPlaying) {
-                const ambient = ambientAudioRefs.current[currentPOI];
-                if (ambient) {
-                    ambient.muted = false;
-                    ambient.play().catch(() => {});
-                }
-            }
-
-            return next;
-        });
-    }, [currentPOI, audioState.isPlaying, volume, applyVolumeToAll]);
-
-    // ══════════════════════════════════════
-    // 5. SEEK AUDIO (synchronisation externe)
-    // ══════════════════════════════════════
-    const seekSceneAudio = useCallback((time: number) => {
-        if (!sceneAudioRef.current) return;
-        
-        const audio = sceneAudioRef.current;
-        
-        console.log("🎯 [SEEK] Seek à:", time, "readyState:", audio.readyState);
-        
-        const applySeek = () => {
-            audio.currentTime = Math.min(time, audio.duration || 0);
-            console.log("✅ [SEEK] Appliqué, currentTime:", audio.currentTime);
-        };
-        
-        if (audio.readyState >= 2) { // HAVE_CURRENT_DATA
-            applySeek();
-        } else {
-            audio.addEventListener('canplay', applySeek, { once: true });
-        }
-    }, []);
-
-    // ══════════════════════════════════════
-    // 6. CLEANUP (déplacé après seekSceneAudio)
-    // ══════════════════════════════════════
-    const prepareForPOIChange = useCallback(() => {
-        console.log("🔄 [AUDIO] Préparation changement POI");
-        setIsTransitioning(true);
-        
-        // Arrêter l'ambient actuel
-        Object.values(ambientAudioRefs.current).forEach(audio => audio.pause());
-        
-        // Reset après un délai
-        setTimeout(() => {
-            setIsTransitioning(false);
-            console.log("✅ [AUDIO] Transition terminée");
-        }, 1500);
-    }, []);
-
-    // useCallback([]) : ne dépend que de refs et d'un setter stable. Une fonction recréée à chaque
-    // rendu faisait démonter/remonter les listeners de cycle de vie de WebDioramaLoader.
-    const cleanup = useCallback(() => {
-        console.log("🔇 Cleanup audio unifié - Début");
-        
-        // ✅ 0. DÉSACTIVER startSoundReady pour éviter re-trigger
-        setStartSoundReady(false);
-        
-        // 1. Scene audio
-        if (sceneAudioRef.current) {
-            console.log("🔇 Stop scene audio:", sceneAudioRef.current.src);
-            sceneAudioRef.current.pause();
-            sceneAudioRef.current.muted = true;
-            sceneAudioRef.current.volume = 0;
-            sceneAudioRef.current.currentTime = 0;
-            sceneAudioRef.current.src = '';
-            sceneAudioRef.current.load();
-            sceneAudioRef.current = null;
-        }
-        
-        // 2. Ambients
-        Object.entries(ambientAudioRefs.current).forEach(([id, audio]) => {
-            console.log("🔇 Stop ambient:", id);
-            audio.pause();
-            audio.muted = true;
-            audio.volume = 0;
-            audio.currentTime = 0;
-            audio.src = '';
-            audio.load();
-        });
-        
-        // 3. Tous trackés
-        allAudiosRef.current.forEach((audio, index) => {
-            console.log("🔇 Stop audio tracké:", index);
-            audio.pause();
-            audio.muted = true;
-            audio.volume = 0;
-            audio.currentTime = 0;
-            audio.src = '';
-            audio.load();
-        });
-        
-        // 4. Reset refs
-        ambientAudioRefs.current = {};
-        allAudiosRef.current = [];
-        
-        console.log("✅ Cleanup audio unifié terminé");
-    }, []);
-
-    // ══════════════════════════════════════
-    // RETURN
-    // ══════════════════════════════════════
-    return {
-        muted,
-        volume,
-        toggleMute,
-        setAudioVolume,
-        startSoundReady,
-        enableAudio,
-        seekSceneAudio, // ✅ AJOUTER
-        cleanup,
-        sceneAudioRef,
-        prepareForPOIChange,
-        preloadSceneAudio, // ✅ NOUVEAU
-        waitForSceneAudio,
+  // Seek (ligne de temps, module réservé `timeline`)
+  const seekSceneAudio = useCallback((time: number) => {
+    const audio = sceneAudioRef.current;
+    if (!audio) return;
+    const applySeek = () => {
+      audio.currentTime = Math.min(time, audio.duration || 0);
     };
+    if (audio.readyState >= 2) applySeek();
+    else audio.addEventListener("canplay", applySeek, { once: true });
+  }, []);
+
+  // Avant un changement de POI (navigation entre POI, module réservé)
+  const prepareForPOIChange = useCallback(() => {
+    setIsTransitioning(true);
+    Object.values(ambientAudioRefs.current).forEach((audio) => audio.pause());
+    clearTimeout(transitionTimerRef.current);
+    transitionTimerRef.current = setTimeout(() => setIsTransitioning(false), 1500);
+  }, []);
+
+  // useCallback([]) : ne dépend que de refs et d'un setter stable. Une fonction recréée à chaque
+  // rendu faisait démonter/remonter les listeners de cycle de vie de WebDioramaLoader.
+  const cleanup = useCallback(() => {
+    setStartSoundReady(false);
+    clearTimeout(transitionTimerRef.current);
+    // Préchargement en cours abandonné ; élément de scène, ambiances et éléments suivis libérés (A-04)
+    preloadGenRef.current++;
+    allAudiosRef.current.forEach(releaseAudio);
+    allAudiosRef.current.clear();
+    sceneAudioRef.current = null;
+    preloadedSceneAudioRef.current = null;
+    sceneAudioReadyRef.current = null;
+    ambientAudioRefs.current = {};
+    playPromisesRef.current.clear();
+  }, []);
+
+  return {
+    startSoundReady,
+    enableAudio,
+    seekSceneAudio,
+    cleanup,
+    sceneAudioRef,
+    prepareForPOIChange,
+    preloadSceneAudio,
+    waitForSceneAudio,
+  };
 }

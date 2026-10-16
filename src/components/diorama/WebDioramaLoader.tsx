@@ -42,6 +42,8 @@ import { addFallbackLightsIfNone } from "./lib/fallbackLights";
 import { ButtonsPlayer, type ActionEvent } from "./lib/buttonsPlayer";
 import ActionButtons from "./ui/ActionButtons";
 import useUnifiedAudio from "./hooks/useUnifiedAudio";
+import useBookAudio from "./hooks/useBookAudio";
+import { effectiveVolume, type SceneSounds } from "./lib/audioEngine";
 import { applySpritesheets } from "./rendering/applySpritesheet";
 import { SpritesheetAnimator } from "./rendering/SpritesheetAnimator";
 
@@ -244,12 +246,28 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
     waitForSceneAudioRef,
   });
 
-  // ✅ Hook audio unifié (remplace usePOIAudio)
+  // Audio Web Audio (Î11, lib/audioEngine.ts) : son par action du mode `buttons` et ambiance d'une scène v1, volume et
+  // sourdine communs (persistés par livre), aussi appliqués à l'audio de la fixture ci-dessous
+  const sceneSounds = useMemo<SceneSounds>(
+    () => ({
+      ambient: config.ambientSound,
+      actions: Object.fromEntries(
+        (config.buttons?.actions ?? []).flatMap((a) => (a.sound ? [[a.id, { sound: a.sound, loop: a.loop }] as const] : [])),
+      ),
+    }),
+    [config.ambientSound, config.buttons],
+  );
+  const {
+    settings: audioSettings,
+    unlock: unlockAudio,
+    onAction: playActionSound,
+    setVolume: setAudioVolume,
+    toggleMute,
+    release: releaseBookAudio,
+  } = useBookAudio(bookId, sceneSounds);
+
+  // Audio de la fixture (ligne de temps, ambiances par POI : modules réservés), en HTMLAudioElement
   const { 
-    muted, 
-    volume,
-    toggleMute, 
-    setAudioVolume,
     startSoundReady,  
     enableAudio,
     cleanup: cleanupAudio,
@@ -260,6 +278,9 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
   } = useUnifiedAudio({
     pois: config.pois,
     currentPOI,
+    bookId,
+    volume: effectiveVolume(audioSettings),
+    muted: audioSettings.muted,
     audioState: {
       isPlaying,
       isPaused,
@@ -599,6 +620,7 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
               onAction: (e) => {
                 if (process.env.NODE_ENV === "development") console.info(`[buttons] ${e.id} : ${e.phase}`);
                 setActionLog((log) => [...log.slice(-9), `${e.id}:${e.phase}`]);
+                playActionSound(e.id, e.phase); // son par action (Î11)
                 onActionRef.current?.(e);
               },
               onChange: setCurrentAction,
@@ -876,6 +898,7 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
       }
 
       // 2. Audio et lecteur de scène (les audios ne sont jamais dans le DOM : tout passe par les hooks)
+      releaseBookAudio();
       cleanupAudio();
       cleanupScenePlayer();
 
@@ -1002,7 +1025,7 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
     };
     // Tout ce qui est listé est stable (useCallback / refs) : l'effet n'est posé qu'une fois.
     // Ne pas y ajouter de valeur instable, sous peine de re-souscrire à chaque rendu.
-  }, [stopAllAnimations, cleanupMixers, cleanupAudio, cleanupScenePlayer, stopVideos, destroyRenderer]);
+  }, [stopAllAnimations, cleanupMixers, cleanupAudio, releaseBookAudio, cleanupScenePlayer, stopVideos, destroyRenderer]);
 
   useEffect(() => {
     if (showLoaderOverlay) {
@@ -1170,7 +1193,8 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
                 onStart={() => {
                   window.scrollTo(0, 0);
 
-                  // ✅ Activer audio
+                  // Audio : AudioContext créé et débloqué dans le geste (Web Audio, Î11), audio de la fixture autorisé
+                  unlockAudio();
                   enableAudio();
 
                   if (!embedded && !isFullscreen) toggleFullscreen();
@@ -1178,8 +1202,6 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
                   // joue déjà depuis le chargement ; le geste ne sert qu'à débloquer l'audio.
                   if (autoplayWanted) {
                     autoplayNow(); // lance la scène et son sceneSound
-                  } else if (muted) {
-                    toggleMute(); // Active ambient
                   }
                   setShowLoaderOverlay(false);
                   setExperienceStarted(true);
@@ -1201,8 +1223,8 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
             <AnimatePresence>
               {startSoundReady && (
                 <VolumeControl
-                  volume={volume}
-                  muted={muted}
+                  volume={audioSettings.volume}
+                  muted={audioSettings.muted}
                   onVolumeChange={setAudioVolume}
                   onToggleMute={toggleMute}
                 />

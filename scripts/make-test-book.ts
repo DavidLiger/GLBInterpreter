@@ -8,7 +8,10 @@
 //   à 2 os, maillage skinné portant des propriétés src_*, empty « start », clips idle/walk/roar/eat ; couche éditoriale dans
 //   scenes/<scène>.edit.json (textes, icônes, sons, cadrage, quiz, crédits) ; « raptor » n'a pas de cadrage (valeurs par
 //   défaut du lecteur, Î10b) ; aucune scène n'a de lumière (éclairage de secours, D-8.10) ;
-// - images PNG 1×1, sons WAV de 0,1 s, icône du livre `icon.png` (512 px, Î9) ;
+// - images PNG 1×1, icône du livre `icon.png` (512 px, Î9) ;
+// - sons WAV audibles (Î11) : un bip par action, de hauteur propre à l'action (walk grave, roar médium, eat aigu ; raptor une
+//   octave plus haut que trex), plus long que le clip (on entend la coupure à l'interruption et à la fin du clip) ; ambiance `jungle.wav` : bourdonnement doux de 2 s qui boucle sans coupure ;
+// - action « walk » du raptor en boucle (`loop: true`, Î11) : couvre le son qui boucle avec l'action et s'arrête avec elle ;
 // - image de chargement de « trex » en bruit aléatoire (≈ 3 MiB, Î10) : avec `--part-mib 1`, au moins un fichier du livre est
 //   découpé, ce qui garde la couverture des tests de recomposition et de reprise (tests/install.spec.ts) sur un livre v1.
 import fs from 'node:fs';
@@ -24,15 +27,28 @@ const PNG_1X1 = Buffer.from(
   'base64',
 );
 
-function silentWav(seconds = 0.1, rate = 8000): Buffer {
+/** WAV PCM 16 bits mono : `sample(t)` dans [−1, 1] pour t en secondes. */
+function wav(seconds: number, sample: (t: number) => number, rate = 22050): Buffer {
   const n = Math.round(seconds * rate);
-  const b = Buffer.alloc(44 + n);
-  b.write('RIFF', 0); b.writeUInt32LE(36 + n, 4); b.write('WAVE', 8); b.write('fmt ', 12);
+  const b = Buffer.alloc(44 + 2 * n);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + 2 * n, 4); b.write('WAVE', 8); b.write('fmt ', 12);
   b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(rate, 24);
-  b.writeUInt32LE(rate, 28); b.writeUInt16LE(1, 32); b.writeUInt16LE(8, 34); b.write('data', 36); b.writeUInt32LE(n, 40);
-  b.fill(128, 44);
+  b.writeUInt32LE(rate * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(2 * n, 40);
+  for (let i = 0; i < n; i++) b.writeInt16LE(Math.round(32767 * Math.max(-1, Math.min(1, sample(i / rate)))), 44 + 2 * i);
   return b;
 }
+
+/** Bip d'action : trois notes brèves répétées (on reconnaît le début, la coupure et la fin), attaque et fin adoucies. */
+function actionWav(freq: number, seconds = 2): Buffer {
+  return wav(seconds, (t) => {
+    const env = Math.min(1, t / 0.01, (seconds - t) / 0.05);
+    const pulse = (t % 0.25) < 0.18 ? 1 : 0;
+    return 0.5 * env * pulse * Math.sin(2 * Math.PI * freq * t);
+  });
+}
+
+/** Ambiance : 110 Hz modulé à 1 Hz, 2 s (nombres entiers de périodes : la boucle ne s'entend pas). */
+const ambientWav = () => wav(2, (t) => 0.25 * (0.6 + 0.4 * Math.sin(2 * Math.PI * t)) * Math.sin(2 * Math.PI * 110 * t));
 
 const L = (fr: string, en: string, es: string) => ({ fr, en, es });
 
@@ -104,7 +120,8 @@ function layer3d(id: string, armature: string): Layer3d {
       animations: {
         mode: 'buttons',
         idle: { object: armature, clip: 'idle', loop: true },
-        actions: ACTIONS.map((a) => ({ id: a.id, object: armature, type: 'armature' as const, clip: a.id, trigger: 'button' as const, loop: false })),
+        // Raptor : « walk » en boucle (Î11, son qui boucle avec l'action et s'arrête par son bouton)
+        actions: ACTIONS.map((a) => ({ id: a.id, object: armature, type: 'armature' as const, clip: a.id, trigger: 'button' as const, loop: id === 'raptor' && a.id === 'walk' })),
       },
     },
   };
@@ -188,8 +205,13 @@ async function main(): Promise<void> {
     .composite([{ input: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><circle cx="256" cy="256" r="220" fill="#2e8b57"/></svg>') }])
     .png()
     .toFile(path.join(dir, 'icon.png'));
-  for (const id of ['trex', 'raptor']) for (const a of ['walk', 'roar', 'eat']) fs.writeFileSync(path.join(dir, `sounds/${id}_${a}.wav`), silentWav());
-  fs.writeFileSync(path.join(dir, 'sounds/jungle.wav'), silentWav(0.2));
+  const pitch: Record<string, number> = { walk: 262, roar: 392, eat: 523 }; // do, sol, do aigu
+  for (const id of ['trex', 'raptor']) {
+    for (const a of ['walk', 'roar', 'eat']) {
+      fs.writeFileSync(path.join(dir, `sounds/${id}_${a}.wav`), actionWav(pitch[a] * (id === 'raptor' ? 2 : 1)));
+    }
+  }
+  fs.writeFileSync(path.join(dir, 'sounds/jungle.wav'), ambientWav());
   console.log(`make-test-book : livre de test écrit dans ${dir}`);
 }
 

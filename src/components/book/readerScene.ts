@@ -95,7 +95,7 @@ function toButtons(built: BuiltScene, at: (p: string | undefined) => string | un
   if (!anim) return undefined;
   return {
     idle: { clip: anim.idle.clip, loop: anim.idle.loop ?? true },
-    actions: anim.actions.map((a) => ({ id: a.id, clip: a.clip, loop: a.loop ?? false, label: a.label, icon: at(a.icon) })),
+    actions: anim.actions.map((a) => ({ id: a.id, clip: a.clip, loop: a.loop ?? false, label: a.label, icon: at(a.icon), sound: at(a.sound) })),
   };
 }
 
@@ -103,7 +103,8 @@ function toButtons(built: BuiltScene, at: (p: string | undefined) => string | un
  * Traduction d'une scène v1 pour le moteur. `base` préfixe les chemins d'assets (relatifs à la racine du livre, D-8.1) :
  * vide dans un livre construit, `dev-book/` en `npm run dev` (voir `bookSource.ts`).
  *
- * Le POI `start` porte le cadrage (`modules.camera`) et le son d'ambiance ; il n'a pas d'élément animé.
+ * Le POI `start` porte le cadrage (`modules.camera`) ; il n'a pas d'élément animé. Sons (Î11) : `ambientSound` de la
+ * configuration et `buttons.actions[].sound`, joués en Web Audio (`lib/audioEngine.ts`), pas par l'audio des POI.
  * `modules.animations` devient `buttons` (mode `buttons`, Î10b, `lib/buttonsPlayer.ts`) : joué sur la racine de la
  * scène, pas par la ligne de temps du moteur (module réservé `timeline`) ; `autoplay` est faux, c'est `idle` qui joue.
  */
@@ -123,7 +124,6 @@ export function sceneToEngineConfig(built: BuiltScene, book: ReaderBook, base = 
     minAzimuthAngle: cam?.minAzimuthAngle,
     maxAzimuthAngle: cam?.maxAzimuthAngle,
     enableZoom: cam?.enableZoom,
-    ambientSound: at(built.modules.audio?.ambientSound),
     elements: [],
   };
   return {
@@ -134,5 +134,6 @@ export function sceneToEngineConfig(built: BuiltScene, book: ReaderBook, base = 
     credits: toCredits(built, book),
     autoplay: false,
     buttons: toButtons(built, at),
+    ambientSound: at(built.modules.audio?.ambientSound),
   };
 }
