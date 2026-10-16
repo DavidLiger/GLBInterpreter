@@ -1,6 +1,6 @@
 // scripts/test-engine.ts — tests du moteur sans navigateur (Î10b). `npm run test:engine`.
 // Cadrage orbital (`lib/orbitFraming.ts`), mode `buttons` (`lib/buttonsPlayer.ts`), boucle unique (`lib/frameTasks.ts`),
-// éclairage de secours (`lib/fallbackLights.ts`), lecture libre d'un clip (`lib/clipPreview.ts`).
+// éclairage de secours (`lib/fallbackLights.ts`), lecture libre d'un clip (`lib/clipPreview.ts`), onglet Caméra de l'atelier (`src/atelier/cameraForm.ts`, A4).
 // Les mixers tournent sur une scène three minimale (un os animé), le temps est avancé à la main.
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -9,6 +9,8 @@ import { ButtonsPlayer, type ActionEvent } from '../src/components/diorama/lib/b
 import { FrameTasks } from '../src/components/diorama/lib/frameTasks';
 import { addFallbackLightsIfNone, FALLBACK_LIGHTS_NAME } from '../src/components/diorama/lib/fallbackLights';
 import { ClipPreview } from '../src/components/diorama/lib/clipPreview';
+import { applyFramingInPlace, cameraFormFromRaw, cameraLayerOf, framingOf, takeFromView, viewOf, withFields } from '../src/atelier/cameraForm';
+import { editLayerSchema } from '../src/schema/glbi';
 
 let failed = 0;
 function test(name: string, fn: () => void) {
@@ -309,6 +311,97 @@ test('lecture libre d’un clip : suspend le mode buttons, boucle, vitesse, repr
   assert.equal(tasks.size, 0);
   assert.ok(!s.player.isSuspended && s.action('idle').isRunning());
   preview.dispose();
+});
+
+// ────────────── Atelier, onglet Caméra (A4) ──────────────
+console.log('Atelier : onglet Caméra (A4)');
+
+const validLayer = (camera: unknown) => editLayerSchema.safeParse({ version: 1, modules: camera ? { camera } : {} }).success;
+
+test('cadrage non touché : relu et écrit tel quel, au bit près', () => {
+  const raw = { zoom: 0.5, lookAxis: 'x', minDistance: 1, maxDistance: 20, minPolarAngle: 0, maxPolarAngle: 1.57, minAzimuthAngle: -3.14, maxAzimuthAngle: 3.14, enableZoom: true };
+  const f = cameraFormFromRaw(raw);
+  assert.equal(f.text.maxPolarAngle, '89.9544');
+  const { camera, issues } = cameraLayerOf(f);
+  assert.equal(issues.length, 0);
+  assert.equal(camera, raw);
+});
+
+test('champ modifié : degrés écrits en radians (6 décimales) ; les autres gardent la valeur du fichier', () => {
+  const f = withFields(cameraFormFromRaw({ maxPolarAngle: 1.57, minAzimuthAngle: -3.14 }), { text: { maxPolarAngle: '80' } });
+  const { camera, issues } = cameraLayerOf(f);
+  assert.equal(issues.length, 0);
+  assert.deepEqual(camera, { maxPolarAngle: 1.396263, minAzimuthAngle: -3.14 });
+  assert.ok(validLayer(camera));
+});
+
+test('180° et ±360° restent dans les bornes du contrat après arrondi', () => {
+  const f = withFields(cameraFormFromRaw(undefined), { text: { minPolarAngle: '0', maxPolarAngle: '180', minAzimuthAngle: '-360', maxAzimuthAngle: '360' } });
+  const { camera, issues } = cameraLayerOf(f);
+  assert.equal(issues.length, 0);
+  assert.ok(validLayer(camera), JSON.stringify(camera));
+});
+
+test('champ illisible ou hors bornes : non écrit, signalé ; les champs valides sont écrits', () => {
+  const f = withFields(cameraFormFromRaw(undefined), { text: { zoom: '1.5', minDistance: 'abc', maxDistance: '8' } });
+  const { camera, issues } = cameraLayerOf(f);
+  assert.deepEqual(camera, { maxDistance: 8 });
+  assert.deepEqual(issues.map((i) => i.field), ['zoom', 'minDistance']);
+  assert.ok(validLayer(camera));
+});
+
+test('paire incohérente (min > max) : aucune des deux bornes écrite, signalée sur la borne min', () => {
+  const f = withFields(cameraFormFromRaw({ minDistance: 1, maxDistance: 5, zoom: 0.25 }), { text: { minDistance: '6' } });
+  const { camera, issues } = cameraLayerOf(f);
+  assert.deepEqual(camera, { zoom: 0.25 });
+  assert.equal(issues.length, 1);
+  assert.equal(issues[0].field, 'minDistance');
+  assert.ok(validLayer(camera));
+});
+
+test('virgule décimale acceptée ; enableZoom écrit seulement s’il passe à faux ; tout vidé → pas de cadrage', () => {
+  let f = withFields(cameraFormFromRaw(undefined), { text: { minDistance: '1,5' }, enableZoom: false });
+  assert.deepEqual(cameraLayerOf(f).camera, { minDistance: 1.5, enableZoom: false });
+  f = withFields(cameraFormFromRaw({ minDistance: 2 }), { text: { minDistance: '' } });
+  assert.equal(cameraLayerOf(f).camera, undefined);
+});
+
+test('vue actuelle : distance, polaire, azimut (convention d’OrbitControls) et zoom pris dans la vue', () => {
+  const target = new THREE.Vector3(0, 1, 0);
+  const cam = new THREE.Vector3(3, 1, 0); // sur +X, à l'horizontale
+  const v = viewOf(cam, target);
+  assert.ok(near(v.distance, 3) && near(v.polarAngle, Math.PI / 2) && near(v.azimuthAngle, Math.PI / 2));
+  assert.equal(takeFromView('maxPolarAngle', v, { minDistance: 1, maxDistance: 5 }), '90');
+  assert.equal(takeFromView('minAzimuthAngle', v, { minDistance: 1, maxDistance: 5 }), '90');
+  assert.equal(takeFromView('zoom', v, { minDistance: 1, maxDistance: 5 }), '0.5');
+  assert.equal(takeFromView('zoom', v, { minDistance: 4, maxDistance: 5 }), '0', 'borné à [0, 1]');
+});
+
+test('zoom pris dans la vue puis relu : distance de départ = distance prise (resolveOrbit)', () => {
+  const f = withFields(cameraFormFromRaw(undefined), { text: { minDistance: '2', maxDistance: '10' } });
+  const z = takeFromView('zoom', { distance: 4.5, polarAngle: 1, azimuthAngle: 0 }, { minDistance: 2, maxDistance: 10 });
+  const frame = resolveOrbit(framingOf(withFields(f, { text: { zoom: z } })), 1);
+  assert.ok(near(frame.distance, 4.5, 1e-3));
+});
+
+test('cadrage posé en place : bornes sur les contrôles, caméra à la vue de départ, bornes levées sur demande', () => {
+  const controls = {
+    target: new THREE.Vector3(0, 0, 0),
+    update: () => true,
+    minDistance: 0, maxDistance: 0, minPolarAngle: 0, maxPolarAngle: 0, minAzimuthAngle: 0, maxAzimuthAngle: 0,
+    enableZoom: false, enablePan: true, dampingFactor: 0,
+  };
+  const live = { camera: { position: new THREE.Vector3() }, controls, radius: 1 };
+  const framing = { minDistance: 2, maxDistance: 4, zoom: 0.5, minPolarAngle: Math.PI / 4, maxPolarAngle: Math.PI / 4, minAzimuthAngle: 0, maxAzimuthAngle: 0 };
+  applyFramingInPlace(live, framing, { bounds: true, moveToStart: true });
+  assert.ok(near(live.camera.position.length(), 3));
+  assert.ok(near(controls.minDistance, 2) && near(controls.maxDistance, 4) && near(controls.maxPolarAngle, Math.PI / 4));
+  const before = live.camera.position.clone();
+  applyFramingInPlace(live, framing, { bounds: false, moveToStart: false });
+  assert.ok(live.camera.position.equals(before), 'caméra non déplacée');
+  assert.equal(controls.maxDistance, Infinity);
+  assert.equal(controls.minAzimuthAngle, -Infinity);
+  assert.equal(controls.enableZoom, true);
 });
 
 if (failed) {

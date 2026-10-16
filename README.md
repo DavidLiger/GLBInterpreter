@@ -66,7 +66,7 @@ Les outils de développement (analyse de scène, QR, spritesheets,
 réglages de post-processing) n'existent qu'en `npm run dev`. En développement, l'écran « Installer le livre » est
 contourné (pas de `book.json` ni de service worker) : l'installation se teste dans le dossier exporté (voir plus bas).
 
-## Atelier de configuration (piste A, A2 et A3)
+## Atelier de configuration (piste A, A2 à A4)
 
 ```bash
 npm run atelier -- --source books/test-dino            # http://127.0.0.1:4100/atelier/, ouvert si aucun onglet ne se reconnecte
@@ -86,6 +86,11 @@ l'extension `atelier.tsx` (`next.config.ts`) ; le build échoue si un fichier de
   supprimer), Ambiance, Quiz, Crédits (état par son et image, V-10 ; `src_*` en lecture seule) : seuls les champs complets
   sont enregistrés ; un champ commencé mais incomplet (traduction manquante, quiz ou crédit inachevé) reste dans la page et est
   listé en tête du Rapport.
+- Onglet Caméra (A4) : cadrage orbital de `modules.camera` (distances en mètres, angles en degrés écrits en radians, `zoom`
+  dans [0, 1], axe de vue, zoom au pincement) ; cible lue dans le GLB, non éditable ; « ◎ vue » recopie la vue actuelle du
+  lecteur dans un champ ; « Appliquer les bornes » (décoché : vue libre pour viser au-delà des bornes) ; « Revenir au cadrage
+  enregistré ». Le cadrage saisi est posé en place sur la caméra du lecteur, sans le remonter. Un champ illisible ou hors
+  bornes, et les deux bornes d'une paire min > max, ne sont pas enregistrés (signalés dans le Rapport).
 - Centre : le lecteur réel (`WebDioramaLoader`, prop `embedded`) sur l'objet fusionné `draft` (`mergeLayers`, A1) : libellé
   manquant remplacé par l'identifiant de l'action ; `edit.json` refusé par son schéma = aperçu avec la couche 3D seule ; GLB sans
   `GLBI_ROOT` (ou couche 3D inutilisable) = scène affichée sans module, pour le diagnostic.

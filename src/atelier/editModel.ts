@@ -3,6 +3,7 @@
 // incomplet (traduction manquante, quiz ou crédit inachevé) reste dans la page, est signalé en tête du Rapport et laisse
 // l'indicateur « modifié, non enregistré » allumé. Le fichier écrit est donc toujours valide pour `editLayerSchema`.
 import { EDIT_LAYER_VERSION, LANGUAGES } from "@/schema/glbi";
+import { cameraFormFromRaw, cameraLayerOf, type CameraForm } from "./cameraForm";
 
 export type Lang = (typeof LANGUAGES)[number];
 export type L3 = Record<Lang, string>;
@@ -32,8 +33,8 @@ export interface QuizForm {
 export interface EditForm {
   name: L3;
   loaderImage: string;
-  /** Cadrage de la caméra : conservé tel quel (onglet Caméra en A4). */
-  camera: unknown;
+  /** Cadrage de la caméra (onglet Caméra, A4) : conservé tel quel tant que l'onglet n'y touche pas. */
+  camera: CameraForm;
   /** Entrées par identifiant d'action, dans l'ordre du fichier (actions du GLB et orphelines). */
   actions: [string, ActionForm][];
   ambientSound: string;
@@ -42,7 +43,7 @@ export interface EditForm {
 }
 
 /** Onglets d'édition (et Rapport, Diagnostic). */
-export type TabId = "scene" | "actions" | "ambiance" | "quiz" | "credits" | "rapport" | "diagnostic";
+export type TabId = "scene" | "camera" | "actions" | "ambiance" | "quiz" | "credits" | "rapport" | "diagnostic";
 
 /** Champ du formulaire : onglet et identifiant (`data-field`) pour les liens du Rapport. */
 export interface FieldRef {
@@ -77,7 +78,7 @@ export function formFromEdit(raw: unknown): EditForm {
   return {
     name: l3Of(scene.name),
     loaderImage: str(scene.loaderImage),
-    camera: modules.camera,
+    camera: cameraFormFromRaw(modules.camera),
     actions: Object.entries(anims).map(([id, a]) => {
       const o = isObj(a) ? a : {};
       return [id, { label: l3Of(o.label), icon: str(o.icon), sound: str(o.sound) }];
@@ -165,6 +166,9 @@ export function layerFromForm(form: EditForm): { layer: Obj; incomplete: Incompl
     credits.push({ asset: c.asset, title: c.title.trim(), author: c.author.trim(), license: c.license.trim(), source: c.source.trim() || undefined });
   }
 
+  const cam = cameraLayerOf(form.camera);
+  for (const i of cam.issues) incomplete.push({ tab: "camera", field: `camera.${i.field}`, message: i.message });
+
   const layer: Obj = {
     version: EDIT_LAYER_VERSION,
     scene: {
@@ -172,7 +176,7 @@ export function layerFromForm(form: EditForm): { layer: Obj; incomplete: Incompl
       loaderImage: form.loaderImage || undefined,
     },
     modules: {
-      camera: form.camera,
+      camera: cam.camera,
       animations: { actions },
       audio: { ambientSound: form.ambientSound || undefined },
       quiz,

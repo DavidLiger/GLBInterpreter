@@ -67,6 +67,12 @@ export interface ReaderEngine {
   buttons: ButtonsPlayer | null;
   /** Rayon de la sphère englobante (valeurs par défaut du cadrage, `lib/orbitFraming.ts`). */
   radius: number;
+  /**
+   * Caméra et contrôles orbitaux du lecteur (A4) : l'onglet Caméra de l'atelier lit la vue actuelle et pose le cadrage
+   * saisi en place, sans remonter le lecteur. Le lecteur ne les lit pas en retour : sans atelier, rien ne change.
+   */
+  camera: THREE.PerspectiveCamera;
+  controls: OrbitControls;
 }
 
 export interface WebDioramaLoaderProps {
@@ -698,6 +704,8 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
             frameTasks: frameTasksRef.current,
             buttons: buttonsRef.current,
             radius,
+            camera,
+            controls,
           });
         },
         (xhr) => {

@@ -1,6 +1,7 @@
 // Rapport → champ (A3, spec-atelier-glbi.md §10.7) : chaque ligne du rapport qui concerne la couche éditoriale de la scène
 // affichée mène au champ du formulaire concerné. Reconnaissance par les textes de `book:check` (scripts/book-check.ts,
 // src/schema/merge.ts), qui sont le contrat d'affichage ; une ligne non reconnue reste sans lien.
+import { CAMERA_NUM_KEYS } from "./cameraForm";
 import type { EditForm, FieldRef } from "./editModel";
 
 /** Champ désigné par un chemin de `edit.json` (`scene.name.en`, `modules.animations.actions.walk.label`, …). */
@@ -23,8 +24,15 @@ function fieldOfEditPath(p: string[], form: EditForm): FieldRef | null {
       const c = p[3] !== undefined ? form.credits[Number(p[3])] : undefined;
       return { tab: "credits", field: c ? `credit.${c.asset}` : "credits" };
     }
+    case "camera": {
+      // Onglet Caméra (A4) : champ du cadrage, sinon l'onglet (cible : couche 3D, affichée dans l'onglet).
+      const k = p[2];
+      if (k === "target") return { tab: "camera", field: "camera.target" };
+      if (k === "lookAxis" || k === "enableZoom" || (CAMERA_NUM_KEYS as readonly string[]).includes(k)) return { tab: "camera", field: `camera.${k}` };
+      return { tab: "camera", field: "camera" };
+    }
     default:
-      return null; // camera : onglet Caméra (A4)
+      return null;
   }
 }
 
@@ -52,6 +60,10 @@ export function fieldOfMessage(message: string, sceneId: string, form: EditForm,
   if ((m = /crédit pour « (.+?) », asset non utilisé/.exec(message))) return { tab: "credits", field: `credit.${m[1]}` };
   if ((m = /action « (.+?) » absente du GLB/.exec(message))) return { tab: "actions", field: `orphan.${m[1]}` };
   if ((m = /^asset « (.+?) » introuvable/.exec(message))) return fieldOfAsset(m[1], form);
+  // Caméra (A4)
+  if (/cadrage non réglé, valeurs par défaut du lecteur/.test(message)) return { tab: "camera", field: "camera" };
+  if (/modules\.camera réglé mais pas de cible dans le GLB/.test(message)) return { tab: "camera", field: "camera" };
+  if (/camera\.target « .+? » /.test(message)) return { tab: "camera", field: "camera.target" };
   if (message.startsWith(`${editFile} : `)) {
     const rest = message.slice(editFile.length + 3);
     const path = rest.slice(0, rest.indexOf(" : ") < 0 ? undefined : rest.indexOf(" : "));

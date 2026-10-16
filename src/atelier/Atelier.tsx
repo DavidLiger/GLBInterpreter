@@ -6,11 +6,15 @@
 // La saisie vit dans la page (editModel.ts) : seuls ses champs complets sont envoyés à l'aperçu (fusion `draft` et rapport
 // recalculés par le serveur) et écrits par Enregistrer (pas d'enregistrement automatique). Le serveur prévient la page de
 // toute modification du dossier source (SSE) : un réexport depuis Blender recharge la scène sans perdre la saisie.
+// Caméra (A4) : le cadrage saisi est posé en place sur le lecteur (caméra et contrôles de la poignée `onEngineReady`,
+// `applyFramingInPlace`), sans remonter le lecteur ni relire le GLB ; le livre publié n'est pas concerné.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import WebDioramaLoader, { type ReaderEngine } from "@/components/diorama/WebDioramaLoader";
 import type { ModelCredit } from "@/schema/glbi";
 import { ATELIER_MARKER, type BookResponse, type ChangeEvent, type PreviewResponse, type ReportLine, type SaveResponse, type SceneResponse } from "./api";
 import DiagnosticTab from "./DiagnosticTab";
+import CameraTab from "./CameraTab";
+import { applyFramingInPlace, framingOf, type CameraForm } from "./cameraForm";
 import { ActionsTab, AmbianceTab, assetOptions, CreditsTab, QuizTab, SceneTab, type GlbAction } from "./EditTabs";
 import { formatEditLayer, glbActionIds } from "./editLayerFile";
 import { formFromEdit, layerFromForm, usedAssets, type EditForm, type FieldRef, type Lang, type TabId } from "./editModel";
@@ -26,6 +30,7 @@ const PREVIEW_DELAY_MS = 350;
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "scene", label: "Scène" },
+  { id: "camera", label: "Caméra" },
   { id: "actions", label: "Actions" },
   { id: "ambiance", label: "Ambiance" },
   { id: "quiz", label: "Quiz" },
@@ -89,6 +94,9 @@ export default function Atelier() {
   const [saveError, setSaveError] = useState<{ error: string; messages: string[] } | null>(null);
   const [diskChanged, setDiskChanged] = useState(false);
   const [focus, setFocus] = useState<{ field: string; n: number } | null>(null);
+  // Caméra (A4) : bornes appliquées au lecteur pendant le réglage ; demande de retour à la vue de départ.
+  const [cameraBounds, setCameraBounds] = useState(true);
+  const [startTick, setStartTick] = useState(0);
 
   const sceneIdRef = useRef<string | null>(null);
   const sceneRef = useRef<SceneResponse | null>(null);
@@ -311,6 +319,37 @@ export default function Atelier() {
   const readerKey = `${scene?.id ?? ""}|${reload}|${ambient}`;
   useEffect(() => setEngine(null), [readerKey]);
 
+  // --- Caméra (A4) : le cadrage saisi (champs valides seulement) est posé en place sur le lecteur ; la caméra va à la vue
+  //     de départ quand le lecteur est (re)monté, quand un champ est saisi au clavier, sur « Revenir au cadrage
+  //     enregistré » et « Aller à la vue de départ » ; pas après « prendre la vue actuelle » ni en changeant de bornes.
+  const framing = useMemo(() => (form ? framingOf(form.camera) : null), [form]);
+  const framingKey = JSON.stringify(framing);
+  const skipMoveKeyRef = useRef<string | null>(null);
+  const appliedRef = useRef<{ engine: ReaderEngine | null; key: string; tick: number }>({ engine: null, key: "", tick: 0 });
+  useEffect(() => {
+    if (!engine || !framing) return;
+    const prev = appliedRef.current;
+    const keyChanged = prev.key !== framingKey;
+    const move = prev.engine !== engine || prev.tick !== startTick || (keyChanged && skipMoveKeyRef.current !== framingKey);
+    skipMoveKeyRef.current = null;
+    appliedRef.current = { engine, key: framingKey, tick: startTick };
+    applyFramingInPlace(engine, framing, { bounds: cameraBounds, moveToStart: move });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `framing` suit `framingKey`
+  }, [engine, framingKey, cameraBounds, startTick]);
+  const setCamera = useCallback(
+    (next: CameraForm, move: boolean) => {
+      if (!move) skipMoveKeyRef.current = JSON.stringify(framingOf(next));
+      else setStartTick((t) => t + 1);
+      setForm((f) => ({ ...f, camera: next }));
+    },
+    [setForm],
+  );
+  const savedCamera = useMemo(() => formFromEdit(scene?.edit).camera, [scene?.edit]);
+  const cameraTarget = useMemo(() => {
+    const t = (scene?.layer3d as { modules?: { camera?: { target?: unknown } } } | null | undefined)?.modules?.camera?.target;
+    return typeof t === "string" ? t : null;
+  }, [scene?.layer3d]);
+
   const errors = report.filter((l) => l.level === "error").length;
   const warnings = report.length - errors;
   const title = book?.book?.title?.fr ?? book?.book?.bookId ?? "livre";
@@ -479,6 +518,22 @@ export default function Atelier() {
           )}
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {tab === "scene" && editTab(form && <SceneTab form={form} setForm={setForm} assets={assets} onShowLoader={() => setReload((r) => r + 1)} />)}
+            {tab === "camera" &&
+              editTab(
+                form && (
+                  <CameraTab
+                    camera={form.camera}
+                    setCamera={setCamera}
+                    savedCamera={savedCamera}
+                    target={cameraTarget}
+                    engine={engine}
+                    bounds={cameraBounds}
+                    onBounds={setCameraBounds}
+                    onStartView={() => setStartTick((t) => t + 1)}
+                    incomplete={incomplete.filter((i) => i.tab === "camera")}
+                  />
+                ),
+              )}
             {tab === "actions" && editTab(form && <ActionsTab form={form} setForm={setForm} glbActions={glbActions} assets={assets} />)}
             {tab === "ambiance" && editTab(form && <AmbianceTab form={form} setForm={setForm} assets={assets} />)}
             {tab === "quiz" && editTab(form && <QuizTab form={form} setForm={setForm} />)}
