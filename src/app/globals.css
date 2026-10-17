@@ -139,6 +139,11 @@ dialog.glbi-screen {
   top: var(--safe-top);
   right: var(--safe-right);
 }
+.glbi-corner-top-left {
+  position: absolute;
+  top: var(--safe-top);
+  left: var(--safe-left);
+}
 .glbi-corner-bottom-right {
   position: absolute;
   bottom: var(--safe-bottom);

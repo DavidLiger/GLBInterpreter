@@ -1,7 +1,8 @@
 // scripts/test-engine.ts — tests du moteur sans navigateur (Î10b). `npm run test:engine`.
 // Cadrage orbital (`lib/orbitFraming.ts`), mode `buttons` (`lib/buttonsPlayer.ts`), boucle unique (`lib/frameTasks.ts`),
 // éclairage de secours (`lib/fallbackLights.ts`), lecture libre d'un clip (`lib/clipPreview.ts`), onglet Caméra de l'atelier (`src/atelier/cameraForm.ts`, A4),
-// audio Web Audio (`lib/audioEngine.ts`, Î11 : AudioContext simulé, aucun son réel).
+// audio Web Audio (`lib/audioEngine.ts`, Î11 : AudioContext simulé, aucun son réel), progression du livre
+// (`src/components/book/progress.ts`, Î13 : règles de déblocage, valeur illisible, stockage indisponible).
 // Les mixers tournent sur une scène three minimale (un os animé), le temps est avancé à la main.
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -15,6 +16,9 @@ import { editLayerSchema } from '../src/schema/glbi';
 import {
   AudioEngine, audioSettingsKey, effectiveVolume, parseAudioSettings, withMuteToggled, withVolume, type AudioContextLike,
 } from '../src/components/diorama/lib/audioEngine';
+import {
+  ProgressStore, emptyProgress, parseProgress, progressKey, sceneAccess, withCollected, withQuizPassed, withUnlocked, type StorageLike,
+} from '../src/components/book/progress';
 
 let failed = 0;
 function test(name: string, fn: () => void) {
@@ -613,6 +617,114 @@ testAsync('volume et sourdine : gain maître, persistance par livre, relus par u
   assert.deepEqual(again.engine.getSettings(), { volume: 0.25, muted: false });
   again.engine.unlock();
   assert.ok(near(again.ctx.gains[0].gain.value, 0.25));
+});
+
+// ────────────── Progression (Î13) ──────────────
+console.log('Progression du livre');
+
+const BOOK = ['trex', 'raptor', 'ptero'];
+
+/** Stockage simulé : `fail` = lecture, écriture ou effacement qui lèvent (stockage refusé ou plein). */
+function progressStorage(init: Record<string, string> = {}, fail: { get?: boolean; set?: boolean; remove?: boolean } = {}) {
+  const m = new Map(Object.entries(init));
+  const s: StorageLike & { m: Map<string, string> } = {
+    m,
+    getItem: (k) => {
+      if (fail.get) throw new Error('SecurityError');
+      return m.get(k) ?? null;
+    },
+    setItem: (k, v) => {
+      if (fail.set) throw new Error('QuotaExceededError');
+      m.set(k, v);
+    },
+    removeItem: (k) => {
+      if (fail.remove) throw new Error('SecurityError');
+      m.delete(k);
+    },
+  };
+  return s;
+}
+
+test('clé glbinterpreter:progress:<bookId> (bookId de book.json)', () => {
+  assert.equal(progressKey('test-dino'), 'glbinterpreter:progress:test-dino');
+});
+
+test('déblocage dans l’ordre du livre : première accessible d’office, suivante accessible si la précédente est débloquée', () => {
+  let p = emptyProgress();
+  assert.deepEqual(BOOK.map((id) => sceneAccess(p, BOOK, id)), ['accessible', 'locked', 'locked']);
+  assert.equal(sceneAccess(p, BOOK, 'inconnue'), 'unknown');
+  p = withQuizPassed(p, 'trex');
+  assert.deepEqual(p, { unlockedScenes: ['trex'], quizPassed: { trex: true }, collected: {} });
+  assert.deepEqual(BOOK.map((id) => sceneAccess(p, BOOK, id)), ['unlocked', 'accessible', 'locked']);
+  p = withUnlocked(p, 'raptor'); // scène sans quiz : débloquée à son ouverture
+  assert.deepEqual(BOOK.map((id) => sceneAccess(p, BOOK, id)), ['unlocked', 'unlocked', 'accessible']);
+  assert.equal(withUnlocked(p, 'raptor'), p, 'déjà débloquée : même objet, rien à écrire');
+  const c = withCollected(p, 'trex');
+  assert.deepEqual(c.collected, { trex: true });
+  assert.equal(withCollected(c, 'trex'), c);
+});
+
+test('scène retirée du livre : conservée dans la valeur, sans effet sur les règles ; scène ajoutée au milieu ne bloque pas la suite débloquée', () => {
+  const p = { unlockedScenes: ['trex', 'ancienne', 'ptero'], quizPassed: { ancienne: true }, collected: {} };
+  assert.equal(sceneAccess(p, BOOK, 'ptero'), 'unlocked');
+  assert.equal(sceneAccess(p, BOOK, 'raptor'), 'accessible');
+  const s = progressStorage();
+  const store = new ProgressStore('b', s, quiet);
+  store.update(() => p);
+  store.update((q) => withQuizPassed(q, 'raptor'));
+  assert.deepEqual(JSON.parse(s.m.get(progressKey('b'))!).unlockedScenes, ['trex', 'ancienne', 'ptero', 'raptor']);
+});
+
+test('valeur illisible : JSON invalide ou forme fausse → vide ; champs valides gardés ; annoncée une fois', () => {
+  assert.deepEqual(parseProgress(null), { progress: emptyProgress(), ok: true });
+  assert.deepEqual(parseProgress('{pas du json'), { progress: emptyProgress(), ok: false });
+  assert.deepEqual(parseProgress('[1,2]'), { progress: emptyProgress(), ok: false });
+  const r = parseProgress(JSON.stringify({ unlockedScenes: ['trex', 3, 'trex'], quizPassed: { trex: true, raptor: 'oui' }, collected: 'x' }));
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.progress, { unlockedScenes: ['trex'], quizPassed: { trex: true }, collected: {} });
+  const warns: string[] = [];
+  const store = new ProgressStore('b', progressStorage({ [progressKey('b')]: '{pas du json' }), { warn: (m: unknown) => warns.push(String(m)) });
+  store.get();
+  store.get();
+  assert.equal(warns.length, 1);
+  assert.ok(/illisible/.test(warns[0]));
+  // Première progression : la valeur illisible est remplacée
+  store.update((p) => withQuizPassed(p, 'trex'));
+  assert.equal(sceneAccess(store.get(), BOOK, 'trex'), 'unlocked');
+  assert.equal(warns.length, 1);
+});
+
+test('écriture et lecture dans le stockage ; rien n’est écrit sans changement ; remise à zéro', () => {
+  const s = progressStorage();
+  const store = new ProgressStore('test-dino', s, quiet);
+  store.update((p) => p);
+  assert.equal(s.m.size, 0);
+  store.update((p) => withQuizPassed(p, 'trex'));
+  assert.equal(s.m.get('glbinterpreter:progress:test-dino'), '{"unlockedScenes":["trex"],"quizPassed":{"trex":true},"collected":{}}');
+  assert.equal(new ProgressStore('test-dino', s, quiet).get().unlockedScenes[0], 'trex', 'relu au rechargement');
+  store.reset();
+  assert.equal(s.m.size, 0);
+  assert.deepEqual(store.get(), emptyProgress());
+});
+
+test('localStorage absent, lecture refusée ou plein : progression en mémoire pour la session, annoncée une fois', () => {
+  for (const [label, storage] of [
+    ['absent', null],
+    ['lecture refusée', progressStorage({}, { get: true, set: true })],
+    ['plein', progressStorage({}, { set: true })],
+  ] as const) {
+    const warns: string[] = [];
+    const store = new ProgressStore('b', storage, { warn: (m: unknown) => warns.push(String(m)) });
+    assert.deepEqual(store.get(), emptyProgress(), label);
+    store.update((p) => withQuizPassed(p, 'trex'));
+    store.update((p) => withUnlocked(p, 'raptor'));
+    assert.deepEqual(store.get().unlockedScenes, ['trex', 'raptor'], label);
+    assert.ok(store.inMemory, label);
+    assert.equal(warns.length, 1, `${label} : ${warns.join(' | ')}`);
+    assert.ok(/mémoire/.test(warns[0]), label);
+    store.reset();
+    assert.deepEqual(store.get(), emptyProgress(), label);
+  }
 });
 
 for (const [name, fn] of asyncTests) {

@@ -6,9 +6,15 @@
 //   npm run build -- --source books/test-dino --part-mib 1     découpe tout fichier > 1 MiB (l'image de chargement de
 //                                                              « trex », ≈ 3 MiB) : des parties à recomposer
 //   npm run test:install                 Chromium et WebKit (npx playwright install chromium webkit au préalable)
+import { unlockAllScenes } from './progress-helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 const SERVER = 'http://localhost:4173';
+
+// Î13 : scènes débloquées (ni quiz ni écran de blocage) ; la progression elle-même est testée dans progress.spec.ts.
+test.beforeEach(async ({ page }) => {
+  await unlockAllScenes(page);
+});
 /** Scène du livre de test v1 (Î10 : les tests ne tournent plus sur la fixture `street`, hors schéma v1). */
 const SCENE = 'trex';
 

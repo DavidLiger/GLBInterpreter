@@ -1,9 +1,15 @@
 // Mode `buttons` sur le livre de test installé (Î10b) : `out/` construit depuis `books/test-dino` (`npm run build -- --source
 // books/test-dino --part-mib 1`). Clips synthétiques : idle 0,5 s, walk 0,75 s, roar 1 s, eat 1,25 s.
 // Les événements `onAction` sont lus dans l'attribut `data-action-log` des boutons (dix derniers, `id:phase`).
+import { unlockAllScenes } from './progress-helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 const SERVER = 'http://localhost:4173';
+
+// Î13 : scènes débloquées (ni quiz ni écran de blocage) ; la progression elle-même est testée dans progress.spec.ts.
+test.beforeEach(async ({ page }) => {
+  await unlockAllScenes(page);
+});
 
 async function openScene(page: Page, scene: string, consoleLines: string[] = []) {
   page.on('console', (m) => consoleLines.push(m.text()));

@@ -210,12 +210,16 @@ relance, éclairage de secours) demande WebGL 2 ; il est sauté par un navigateu
 `tests/ui.spec.ts` (Î12 : boutons d'animation, fenêtre Informations et crédits, écrans d'installation, langues FR, EN,
 ES, `lang` et titre, 404 et stubs, téléphone émulé) demande aussi WebGL 2 pour ses tests de scène ;
 `UI_SHOTS=<dossier> npx playwright test tests/ui.spec.ts` enregistre des captures d'écran des étapes.
+`tests/progress.spec.ts` (Î13 : quiz avant la scène, écran de blocage, déblocage dans l'ordre, menu de collection,
+remise à zéro, valeur illisible et stockage plein, langues) ; les autres fichiers de tests débloquent toutes les scènes
+avant chaque page (`tests/progress-helpers.ts`), ce qui les dispense du quiz et du blocage.
 
 Procédure manuelle hors ligne (O-34), sur le dossier exporté servi par `npx http-server` (voir plus haut) :
 
 1. Ouvrir `http://localhost:8001/s/<scène>` : écran « Installer le livre », taille annoncée, bouton « Installer ».
 2. Pendant le téléchargement, « Mettre en pause » puis « Reprendre » : la progression repart de ce qui est acquis.
-3. Fin du téléchargement : la scène s'ouvre. Outils de développement du navigateur > Application > Cache Storage :
+3. Fin du téléchargement : la scène s'ouvre (première page du livre : après son quiz, Î13 ; autre page : écran de
+   blocage tant que la précédente n'est pas débloquée). Outils de développement du navigateur > Application > Cache Storage :
    un cache `book-<bookId>@/` contient tous les fichiers de `book.json`, sans fichier `.partNNN`.
 4. Couper le serveur (ou cocher « Offline » dans l'onglet Réseau), recharger, ouvrir `/s/<scène>` : la scène s'ouvre.
 5. Reconstruire le livre après avoir modifié un fichier, relancer le serveur, recharger : écran « Mise à jour du

@@ -4,9 +4,15 @@
 // écrans d'installation (`<dialog>` non modal), langues FR/EN/ES de bout en bout, `lang` et `<title>`, 404 et stubs,
 // téléphone (indice de rotation, zones sûres, barre d'actions sans recouvrement).
 // `UI_SHOTS=<dossier>` : captures d'écran des étapes (relecture visuelle).
+import { unlockAllScenes } from './progress-helpers';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const SERVER = 'http://localhost:4173';
+
+// Î13 : scènes débloquées (ni quiz ni écran de blocage) ; la progression elle-même est testée dans progress.spec.ts.
+test.beforeEach(async ({ page }) => {
+  await unlockAllScenes(page);
+});
 const shots = process.env.UI_SHOTS;
 
 async function shot(page: Page, name: string) {
@@ -191,11 +197,11 @@ test('langues FR, EN, ES de bout en bout : installation, scène, boutons, crédi
   await expect(page).toHaveTitle('Dinos de prueba');
   await shot(page, 'scene-es');
 
-  // Langue gardée au rechargement ; accueil et scène introuvable traduits
+  // Langue gardée au rechargement ; menu de collection (Î13) et scène introuvable traduits
   await page.goto(`${SERVER}/#/`);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Dinos de prueba' })).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText('Elige una escena.')).toBeVisible();
+  await expect(page.getByTestId('collection-count')).toHaveText('Mi colección · 3 de 3 descubiertas');
   await expect(page.getByRole('link', { name: 'Tiranosaurio' })).toBeVisible();
   await page.goto(`${SERVER}/#/s/inconnue`);
   await expect(page.getByRole('heading', { name: 'Escena no encontrada' })).toBeVisible();

@@ -8,6 +8,9 @@
 //   à 2 os, maillage skinné portant des propriétés src_*, empty « start », clips idle/walk/roar/eat ; couche éditoriale dans
 //   scenes/<scène>.edit.json (textes, icônes, sons, cadrage, quiz, crédits) ; « raptor » n'a pas de cadrage (valeurs par
 //   défaut du lecteur, Î10b) ; aucune scène n'a de lumière (éclairage de secours, D-8.10) ;
+// - progression (Î13) : trois scènes dans l'ordre trex → raptor → ptero ; quiz complet en 3 langues sur « trex » et
+//   « ptero », « raptor » sans quiz (débloquée à son ouverture) ; « ptero » sert l'écran de blocage tant que « raptor »
+//   n'est pas débloquée ;
 // - images PNG 1×1, icône du livre `icon.png` (512 px, Î9) ;
 // - sons WAV audibles (Î11) : un bip par action, de hauteur propre à l'action (walk grave, roar médium, eat aigu ; raptor une
 //   octave plus haut que trex), plus long que le clip (on entend la coupure à l'interruption et à la fin du clip) ; ambiance `jungle.wav` : bourdonnement doux de 2 s qui boucle sans coupure ;
@@ -170,7 +173,7 @@ async function main(): Promise<void> {
     bookId: 'test-dino',
     title: L('Dinos de test', 'Test dinos', 'Dinos de prueba'),
     languages: ['fr', 'en', 'es'],
-    scenes: ['trex', 'raptor'],
+    scenes: ['trex', 'raptor', 'ptero'],
     origin: 'https://dino.editions-liger.com',
     ogImage: 'images/og.png',
     legal: { year: 2026, text: L('© Éditions Liger', '© Éditions Liger', '© Éditions Liger') },
@@ -181,16 +184,19 @@ async function main(): Promise<void> {
   const scenes = [
     { id: 'trex', armature: 'Armature_Trex', name: L('Tyrannosaure', 'Tyrannosaurus', 'Tiranosaurio') },
     { id: 'raptor', armature: 'Armature_Raptor', name: L('Vélociraptor', 'Velociraptor', 'Velociraptor') },
+    { id: 'ptero', armature: 'Armature_Ptero', name: L('Ptéranodon', 'Pteranodon', 'Pteranodonte') },
   ];
   for (const sc of scenes) {
     await makeGlb(path.join(dir, `scenes/${sc.id}.glb`), sc.armature, clips, layer3d(sc.id, sc.armature));
     const edit = editLayer(sc.id, sc.name);
     // « raptor » sans cadrage (Î10b) : couvre les valeurs par défaut du lecteur (sphère englobante, lib/orbitFraming.ts)
     if (sc.id === 'raptor') delete edit.modules!.camera;
+    // « raptor » sans quiz (Î13) : scène débloquée à son ouverture ; « trex » et « ptero » ont un quiz complet en 3 langues.
+    if (sc.id === 'raptor') delete edit.modules!.quiz;
     fs.writeFileSync(path.join(dir, `scenes/${sc.id}.edit.json`), `${JSON.stringify(edit, null, 2)}\n`);
   }
 
-  for (const f of ['images/og.png', 'images/raptor-preview.png', 'icons/walk.png', 'icons/roar.png', 'icons/eat.png']) {
+  for (const f of ['images/og.png', 'images/raptor-preview.png', 'images/ptero-preview.png', 'icons/walk.png', 'icons/roar.png', 'icons/eat.png']) {
     fs.writeFileSync(path.join(dir, f), PNG_1X1);
   }
   // Bruit pseudo-aléatoire (graine fixe : même fichier à chaque génération) : un PNG incompressible de ≈ 3 MiB.
@@ -208,9 +214,10 @@ async function main(): Promise<void> {
     .png()
     .toFile(path.join(dir, 'icon.png'));
   const pitch: Record<string, number> = { walk: 262, roar: 392, eat: 523 }; // do, sol, do aigu
-  for (const id of ['trex', 'raptor']) {
+  const octave: Record<string, number> = { trex: 1, raptor: 2, ptero: 4 };
+  for (const id of ['trex', 'raptor', 'ptero']) {
     for (const a of ['walk', 'roar', 'eat']) {
-      fs.writeFileSync(path.join(dir, `sounds/${id}_${a}.wav`), actionWav(pitch[a] * (id === 'raptor' ? 2 : 1)));
+      fs.writeFileSync(path.join(dir, `sounds/${id}_${a}.wav`), actionWav(pitch[a] * octave[id]));
     }
   }
   fs.writeFileSync(path.join(dir, 'sounds/jungle.wav'), ambientWav());

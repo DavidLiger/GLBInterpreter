@@ -4,9 +4,15 @@
 //
 // Un script injecté note chaque son lancé (`AudioBufferSourceNode.start`) : hauteur estimée sur les échantillons décodés,
 // boucle, arrêt (`stop`) ou fin naturelle (`ended`). Aucun son n'est écouté : on vérifie que le bon son part et s'arrête.
+import { unlockAllScenes } from './progress-helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 const SERVER = 'http://localhost:4173';
+
+// Î13 : scènes débloquées (ni quiz ni écran de blocage) ; la progression elle-même est testée dans progress.spec.ts.
+test.beforeEach(async ({ page }) => {
+  await unlockAllScenes(page);
+});
 
 declare global {
   interface Window {

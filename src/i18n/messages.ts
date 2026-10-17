@@ -40,9 +40,6 @@ const fr = {
   lang: {
     label: "Langue",
   },
-  home: {
-    subtitle: "Choisissez une scène.",
-  },
   unknownScene: {
     title: "Scène introuvable",
     message: "Ce code ne correspond à aucune scène de ce livre.",
@@ -168,10 +165,30 @@ const fr = {
     message: "Vérifiez votre connexion puis réessayez. Si le problème persiste, fermez l'onglet et rouvrez le lien.",
     button: "Recharger la scène",
   },
-  // Réservé au quiz (Î13) : chaînes fixées ici pour que le livre 1 les ait dans les 3 langues.
+  // Quiz, menu de collection, écran de blocage et retour au menu (Î13, spec-progression.md). Les textes du quiz lui-même
+  // (question, réponses, explication) viennent de la couche éditoriale (`modules.quiz`).
   quiz: {
     tryAgain: "Essaie encore !",
     skip: "Passer",
+    kicker: "Petit quiz",
+    correct: "Bravo !",
+  },
+  collection: {
+    title: "Ma collection",
+    progress: "{n} sur {total} découvertes",
+    hint: "Trouve la page suivante dans le livre et scanne son QR code !",
+    start: "Pour commencer, scanne le QR code de la première page du livre !",
+    locked: "Page {n} : pas encore découverte",
+    backToMenu: "Retour au menu",
+    reset: "Effacer ma collection",
+    resetTitle: "Effacer ta collection ?",
+    resetMessage: "Toutes les pages découvertes seront à redécouvrir, quiz compris.",
+    cancel: "Annuler",
+    confirmReset: "Effacer",
+  },
+  blocked: {
+    title: "Pas encore !",
+    message: "Tu n'as pas encore découvert cette page. Commence par la page précédente !",
   },
 };
 
@@ -186,9 +203,6 @@ const en: Messages = {
   },
   lang: {
     label: "Language",
-  },
-  home: {
-    subtitle: "Choose a scene.",
   },
   unknownScene: {
     title: "Scene not found",
@@ -318,6 +332,25 @@ const en: Messages = {
   quiz: {
     tryAgain: "Try again!",
     skip: "Continue",
+    kicker: "Quick quiz",
+    correct: "Well done!",
+  },
+  collection: {
+    title: "My collection",
+    progress: "{n} of {total} discovered",
+    hint: "Find the next page in the book and scan its QR code!",
+    start: "To begin, scan the QR code on the first page of the book!",
+    locked: "Page {n}: not discovered yet",
+    backToMenu: "Back to the menu",
+    reset: "Clear my collection",
+    resetTitle: "Clear your collection?",
+    resetMessage: "All discovered pages will have to be found again, quizzes included.",
+    cancel: "Cancel",
+    confirmReset: "Clear",
+  },
+  blocked: {
+    title: "Not yet!",
+    message: "You haven't discovered this page yet. Start with the previous page!",
   },
 };
 
@@ -330,9 +363,6 @@ const es: Messages = {
   },
   lang: {
     label: "Idioma",
-  },
-  home: {
-    subtitle: "Elige una escena.",
   },
   unknownScene: {
     title: "Escena no encontrada",
@@ -462,6 +492,25 @@ const es: Messages = {
   quiz: {
     tryAgain: "¡Inténtalo de nuevo!",
     skip: "Continuar",
+    kicker: "Pregunta rápida",
+    correct: "¡Muy bien!",
+  },
+  collection: {
+    title: "Mi colección",
+    progress: "{n} de {total} descubiertas",
+    hint: "¡Busca la página siguiente en el libro y escanea su código QR!",
+    start: "Para empezar, ¡escanea el código QR de la primera página del libro!",
+    locked: "Página {n}: aún no descubierta",
+    backToMenu: "Volver al menú",
+    reset: "Borrar mi colección",
+    resetTitle: "¿Borrar tu colección?",
+    resetMessage: "Habrá que volver a descubrir todas las páginas, con sus preguntas.",
+    cancel: "Cancelar",
+    confirmReset: "Borrar",
+  },
+  blocked: {
+    title: "¡Todavía no!",
+    message: "Aún no has descubierto esta página. ¡Empieza por la página anterior!",
   },
 };
 

@@ -1,21 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import dynamic from "next/dynamic";
 import WebDioramaLoader from "@/components/diorama/WebDioramaLoader";
 import { TranslationProvider, useTranslation } from "@/contexts/TranslationContext";
 import LanguageSelector from "@/components/diorama/ui/LanguageSelector";
+import Dialog from "@/components/ui/Dialog";
+import type { ActionEvent } from "@/components/diorama/lib/buttonsPlayer";
 import DebugConsole from "./DebugConsole";
 import InstallGate from "./install/InstallGate";
 import ServiceWorkerRegister from "./ServiceWorkerRegister";
 import { DEV_BOOK_DIR, fixtureSceneIds, loadFixtureScene, loadReaderBook, loadReaderScene } from "./bookSource";
 import type { ReaderBook, ReaderScene } from "./readerScene";
-import { parseDevSceneHash, parseSceneHash, sceneHref, useLocationHash } from "./sceneRoute";
+import type { QuizModule } from "@/schema/glbi";
+import { goToScene, parseDevSceneHash, parseSceneHash, sceneHref, useLocationHash } from "./sceneRoute";
+import {
+  ProgressStore, isUnlocked, pageStorage, sceneAccess, withCollected, withQuizPassed, withUnlocked, type Progress,
+} from "./progress";
 
 const isDev = process.env.NODE_ENV === "development";
+
+// Quiz d'entrée (Î13) : chargé à la demande, hors du bundle de la page tant qu'aucune scène n'en demande un.
+const Quiz = dynamic(() => import("@/components/quiz/Quiz"), { ssr: false, loading: () => <Black /> });
 
 // Racine du livre. Î8 : rien du livre ne s'affiche avant l'installation complète (InstallGate) ; la console de
 // débogage (`#/debug`, `?debug=1`) et l'invite de mise à jour du service worker restent hors de cette garde.
 // Î10 : le livre est lu à l'exécution (`book.json`, `scenes/<id>.json`, voir bookSource.ts), plus de config compilée.
+// Î13 : progression (`progress.ts`), menu de collection, quiz avant une scène, écran de blocage (`spec-progression.md`).
 export default function BookApp() {
   const hash = useLocationHash();
   return (
@@ -48,8 +59,8 @@ function useLoaded<T>(run: () => Promise<T>): Loaded<T> {
   return state;
 }
 
-// Routeur du livre (D-8.4). `#/s/<scène>` → scène du livre ; `#/dev/<scène>` → fixture (développement seulement) ;
-// hash vide (ou `#/debug`) → accueil provisoire (le menu de collection arrive en Î13) ; autre hash → scène inconnue.
+// Routeur du livre (D-8.4). `#/s/<scène>` → scène du livre (quiz ou blocage selon la progression) ; `#/dev/<scène>` →
+// fixture (développement seulement) ; hash vide (ou `#/debug`) → menu de collection ; autre hash → scène inconnue.
 function BookRoute({ hash }: { hash: string }) {
   const book = useLoaded(loadReaderBook);
   const devSceneId = isDev ? parseDevSceneHash(hash) : null;
@@ -62,24 +73,112 @@ function BookRoute({ hash }: { hash: string }) {
 
 function BookRouteLoaded({ hash, reader }: { hash: string; reader: ReaderBook | null }) {
   useDocumentTitle(reader);
-  return <BookPage hash={hash} reader={reader} />;
+  const progress = useProgress(reader);
+  return <BookPage hash={hash} reader={reader} progress={progress} />;
 }
 
-function BookPage({ hash, reader }: { hash: string; reader: ReaderBook | null }) {
-  if (hash === "" || hash === "#" || hash === "#/" || hash === "#/debug") return <BookHome book={reader} />;
+/** Progression du livre (`null` : pas de livre, ou cartouche fixture, hors progression). */
+interface BookProgress {
+  get: () => Progress;
+  update: (fn: (p: Progress) => Progress) => void;
+  reset: () => void;
+}
+
+/**
+ * Progression du livre courant, lue dans le stockage à chaque rendu ; une écriture fait rendre de nouveau. La cartouche
+ * fixture (`book.json` `fixture: true`, référence des modules réservés) est hors progression : tout y est ouvert.
+ */
+function useProgress(reader: ReaderBook | null): BookProgress | null {
+  const store = useMemo(() => (reader && !reader.fixture ? new ProgressStore(reader.bookId, pageStorage()) : null), [reader]);
+  const [, setRevision] = useState(0);
+  const update = useCallback(
+    (fn: (p: Progress) => Progress) => {
+      if (!store) return;
+      const before = JSON.stringify(store.get());
+      if (JSON.stringify(store.update(fn)) !== before) setRevision((r) => r + 1);
+    },
+    [store],
+  );
+  const reset = useCallback(() => {
+    store?.reset();
+    setRevision((r) => r + 1);
+  }, [store]);
+  return useMemo(() => (store ? { get: () => store.get(), update, reset } : null), [store, update, reset]);
+}
+
+function BookPage({ hash, reader, progress }: { hash: string; reader: ReaderBook | null; progress: BookProgress | null }) {
+  if (hash === "" || hash === "#" || hash === "#/" || hash === "#/debug") return <CollectionMenu book={reader} progress={progress} />;
 
   const sceneId = parseSceneHash(hash);
-  if (!sceneId || !reader) return <UnknownScene />;
+  if (!sceneId || !reader || !reader.scenes.includes(sceneId)) return <UnknownScene />;
   // `key` : changement de scène = démontage complet du lecteur (comme un changement de page auparavant).
-  return <SceneRoute key={sceneId} load={() => loadReaderScene(reader, sceneId)} />;
+  if (!progress) return <SceneRoute key={sceneId} load={() => loadReaderScene(reader, sceneId)} onBack={backToMenu} />;
+  return <BookScene key={sceneId} reader={reader} sceneId={sceneId} progress={progress} />;
 }
 
-function SceneRoute({ load }: { load: () => Promise<ReaderScene | null> }) {
+const backToMenu = () => goToScene(null);
+
+/**
+ * Scène du livre soumise à la progression (Q1). L'accès est fixé à l'arrivée : une scène non accessible affiche l'écran
+ * de blocage sans rien charger (ni `scenes/<id>.json`, ni le lecteur, ni le GLB).
+ */
+function BookScene({ reader, sceneId, progress }: { reader: ReaderBook; sceneId: string; progress: BookProgress }) {
+  const [access] = useState(() => sceneAccess(progress.get(), reader.scenes, sceneId));
+  if (access === "locked" || access === "unknown") return <BlockedScene />;
+  return <OpenScene reader={reader} sceneId={sceneId} progress={progress} needsQuiz={access === "accessible"} />;
+}
+
+function OpenScene({ reader, sceneId, progress, needsQuiz }: { reader: ReaderBook; sceneId: string; progress: BookProgress; needsQuiz: boolean }) {
+  const state = useLoaded(() => loadReaderScene(reader, sceneId));
+  const [quizDone, setQuizDone] = useState(false);
+  const quiz = state.s === "ok" && state.value?.kind === "v1" ? state.value.built.modules.quiz : undefined;
+  const showQuiz = needsQuiz && !!quiz && !quizDone;
+
+  // Scène accessible sans quiz : débloquée à son ouverture (Q1).
+  const opened = state.s === "ok" && !!state.value && !showQuiz;
+  useEffect(() => {
+    if (opened) progress.update((p) => withUnlocked(p, sceneId));
+  }, [opened, progress, sceneId]);
+
+  // `collected` : première action jouée dans la scène (écrit, non exploité tant que le mini-jeu n'existe pas).
+  const onAction = useCallback(
+    (e: ActionEvent) => {
+      if (e.phase === "start") progress.update((p) => withCollected(p, sceneId));
+    },
+    [progress, sceneId],
+  );
+
+  if (state.s === "loading") return <Black />;
+  if (state.s === "error") return <BookError message={state.message} />;
+  if (!state.value) return <UnknownScene />;
+  if (showQuiz) {
+    return (
+      <QuizScreen
+        scene={state.value}
+        quiz={quiz!}
+        onPassed={() => progress.update((p) => withQuizPassed(p, sceneId))}
+        onContinue={() => setQuizDone(true)}
+      />
+    );
+  }
+  return <WebDioramaLoader scene={state.value} onAction={onAction} onBack={backToMenu} />;
+}
+
+function QuizScreen({ scene, quiz, onPassed, onContinue }: { scene: ReaderScene; quiz: QuizModule; onPassed: () => void; onContinue: () => void }) {
+  const { lang } = useTranslation();
+  return (
+    <Screen>
+      <Quiz quiz={quiz} title={scene.config.name[lang]} onPassed={onPassed} onContinue={onContinue} />
+    </Screen>
+  );
+}
+
+function SceneRoute({ load, onBack }: { load: () => Promise<ReaderScene | null>; onBack?: () => void }) {
   const state = useLoaded(load);
   if (state.s === "loading") return <Black />;
   if (state.s === "error") return <BookError message={state.message} />;
   if (!state.value) return <UnknownScene />;
-  return <WebDioramaLoader scene={state.value} />;
+  return <WebDioramaLoader scene={state.value} onBack={onBack} />;
 }
 
 /** Titre du document : titre du livre dans la langue du lecteur (Î12 ; au build, celui de la première langue). */
@@ -92,33 +191,34 @@ function useDocumentTitle(book: ReaderBook | null) {
 }
 
 type SceneName = { fr: string; en: string; es: string };
+type SceneCard = { name?: SceneName; image?: string };
 
-/** Noms des scènes pour l'accueil provisoire (lus dans les scènes elles-mêmes). */
-function useSceneNames(book: ReaderBook | null): Record<string, SceneName | undefined> {
-  const [names, setNames] = useState<Record<string, SceneName | undefined>>({});
+/** Nom et image de chargement de chaque scène (lus dans les scènes elles-mêmes) pour le menu. */
+function useSceneCards(book: ReaderBook | null): Record<string, SceneCard | undefined> {
+  const [cards, setCards] = useState<Record<string, SceneCard | undefined>>({});
   useEffect(() => {
     if (!book) return;
     let alive = true;
     Promise.all(
       book.scenes.map((id) =>
         loadReaderScene(book, id).then(
-          (s) => [id, s?.config.name] as const,
+          (s) => [id, s ? { name: s.config.name, image: s.config.loaderImage } : undefined] as const,
           () => [id, undefined] as const,
         ),
       ),
     ).then((pairs) => {
-      if (alive) setNames(Object.fromEntries(pairs));
+      if (alive) setCards(Object.fromEntries(pairs));
     });
     return () => {
       alive = false;
     };
   }, [book]);
-  return names;
+  return cards;
 }
 
 const linkClass = "glbi-btn glbi-btn-secondary px-6 py-3";
 
-/** Écran plein du livre (accueil, erreurs) : zones sûres, sélecteur de langue en haut à droite. */
+/** Écran plein du livre (menu, quiz, blocage, erreurs) : zones sûres, sélecteur de langue en haut à droite. */
 function Screen({ children }: { children: React.ReactNode }) {
   return (
     <main className="glbi-safe-padding relative min-h-dvh flex flex-col items-center justify-center gap-4 bg-black text-white text-center" style={{ paddingTop: "calc(var(--safe-top) + 3.75rem)" }}>
@@ -130,23 +230,101 @@ function Screen({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Accueil provisoire (le menu de collection arrive en Î13) : titre du livre et noms des scènes dans la langue du
-// lecteur. Le message sans livre et la fixture ne s'affichent qu'en développement (textes de développeur, en français).
-function BookHome({ book }: { book: ReaderBook | null }) {
+/** Image de chargement d'une scène, sinon icône du livre ; masquée si elle est introuvable. */
+function CardImage({ src }: { src?: string }) {
+  const [hidden, setHidden] = useState(false);
+  if (hidden) return <span className="h-14 w-14 shrink-0" aria-hidden="true" />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- export statique, images du livre servies telles quelles (D-7.5)
+    <img src={src ?? "icon.png"} alt="" className="h-14 w-14 shrink-0 rounded-full object-cover bg-white/10" onError={() => setHidden(true)} />
+  );
+}
+
+const fill = (s: string, vars: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
+
+// Menu de collection (Î13, remplace l'accueil provisoire) : scènes dans l'ordre du livre ; débloquées = carte avec nom
+// et image, qui ouvre la scène ; les autres grisées, numéro et « ? », non cliquables (Q2) ; remise à zéro confirmée (Q6).
+// Le message sans livre et la fixture ne s'affichent qu'en développement (textes de développeur, en français).
+function CollectionMenu({ book, progress }: { book: ReaderBook | null; progress: BookProgress | null }) {
   const { t, lang } = useTranslation();
-  const names = useSceneNames(book);
+  const cards = useSceneCards(book);
+  const p = progress?.get();
+  const unlocked = (id: string) => !p || isUnlocked(p, id);
+  const count = book ? book.scenes.filter(unlocked).length : 0;
+  const [confirmReset, setConfirmReset] = useState(false);
+  const resetTitleId = useId();
+
   return (
     <Screen>
       <h1 className="text-2xl font-bold">{book?.title?.[lang] ?? "GLBInterpreter"}</h1>
-      {book && <p className="text-white/80">{t.home.subtitle}</p>}
       {book ? (
-        <nav className="flex flex-col gap-3">
-          {book.scenes.map((id) => (
-            <a key={id} href={sceneHref(id)} className={linkClass}>
-              {names[id]?.[lang] ?? id}
-            </a>
-          ))}
-        </nav>
+        <>
+          <p className="text-white/80" data-testid="collection-count">
+            {t.collection.title} · {fill(t.collection.progress, { n: count, total: book.scenes.length })}
+          </p>
+          <ol className="flex w-full max-w-md flex-col gap-3" data-testid="collection">
+            {book.scenes.map((id, i) => {
+              const card = cards[id];
+              return (
+                <li key={id}>
+                  {unlocked(id) ? (
+                    <a href={sceneHref(id)} className="glbi-btn glbi-btn-secondary w-full justify-start gap-4 px-3 py-2 text-left text-lg" data-testid="collection-scene">
+                      <CardImage src={card?.image} />
+                      <span>{card?.name?.[lang] ?? id}</span>
+                    </a>
+                  ) : (
+                    <div
+                      className="flex min-h-11 w-full items-center gap-4 rounded-full bg-white/5 px-3 py-2 text-left text-lg text-white/45"
+                      aria-label={fill(t.collection.locked, { n: i + 1 })}
+                      role="img"
+                      data-testid="collection-locked"
+                    >
+                      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/10 text-2xl font-bold" aria-hidden="true">
+                        ?
+                      </span>
+                      <span aria-hidden="true">{i + 1}</span>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+          {/* Rien de débloqué (app ouverte par son icône sans QR scanné) : consigne de commencer par la première page. */}
+          {count < book.scenes.length && (
+            <p className="max-w-md text-white/80" data-testid="collection-hint">
+              {count === 0 ? t.collection.start : t.collection.hint}
+            </p>
+          )}
+          {progress && count > 0 && (
+            <button type="button" className="glbi-btn glbi-btn-link mt-4 text-sm" onClick={() => setConfirmReset(true)} aria-haspopup="dialog" data-testid="collection-reset">
+              {t.collection.reset}
+            </button>
+          )}
+          <Dialog open={confirmReset} onClose={() => setConfirmReset(false)} labelledBy={resetTitleId} className="glbi-dialog" testId="collection-reset-dialog">
+            <div className="glbi-panel flex flex-col items-center gap-4 p-6 text-center">
+              <h2 id={resetTitleId} className="text-xl font-bold">
+                {t.collection.resetTitle}
+              </h2>
+              <p className="text-white/85">{t.collection.resetMessage}</p>
+              <div className="flex flex-wrap justify-center gap-3">
+                <button type="button" className="glbi-btn glbi-btn-primary" onClick={() => setConfirmReset(false)}>
+                  {t.collection.cancel}
+                </button>
+                <button
+                  type="button"
+                  className="glbi-btn glbi-btn-outline"
+                  onClick={() => {
+                    progress?.reset();
+                    setConfirmReset(false);
+                  }}
+                  data-testid="collection-reset-confirm"
+                >
+                  {t.collection.confirmReset}
+                </button>
+              </div>
+            </div>
+          </Dialog>
+        </>
       ) : (
         <p className="text-white/70 max-w-md">
           Aucun livre préparé dans <code>public/{DEV_BOOK_DIR}</code> : lancer{" "}
@@ -169,6 +347,22 @@ function BookHome({ book }: { book: ReaderBook | null }) {
 
 function Black() {
   return <div className="fixed inset-0 bg-black" />;
+}
+
+/** Scène pas encore accessible (Q1, Q2) : affiché avant tout chargement de la scène. */
+function BlockedScene() {
+  const { t } = useTranslation();
+  return (
+    <Screen>
+      <h1 className="text-2xl font-bold" data-testid="blocked-title">
+        {t.blocked.title}
+      </h1>
+      <p className="max-w-md text-white/80">{t.blocked.message}</p>
+      <a href="#/" className={linkClass}>
+        {t.collection.backToMenu}
+      </a>
+    </Screen>
+  );
 }
 
 function UnknownScene() {

@@ -27,6 +27,7 @@ import { usePOIScenePlayer } from "@/components/diorama/hooks/usePOIScenePlayer"
 import DialogueModal from "./ui/DialogueModal";
 import DialogueButton from "./ui/DialogueButton";
 import InfoButton from "./ui/InfoButton";
+import BackToMenuButton from "./ui/BackToMenuButton";
 import InfoModal, { type InfoHelp } from "./ui/InfoModal";
 import POIBreadcrumbs from "./ui/POIBreadcrumbs";
 import { setupPostProcessing, setupEmissiveMaterials } from "./rendering/setupPostProcessing";
@@ -94,6 +95,11 @@ export interface WebDioramaLoaderProps {
    */
   lang?: Lang;
   onLangChange?: (lang: Lang) => void;
+  /**
+   * Livre (Î13) : retour au menu de collection, bouton en haut à gauche de la scène. Sans cette prop (atelier,
+   * fixture de développement), pas de bouton.
+   */
+  onBack?: () => void;
 }
 
 /**
@@ -123,7 +129,7 @@ export default function WebDioramaLoader(props: WebDioramaLoaderProps) {
 
 // Î8 : le livre entier est installé et vérifié avant le montage du lecteur (InstallGate, src/components/book/install/) ;
 // plus de vérification de cache ni de modale de téléchargement ici.
-function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, embedded = false }: WebDioramaLoaderProps) {
+function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, onBack, embedded = false }: WebDioramaLoaderProps) {
   const { config, bookId } = readerScene;
   // Boucle unique (P-06) et mode `buttons` (Î10b)
   const frameTasksRef = useRef<FrameTasks>(new FrameTasks());
@@ -1248,6 +1254,14 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
             {!embedded && fullscreenSupported && <FullscreenButton isFullscreen={isFullscreen} onToggle={toggleFullscreen} />}
           </div>
 
+          {onBack && (
+            <div className="glbi-corner-top-left z-50">
+              <BackToMenuButton onClick={onBack} />
+            </div>
+          )}
+
+          {/* Navigation entre POI (module réservé) : sans objet sur une scène v1 à POI unique (Î13), gardée pour la fixture. */}
+          {!(readerScene.kind === "v1" && config.pois.length === 1) && (
           <POIBreadcrumbs
             currentPOI={currentPOI}
             goToPOI={goToPOI}
@@ -1257,6 +1271,7 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, em
             isPortrait={isPortrait}
             viewportHeight={viewportHeight}
           />
+          )}
 
           {DevTools && !embedded && (
             <DevTools
