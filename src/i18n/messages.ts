@@ -56,6 +56,11 @@ const fr = {
     start: "Cliquer pour commencer",
     startMobile: "Toucher pour commencer",
     loading: "Chargement de la scène",
+    // Î13bis : chargeur rond d'une scène v1 (lancement automatique) ; annonce unique pour un lecteur d'écran
+    ready: "Scène prête",
+    // Son bloqué par le navigateur jusqu'au premier geste de la page (arrivée directe par un QR)
+    tapForSound: "🔇 Touche l'écran pour le son",
+    clickForSound: "🔇 Clique dans la page pour le son",
   },
   actions: {
     group: "Animations",
@@ -220,6 +225,9 @@ const en: Messages = {
     start: "Click to start",
     startMobile: "Tap to start",
     loading: "Loading the scene",
+    ready: "Scene ready",
+    tapForSound: "🔇 Tap the screen for sound",
+    clickForSound: "🔇 Click the page for sound",
   },
   actions: {
     group: "Animations",
@@ -380,6 +388,9 @@ const es: Messages = {
     start: "Clic para comenzar",
     startMobile: "Toca para comenzar",
     loading: "Cargando la escena",
+    ready: "Escena lista",
+    tapForSound: "🔇 Toca la pantalla para el sonido",
+    clickForSound: "🔇 Haz clic en la página para el sonido",
   },
   actions: {
     group: "Animaciones",

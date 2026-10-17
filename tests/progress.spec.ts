@@ -3,6 +3,7 @@
 // Règles de déblocage pures, valeur illisible et stockage indisponible : aussi dans `npm run test:engine`.
 import { expect, test, type Page } from '@playwright/test';
 import { PROGRESS_KEY } from './progress-helpers';
+import { fullscreenElement, readerShown, sceneLaunched } from './scene-helpers';
 
 const SERVER = 'http://localhost:4173';
 
@@ -25,8 +26,6 @@ const progress = (page: Page) =>
 
 const hasWebGL = (page: Page) => page.evaluate(() => !!document.createElement('canvas').getContext('webgl2'));
 
-/** Lecteur monté (écran « Cliquer pour commencer »), ou écran WebGL sans GPU. */
-const readerShown = (page: Page) => page.getByText(/pour commencer|to start|para comenzar|tout le monde s'est endormi/).first();
 
 const choice = (page: Page, name: string) => page.getByTestId('quiz-choice').filter({ hasText: name });
 
@@ -57,10 +56,12 @@ test('premier lancement par le QR de la première scène : quiz, mauvaise puis b
   if (test.info().project.name === 'chromium') await expect(dialog.getByRole('button', { name: 'Passer' })).toBeFocused();
   expect(await progress(page)).toEqual({ unlockedScenes: ['trex'], quizPassed: { trex: true }, collected: {} });
 
-  // « Passer » ouvre la scène
+  // « Passer » ouvre la scène ; Î13bis : plein écran de la page demandé dans ce clic (Chromium ; le WebKit de Playwright
+  // sous Windows n'a pas toujours l'API)
   await dialog.getByRole('button', { name: 'Passer' }).click();
   await expect(page.getByTestId('quiz')).toHaveCount(0);
   await expect(readerShown(page)).toBeVisible({ timeout: 30_000 });
+  if (test.info().project.name === 'chromium') await expect.poll(() => fullscreenElement(page)).toBe('html');
 
   // Rechargement : scène débloquée, le quiz n'est pas reposé
   await page.reload();
@@ -69,7 +70,7 @@ test('premier lancement par le QR de la première scène : quiz, mauvaise puis b
 
   // Scène lancée : `collected` à la première action ; bouton Menu, pas de fil d'Ariane des POI sur une scène v1
   test.skip(!(await hasWebGL(page)), 'navigateur de test sans WebGL 2 : lecteur non monté');
-  await page.getByText(/Cliquer pour commencer/).click();
+  await sceneLaunched(page); // Î13bis : lancement automatique, sans écran de démarrage
   await page.getByTestId('action-buttons').getByRole('button', { name: 'Marcher' }).click();
   await expect.poll(async () => (await progress(page))?.collected).toEqual({ trex: true });
   await expect(page.getByRole('button', { name: /Tyranno/ })).toHaveCount(0);
@@ -147,10 +148,15 @@ test('menu de collection : carte débloquée qui ouvre la scène sans quiz, remi
   await expect(page.getByTestId('collection-locked')).toHaveCount(2);
   for (const c of await page.getByTestId('collection').getByRole('listitem').all()) expect((await c.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 
-  // Carte débloquée : la scène s'ouvre, sans quiz
+  // Carte débloquée : la scène s'ouvre, sans quiz ; Î13bis : plein écran de la page demandé dans le clic (Chromium)
+  if (test.info().project.name === 'chromium') {
+    await page.evaluate(() => (document.fullscreenElement ? document.exitFullscreen() : undefined));
+    await expect.poll(() => fullscreenElement(page)).toBeNull();
+  }
   await page.getByRole('link', { name: 'Tyrannosaure' }).click();
   await expect(readerShown(page)).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('quiz')).toHaveCount(0);
+  if (test.info().project.name === 'chromium') await expect.poll(() => fullscreenElement(page)).toBe('html');
 
   // Remise à zéro : annulée puis confirmée
   await page.goto(`${SERVER}/#/`);

@@ -619,6 +619,37 @@ testAsync('volume et sourdine : gain maître, persistance par livre, relus par u
   assert.ok(near(again.ctx.gains[0].gain.value, 0.25));
 });
 
+testAsync('Î13bis : contexte créé sans geste et resté suspendu (blocked), puis repris au premier geste', async () => {
+  const { ctx, engine } = audioRig();
+  // Navigateur sans activation de la page : resume() ne démarre rien
+  let allowed = false;
+  ctx.resume = () => {
+    if (allowed) ctx.state = 'running';
+    return Promise.resolve();
+  };
+  const seen: boolean[] = [];
+  engine.onBlockedChange((b) => seen.push(b));
+  assert.equal(engine.blocked, false, 'pas de contexte : rien de bloqué');
+  engine.unlock(); // lancement de la scène, hors geste
+  await flush(); await flush();
+  assert.equal(engine.blocked, true);
+  assert.deepEqual(seen, [true]);
+  assert.deepEqual(ctx.playing(), ['sounds/jungle.wav (boucle)'], 'ambiance programmée, partira au démarrage du contexte');
+  const silentBefore = ctx.sources.filter((s) => s.buffer?.path === '(muet)').length;
+  allowed = true; // premier geste de la page
+  engine.unlock();
+  await flush();
+  assert.equal(ctx.state, 'running');
+  assert.equal(engine.blocked, false);
+  assert.deepEqual(seen, [true, false]);
+  assert.equal(ctx.sources.filter((s) => s.buffer?.path === '(muet)').length, silentBefore + 1, 'tampon muet rejoué dans le geste');
+  assert.equal(ctx.decoded.length, 4, 'sons décodés une seule fois');
+  engine.unlock(); // gestes suivants : sans effet
+  assert.deepEqual(seen, [true, false]);
+  engine.dispose();
+  assert.equal(engine.blocked, false);
+});
+
 // ────────────── Progression (Î13) ──────────────
 console.log('Progression du livre');
 

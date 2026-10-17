@@ -7,6 +7,7 @@ import { TranslationProvider, useTranslation } from "@/contexts/TranslationConte
 import LanguageSelector from "@/components/diorama/ui/LanguageSelector";
 import Dialog from "@/components/ui/Dialog";
 import type { ActionEvent } from "@/components/diorama/lib/buttonsPlayer";
+import { requestPageFullscreen } from "@/components/diorama/lib/pageFullscreen";
 import DebugConsole from "./DebugConsole";
 import InstallGate from "./install/InstallGate";
 import ServiceWorkerRegister from "./ServiceWorkerRegister";
@@ -157,7 +158,13 @@ function OpenScene({ reader, sceneId, progress, needsQuiz }: { reader: ReaderBoo
         scene={state.value}
         quiz={quiz!}
         onPassed={() => progress.update((p) => withQuizPassed(p, sceneId))}
-        onContinue={() => setQuizDone(true)}
+        onContinue={() => {
+          // Î13bis : « Passer » est le geste qui précède la scène (lancée sans écran de démarrage) : plein écran demandé
+          // ici (l'API exige un geste) ; le son suit (activation de la page). Échap, qui vaut aussi « Passer », n'est pas
+          // un geste reconnu par le navigateur : la scène s'ouvre alors sans plein écran.
+          requestPageFullscreen();
+          setQuizDone(true);
+        }}
       />
     );
   }
@@ -268,7 +275,14 @@ function CollectionMenu({ book, progress }: { book: ReaderBook | null; progress:
               return (
                 <li key={id}>
                   {unlocked(id) ? (
-                    <a href={sceneHref(id)} className="glbi-btn glbi-btn-secondary w-full justify-start gap-4 px-3 py-2 text-left text-lg" data-testid="collection-scene">
+                    <a
+                      href={sceneHref(id)}
+                      // Î13bis : le clic d'une carte est le geste qui précède la scène (lancée sans écran de démarrage) :
+                      // plein écran demandé ici ; le son suit (activation de la page). Hors progression (fixture) : inchangé.
+                      onClick={progress ? requestPageFullscreen : undefined}
+                      className="glbi-btn glbi-btn-secondary w-full justify-start gap-4 px-3 py-2 text-left text-lg"
+                      data-testid="collection-scene"
+                    >
                       <CardImage src={card?.image} />
                       <span>{card?.name?.[lang] ?? id}</span>
                     </a>

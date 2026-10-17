@@ -20,6 +20,8 @@ import { applyLights } from "./rendering/applyLights";
 import { applyBulbs } from "./rendering/applyBulbs";
 import { useOrientation } from "./hooks/useOrientation";
 import { useFullscreen } from "./hooks/useFullscreen";
+import { isActivationGesture } from "./hooks/useBookAudio";
+import { isPageFullscreen, requestPageFullscreen, wasPageFullscreen } from "./lib/pageFullscreen";
 import { useResize } from "./hooks/useResize";
 import { usePOIAnimations } from "./hooks/usePOIAnimations";
 import POIPlayer from "@/components/diorama/ui/POIPlayer";
@@ -110,6 +112,23 @@ export interface WebDioramaLoaderProps {
 export default function WebDioramaLoader(props: WebDioramaLoaderProps) {
   const [mounted, setMounted] = useState(false); // ✅ NOUVEAU
 
+  // Retour d'arrière-plan d'une scène v1 du livre (Î13bis) : le lecteur, libéré à la page masquée, est remonté sur place
+  // (nouvelle `key`) au lieu de recharger la page ; la page garde ainsi son activation (son sans nouveau geste dans Chrome
+  // et Firefox). Garde contre la boucle : un seul remontage automatique par période de `AUTO_REMOUNT_GUARD_MS` ; au-delà,
+  // l'écran « Scène en pause » revient, et son bouton remonte le lecteur. Compteur en mémoire (remis à zéro au rechargement
+  // de la page ou au changement de scène).
+  const [mountId, setMountId] = useState(0);
+  const lastAutoRemountRef = useRef(-Infinity);
+  const refullscreenRef = useRef(false);
+  const remount = useCallback((auto: boolean, refullscreen: boolean): boolean => {
+    const now = performance.now();
+    if (auto && now - lastAutoRemountRef.current < AUTO_REMOUNT_GUARD_MS) return false;
+    if (auto) lastAutoRemountRef.current = now;
+    refullscreenRef.current = refullscreen;
+    setMountId((n) => n + 1);
+    return true;
+  }, []);
+
   // ✅ Attendre le mount côté client
   useEffect(() => {
     setMounted(true);
@@ -120,17 +139,49 @@ export default function WebDioramaLoader(props: WebDioramaLoaderProps) {
     return null;
   }
 
+  const autoStart = props.scene.kind === "v1" && !props.embedded;
   return (
     <TranslationProvider lang={props.lang} onLangChange={props.onLangChange}>
-      <WebDioramaLoaderInner {...props} />
+      <WebDioramaLoaderInner
+        key={mountId}
+        {...props}
+        onRemount={autoStart ? remount : undefined}
+        refullscreenOnGesture={autoStart && refullscreenRef.current}
+      />
     </TranslationProvider>
   );
 }
 
+/** Garde contre la boucle de remontage au retour d'arrière-plan (Î13bis, décision de David du 17/10). */
+const AUTO_REMOUNT_GUARD_MS = 30_000;
+
+/** Gestes qui donnent à la page le droit de demander le plein écran (activation transitoire). */
+const GESTURE_EVENTS = ["pointerup", "touchend", "mousedown", "keydown", "click"] as const;
+
+interface InnerProps extends WebDioramaLoaderProps {
+  /**
+   * Scène v1 du livre (Î13bis) : remontage du lecteur par `WebDioramaLoader` (`auto` : retour d'arrière-plan, soumis à la
+   * garde ; sinon bouton de l'écran « Scène en pause »). Faux : remontage automatique refusé par la garde.
+   */
+  onRemount?: (auto: boolean, refullscreen: boolean) => boolean;
+  /** Lecteur remonté après un retour d'arrière-plan qui a fait sortir du plein écran : le redemander au premier geste. */
+  refullscreenOnGesture?: boolean;
+}
+
 // Î8 : le livre entier est installé et vérifié avant le montage du lecteur (InstallGate, src/components/book/install/) ;
 // plus de vérification de cache ni de modale de téléchargement ici.
-function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, onBack, embedded = false }: WebDioramaLoaderProps) {
+function WebDioramaLoaderInner({
+  scene: readerScene, onAction, onEngineReady, onBack, embedded = false, onRemount, refullscreenOnGesture = false,
+}: InnerProps) {
   const { config, bookId } = readerScene;
+  // Scène v1 du livre (Î13bis) : pas d'écran « Toucher pour commencer », lancement à la fin du chargement. La fixture
+  // (`#/dev/`, cartouche `fixture: true`) et l'atelier (`embedded`) gardent leur écran de démarrage.
+  const autoStart = readerScene.kind === "v1" && !embedded;
+  const onRemountRef = useRef(onRemount);
+  onRemountRef.current = onRemount;
+  /** Page en plein écran au moment où elle a été masquée (Chrome Android en sort au changement d'application). */
+  const fsAtHideRef = useRef(false);
+  const restartingRef = useRef(false);
   // Boucle unique (P-06) et mode `buttons` (Î10b)
   const frameTasksRef = useRef<FrameTasks>(new FrameTasks());
   const sceneRadiusRef = useRef<number | null>(null);
@@ -267,12 +318,30 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, on
   );
   const {
     settings: audioSettings,
+    blocked: audioBlocked,
     unlock: unlockAudio,
     onAction: playActionSound,
     setVolume: setAudioVolume,
     toggleMute,
     release: releaseBookAudio,
-  } = useBookAudio(bookId, sceneSounds);
+  } = useBookAudio(bookId, sceneSounds, autoStart && experienceStarted);
+  const sceneHasSound = !!sceneSounds.ambient || Object.keys(sceneSounds.actions).length > 0;
+
+  // Plein écran perdu au passage en arrière-plan (Î13bis) : redemandé dans le premier geste de la scène remontée (l'API
+  // exige un geste) ; ce geste reste transmis à la scène (écoute en capture, sans le retenir).
+  useEffect(() => {
+    if (!refullscreenOnGesture || !experienceStarted) return;
+    const onGesture = (e: Event) => {
+      if (!isActivationGesture(e)) return;
+      off();
+      if (!isPageFullscreen()) requestPageFullscreen();
+    };
+    const off = () => {
+      for (const type of GESTURE_EVENTS) window.removeEventListener(type, onGesture, true);
+    };
+    for (const type of GESTURE_EVENTS) window.addEventListener(type, onGesture, true);
+    return off;
+  }, [refullscreenOnGesture, experienceStarted]);
 
   // Audio de la fixture (ligne de temps, ambiances par POI : modules réservés), en HTMLAudioElement
   const { 
@@ -439,7 +508,8 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, on
     };
   }, []);
 
-  const { isFullscreen, isSupported: fullscreenSupported, toggle: toggleFullscreen } = useFullscreen(containerRef, onFullscreenChange);
+  // Plein écran de la page entière (Î13bis, `lib/pageFullscreen.ts`) : demandé au clic du menu ou de « Passer » (BookApp)
+  const { isFullscreen, isSupported: fullscreenSupported, toggle: toggleFullscreen } = useFullscreen(onFullscreenChange);
   useResize(updateRendererSize);
 
   useEffect(() => {
@@ -988,9 +1058,29 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, on
         console.log("🚨 Détection: onglet caché → cleanup");
         wasHiddenRef.current = true;
         voluntaryCleanupRef.current = true;
+        fsAtHideRef.current = wasPageFullscreen();
         performCleanup();
       } else if (!document.hidden && wasHiddenRef.current) {
+        restartAfterHidden();
+      }
+    };
+
+    // Retour de la page masquée. Scène v1 du livre (Î13bis) : remontage automatique du lecteur, sauf refus de la garde
+    // contre la boucle (écran « Scène en pause ») ; ailleurs (fixture, atelier) : écran « Scène en pause » comme avant.
+    // `visibilitychange` et `focus` arrivent tous deux au retour : un seul remontage.
+    const restartAfterHidden = () => {
+      const remount = onRemountRef.current;
+      if (!remount) {
         console.log("⏸️ Détection: retour onglet → demander relance manuelle");
+        setNeedsManualRestart(true);
+        return;
+      }
+      if (restartingRef.current) return;
+      if (remount(true, fsAtHideRef.current)) {
+        console.log("🔄 Retour d'arrière-plan : scène remontée");
+        restartingRef.current = true;
+      } else {
+        console.log("⏸️ Retour d'arrière-plan : second retour en moins de 30 s → relance manuelle");
         setNeedsManualRestart(true);
       }
     };
@@ -1008,9 +1098,8 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, on
         return;
       }
       
-      if (wasHiddenRef.current) {
-        console.log("⏸️ Détection: retour focus → demander relance manuelle");
-        setNeedsManualRestart(true);
+      if (wasHiddenRef.current && !document.hidden) {
+        restartAfterHidden();
       }
     };
     
@@ -1031,6 +1120,7 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, on
       if (!wasHiddenRef.current) {
         wasHiddenRef.current = true;
         voluntaryCleanupRef.current = true;
+        fsAtHideRef.current = wasPageFullscreen();
         performCleanup();
       }
     };
@@ -1148,8 +1238,17 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, on
             {t.restart.message}
           </p>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => {
+              // Scène v1 du livre (Î13bis) : lecteur remonté sur place ; le clic est un geste (son, plein écran)
+              if (onRemount) {
+                if (fsAtHideRef.current) requestPageFullscreen();
+                onRemount(false, false);
+              } else {
+                window.location.reload();
+              }
+            }}
             className="glbi-btn px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white text-lg font-bold shadow-lg"
+            data-testid="restart-button"
           >
             {t.restart.button}
           </button>
@@ -1211,14 +1310,17 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, on
                 loaderImage={config.loaderImage}
                 fontClassName="font-handy"
                 embedded={embedded}
+                autoStart={autoStart}
                 onStart={() => {
                   window.scrollTo(0, 0);
 
-                  // Audio : AudioContext créé et débloqué dans le geste (Web Audio, Î11), audio de la fixture autorisé
-                  unlockAudio();
+                  // Audio : AudioContext créé et débloqué dans le geste (Web Audio, Î11), audio de la fixture autorisé.
+                  // Scène v1 du livre (Î13bis) : lancement sans geste ; le son est débloqué par `useBookAudio` (activation
+                  // de la page, sinon premier geste) et le plein écran a été demandé au clic du menu ou de « Passer ».
+                  if (!autoStart) unlockAudio();
                   enableAudio();
 
-                  if (!embedded && !isFullscreen) toggleFullscreen();
+                  if (!autoStart && !embedded && !isFullscreen) toggleFullscreen();
                   // Ligne de temps (fixture) : autoplay lancé dans le geste, une seule fois (P-14). Scène v1 : `idle`
                   // joue déjà depuis le chargement ; le geste ne sert qu'à débloquer l'audio.
                   if (autoplayWanted) {
@@ -1233,6 +1335,23 @@ function WebDioramaLoaderInner({ scene: readerScene, onAction, onEngineReady, on
           </AnimatePresence>
 
           <RotateHint show={showRotateHint} onDismiss={dismissRotateHint} />
+
+          {/* Scène v1 du livre (Î13bis) : annonce unique au lancement, pour un lecteur d'écran */}
+          {autoStart && (
+            <div className="sr-only" role="status" aria-live="polite" data-testid="scene-ready">
+              {experienceStarted ? t.loader.ready : ""}
+            </div>
+          )}
+          {/* Son bloqué par le navigateur jusqu'au premier geste de la page (arrivée directe par un QR) */}
+          {autoStart && (
+            <div className="glbi-sound-hint z-40" role="status" aria-live="polite">
+              {experienceStarted && sceneHasSound && audioBlocked && (
+                <span className="rounded-full bg-black/70 px-4 py-2 text-sm font-semibold text-white shadow-lg" data-testid="sound-hint">
+                  {isMobile ? t.loader.tapForSound : t.loader.clickForSound}
+                </span>
+              )}
+            </div>
+          )}
 
           <div className="glbi-corner-top-right z-50 flex flex-row gap-2 items-end">
             <InfoButton onClick={() => setShowInfoModal(true)} />

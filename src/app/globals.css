@@ -175,3 +175,24 @@ dialog.glbi-screen {
     bottom: var(--safe-bottom);
   }
 }
+
+/*
+ * Pastille « Touche l'écran pour le son » (Î13bis) : centrée juste au-dessus de la barre des boutons d'animation (une
+ * rangée de 44 px), sans recevoir les touchers (ils vont à la scène, et le premier débloque le son).
+ */
+.glbi-sound-hint {
+  position: absolute;
+  left: calc(var(--safe-left) + 1rem);
+  right: calc(var(--safe-right) + 1rem);
+  bottom: calc(var(--safe-bottom) + 7rem);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+@media (min-width: 640px), (orientation: landscape) and (max-height: 500px) {
+  .glbi-sound-hint {
+    left: calc(var(--safe-left) + var(--corner-controls));
+    right: calc(var(--safe-right) + var(--corner-controls));
+    bottom: calc(var(--safe-bottom) + 3.5rem);
+  }
+}

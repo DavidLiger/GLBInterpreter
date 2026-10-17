@@ -2,6 +2,7 @@
 // books/test-dino --part-mib 1`). Clips synthétiques : idle 0,5 s, walk 0,75 s, roar 1 s, eat 1,25 s.
 // Les événements `onAction` sont lus dans l'attribut `data-action-log` des boutons (dix derniers, `id:phase`).
 import { unlockAllScenes } from './progress-helpers';
+import { sceneLaunched } from './scene-helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 const SERVER = 'http://localhost:4173';
@@ -20,13 +21,8 @@ async function openScene(page: Page, scene: string, consoleLines: string[] = [])
   await expect(page.getByRole('heading', { name: /Installer le livre/ })).toBeHidden({ timeout: 120_000 });
   const webgl = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl2'));
   test.skip(!webgl, 'navigateur de test sans WebGL 2 : lecteur non monté');
-  // Écran de démarrage (le geste débloque l'audio ; idle joue déjà)
-  const start = page.getByText(/Cliquer pour commencer|Toucher pour commencer/);
-  await expect(start).toBeVisible({ timeout: 30_000 });
-  await start.click();
-  const bar = page.getByTestId('action-buttons');
-  await expect(bar).toBeVisible({ timeout: 10_000 });
-  return bar;
+  // Î13bis : plus d'écran de démarrage, la scène se lance seule à la fin du chargement (idle joue déjà)
+  return sceneLaunched(page);
 }
 
 const log = async (page: Page) => ((await page.getByTestId('action-buttons').getAttribute('data-action-log')) ?? '').split(' ').filter(Boolean);

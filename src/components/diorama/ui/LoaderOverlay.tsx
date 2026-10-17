@@ -10,7 +10,10 @@
 // - Sortie en fondu : le composant est la racine animée sous l'`AnimatePresence` du lecteur (avant Î12, une seconde
 //   `AnimatePresence` interne, toujours ouverte, empêchait la sortie de jouer, U-01).
 // - Zones sûres : contenu hors encoche ; sélecteur de langue en haut à droite.
-import React, { useEffect, useState } from "react";
+// - Î13bis (`autoStart`, scène v1 du livre) : plus de bouton « Toucher pour commencer » ; chargeur rond (image de la scène,
+//   progression dessinée sur son contour), et la scène se lance seule à la fin du chargement (`onStart` appelé hors geste).
+//   La fixture et l'atelier gardent la barre de progression et le bouton.
+import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useTranslation } from "@/contexts/TranslationContext";
 import LanguageSelector from "./LanguageSelector";
@@ -24,6 +27,8 @@ interface LoaderOverlayProps {
   loaderImage?: string;
   fontClassName?: string;
   onStart?: () => void;
+  /** Scène v1 du livre (Î13bis) : chargeur rond et lancement automatique (`onStart` appelé une fois, sans geste). */
+  autoStart?: boolean;
   /** Atelier (A2) : rendu dans le conteneur du lecteur (hauteur `100 %` dans les deux cas) ; pas de focus automatique. */
   embedded?: boolean;
 }
@@ -40,6 +45,7 @@ export default function LoaderOverlay({
   loaderImage,
   fontClassName,
   onStart,
+  autoStart = false,
   embedded = false,
 }: LoaderOverlayProps) {
   const [isReady, setIsReady] = useState(false);
@@ -58,7 +64,17 @@ export default function LoaderOverlay({
     }
   }, [isLoaded]);
 
-  const progress = Math.max(0, Math.min(100, Math.round(loadingProgress)));
+  // Lancement automatique (Î13bis) : une seule fois, dès que la scène est prête
+  const onStartRef = useRef(onStart);
+  onStartRef.current = onStart;
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (!autoStart || !isReady || startedRef.current) return;
+    startedRef.current = true;
+    onStartRef.current?.();
+  }, [autoStart, isReady]);
+
+  const progress = Math.max(0, Math.min(100, Math.round(isLoaded ? 100 : loadingProgress)));
   const compact = !isPortrait && isMobile;
 
   return (
@@ -98,6 +114,16 @@ export default function LoaderOverlay({
           )}
         </div>
 
+        {autoStart ? (
+          <RoundLoader
+            progress={progress}
+            imageSrc={imageSrc}
+            onImageError={() => setImageSrc((cur) => (cur !== FALLBACK_IMAGE ? FALLBACK_IMAGE : null))}
+            label={t.loader.loading}
+            compact={compact}
+          />
+        ) : (
+        <>
         {/* Image */}
         <div className="flex-1 min-h-0 flex items-center justify-center w-full max-w-2xl py-2">
           {imageSrc && (
@@ -165,7 +191,74 @@ export default function LoaderOverlay({
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
     </motion.div>
+  );
+}
+
+/** Rayon de l'anneau dans un repère de 100 × 100 (trait de 4). */
+const RING_R = 47;
+const RING_C = 2 * Math.PI * RING_R;
+
+/**
+ * Chargeur rond (Î13bis) : image de la scène (sinon icône du livre) dans un cercle, progression dessinée sur son contour,
+ * pourcentage en petit dessous. Barre de progression nommée « Chargement de la scène » pour un lecteur d'écran, valeur en
+ * pourcentage ; ses mises à jour ne sont pas annoncées tant qu'on ne va pas sur elle (pas de bavardage). L'annonce
+ * « Scène prête » est faite par le lecteur, hors de cet écran qui disparaît au lancement.
+ */
+function RoundLoader({
+  progress,
+  imageSrc,
+  onImageError,
+  label,
+  compact,
+}: {
+  progress: number;
+  imageSrc: string | null;
+  onImageError: () => void;
+  label: string;
+  compact: boolean;
+}) {
+  const size = compact ? "min(38vw, 52dvh, 260px)" : "min(68vw, 46dvh, 300px)";
+  return (
+    <div className="flex-1 min-h-0 w-full flex flex-col items-center justify-center gap-3 py-2">
+      <div
+        className="relative shrink-0"
+        style={{ width: size, height: size }}
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress}
+        data-testid="round-loader"
+      >
+        <div className="absolute rounded-full overflow-hidden bg-white/10" style={{ inset: "7%" }}>
+          {imageSrc && (
+            // eslint-disable-next-line @next/next/no-img-element -- export statique, images du livre servies telles quelles (D-7.5)
+            <img src={imageSrc} alt="" className="h-full w-full object-cover" onError={onImageError} />
+          )}
+        </div>
+        <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full -rotate-90" aria-hidden="true">
+          <circle cx="50" cy="50" r={RING_R} fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="4" />
+          <circle
+            cx="50"
+            cy="50"
+            r={RING_R}
+            fill="none"
+            stroke="#fbbf24"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeDasharray={RING_C}
+            strokeDashoffset={RING_C * (1 - progress / 100)}
+            style={{ transition: "stroke-dashoffset 0.3s ease-out" }}
+          />
+        </svg>
+      </div>
+      <p className="text-sm font-bold text-gray-300" aria-hidden="true">
+        {progress} %
+      </p>
+    </div>
   );
 }

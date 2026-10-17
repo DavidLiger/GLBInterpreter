@@ -5,6 +5,7 @@
 // Un script injecté note chaque son lancé (`AudioBufferSourceNode.start`) : hauteur estimée sur les échantillons décodés,
 // boucle, arrêt (`stop`) ou fin naturelle (`ended`). Aucun son n'est écouté : on vérifie que le bon son part et s'arrête.
 import { unlockAllScenes } from './progress-helpers';
+import { sceneLaunched } from './scene-helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 const SERVER = 'http://localhost:4173';
@@ -85,16 +86,12 @@ async function install(page: Page, scene: string, needsAudio = true) {
   test.skip(needsAudio && !webAudio, 'navigateur de test sans Web Audio : aucun son à vérifier');
 }
 
+/** Î13bis : la scène se lance seule (plus d'écran « Cliquer pour commencer ») ; le geste de l'installation a déjà donné à la page le droit de jouer du son. */
 async function start(page: Page) {
-  const startText = page.getByText(/Cliquer pour commencer|Toucher pour commencer/);
-  await expect(startText).toBeVisible({ timeout: 30_000 });
-  expect(await page.evaluate(() => window.__audioLog.length), 'aucun son avant le geste').toBe(0);
-  await startText.click();
-  await expect(page.getByTestId('action-buttons')).toBeVisible({ timeout: 10_000 });
-  return page.getByTestId('action-buttons');
+  return sceneLaunched(page);
 }
 
-test('ambiance en boucle après le geste ; son par action : lancement, interruption, relance', async ({ page }) => {
+test('ambiance en boucle dès le lancement automatique ; son par action : lancement, interruption, relance', async ({ page }) => {
   const lines: string[] = [];
   page.on('console', (m) => lines.push(m.text()));
   await install(page, 'trex');
@@ -152,8 +149,8 @@ test('volume et sourdine : clavier, libellés, persistance au rechargement', asy
   await mute.click();
   await expect(page.getByRole('button', { name: 'Remettre le son' })).toHaveAttribute('aria-pressed', 'true');
   await expect(slider).toHaveAttribute('aria-valuetext', '0 % (son coupé)');
-  // En plein écran (passé par « Cliquer pour commencer »), Échap est pris par le navigateur pour en sortir : on en sort
-  // d'abord, Échap ferme alors le panneau
+  // En plein écran, Échap est pris par le navigateur pour en sortir : on en sort d'abord (depuis Î13bis, l'arrivée par
+  // l'installation ne met pas en plein écran), Échap ferme alors le panneau
   await page.evaluate(() => (document.fullscreenElement ? document.exitFullscreen() : undefined));
   await page.keyboard.press('Escape');
   await expect(button).toHaveAttribute('aria-expanded', 'false');
@@ -178,4 +175,52 @@ test('hors ligne : les sons sont lus dans le Cache Storage du livre', async ({ p
   await bar.locator('[data-action-id="roar"]').click();
   await expect.poll(() => playing(page)).toEqual(['ambiance (boucle)', 'roar-trex']);
   await context.setOffline(false);
+});
+
+// Règle d'autoplay de Chrome simulée : les navigateurs de test sans écran laissent jouer le son sans geste (Chromium ignore
+// `--autoplay-policy` pour Web Audio en mode sans écran ; un nouvel onglet y a déjà `userActivation.hasBeenActive`, vérifié
+// le 17/10). Le script injecté rend à `AudioContext` la règle du navigateur réel : tant que la page n'a reçu aucun geste
+// réel (toucher, clic, touche du clavier), le contexte est suspendu et `resume()` n'aboutit pas ; après un geste, il démarre.
+const GESTURE_REQUIRED = () => {
+  const Orig = window.AudioContext;
+  if (!Orig) return;
+  let active = false;
+  for (const type of ['pointerup', 'touchend', 'mousedown', 'keydown']) {
+    window.addEventListener(type, (e) => {
+      if (e.isTrusted && !(e instanceof KeyboardEvent && e.key === 'Escape')) active = true;
+    }, true);
+  }
+  window.AudioContext = class extends Orig {
+    constructor(...a: ConstructorParameters<typeof AudioContext>) {
+      super(...a);
+      if (!active) void this.suspend();
+    }
+    resume() {
+      return active ? super.resume() : new Promise<void>(() => {});
+    }
+  };
+};
+
+test('Î13bis : arrivée sans geste dans la page (QR direct) : son bloqué, pastille, premier clic dans la page', async ({ page: first, context }) => {
+  await install(first, 'trex');
+  await sceneLaunched(first);
+  await first.close();
+  // Nouvel onglet sur l'adresse de la scène, sans geste (comme l'appareil photo qui ouvre un QR). Un rechargement ne
+  // suffit pas : Chromium et WebKit gardent l'activation d'une page à la suivante du même site.
+  const page = await context.newPage();
+  await unlockAllScenes(page);
+  await page.addInitScript(INSTRUMENT);
+  await page.addInitScript(GESTURE_REQUIRED);
+  await page.goto(`${SERVER}/#/s/trex`);
+  await sceneLaunched(page);
+  const hint = page.getByTestId('sound-hint');
+  await expect(hint).toHaveText('🔇 Clique dans la page pour le son', { timeout: 10_000 });
+  // Premier clic dans la scène (hors boutons) : son débloqué, pastille retirée, ambiance en boucle
+  const vp = page.viewportSize()!;
+  await page.mouse.click(vp.width / 2, vp.height / 3);
+  await expect(hint).toHaveCount(0);
+  await expect.poll(() => playing(page)).toContain('ambiance (boucle)');
+  // Le premier clic n'a pas été retenu : les boutons répondent
+  await page.getByTestId('action-buttons').locator('[data-action-id="roar"]').click();
+  await expect.poll(() => playing(page)).toEqual(['ambiance (boucle)', 'roar-trex']);
 });

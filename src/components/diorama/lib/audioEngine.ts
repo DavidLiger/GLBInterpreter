@@ -7,8 +7,9 @@
 // Chargement (A-05, A-10 à A-13) :
 //   - les octets sont lus dans le Cache Storage du livre (`getAssetFromCache`, cache `book-<bookId>@<dossier>`), sinon par
 //     URL (développement, atelier, livre non installé) ; ils sont préchargés dès que la scène connaît ses sons, avant le geste ;
-//   - le décodage (`decodeAudioData`) attend l'`AudioContext`, créé et débloqué par le geste de l'écran « Cliquer pour
-//     commencer » (`unlock`, à appeler dans le gestionnaire du clic) ; un son lancé avant la fin de son décodage part dès
+//   - le décodage (`decodeAudioData`) attend l'`AudioContext`, créé par `unlock` : dans le geste de l'écran « Cliquer pour
+//     commencer » (fixture, atelier), ou au lancement automatique d'une scène v1 du livre, puis repris dans le premier
+//     geste de la page s'il est resté suspendu (Î13bis, `blocked`) ; un son lancé avant la fin de son décodage part dès
 //     qu'il est prêt, si son lancement est toujours en cours ;
 //   - génération : chaque `setSounds` incrémente un numéro ; un chargement d'une génération précédente est abandonné, et
 //     les sons qui ne sont plus utilisés sont oubliés (mémoire rendue au ramasse-miettes).
@@ -245,14 +246,59 @@ export class AudioEngine {
 
   // ────────────── Déblocage ──────────────
 
-  /** Vrai une fois l'`AudioContext` créé (geste de l'écran de démarrage). */
+  /** Vrai une fois l'`AudioContext` créé. */
   get unlocked(): boolean {
     return !!this.ctx;
   }
 
   /**
-   * À appeler **dans** le gestionnaire du geste (clic, toucher) : crée et reprend l'`AudioContext`, joue un tampon muet
-   * (déblocage des anciens iOS), décode les sons préchargés et lance l'ambiance.
+   * Vrai quand l'`AudioContext` existe mais ne joue pas encore : le navigateur attend un geste dans la page (Î13bis :
+   * arrivée directe par un QR, page rechargée par le système). Les sons programmés partent dès qu'il démarre.
+   */
+  get blocked(): boolean {
+    const s = this.ctx?.state;
+    return !!s && s !== "running" && s !== "closed";
+  }
+
+  /** Changements de `blocked` (pastille « Touche l'écran pour le son », Î13bis). */
+  onBlockedChange(fn: (blocked: boolean) => void): () => void {
+    this.blockedListeners.add(fn);
+    return () => this.blockedListeners.delete(fn);
+  }
+
+  private readonly blockedListeners = new Set<(blocked: boolean) => void>();
+  private lastBlocked: boolean | null = null;
+
+  private notifyBlocked(): void {
+    if (this.disposed) return;
+    const b = this.blocked;
+    if (b === this.lastBlocked) return;
+    this.lastBlocked = b;
+    for (const fn of this.blockedListeners) fn(b);
+  }
+
+  /** Tampon muet joué pour débloquer les anciens iOS (doit partir dans le geste). */
+  private playSilent(): void {
+    if (!this.ctx || !this.master) return;
+    try {
+      const silent = this.ctx.createBufferSource();
+      silent.buffer = this.ctx.createBuffer(1, 1, 22050);
+      silent.connect(this.master);
+      silent.start(0);
+    } catch {
+      /* sans effet sur les navigateurs récents */
+    }
+  }
+
+  /**
+   * Crée l'`AudioContext` s'il n'existe pas (décodage des sons préchargés, ambiance programmée), puis le reprend s'il est
+   * suspendu, avec un tampon muet (anciens iOS).
+   *
+   * Î13bis : appelé une première fois **au lancement de la scène**, hors de tout geste. Le navigateur le laisse démarrer si
+   * la page a déjà reçu un geste (activation durable : clic d'une carte du menu, « Passer » du quiz, installation ; Chrome,
+   * Firefox) ou si l'app est installée (Chrome) ; sinon il reste suspendu (`blocked`), et le lecteur rappelle `unlock`
+   * **dans** le premier geste de la page (toucher, clic, touche du clavier). Avant Î13bis, il n'était appelé que dans le
+   * geste de l'écran « Cliquer pour commencer » (toujours le cas pour la fixture et l'atelier).
    */
   unlock(): void {
     if (this.disposed) return;
@@ -271,18 +317,27 @@ export class AudioEngine {
       this.master = ctx.createGain();
       this.master.gain.value = effectiveVolume(this.settings);
       this.master.connect(ctx.destination);
-      try {
-        const silent = ctx.createBufferSource();
-        silent.buffer = ctx.createBuffer(1, 1, 22050);
-        silent.connect(this.master);
-        silent.start(0);
-      } catch {
-        /* sans effet sur les navigateurs récents */
-      }
+      // Démarrage annoncé par le navigateur (`statechange`), et de toute façon vérifié à la fin de `resume()`
+      const target = ctx as unknown as { addEventListener?: (type: string, fn: () => void) => void };
+      target.addEventListener?.("statechange", () => {
+        if (this.ctx === ctx) this.notifyBlocked();
+      });
+      this.playSilent();
       for (const p of [...this.bytes.keys()]) void this.decode(p);
       this.startAmbient();
+    } else if (this.ctx.state !== "running") {
+      this.playSilent();
     }
-    if (this.ctx.state !== "running") this.ctx.resume().catch(() => {});
+    const ctx = this.ctx;
+    if (ctx.state !== "running") {
+      ctx
+        .resume()
+        .then(() => {
+          if (this.ctx === ctx) this.notifyBlocked();
+        })
+        .catch(() => {});
+    }
+    this.notifyBlocked();
   }
 
   // ────────────── Lecture ──────────────
@@ -374,6 +429,7 @@ export class AudioEngine {
     this.bytes.clear();
     this.buffers.clear();
     this.listeners.clear();
+    this.blockedListeners.clear();
     const ctx = this.ctx;
     this.ctx = null;
     this.master = null;

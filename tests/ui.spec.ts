@@ -5,6 +5,7 @@
 // téléphone (indice de rotation, zones sûres, barre d'actions sans recouvrement).
 // `UI_SHOTS=<dossier>` : captures d'écran des étapes (relecture visuelle).
 import { unlockAllScenes } from './progress-helpers';
+import { sceneLaunched } from './scene-helpers';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const SERVER = 'http://localhost:4173';
@@ -33,13 +34,8 @@ async function installAndStart(page: Page, scene = 'trex'): Promise<Locator> {
   await expect(installHeading(page)).toBeHidden({ timeout: 120_000 });
   const webgl = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl2'));
   test.skip(!webgl, 'navigateur de test sans WebGL 2 : lecteur non monté');
-  const start = page.getByRole('button', { name: /pour commencer|to start|para comenzar/i });
-  await expect(start).toBeVisible({ timeout: 30_000 });
-  await shot(page, 'loader');
-  await start.click();
-  const bar = page.getByTestId('action-buttons');
-  await expect(bar).toBeVisible({ timeout: 10_000 });
-  return bar;
+  // Î13bis : plus d'écran de démarrage, la scène se lance seule à la fin du chargement
+  return sceneLaunched(page);
 }
 
 /** Taille de mise en page (sans les transformations : l'ouverture d'un dialogue l'anime de 0,96 à 1). */
@@ -47,7 +43,10 @@ async function layoutSize(l: Locator) {
   return l.evaluate((el) => ({ width: (el as HTMLElement).offsetWidth, height: (el as HTMLElement).offsetHeight }));
 }
 
-/** Le démarrage met le lecteur en plein écran : en sortir (sinon le premier Échap est gardé par le navigateur). */
+/**
+ * Plein écran éventuel : en sortir (sinon le premier Échap est gardé par le navigateur). Depuis Î13bis, l'arrivée par
+ * l'installation ne demande plus le plein écran (il l'est au clic du menu ou de « Passer ») : sans effet le plus souvent.
+ */
 async function leaveFullscreen(page: Page) {
   const isFs = () => page.evaluate(() => !!(document.fullscreenElement ?? (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement));
   if (!(await isFs())) return;
@@ -176,7 +175,7 @@ test('langues FR, EN, ES de bout en bout : installation, scène, boutons, crédi
   const webgl = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl2'));
   test.skip(!webgl, 'navigateur de test sans WebGL 2 : lecteur non monté');
   await expect(page.getByRole('heading', { name: 'Tyrannosaurus' })).toBeVisible({ timeout: 30_000 });
-  await page.getByRole('button', { name: /to start/ }).click();
+  await sceneLaunched(page);
   await expect(page.getByTestId('action-buttons').getByRole('button')).toHaveText(['Walk', 'Roar', 'Eat']);
   await expect(page.getByRole('group', { name: 'Animations' })).toBeVisible();
   await page.getByRole('button', { name: 'Information' }).click();
@@ -238,18 +237,19 @@ test.describe('téléphone Android', () => {
       'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36',
   });
 
-  test('indice de rotation après « Toucher pour commencer », fermé au toucher ; barre d’actions sans recouvrement', async ({ page }) => {
+  test('indice de rotation après le lancement automatique, fermé au toucher ; barre d’actions sans recouvrement', async ({ page }) => {
     await install(page);
     await page.getByRole('button', { name: 'Installer', exact: true }).tap();
     await expect(installHeading(page)).toBeHidden({ timeout: 120_000 });
     const webgl = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl2'));
     test.skip(!webgl, 'navigateur de test sans WebGL 2 : lecteur non monté');
-    const start = page.getByRole('button', { name: 'Toucher pour commencer' });
-    await expect(start).toBeVisible({ timeout: 30_000 });
-    // Pas d'indice sous l'écran de chargement
-    await expect(page.getByTestId('rotate-hint')).toHaveCount(0);
-    await shot(page, 'phone-loader');
-    await start.tap();
+    // Chargeur rond (Î13bis) : pas de bouton ; pas d'indice sous l'écran de chargement
+    await expect(page.getByTestId('round-loader').or(page.getByTestId('action-buttons')).first()).toBeVisible({ timeout: 30_000 });
+    if (await page.getByTestId('round-loader').isVisible()) {
+      await expect(page.getByTestId('rotate-hint')).toHaveCount(0);
+      await shot(page, 'phone-loader');
+    }
+    await sceneLaunched(page);
     const hint = page.getByTestId('rotate-hint');
     await expect(hint).toBeVisible();
     await expect(hint).toContainText('Tourner le téléphone');
