@@ -327,13 +327,19 @@ function WebDioramaLoaderInner({
   } = useBookAudio(bookId, sceneSounds, autoStart && experienceStarted);
   const sceneHasSound = !!sceneSounds.ambient || Object.keys(sceneSounds.actions).length > 0;
 
-  // Plein écran perdu au passage en arrière-plan (Î13bis) : redemandé dans le premier geste de la scène remontée (l'API
-  // exige un geste) ; ce geste reste transmis à la scène (écoute en capture, sans le retenir).
+  // Plein écran au premier geste dans la scène (Î13bis ; l'API exige un geste), une fois par montage du lecteur :
+  //  - plein écran perdu au passage en arrière-plan (scène remontée) ;
+  //  - arrivée sans geste dans la page (QR direct dans le navigateur : son bloqué), décision de David du 17/10 après la
+  //    batterie : ce premier toucher lance le son et met en plein écran.
+  // Le geste reste transmis à la scène (écoute en capture, sans le retenir).
+  const fsGestureDoneRef = useRef(false);
+  const wantFullscreenOnGesture = experienceStarted && (refullscreenOnGesture || audioBlocked);
   useEffect(() => {
-    if (!refullscreenOnGesture || !experienceStarted) return;
+    if (!wantFullscreenOnGesture || fsGestureDoneRef.current) return;
     const onGesture = (e: Event) => {
       if (!isActivationGesture(e)) return;
       off();
+      fsGestureDoneRef.current = true;
       if (!isPageFullscreen()) requestPageFullscreen();
     };
     const off = () => {
@@ -341,7 +347,7 @@ function WebDioramaLoaderInner({
     };
     for (const type of GESTURE_EVENTS) window.addEventListener(type, onGesture, true);
     return off;
-  }, [refullscreenOnGesture, experienceStarted]);
+  }, [wantFullscreenOnGesture]);
 
   // Audio de la fixture (ligne de temps, ambiances par POI : modules réservés), en HTMLAudioElement
   const { 
@@ -1342,11 +1348,12 @@ function WebDioramaLoaderInner({
               {experienceStarted ? t.loader.ready : ""}
             </div>
           )}
-          {/* Son bloqué par le navigateur jusqu'au premier geste de la page (arrivée directe par un QR) */}
+          {/* Son bloqué par le navigateur jusqu'au premier geste de la page (arrivée directe par un QR) : pastille en haut au
+              centre, sous les boutons des coins (après la batterie du 17/10 : au niveau des boutons d'animation, peu visible) */}
           {autoStart && (
             <div className="glbi-sound-hint z-40" role="status" aria-live="polite">
               {experienceStarted && sceneHasSound && audioBlocked && (
-                <span className="rounded-full bg-black/70 px-4 py-2 text-sm font-semibold text-white shadow-lg" data-testid="sound-hint">
+                <span className="glbi-sound-hint-pill motion-safe:animate-pulse" data-testid="sound-hint">
                   {isMobile ? t.loader.tapForSound : t.loader.clickForSound}
                 </span>
               )}

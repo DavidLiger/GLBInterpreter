@@ -177,22 +177,27 @@ dialog.glbi-screen {
 }
 
 /*
- * Pastille « Touche l'écran pour le son » (Î13bis) : centrée juste au-dessus de la barre des boutons d'animation (une
- * rangée de 44 px), sans recevoir les touchers (ils vont à la scène, et le premier débloque le son).
+ * Pastille « Touche l'écran pour le son » (Î13bis) : en haut au centre, sous les boutons des coins (retour au menu,
+ * informations), sans recevoir les touchers (ils vont à la scène, et le premier débloque le son). Ambre comme l'action
+ * active, texte noir, pour être vue (batterie du 17/10 : près des boutons d'animation, elle passait inaperçue).
  */
 .glbi-sound-hint {
   position: absolute;
+  top: calc(var(--safe-top) + 4rem);
   left: calc(var(--safe-left) + 1rem);
   right: calc(var(--safe-right) + 1rem);
-  bottom: calc(var(--safe-bottom) + 7rem);
   display: flex;
   justify-content: center;
   pointer-events: none;
 }
-@media (min-width: 640px), (orientation: landscape) and (max-height: 500px) {
-  .glbi-sound-hint {
-    left: calc(var(--safe-left) + var(--corner-controls));
-    right: calc(var(--safe-right) + var(--corner-controls));
-    bottom: calc(var(--safe-bottom) + 3.5rem);
-  }
+.glbi-sound-hint-pill {
+  border-radius: 9999px;
+  background: #fbbf24;
+  color: #000;
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1.4;
+  padding: 0.6rem 1.25rem;
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }

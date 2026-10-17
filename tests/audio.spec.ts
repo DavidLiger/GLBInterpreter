@@ -5,7 +5,7 @@
 // Un script injecté note chaque son lancé (`AudioBufferSourceNode.start`) : hauteur estimée sur les échantillons décodés,
 // boucle, arrêt (`stop`) ou fin naturelle (`ended`). Aucun son n'est écouté : on vérifie que le bon son part et s'arrête.
 import { unlockAllScenes } from './progress-helpers';
-import { sceneLaunched } from './scene-helpers';
+import { fullscreenElement, sceneLaunched } from './scene-helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 const SERVER = 'http://localhost:4173';
@@ -215,11 +215,17 @@ test('Î13bis : arrivée sans geste dans la page (QR direct) : son bloqué, past
   await sceneLaunched(page);
   const hint = page.getByTestId('sound-hint');
   await expect(hint).toHaveText('🔇 Clique dans la page pour le son', { timeout: 10_000 });
-  // Premier clic dans la scène (hors boutons) : son débloqué, pastille retirée, ambiance en boucle
+  // Pastille en haut au centre, loin des boutons d'animation (batterie du 17/10)
   const vp = page.viewportSize()!;
-  await page.mouse.click(vp.width / 2, vp.height / 3);
+  const h = (await hint.boundingBox())!;
+  expect(h.y + h.height).toBeLessThan(vp.height / 3);
+  expect(Math.abs(h.x + h.width / 2 - vp.width / 2)).toBeLessThan(4);
+  // Premier clic dans la scène (hors boutons) : son débloqué, pastille retirée, ambiance en boucle ; plein écran de la
+  // page demandé dans ce clic (décision de David du 17/10, Chromium : WebKit sous Windows n'a pas toujours l'API)
+  await page.mouse.click(vp.width / 2, vp.height / 2);
   await expect(hint).toHaveCount(0);
   await expect.poll(() => playing(page)).toContain('ambiance (boucle)');
+  if (test.info().project.name === 'chromium') await expect.poll(() => fullscreenElement(page)).toBe('html');
   // Le premier clic n'a pas été retenu : les boutons répondent
   await page.getByTestId('action-buttons').locator('[data-action-id="roar"]').click();
   await expect.poll(() => playing(page)).toEqual(['ambiance (boucle)', 'roar-trex']);
