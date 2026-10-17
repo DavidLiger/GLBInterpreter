@@ -7,7 +7,9 @@
 import { useEffect, useState } from "react";
 import { audioPathSchema, imagePathSchema, IMAGE_EXTENSIONS, AUDIO_EXTENSIONS, LANGUAGES } from "@/schema/glbi";
 import type { ModelCredit } from "@/schema/glbi";
-import { emptyAction, emptyL3, type ActionForm, type CreditForm, type EditForm, type L3, type QuizForm } from "./editModel";
+import Quiz from "@/components/quiz/Quiz";
+import { TranslationProvider } from "@/contexts/TranslationContext";
+import { emptyAction, emptyL3, quizPreviewOf, type ActionForm, type CreditForm, type EditForm, type L3, type Lang, type QuizForm } from "./editModel";
 
 export type SetForm = (update: (f: EditForm) => EditForm) => void;
 
@@ -279,14 +281,14 @@ export function AmbianceTab({ form, setForm, assets }: { form: EditForm; setForm
   );
 }
 
-export function QuizTab({ form, setForm }: { form: EditForm; setForm: SetForm }) {
+export function QuizTab({ form, setForm, lang, sceneId }: { form: EditForm; setForm: SetForm; lang: Lang; sceneId: string }) {
   const q = form.quiz;
   const set = (quiz: QuizForm) => setForm((f) => ({ ...f, quiz }));
   return (
     <div className="flex flex-col gap-5 text-sm">
       <p className="text-xs text-neutral-500">
         Une question, 3 réponses, une seule bonne, une explication ; les 3 langues partout. Enregistré seulement complet.
-        Aperçu par le lecteur : A5 (après Î13).
+        Aperçu en bas de l&apos;onglet, dans la langue d&apos;aperçu.
       </p>
       <Section title="Question">
         <L3Input field="quiz.question" value={q.question} onChange={(question) => set({ ...q, question })} multiline />
@@ -319,7 +321,46 @@ export function QuizTab({ form, setForm }: { form: EditForm; setForm: SetForm })
       >
         Vider le quiz
       </button>
+      <QuizPreview quiz={q} lang={lang} title={form.name[lang].trim() || sceneId} />
     </div>
+  );
+}
+
+/**
+ * Aperçu du quiz (A5) : composant du lecteur monté tel quel, dans la langue d'aperçu (fournisseur à langue imposée, qui
+ * ne réutilise pas celui du lecteur et ne touche pas `<html lang>`), sans `onContinue` (« Passer » remet le quiz à son
+ * début) ni progression. Source : la saisie de la page, enregistrée ou non ; affiché dès que le quiz est complet dans la
+ * langue d'aperçu (décision du 17/10). Remonté à chaque changement du quiz (réponses grisées remises à zéro). La fenêtre
+ * « Bravo ! » est la modale du livre : elle couvre l'atelier jusqu'à « Passer », Échap ou un clic sur le fond.
+ */
+function QuizPreview({ quiz, lang, title }: { quiz: QuizForm; lang: Lang; title: string }) {
+  const p = quizPreviewOf(quiz, lang);
+  const key = p.quiz ? JSON.stringify(p.quiz) : "";
+  return (
+    <Section title={`Aperçu (${lang.toUpperCase()})`} hint="Quiz tel que le lecteur l'affiche ; rien n'est enregistré ni compté dans la progression.">
+      <div data-testid="quiz-preview" className="flex flex-col gap-2">
+        {!p.started ? (
+          <p className="text-xs text-neutral-400">Pas de quiz pour cette scène : la scène s&apos;ouvre sans question.</p>
+        ) : !p.quiz ? (
+          <p className="rounded bg-amber-950 px-3 py-2 text-xs text-amber-200" data-testid="quiz-preview-missing">
+            Aperçu impossible en {lang.toUpperCase()} : {p.missingHere.join(", ")} à compléter.
+          </p>
+        ) : (
+          <>
+            {p.otherLangs.length > 0 && (
+              <p className="rounded bg-amber-950 px-3 py-2 text-xs text-amber-200" data-testid="quiz-preview-incomplete">
+                Quiz incomplet, non enregistré : à traduire en {p.otherLangs.join(", ")}.
+              </p>
+            )}
+            <div className="flex justify-center rounded-lg bg-black px-4 py-6 text-white">
+              <TranslationProvider lang={lang}>
+                <Quiz key={key} quiz={p.quiz} title={title} />
+              </TranslationProvider>
+            </div>
+          </>
+        )}
+      </div>
+    </Section>
   );
 }
 

@@ -536,7 +536,7 @@ export default function Atelier() {
               )}
             {tab === "actions" && editTab(form && <ActionsTab form={form} setForm={setForm} glbActions={glbActions} assets={assets} />)}
             {tab === "ambiance" && editTab(form && <AmbianceTab form={form} setForm={setForm} assets={assets} />)}
-            {tab === "quiz" && editTab(form && <QuizTab form={form} setForm={setForm} />)}
+            {tab === "quiz" && editTab(form && <QuizTab form={form} setForm={setForm} lang={lang} sceneId={scene?.id ?? ""} />)}
             {tab === "credits" && editTab(form && <CreditsTab form={form} setForm={setForm} used={used} modelCredits={modelCredits} />)}
             {book && tab === "rapport" && (
               <ReportTab report={report} summary={summary} scene={shown} incomplete={editable ? incomplete : []} previewing={!!activePreview} linkOf={linkOf} onGoto={goto} />

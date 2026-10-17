@@ -2,7 +2,7 @@
 // Décision du 15/10 (option B) : seuls les champs complets sont enregistrés et envoyés à l'aperçu ; un champ commencé mais
 // incomplet (traduction manquante, quiz ou crédit inachevé) reste dans la page, est signalé en tête du Rapport et laisse
 // l'indicateur « modifié, non enregistré » allumé. Le fichier écrit est donc toujours valide pour `editLayerSchema`.
-import { EDIT_LAYER_VERSION, LANGUAGES } from "@/schema/glbi";
+import { EDIT_LAYER_VERSION, LANGUAGES, type QuizModule } from "@/schema/glbi";
 import { cameraFormFromRaw, cameraLayerOf, type CameraForm } from "./cameraForm";
 
 export type Lang = (typeof LANGUAGES)[number];
@@ -106,6 +106,32 @@ function l3State(t: L3): { state: "complete" | "empty" | "partial"; missing: str
   return { state: missing.length === LANGUAGES.length ? "empty" : "partial", missing: missing.map((l) => LANG_NAMES[l]) };
 }
 const trimmed = (t: L3): L3 => ({ fr: t.fr.trim(), en: t.en.trim(), es: t.es.trim() });
+
+/**
+ * Aperçu du quiz (A5, décision de David du 17/10, option A) : le quiz est montré dès qu'il est complet dans la langue
+ * d'aperçu (question, 3 réponses, bonne réponse, explication), même si les autres langues manquent ; il n'est enregistré
+ * que complet dans les 3 langues (A3). `missingHere` : ce qui manque dans la langue d'aperçu (pas d'aperçu) ;
+ * `otherLangs` : langues encore incomplètes (aperçu affiché, quiz non enregistré). `quiz` : `null` si rien n'est saisi.
+ */
+export function quizPreviewOf(q: QuizForm, lang: Lang): { quiz: QuizModule | null; started: boolean; missingHere: string[]; otherLangs: string[] } {
+  const texts = [q.question, ...q.choices, q.explanation];
+  const started = texts.some((t) => LANGUAGES.some((l) => t[l].trim())) || q.correct !== null;
+  const missingHere: string[] = [];
+  if (!q.question[lang].trim()) missingHere.push("question");
+  q.choices.forEach((c, i) => !c[lang].trim() && missingHere.push(`réponse ${i + 1}`));
+  if (q.correct === null) missingHere.push("bonne réponse");
+  if (!q.explanation[lang].trim()) missingHere.push("explication");
+  const otherLangs = LANGUAGES.filter((l) => l !== lang && texts.some((t) => !t[l].trim())).map((l) => LANG_NAMES[l]);
+  const quiz: QuizModule | null =
+    started && !missingHere.length
+      ? {
+          question: trimmed(q.question),
+          choices: q.choices.map((c, i) => ({ text: trimmed(c), correct: i === q.correct })),
+          explanation: trimmed(q.explanation),
+        }
+      : null;
+  return { quiz, started, missingHere, otherLangs };
+}
 
 /** Champs vides du formulaire : aucune donnée à garder. */
 const creditEmpty = (c: CreditForm) => !c.title.trim() && !c.author.trim() && !c.license.trim() && !c.source.trim();
