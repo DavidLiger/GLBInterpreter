@@ -2,7 +2,8 @@
 // Cadrage orbital (`lib/orbitFraming.ts`), mode `buttons` (`lib/buttonsPlayer.ts`), boucle unique (`lib/frameTasks.ts`),
 // éclairage de secours (`lib/fallbackLights.ts`), lecture libre d'un clip (`lib/clipPreview.ts`), onglet Caméra de l'atelier (`src/atelier/cameraForm.ts`, A4),
 // audio Web Audio (`lib/audioEngine.ts`, Î11 : AudioContext simulé, aucun son réel), progression du livre
-// (`src/components/book/progress.ts`, Î13 : règles de déblocage, valeur illisible, stockage indisponible).
+// (`src/components/book/progress.ts`, Î13 : règles de déblocage, valeur illisible, stockage indisponible), lecture d'un
+// QR par le scanner interne (`src/components/book/scanTarget.ts`, Î14 : adresse du livre, miroir, autre livre).
 // Les mixers tournent sur une scène three minimale (un os animé), le temps est avancé à la main.
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -19,6 +20,7 @@ import {
 import {
   ProgressStore, emptyProgress, parseProgress, progressKey, sceneAccess, withCollected, withQuizPassed, withUnlocked, type StorageLike,
 } from '../src/components/book/progress';
+import { sceneFromScan } from '../src/components/book/scanTarget';
 
 let failed = 0;
 function test(name: string, fn: () => void) {
@@ -757,6 +759,62 @@ test('localStorage absent, lecture refusée ou plein : progression en mémoire p
     assert.deepEqual(store.get(), emptyProgress(), label);
   }
 });
+
+// ────────────── Scanner QR interne (Î14) ──────────────
+console.log('Scanner QR interne');
+{
+  const scenes = ['trex', 'raptor', 'ptero'];
+  const book = { origin: 'https://dino.editions-liger.com', pageRoot: 'https://compte.github.io/dino/', scenes };
+  const scene = (sceneId: string) => ({ kind: 'scene', sceneId });
+  const foreign = { kind: 'foreign' };
+
+  test('QR imprimé du livre : scène, quels que soient la casse de l’hôte, le / final, index.html, requête et fragment', () => {
+    for (const text of [
+      'https://dino.editions-liger.com/s/trex',
+      'https://DINO.Editions-Liger.com/s/trex/',
+      'https://dino.editions-liger.com/s/trex/index.html',
+      'https://dino.editions-liger.com/s/trex?utm=x#a',
+      '  https://dino.editions-liger.com/s/trex  ',
+    ]) assert.deepEqual(sceneFromScan(text, book), scene('trex'), text);
+  });
+
+  test('livre servi ailleurs (miroir, domaine mort) : le QR imprimé reste lu, sans réseau', () => {
+    assert.deepEqual(sceneFromScan('https://dino.editions-liger.com/s/ptero', { ...book, pageRoot: 'http://192.168.1.20:8001/' }), scene('ptero'));
+    // QR refait pour le miroir (racine de la page courante, sous-chemin compris)
+    assert.deepEqual(sceneFromScan('https://compte.github.io/dino/s/raptor', book), scene('raptor'));
+  });
+
+  test('origin avec chemin : le préfixe doit correspondre exactement', () => {
+    const b = { origin: 'https://editions-liger.com/dino', pageRoot: 'https://x.test/', scenes };
+    assert.deepEqual(sceneFromScan('https://editions-liger.com/dino/s/trex', b), scene('trex'));
+    assert.deepEqual(sceneFromScan('https://editions-liger.com/dinosaures/s/trex', b), foreign);
+    assert.deepEqual(sceneFromScan('https://editions-liger.com/s/trex', b), foreign);
+  });
+
+  test('refusés : autre livre (même id), autre site, autre protocole, texte libre, scène inconnue, chemin hors /s/<scène>', () => {
+    for (const text of [
+      'https://dinos-tome2.editions-liger.com/s/trex',
+      'https://editions-liger.com/s/trex',
+      'http://dino.editions-liger.com/s/trex',
+      'https://dino.editions-liger.com:8443/s/trex',
+      'ftp://dino.editions-liger.com/s/trex',
+      'trex',
+      '/s/trex',
+      '',
+      'https://dino.editions-liger.com/s/stego',
+      'https://dino.editions-liger.com/',
+      'https://dino.editions-liger.com/s/trex/autre',
+      'https://dino.editions-liger.com/x/s/trex',
+      'https://dino.editions-liger.com/s/..%2Ftrex',
+    ]) assert.deepEqual(sceneFromScan(text, book), foreign, text);
+  });
+
+  test('livre sans origin (cartouche fixture) : seule la racine de la page compte', () => {
+    const b = { pageRoot: 'http://localhost:3000/', scenes };
+    assert.deepEqual(sceneFromScan('http://localhost:3000/s/trex', b), scene('trex'));
+    assert.deepEqual(sceneFromScan('https://dino.editions-liger.com/s/trex', b), foreign);
+  });
+}
 
 for (const [name, fn] of asyncTests) {
   try {

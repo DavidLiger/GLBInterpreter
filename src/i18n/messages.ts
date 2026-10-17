@@ -195,6 +195,19 @@ const fr = {
     title: "Pas encore !",
     message: "Tu n'as pas encore découvert cette page. Commence par la page précédente !",
   },
+  // Scanner QR interne (Î14) : bouton du menu de collection et fenêtre de la caméra.
+  scanner: {
+    button: "Scanner un QR code",
+    title: "Scanne le QR code",
+    instructions: "Vise le QR code imprimé dans le livre.",
+    starting: "Ouverture de la caméra…",
+    foreign: "Ce QR code n'est pas une page de ce livre.",
+    denied: "La caméra n'est pas autorisée. Autorise-la dans les réglages du navigateur, puis réessaie.",
+    noCamera: "Aucune caméra n'a été trouvée sur cet appareil.",
+    busy: "La caméra est utilisée par une autre application. Ferme-la, puis réessaie.",
+    insecure: "La caméra ne fonctionne qu'à une adresse sécurisée (https).",
+    error: "Impossible d'ouvrir la caméra.",
+  },
 };
 
 export type Messages = typeof fr;
@@ -360,6 +373,18 @@ const en: Messages = {
     title: "Not yet!",
     message: "You haven't discovered this page yet. Start with the previous page!",
   },
+  scanner: {
+    button: "Scan a QR code",
+    title: "Scan the QR code",
+    instructions: "Point the camera at a QR code printed in the book.",
+    starting: "Starting the camera…",
+    foreign: "This QR code isn't a page of this book.",
+    denied: "The camera isn't allowed. Allow it in your browser settings, then try again.",
+    noCamera: "No camera was found on this device.",
+    busy: "Another app is using the camera. Close it, then try again.",
+    insecure: "The camera only works on a secure (https) address.",
+    error: "The camera couldn't be opened.",
+  },
 };
 
 const es: Messages = {
@@ -522,6 +547,18 @@ const es: Messages = {
   blocked: {
     title: "¡Todavía no!",
     message: "Aún no has descubierto esta página. ¡Empieza por la página anterior!",
+  },
+  scanner: {
+    button: "Escanear un código QR",
+    title: "Escanea el código QR",
+    instructions: "Apunta la cámara a un código QR impreso en el libro.",
+    starting: "Abriendo la cámara…",
+    foreign: "Este código QR no es una página de este libro.",
+    denied: "La cámara no está autorizada. Autorízala en los ajustes del navegador y vuelve a intentarlo.",
+    noCamera: "No se ha encontrado ninguna cámara en este dispositivo.",
+    busy: "Otra aplicación está usando la cámara. Ciérrala y vuelve a intentarlo.",
+    insecure: "La cámara solo funciona en una dirección segura (https).",
+    error: "No se ha podido abrir la cámara.",
   },
 };
 

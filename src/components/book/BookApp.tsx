@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import { QrCode } from "lucide-react";
 import WebDioramaLoader from "@/components/diorama/WebDioramaLoader";
 import { TranslationProvider, useTranslation } from "@/contexts/TranslationContext";
 import LanguageSelector from "@/components/diorama/ui/LanguageSelector";
@@ -23,6 +24,10 @@ const isDev = process.env.NODE_ENV === "development";
 
 // Quiz d'entrée (Î13) : chargé à la demande, hors du bundle de la page tant qu'aucune scène n'en demande un.
 const Quiz = dynamic(() => import("@/components/quiz/Quiz"), { ssr: false, loading: () => <Black /> });
+
+// Scanner QR interne (Î14) : fenêtre et décodeur `@zxing/browser` dans un chunk à part, chargé au premier toucher du
+// bouton du menu ; le chunk est dans le livre (`book.json.files`), donc servi hors ligne par le service worker.
+const QrScannerDialog = dynamic(() => import("@/components/scanner/QrScannerDialog"), { ssr: false, loading: () => null });
 
 // Racine du livre. Î8 : rien du livre ne s'affiche avant l'installation complète (InstallGate) ; la console de
 // débogage (`#/debug`, `?debug=1`) et l'invite de mise à jour du service worker restent hors de cette garde.
@@ -252,6 +257,9 @@ const fill = (s: string, vars: Record<string, string | number>) => s.replace(/\{
 // Menu de collection (Î13, remplace l'accueil provisoire) : scènes dans l'ordre du livre ; débloquées = carte avec nom
 // et image, qui ouvre la scène ; les autres grisées, numéro et « ? », non cliquables (Q2) ; remise à zéro confirmée (Q6).
 // Le message sans livre et la fixture ne s'affichent qu'en développement (textes de développeur, en français).
+// Î14 (décisions de David du 17/10) : consigne et bouton du scanner entre le compte et la liste, visibles sans défiler
+// même avec 15 scènes ; bouton affiché dès qu'il y a une progression (livre v1, `npm run dev` compris), même sans rien
+// de débloqué, et jamais dans la cartouche fixture.
 function CollectionMenu({ book, progress }: { book: ReaderBook | null; progress: BookProgress | null }) {
   const { t, lang } = useTranslation();
   const cards = useSceneCards(book);
@@ -260,6 +268,7 @@ function CollectionMenu({ book, progress }: { book: ReaderBook | null; progress:
   const count = book ? book.scenes.filter(unlocked).length : 0;
   const [confirmReset, setConfirmReset] = useState(false);
   const resetTitleId = useId();
+  const [scanning, setScanning] = useState(false);
 
   return (
     <Screen>
@@ -269,6 +278,32 @@ function CollectionMenu({ book, progress }: { book: ReaderBook | null; progress:
           <p className="text-white/80" data-testid="collection-count">
             {t.collection.title} · {fill(t.collection.progress, { n: count, total: book.scenes.length })}
           </p>
+          {/* Rien de débloqué (app ouverte par son icône sans QR scanné) : consigne de commencer par la première page. */}
+          {count < book.scenes.length && (
+            <p className="max-w-md text-white/80" data-testid="collection-hint">
+              {count === 0 ? t.collection.start : t.collection.hint}
+            </p>
+          )}
+          {progress && (
+            <button
+              type="button"
+              className="glbi-btn glbi-btn-primary px-6 py-3 text-lg"
+              // Toucher = geste dans la page (Î13bis) : plein écran de la page demandé ici, comme au clic d'une carte ;
+              // l'activation de la page est acquise, la scène ouverte par le scanner joue son son sans pastille.
+              onClick={() => {
+                requestPageFullscreen();
+                setScanning(true);
+              }}
+              aria-haspopup="dialog"
+              data-testid="scanner-button"
+            >
+              <QrCode className="h-6 w-6" aria-hidden="true" />
+              {t.scanner.button}
+            </button>
+          )}
+          {scanning && (
+            <QrScannerDialog origin={book.origin} scenes={book.scenes} onClose={() => setScanning(false)} onScene={goToScene} />
+          )}
           <ol className="flex w-full max-w-md flex-col gap-3" data-testid="collection">
             {book.scenes.map((id, i) => {
               const card = cards[id];
@@ -303,12 +338,6 @@ function CollectionMenu({ book, progress }: { book: ReaderBook | null; progress:
               );
             })}
           </ol>
-          {/* Rien de débloqué (app ouverte par son icône sans QR scanné) : consigne de commencer par la première page. */}
-          {count < book.scenes.length && (
-            <p className="max-w-md text-white/80" data-testid="collection-hint">
-              {count === 0 ? t.collection.start : t.collection.hint}
-            </p>
-          )}
           {progress && count > 0 && (
             <button type="button" className="glbi-btn glbi-btn-link mt-4 text-sm" onClick={() => setConfirmReset(true)} aria-haspopup="dialog" data-testid="collection-reset">
               {t.collection.reset}

@@ -27,6 +27,8 @@ export interface ReaderBook {
   fixture: boolean;
   title?: { fr: string; en: string; es: string };
   legal?: { year: number; text: { fr: string; en: string; es: string } };
+  /** Adresse imprimée dans les QR (`book.json.origin`) : le scanner interne n'accepte que les QR de ce livre (Î14). */
+  origin?: string;
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -42,6 +44,7 @@ export function parseReaderBook(raw: unknown): ReaderBook {
     fixture: raw.fixture === true,
     title: isObj(raw.title) ? (raw.title as ReaderBook["title"]) : undefined,
     legal: isObj(raw.legal) ? (raw.legal as ReaderBook["legal"]) : undefined,
+    origin: typeof raw.origin === "string" ? raw.origin : undefined,
   };
 }
 

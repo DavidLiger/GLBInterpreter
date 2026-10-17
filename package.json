@@ -21,6 +21,8 @@
   },
   "dependencies": {
     "@serwist/next": "^9.2.1",
+    "@zxing/browser": "0.2.1",
+    "@zxing/library": "0.23.0",
     "framer-motion": "^12.23.12",
     "lucide-react": "^0.542.0",
     "next": "^16.0.7",

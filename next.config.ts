@@ -36,6 +36,12 @@ const nextConfig: NextConfig = {
   },
   // `next dev` (Turbopack) : configuration vide requise à côté de la config webpack de Serwist.
   turbopack: {},
+  // Î14 : `@zxing/library` ne déclare pas `sideEffects` ; sans cette règle, tout le paquet (lecteurs PDF417, Aztec,
+  // encodeurs…) entre dans le chunk du scanner (478 Ko au lieu de 115 Ko pour le seul lecteur QR).
+  webpack: (config) => {
+    config.module.rules.push({ test: /[\\/]node_modules[\\/]@zxing[\\/]/, sideEffects: false });
+    return config;
+  },
   // A3 : indicateur de développement de Next (« N ») masqué dans l'atelier, il recouvrait le lecteur.
   ...(isAtelier ? { pageExtensions: ['tsx', 'ts', 'jsx', 'js', 'atelier.tsx'], distDir: '.next-atelier', devIndicators: false as const } : {}),
 };
