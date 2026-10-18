@@ -14,11 +14,14 @@
 // - Contexte non sécurisé (pas de `getUserMedia` hors HTTPS), permission refusée, pas de caméra, caméra occupée : message
 //   traduit, « Réessayer » (sauf contexte non sécurisé) et « Fermer ». Caméra coupée par le système pendant le scan :
 //   « Impossible d'ouvrir la caméra », « Réessayer ».
+// - Î16 : sur iPhone et iPad, refus de la caméra → `deniedIos` (« Réessayer » redemande l'autorisation ; iOS ne garde pas
+//   la réponse d'une app web d'un lancement à l'autre, et l'app installée n'a pas de réglages de navigateur).
 import { useEffect, useId, useRef, useState } from "react";
 import { BrowserQRCodeReader, type IScannerControls } from "@zxing/browser";
 import Dialog from "@/components/ui/Dialog";
 import { useTranslation } from "@/contexts/TranslationContext";
 import { sceneFromScan } from "@/components/book/scanTarget";
+import { detectPlatform } from "@/components/book/install/platform";
 
 type Status = "starting" | "scanning" | "insecure" | "denied" | "noCamera" | "busy" | "error";
 
@@ -149,7 +152,8 @@ export default function QrScannerDialog({ origin, scenes, onClose, onScene }: Qr
   }, [attempt, origin, scenes]);
 
   const failed = status !== "starting" && status !== "scanning";
-  const message = failed ? t.scanner[status] : status === "starting" ? t.scanner.starting : foreign ? t.scanner.foreign : "";
+  const failedMessage = status === "denied" && detectPlatform().ios ? t.scanner.deniedIos : failed ? t.scanner[status] : "";
+  const message = failed ? failedMessage : status === "starting" ? t.scanner.starting : foreign ? t.scanner.foreign : "";
 
   return (
     <Dialog open onClose={onClose} labelledBy={titleId} className="glbi-dialog" testId="scanner-dialog">

@@ -11,6 +11,8 @@
 // Î16 ; sauté dans un build d'essai iOS, `IOS_TRIAL` de `platform.ts`) et un navigateur intégré (Instagram,
 // Facebook…) l'écran « Ouvrez le livre dans Chrome » (D-6.2 C) : rien n'y est
 // téléchargé. Sur Chrome (Android, ordinateur), le bouton « Ajouter à l'écran d'accueil » utilise `beforeinstallprompt`.
+// Î16 (D-16.4) : sur iPhone et iPad dans Safari (hors app installée), un livre absent passe d'abord par l'écran de
+// guidage vers l'écran d'accueil (`IosGuide`), avec « Continuer dans Safari » vers l'installation habituelle.
 //
 // Î12 (U-02) : chaque écran est rendu par la primitive `<dialog>` (`ui/Dialog.tsx`) en mode non modal et non fermable :
 // rôle « dialogue » nommé par le titre de l'écran, focus posé sur ce titre à chaque changement d'écran (annoncé par les
@@ -26,11 +28,13 @@ import { bookBaseUrl, fetchRemoteIndex, sameFiles, totalBytes, type BookFilesInd
 import { cacheStorageAvailable, missingFiles, readInstalledIndex, remainingBytes } from "./bookCache";
 import { InstallError, installBook, type InstallErrorKind, type InstallProgress } from "./downloader";
 import { readTrace, type InstallTrace } from "./trace";
-import { chromeIntentUrl, detectPlatform, IOS_TRIAL, shareableUrl, type Platform } from "./platform";
+import { chromeIntentUrl, detectPlatform, IOS_TRIAL, isInstalledApp, shareableUrl, type Platform } from "./platform";
 import { getInstallPromptState, promptInstall, useInstallPrompt } from "./installPrompt";
 import { parseSceneHash } from "../sceneRoute";
 
 type Mode = "install" | "update" | "repair";
+
+type PromptState = { s: "prompt"; index: BookFilesIndex; mode: Mode; missingBytes: number; available: number | null };
 
 type State =
   | { s: "checking" }
@@ -41,7 +45,9 @@ type State =
   | { s: "offline" }
   | { s: "unsupported" }
   | { s: "invalid"; message: string }
-  | { s: "prompt"; index: BookFilesIndex; mode: Mode; missingBytes: number; available: number | null }
+  | PromptState
+  /** Î16 : iPhone ou iPad dans Safari, livre absent : guidage vers l'écran d'accueil ; `prompt` si « Continuer dans Safari ». */
+  | { s: "iosGuide"; prompt: PromptState }
   | { s: "downloading"; index: BookFilesIndex; mode: Mode; progress: InstallProgress | null }
   | { s: "failed"; index: BookFilesIndex; mode: Mode; kind: InstallErrorKind; detail: string };
 
@@ -145,7 +151,11 @@ export default function InstallGate({ children }: { children: ReactNode }) {
         mode = "repair";
       } else mode = missingInstalled.length === 0 ? "update" : "repair";
     }
-    setState({ s: "prompt", index: remote, mode, missingBytes: await remainingBytes(remote, base), available: await availableSpace() });
+    const prompt: PromptState = { s: "prompt", index: remote, mode, missingBytes: await remainingBytes(remote, base), available: await availableSpace() };
+    // Î16 (D-16.4) : sur iOS, hors app installée, guidage avant tout téléchargement (Safari et l'app ont des stockages
+    // séparés, et Safari efface les données d'un site non installé après quelques jours sans visite). Un livre déjà
+    // installé dans Safari (« Continuer dans Safari ») se met à jour ou se complète sans guidage.
+    setState(mode === "install" && p.ios && !isInstalledApp() ? { s: "iosGuide", prompt } : prompt);
   }, []);
 
   useEffect(() => {
@@ -212,6 +222,7 @@ export default function InstallGate({ children }: { children: ReactNode }) {
         {state.s === "unsupported" && <Notice title={title(t.install.unsupportedTitle)} text={t.install.unsupported} />}
         {state.s === "invalid" && <Notice title={title(t.install.invalidTitle)} text={state.message} action={t.install.retry} onAction={check} />}
         {state.s === "ios" && <Notice title={title(t.install.iosTitle)} text={t.install.ios} />}
+        {state.s === "iosGuide" && <IosGuide title={title(t.install.iosGuideTitle)} onSafari={() => setState(state.prompt)} />}
         {state.s === "inapp" && <InAppBrowser title={title(t.install.inAppTitle)} app={state.app} android={state.android} />}
 
         {state.s === "done" && (
@@ -375,6 +386,64 @@ function AddToHomeScreen({ primary: isPrimary = false }: { primary?: boolean }) 
       </button>
       <p className="text-white/50 text-xs">{t.install.addToHomeHint}</p>
     </div>
+  );
+}
+
+/**
+ * Î16 (D-16.4) : guidage iOS vers l'écran d'accueil (Safari sur iPhone ou iPad, livre non installé). Pictogrammes dessinés
+ * ici (aucune image d'Apple), icône réelle du livre à l'étape 3. Le lecteur qui a déjà l'app arrive ici quand il scanne
+ * avec l'appareil photo d'iOS (le lien s'ouvre toujours dans Safari) : la phrase « Déjà ajouté ? » vient en premier.
+ */
+function IosGuide({ title, onSafari }: { title: ReactNode; onSafari: () => void }) {
+  const { t } = useTranslation();
+  const steps: [ReactNode, string][] = [
+    [<GuideIcon key="share" kind="share" />, t.install.iosGuideStep1],
+    [<GuideIcon key="add" kind="add" />, t.install.iosGuideStep2],
+    [<img key="icon" src="apple-touch-icon.png" alt="" className="h-11 w-11 rounded-xl" />, t.install.iosGuideStep3],
+  ];
+  return (
+    <>
+      {title}
+      <p className="rounded-2xl bg-white/10 px-4 py-3 text-white">{t.install.iosGuideAlready}</p>
+      <p className="text-white/80">{t.install.iosGuideIntro}</p>
+      <ol className="flex w-full flex-col gap-3 text-left">
+        {steps.map(([icon, text], i) => (
+          <li key={i} className="flex items-center gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center" aria-hidden="true">
+              {icon}
+            </span>
+            <span className="text-white/90">
+              <span className="font-bold">{i + 1}. </span>
+              {text}
+            </span>
+          </li>
+        ))}
+      </ol>
+      <p className="text-white/60 text-sm">{t.install.iosGuideCamera}</p>
+      <button type="button" onClick={onSafari} className="glbi-btn glbi-btn-link">
+        {t.install.iosGuideSafari}
+      </button>
+      <p className="text-white/50 text-xs">{t.install.iosGuideSafariNote}</p>
+    </>
+  );
+}
+
+/** Pictogrammes du guidage iOS : partage (carré et flèche vers le haut), ajout (carré et plus). */
+function GuideIcon({ kind }: { kind: "share" | "add" }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-9 w-9" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+      {kind === "share" ? (
+        <>
+          <path d="M8 9H6.5A1.5 1.5 0 0 0 5 10.5v9A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 17.5 9H16" />
+          <path d="M12 14V3M8.5 6.5 12 3l3.5 3.5" />
+        </>
+      ) : (
+        <>
+          <rect x="4" y="4" width="16" height="16" rx="3.5" />
+          <path d="M12 8.5v7M8.5 12h7" />
+        </>
+      )}
+    </svg>
   );
 }
 
