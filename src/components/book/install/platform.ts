@@ -7,6 +7,14 @@
 // contact (`maxTouchPoints > 1`, aucun Mac n'a d'écran tactile) ; Playwright WebKit (« Desktop Safari ») a 0 point de
 // contact et reste donc un Mac.
 
+/**
+ * Î16 : build d'essai iOS (`NEXT_PUBLIC_GLBI_IOS_TRIAL=1 npm run build -- …`), réservé au déploiement d'essai. Un
+ * iPhone ou un iPad n'y voit pas l'écran « version iPhone à venir » et suit le parcours commun. Fixé au build (et non
+ * par l'URL) : l'app ouverte depuis l'écran d'accueil démarre sur `start_url` sans paramètre, avec un stockage séparé
+ * de Safari. Un build sans la variable garde l'écran (D-8.8). Retiré à la fin d'Î16.
+ */
+export const IOS_TRIAL = process.env.NEXT_PUBLIC_GLBI_IOS_TRIAL === '1';
+
 /** Marqueurs d'agent utilisateur des applications qui ouvrent les liens dans leur propre navigateur. */
 const IN_APP: readonly (readonly [RegExp, string])[] = [
   [/Instagram/i, 'Instagram'],

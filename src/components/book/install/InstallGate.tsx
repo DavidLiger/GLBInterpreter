@@ -8,7 +8,8 @@
 // En `npm run dev`, l'écran est contourné (pas de book.json ni de service worker hors export) : tester dans `out/`.
 //
 // Î9 : avant toute vérification, un iPhone ou un iPad voit l'écran « version iPhone à venir » (D-8.8, à retirer en
-// Î16) et un navigateur intégré (Instagram, Facebook…) l'écran « Ouvrez le livre dans Chrome » (D-6.2 C) : rien n'y est
+// Î16 ; sauté dans un build d'essai iOS, `IOS_TRIAL` de `platform.ts`) et un navigateur intégré (Instagram,
+// Facebook…) l'écran « Ouvrez le livre dans Chrome » (D-6.2 C) : rien n'y est
 // téléchargé. Sur Chrome (Android, ordinateur), le bouton « Ajouter à l'écran d'accueil » utilise `beforeinstallprompt`.
 //
 // Î12 (U-02) : chaque écran est rendu par la primitive `<dialog>` (`ui/Dialog.tsx`) en mode non modal et non fermable :
@@ -25,7 +26,7 @@ import { bookBaseUrl, fetchRemoteIndex, sameFiles, totalBytes, type BookFilesInd
 import { cacheStorageAvailable, missingFiles, readInstalledIndex, remainingBytes } from "./bookCache";
 import { InstallError, installBook, type InstallErrorKind, type InstallProgress } from "./downloader";
 import { readTrace, type InstallTrace } from "./trace";
-import { chromeIntentUrl, detectPlatform, shareableUrl, type Platform } from "./platform";
+import { chromeIntentUrl, detectPlatform, IOS_TRIAL, shareableUrl, type Platform } from "./platform";
 import { getInstallPromptState, promptInstall, useInstallPrompt } from "./installPrompt";
 import { parseSceneHash } from "../sceneRoute";
 
@@ -98,7 +99,9 @@ export default function InstallGate({ children }: { children: ReactNode }) {
       return;
     }
     const p = detectPlatform();
-    if (p.ios) {
+    if (p.ios && IOS_TRIAL) {
+      console.info("Build d'essai iOS (Î16) : écran « version iPhone à venir » sauté");
+    } else if (p.ios) {
       setState({ s: "ios" });
       return;
     }
