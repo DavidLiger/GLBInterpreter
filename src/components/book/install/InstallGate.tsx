@@ -7,10 +7,10 @@
 //
 // En `npm run dev`, l'écran est contourné (pas de book.json ni de service worker hors export) : tester dans `out/`.
 //
-// Î9 : avant toute vérification, un iPhone ou un iPad voit l'écran « version iPhone à venir » (D-8.8, à retirer en
-// Î16 ; sauté dans un build d'essai iOS, `IOS_TRIAL` de `platform.ts`) et un navigateur intégré (Instagram,
-// Facebook…) l'écran « Ouvrez le livre dans Chrome » (D-6.2 C) : rien n'y est
-// téléchargé. Sur Chrome (Android, ordinateur), le bouton « Ajouter à l'écran d'accueil » utilise `beforeinstallprompt`.
+// Î9 : avant toute vérification, un navigateur intégré (Instagram, Facebook…) voit l'écran « Ouvrez le livre dans
+// Chrome » (D-6.2 C ; « dans Safari » sur iPhone et iPad depuis Î16) : rien n'y est téléchargé. L'écran « version
+// iPhone à venir » (D-8.8) est retiré en Î16 (D-16.6, iOS validé sur iPhone SE 2022, iOS 26.6). Sur Chrome (Android,
+// ordinateur), le bouton « Ajouter à l'écran d'accueil » utilise `beforeinstallprompt`.
 // Î16 (D-16.4) : sur iPhone et iPad dans Safari (hors app installée), un livre absent passe d'abord par l'écran de
 // guidage vers l'écran d'accueil (`IosGuide`), avec « Continuer dans Safari » vers l'installation habituelle.
 //
@@ -28,26 +28,23 @@ import { bookBaseUrl, fetchRemoteIndex, sameFiles, totalBytes, type BookFilesInd
 import { cacheStorageAvailable, missingFiles, readInstalledIndex, remainingBytes } from "./bookCache";
 import { InstallError, installBook, type InstallErrorKind, type InstallProgress } from "./downloader";
 import { readTrace, type InstallTrace } from "./trace";
-import { chromeIntentUrl, detectPlatform, IOS_TRIAL, isInstalledApp, shareableUrl, type Platform } from "./platform";
+import { chromeIntentUrl, detectPlatform, isInstalledApp, shareableUrl, type Platform } from "./platform";
 import { getInstallPromptState, promptInstall, useInstallPrompt } from "./installPrompt";
 import { parseSceneHash } from "../sceneRoute";
 
 type Mode = "install" | "update" | "repair";
 
-type PromptState = { s: "prompt"; index: BookFilesIndex; mode: Mode; missingBytes: number; available: number | null };
-
 type State =
   | { s: "checking" }
   | { s: "ready" }
-  | { s: "ios" }
-  | { s: "inapp"; app: string; android: boolean }
+  | { s: "inapp"; app: string; android: boolean; ios: boolean }
   | { s: "done" }
   | { s: "offline" }
   | { s: "unsupported" }
   | { s: "invalid"; message: string }
-  | PromptState
-  /** Î16 : iPhone ou iPad dans Safari, livre absent : guidage vers l'écran d'accueil ; `prompt` si « Continuer dans Safari ». */
-  | { s: "iosGuide"; prompt: PromptState }
+  | { s: "prompt"; index: BookFilesIndex; mode: Mode; missingBytes: number; available: number | null }
+  /** Î16 : iPhone ou iPad dans Safari, livre absent : guidage vers l'écran d'accueil ; écran `prompt` si « Continuer dans Safari ». */
+  | { s: "iosGuide"; index: BookFilesIndex }
   | { s: "downloading"; index: BookFilesIndex; mode: Mode; progress: InstallProgress | null }
   | { s: "failed"; index: BookFilesIndex; mode: Mode; kind: InstallErrorKind; detail: string };
 
@@ -105,14 +102,8 @@ export default function InstallGate({ children }: { children: ReactNode }) {
       return;
     }
     const p = detectPlatform();
-    if (p.ios && IOS_TRIAL) {
-      console.info("Build d'essai iOS (Î16) : écran « version iPhone à venir » sauté");
-    } else if (p.ios) {
-      setState({ s: "ios" });
-      return;
-    }
     if (p.inApp) {
-      setState({ s: "inapp", app: p.inApp, android: p.android });
+      setState({ s: "inapp", app: p.inApp, android: p.android, ios: p.ios });
       return;
     }
     if (!(await cacheStorageAvailable())) {
@@ -151,12 +142,20 @@ export default function InstallGate({ children }: { children: ReactNode }) {
         mode = "repair";
       } else mode = missingInstalled.length === 0 ? "update" : "repair";
     }
-    const prompt: PromptState = { s: "prompt", index: remote, mode, missingBytes: await remainingBytes(remote, base), available: await availableSpace() };
     // Î16 (D-16.4) : sur iOS, hors app installée, guidage avant tout téléchargement (Safari et l'app ont des stockages
     // séparés, et Safari efface les données d'un site non installé après quelques jours sans visite). Un livre déjà
-    // installé dans Safari (« Continuer dans Safari ») se met à jour ou se complète sans guidage.
-    setState(mode === "install" && p.ios && !isInstalledApp() ? { s: "iosGuide", prompt } : prompt);
+    // installé dans Safari (« Continuer dans Safari ») se met à jour ou se complète sans guidage. Rien n'est ouvert dans
+    // le Cache Storage avant « Continuer dans Safari » (`remainingBytes` créerait le cache du livre).
+    if (mode === "install" && p.ios && !isInstalledApp()) {
+      setState({ s: "iosGuide", index: remote });
+      return;
+    }
+    await showPrompt(remote, mode, base);
   }, []);
+
+  const showPrompt = async (index: BookFilesIndex, mode: Mode, base = bookBaseUrl()) => {
+    setState({ s: "prompt", index, mode, missingBytes: await remainingBytes(index, base), available: await availableSpace() });
+  };
 
   useEffect(() => {
     void check();
@@ -221,9 +220,10 @@ export default function InstallGate({ children }: { children: ReactNode }) {
         {state.s === "offline" && <Notice title={title(t.install.offlineTitle)} text={t.install.offline} action={t.install.retry} onAction={check} />}
         {state.s === "unsupported" && <Notice title={title(t.install.unsupportedTitle)} text={t.install.unsupported} />}
         {state.s === "invalid" && <Notice title={title(t.install.invalidTitle)} text={state.message} action={t.install.retry} onAction={check} />}
-        {state.s === "ios" && <Notice title={title(t.install.iosTitle)} text={t.install.ios} />}
-        {state.s === "iosGuide" && <IosGuide title={title(t.install.iosGuideTitle)} onSafari={() => setState(state.prompt)} />}
-        {state.s === "inapp" && <InAppBrowser title={title(t.install.inAppTitle)} app={state.app} android={state.android} />}
+        {state.s === "iosGuide" && <IosGuide title={title(t.install.iosGuideTitle)} onSafari={() => void showPrompt(state.index, "install")} />}
+        {state.s === "inapp" && (
+          <InAppBrowser title={title(state.ios ? t.install.inAppTitleIos : t.install.inAppTitle)} app={state.app} android={state.android} ios={state.ios} />
+        )}
 
         {state.s === "done" && (
           <>
@@ -448,7 +448,7 @@ function GuideIcon({ kind }: { kind: "share" | "add" }) {
 }
 
 /** Navigateur intégré (D-6.2 C) : aucun téléchargement ; ouvrir la même adresse (scène comprise) dans Chrome. */
-function InAppBrowser({ title, app, android }: { title: ReactNode; app: string; android: boolean }) {
+function InAppBrowser({ title, app, android, ios }: { title: ReactNode; app: string; android: boolean; ios: boolean }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const url = shareableUrl(parseSceneHash(window.location.hash));
@@ -463,7 +463,7 @@ function InAppBrowser({ title, app, android }: { title: ReactNode; app: string; 
   return (
     <>
       {title}
-      <p className="text-white/80">{(android ? t.install.inApp : t.install.inAppOther).replace("{app}", app)}</p>
+      <p className="text-white/80">{(android ? t.install.inApp : ios ? t.install.inAppIos : t.install.inAppOther).replace("{app}", app)}</p>
       {android && (
         <a href={chromeIntentUrl(url)} className={primary}>
           {t.install.openInChrome}

@@ -1,5 +1,5 @@
-// Tests de plateforme (Î9) : écran « version iPhone à venir » (D-8.8), navigateurs intégrés (D-6.2 C), manifest et
-// icônes du livre. Simulation d'agent utilisateur seulement : ni iPhone, ni Instagram, ni installation Android réels.
+// Tests de plateforme (Î9) : guidage iOS vers l'écran d'accueil (Î16, D-16.4 ; remplace l'écran « version iPhone à
+// venir » d'Î9), navigateurs intégrés (D-6.2 C), manifest et icônes du livre. Simulation d'agent utilisateur seulement : ni iPhone, ni Instagram, ni installation Android réels.
 // Playwright WebKit (« Desktop Safari ») se présente en Safari de Mac sans écran tactile : il reste un ordinateur et
 // installe le livre (tests de tests/install.spec.ts).
 import { expect, test, type Page } from '@playwright/test';
@@ -13,6 +13,8 @@ const UA = {
     'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1',
   ipadAsMac:
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15',
+  instagramIphone:
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/22F76 Instagram 346.0.0.21.83 (iPhone14,6; iOS 18_5; fr_FR; fr; scale=2.00; 750x1334; 634108168)',
   instagramAndroid:
     'Mozilla/5.0 (Linux; Android 14; Pixel 8 Build/AP2A.240805.005; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/128.0.6613.127 Mobile Safari/537.36 Instagram 346.0.0.38.86 Android',
   facebookAndroid:
@@ -32,11 +34,15 @@ test.beforeEach(async ({ page }) => {
 
 test.describe('iPhone', () => {
   test.use({ userAgent: UA.iphone });
-  test('écran « version iPhone à venir », rien n\'est téléchargé', async ({ page }) => {
+  test('guidage vers l\'écran d\'accueil, rien n\'est téléchargé ; « Continuer dans Safari » mène à l\'installation', async ({ page }) => {
     await page.goto(`${SERVER}/#/s/${SCENE}`);
-    await expect(page.getByRole('heading', { name: 'Version iPhone et iPad à venir' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('heading', { name: "Ajoutez le livre à l'écran d'accueil" })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText('Déjà ajouté')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Installer' })).toHaveCount(0);
     await nothingDownloaded(page);
+    await page.getByRole('button', { name: 'Continuer dans Safari' }).click();
+    await expect(page.getByRole('heading', { name: 'Installer le livre' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Installer' })).toBeVisible();
   });
 });
 
@@ -45,7 +51,7 @@ test.describe('iPad qui se présente comme un Mac', () => {
   test('reconnu par ses points de contact', async ({ page }) => {
     await page.addInitScript(() => Object.defineProperty(Navigator.prototype, 'maxTouchPoints', { get: () => 5 }));
     await page.goto(`${SERVER}/`);
-    await expect(page.getByRole('heading', { name: 'Version iPhone et iPad à venir' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('heading', { name: "Ajoutez le livre à l'écran d'accueil" })).toBeVisible({ timeout: 20_000 });
     await nothingDownloaded(page);
   });
   test('un Mac sans écran tactile installe le livre', async ({ page }) => {
@@ -71,6 +77,17 @@ for (const [name, ua] of [['Instagram', UA.instagramAndroid], ['Facebook', UA.fa
     });
   });
 }
+
+test.describe('navigateur intégré Instagram (iPhone)', () => {
+  test.use({ userAgent: UA.instagramIphone });
+  test('téléchargement bloqué, lien à ouvrir dans Safari (pas de lien Chrome)', async ({ page }) => {
+    await page.goto(`${SERVER}/#/s/${SCENE}`);
+    await expect(page.getByRole('heading', { name: 'Ouvrez le livre dans Safari' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText('ouvrez-le dans Safari')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Ouvrir dans Chrome' })).toHaveCount(0);
+    await nothingDownloaded(page);
+  });
+});
 
 test('manifest du livre : plein écran, icônes any et maskable, apple-touch-icon', async ({ page }) => {
   for (const base of ['/', '/depot/']) {
