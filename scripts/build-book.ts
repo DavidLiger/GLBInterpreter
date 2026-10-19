@@ -6,6 +6,7 @@
 //   npm run dev:book -- --source <dossier>           livre de développement dans public/dev-book/ (Î10), lu par `npm run dev`
 //   option --textures auto|ktx2|webp|keep            textures des GLB (défaut auto : KTX2 si `ktx` est installé, sinon WebP)
 //   option --part-mib <n>                            tests seulement : découpe tout fichier > n MiB en parties de n MiB
+//   option --report <fichier>                        studio (ST1) : rapport en JSON (lignes, origine, scène), même en cas d'échec
 //
 // Dossier source d'un livre (chemins d'assets relatifs à sa racine = racine du dossier construit, D-8.1) :
 //   book.json                    couche livre (spec-extras-blender.md §5)
@@ -92,9 +93,20 @@ const warn = (m: string) => report.warning(m);
 /** Dossier construit en cours d'écriture (après `requireExport`) : un échec le laisse incomplet. */
 let writingOut: string | null = null;
 
+/** `--report <fichier>` (studio, ST1) : lignes du rapport avec leur scène, écrites en JSON à la fin (succès ou échec). */
+let reportFile: string | null = null;
+
 function flushReport(): void {
   for (const w of warnings) console.warn(`  avertissement : ${w}`);
   for (const e of errors) console.error(`  ERREUR : ${e}`);
+  if (reportFile) {
+    try {
+      fs.mkdirSync(path.dirname(reportFile), { recursive: true });
+      fs.writeFileSync(reportFile, `${JSON.stringify({ ok: errors.length === 0, lines: report.lines }, null, 2)}\n`);
+    } catch (e) {
+      console.error(`build-book : rapport ${reportFile} non écrit (${(e as Error).message})`);
+    }
+  }
 }
 
 function fail(): never {
@@ -160,7 +172,8 @@ function parseArgs(argv: string[]): Options {
       const n = Number(next());
       if (!(n >= 1 && n <= 20)) throw new Error('--part-mib : nombre de MiB entre 1 et 20 attendu');
       opts.splitAbove = opts.partBytes = Math.floor(n * 1024 * 1024);
-    } else throw new Error(`option inconnue « ${a} » (options : --source, --out, --qr-dir, --check, --dev, --textures, --part-mib)`);
+    } else if (a === '--report') reportFile = path.resolve(process.cwd(), next());
+    else throw new Error(`option inconnue « ${a} » (options : --source, --out, --qr-dir, --check, --dev, --textures, --part-mib, --report)`);
   }
   return opts;
 }
@@ -543,10 +556,17 @@ function removeFixtureMedia(outDir: string): void {
  */
 const ATELIER_MARKER = 'glbi-atelier-a2';
 const ATELIER_TRACES = [ATELIER_MARKER, '/atelier/__api/', '__api/events', 'page.atelier'];
+/**
+ * Studio exclu du livre (ST1, spec-app-bureau.md §2) : `scripts/studio/` n'est importé par aucun fichier de `src/`. Marqueur
+ * écrit dans la page du studio (scripts/studio/ui/), cherché ici comme celui de l'atelier, avec le préfixe de son API.
+ */
+const STUDIO_MARKER = 'glbi-studio-st1';
+const STUDIO_TRACES = [STUDIO_MARKER, '/__studio/'];
 const TEXT_FILE = /\.(html?|js|mjs|cjs|css|json|txt|webmanifest|map|svg|xml)$/i;
 
 function checkNoAtelier(outDir: string): void {
   const found: string[] = [];
+  const studio: string[] = [];
   for (const rel of listFiles(outDir)) {
     if (/^atelier(\/|\.html$)/.test(rel)) {
       found.push(rel);
@@ -555,12 +575,17 @@ function checkNoAtelier(outDir: string): void {
     if (!TEXT_FILE.test(rel)) continue;
     const text = fs.readFileSync(path.join(outDir, rel), 'utf8');
     if (ATELIER_TRACES.some((t) => text.includes(t))) found.push(rel);
+    if (STUDIO_TRACES.some((t) => text.includes(t))) studio.push(rel);
   }
+  const list = (l: string[]) => `${l.slice(0, 5).join(', ')}${l.length > 5 ? ', …' : ''}`;
   if (found.length) {
     err(
-      `code de l'atelier dans le dossier construit (${found.slice(0, 5).join(', ')}${found.length > 5 ? ', …' : ''}) : ` +
+      `code de l'atelier dans le dossier construit (${list(found)}) : ` +
         'ne jamais lancer next build avec ATELIER=1 ; supprimer out/ et relancer npm run build',
     );
+  }
+  if (studio.length) {
+    err(`code du studio dans le dossier construit (${list(studio)}) : scripts/studio/ ne doit être importé par aucun fichier de src/ ni copié dans public/`);
   }
 }
 

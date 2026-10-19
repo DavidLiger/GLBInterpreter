@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import type { Document, Node as GNode } from '@gltf-transform/core';
 import sharp from 'sharp';
 import { readGlbFile, referencedNodeNames } from './glb-pipeline';
-import { bookSchema, formatIssues, GLBI_ROOT_NAME, type Book, type GlbiConfig, type ModelCredit } from '../src/schema/glbi';
+import { bookSchema, formatIssues, GLBI_ROOT_NAME, isReservedSourcePath, type Book, type GlbiConfig, type ModelCredit } from '../src/schema/glbi';
 import { mergeLayers } from '../src/schema/merge';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -62,6 +62,26 @@ export function listFiles(dir: string): string[] {
       const full = path.join(d, e.name);
       if (e.isDirectory()) walk(full);
       else if (e.isFile()) outList.push(toPosix(path.relative(dir, full)));
+    }
+  };
+  walk(dir);
+  return outList.sort();
+}
+
+/**
+ * Fichiers d'un dossier source de livre, sans le dossier réservé `blender/` (ST1, DP-2 : `.blend`, textures de travail,
+ * sauvegardes), qui n'est même pas parcouru. Liste des fichiers non référencés de `book:check`, scrutation et menus d'assets
+ * de l'atelier. `listFiles` reste la liste complète (dossier construit).
+ */
+export function listSourceFiles(dir: string): string[] {
+  const outList: string[] = [];
+  const walk = (d: string) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const full = path.join(d, e.name);
+      const rel = toPosix(path.relative(dir, full));
+      if (e.isDirectory()) {
+        if (!isReservedSourcePath(rel)) walk(full);
+      } else if (e.isFile() && !isReservedSourcePath(rel)) outList.push(rel);
     }
   };
   walk(dir);
@@ -386,7 +406,8 @@ export async function checkBookSource(sourceDir: string, report: Report, readSce
   else await iconSourceOk(path.join(sourceDir, 'icon.png'), err);
   if (fs.existsSync(path.join(sourceDir, 'icon-maskable.png'))) await iconSourceOk(path.join(sourceDir, 'icon-maskable.png'), err);
   for (const id of book.scenes) known.add(`scenes/${id}.glb`).add(`scenes/${id}.edit.json`);
-  const unused = listFiles(sourceDir).filter((f) => !known.has(f));
+  // `blender/` (dossier réservé, ST1) : ni listé ni copié.
+  const unused = listSourceFiles(sourceDir).filter((f) => !known.has(f));
   if (unused.length && !report.errors.length) warn(`fichier(s) source non référencé(s), non copié(s) : ${unused.join(', ')}`);
 
   return { book, scenes, assets };

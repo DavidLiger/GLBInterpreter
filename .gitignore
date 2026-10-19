@@ -81,6 +81,9 @@ public/swe-worker-*.js
 # Décodeurs copiés depuis three par scripts/copy-decoders.ts (predev / prebuild, Î7)
 public/decoders/
 
+# Studio de fabrication (npm run studio, ST1) : état des sorties, PID, réglages, journaux
+/.studio/
+
 # Tests d'installation (Playwright, Î8)
 /test-results/
 /playwright-report/

@@ -37,12 +37,22 @@ export const sceneIdSchema = z.string().regex(SCENE_ID_PATTERN, 'identifiant de 
 export const BLENDER_NAME_PATTERN = /^[A-Za-z0-9_]+$/;
 const blenderNameSchema = z.string().regex(BLENDER_NAME_PATTERN, 'nom Blender : lettres, chiffres et _ uniquement');
 
+/**
+ * Dossier réservé du dossier source (DP-2, spec-app-bureau.md §5) : `blender/<scène>.blend`, textures de travail,
+ * sauvegardes. Jamais publié : refusé dans les chemins d'assets, ignoré par la liste des fichiers non référencés de
+ * `book:check` et par l'atelier (scrutation, menus d'assets). Comparaison sans casse (Windows : `Blender/` = `blender/`).
+ */
+export const RESERVED_SOURCE_DIR = 'blender';
+/** `rel` (chemin relatif à la racine du livre, séparateur `/`) est dans le dossier réservé `blender/`. */
+export const isReservedSourcePath = (rel: string): boolean => rel.split('/')[0].toLowerCase() === RESERVED_SOURCE_DIR;
+
 export const IMAGE_EXTENSIONS = ['webp', 'png', 'jpg', 'jpeg', 'avif'] as const;
 export const AUDIO_EXTENSIONS = ['mp3', 'ogg', 'opus', 'm4a', 'aac', 'wav'] as const;
 
 /**
  * Chemin d'asset relatif à la racine du livre (D-8.1, V-02, C-22, C-23) : pas d'URL, pas de `/` initial,
- * pas de `..`, pas d'anti-slash, segments en lettres/chiffres/`_`/`-`/`.`, extension obligatoire et attendue.
+ * pas de `..`, pas d'anti-slash, segments en lettres/chiffres/`_`/`-`/`.`, extension obligatoire et attendue,
+ * pas sous le dossier réservé `blender/` (ST1, DP-2 ; aucun livre valide n'en dépendait : versions inchangées).
  */
 function assetPath(kind: string, extensions: readonly string[]) {
   return z.string().superRefine((p, ctx) => {
@@ -52,6 +62,7 @@ function assetPath(kind: string, extensions: readonly string[]) {
     if (p.includes('\\')) return fail('anti-slash interdit');
     const segments = p.split('/');
     if (segments.some((s) => s === '' || s === '.' || s === '..')) return fail('segment vide, . ou .. interdit');
+    if (isReservedSourcePath(p)) return fail(`dossier ${RESERVED_SOURCE_DIR}/ réservé aux fichiers de travail, non publié`);
     if (segments.some((s) => !/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(s))) {
       return fail('caractères autorisés : lettres, chiffres, _, - et .');
     }

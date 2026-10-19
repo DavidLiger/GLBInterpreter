@@ -16,13 +16,17 @@
 // les 500 ms ; un fichier
 // modifié est pris en compte quand sa taille et sa date n'ont pas bougé pendant deux relevés (un GLB, en plus, quand son
 // en-tête annonce la taille du fichier : écriture par Blender terminée). Le rapport est alors recalculé et la page prévenue.
+// Le dossier réservé `blender/` (fichiers de travail, ST1) n'est ni scruté ni listé dans les menus d'assets.
+// Protection (ST1, spec-app-bureau.md §11) : toute requête (WebSocket compris) dont l'en-tête `Host` n'est pas
+// `127.0.0.1:<port>` ou `localhost:<port>`, ou dont l'`Origin` éventuel n'est pas `http://` suivi de l'un d'eux, reçoit 403
+// (rebinding DNS, page d'un autre site).
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { checkBookSource, listFiles, readScene, Report, ROOT, toPosix, type ReadSceneFn, type SceneResult } from '../book-check';
+import { checkBookSource, listSourceFiles, readScene, Report, ROOT, toPosix, type ReadSceneFn, type SceneResult } from '../book-check';
 import { checkSchemaFresh } from '../export-schema';
 import { layerIssues, mergeLayers } from '../../src/schema/merge';
 import { editLayerSchema, SCENE_ID_PATTERN, type BuiltScene, type ModelCredit } from '../../src/schema/glbi';
@@ -160,7 +164,8 @@ async function runChecks(override?: { id: string; value: unknown }, cache?: Map<
 async function computeBook(): Promise<BookState> {
   const { lines, summary, sceneChecks } = await runChecks();
 
-  const files = fs.existsSync(sourceDir) ? listFiles(sourceDir) : [];
+  // Dossier réservé `blender/` (ST1) : ni dans les menus d'assets, ni scruté.
+  const files = fs.existsSync(sourceDir) ? listSourceFiles(sourceDir) : [];
   const rawBook = readJsonLoose(path.join(sourceDir, 'book.json'));
   const bookScenes = isObj(rawBook) && Array.isArray(rawBook.scenes) ? rawBook.scenes.filter((s): s is string => typeof s === 'string') : [];
   const scenes: AtelierScene[] = bookScenes.map((id) => ({ id, inBook: true }));
@@ -304,7 +309,7 @@ const pending = new Map<string, { stamp: Stamp | null; same: number; since: numb
 function snapshot(): Map<string, Stamp> {
   const snap = new Map<string, Stamp>();
   if (!fs.existsSync(sourceDir)) return snap;
-  for (const rel of listFiles(sourceDir)) {
+  for (const rel of listSourceFiles(sourceDir)) {
     try {
       const st = fs.statSync(path.join(sourceDir, rel));
       snap.set(rel, { size: st.size, mtime: st.mtimeMs });
@@ -603,10 +608,33 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, route: s
   sendJson(res, 404, { error: `API inconnue : ${route}` });
 }
 
+/** Port d'écoute de l'atelier (contrôle de `Host` et `Origin`). */
+let listenPort = DEFAULT_PORT;
+
+/**
+ * Requête admise (ST1) : `Host` = `127.0.0.1:<port>` ou `localhost:<port>` ; `Origin`, s'il est présent, = `http://` suivi de
+ * l'un des deux. Une navigation ou un `fetch` de même origine en `GET` n'envoie pas d'`Origin` : admis.
+ */
+function allowedRequest(req: http.IncomingMessage): boolean {
+  const hosts = [`127.0.0.1:${listenPort}`, `localhost:${listenPort}`];
+  const host = (req.headers.host ?? '').toLowerCase();
+  if (!hosts.includes(host)) return false;
+  const origin = req.headers.origin;
+  if (origin === undefined) return true;
+  return hosts.some((h) => origin.toLowerCase() === `http://${h}`);
+}
+
+function refuse(req: http.IncomingMessage, res: http.ServerResponse): void {
+  console.error(`atelier : requête refusée (403) : Host « ${req.headers.host ?? ''} », Origin « ${req.headers.origin ?? ''} », ${req.method} ${req.url}`);
+  res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+  res.end('atelier : requête refusée (Host ou Origin non autorisé)\n');
+}
+
 /** Dernière requête d'un onglet de l'atelier (page ou flux d'événements), hors requêtes du serveur lui-même. */
 let tabSeenAt = 0;
 
 function handle(req: http.IncomingMessage, res: http.ServerResponse): void {
+  if (!allowedRequest(req)) return refuse(req, res);
   const url = req.url ?? '/';
   const q = url.indexOf('?');
   const pathname = q < 0 ? url : url.slice(0, q);
@@ -656,6 +684,11 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse): void {
 
 /** WebSocket (rechargement à chaud de `next dev`, /_next/webpack-hmr) : relais brut vers `next dev`. */
 function upgrade(req: http.IncomingMessage, socket: net.Socket, head: Buffer): void {
+  if (!allowedRequest(req)) {
+    console.error(`atelier : WebSocket refusé (403) : Host « ${req.headers.host ?? ''} », Origin « ${req.headers.origin ?? ''} »`);
+    socket.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n');
+    return;
+  }
   const up = net.connect(nextPort, HOST, () => {
     let h = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`;
     for (let i = 0; i < req.rawHeaders.length; i += 2) h += `${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}\r\n`;
@@ -747,6 +780,7 @@ async function main(): Promise<void> {
     process.exit(2);
   }
   sourceDir = opts.source;
+  listenPort = opts.port;
   if (!fs.existsSync(sourceDir) || !fs.statSync(sourceDir).isDirectory()) {
     console.error(`atelier : dossier source introuvable : ${toPosix(sourceDir)}`);
     process.exit(2);

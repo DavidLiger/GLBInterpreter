@@ -1,0 +1,85 @@
+<!doctype html>
+<!-- Studio de fabrication d'un livre (ST1, spec-app-bureau.md). Servi par scripts/studio/server.ts ; jamais dans un livre
+     (marqueur cherché par le contrôle de fin de build : glbi-studio-st1). -->
+<html lang="fr" data-studio="glbi-studio-st1">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Studio GLBI</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/studio.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">Studio GLBI</div>
+    <div class="top-book" id="top-book">aucun livre ouvert</div>
+    <div class="top-pid" id="top-pid"></div>
+    <button type="button" class="btn danger" data-act="quitter">Tout arrêter et quitter</button>
+  </header>
+
+  <div id="bandeaux" aria-live="polite"></div>
+
+  <main class="grid">
+    <section class="card" id="livre">
+      <h2>Livre</h2>
+      <form id="ouvrir" class="row" autocomplete="off">
+        <label class="grow"><span class="sr">Dossier du livre</span>
+          <input id="chemin" type="text" placeholder="Dossier du livre (contenant book.json), ex. D:\Livres\dino ou books/test-dino" spellcheck="false">
+        </label>
+        <button type="submit" class="btn primary">Ouvrir</button>
+        <button type="button" class="btn" data-act="parcourir" id="parcourir" hidden>Parcourir…</button>
+      </form>
+      <div id="recents"></div>
+      <div id="book-head"></div>
+      <div id="scenes"></div>
+      <div id="check"></div>
+    </section>
+
+    <section class="card" id="sorties">
+      <h2>Sorties partagées</h2>
+      <div id="outputs"></div>
+    </section>
+
+    <section class="card" id="processus">
+      <h2>Processus</h2>
+      <div id="procs"></div>
+    </section>
+
+    <section class="card" id="taches">
+      <h2>Tâches</h2>
+      <div id="tasks"></div>
+    </section>
+
+    <section class="card wide" id="journal-card">
+      <div class="row between">
+        <h2>Journal</h2>
+        <label class="small"><input type="checkbox" id="suivre" checked> suivre la fin</label>
+      </div>
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <pre id="journal" tabindex="0" aria-label="Journal"></pre>
+    </section>
+
+    <section class="card wide" id="reglages">
+      <h2>Ports</h2>
+      <form id="ports" class="row wrap">
+        <label>Atelier <input type="number" name="atelier" min="1024" max="65534"></label>
+        <label>Lecteur de développement <input type="number" name="dev" min="1024" max="65534"></label>
+        <label>Serveur de test <input type="number" name="test" min="1024" max="65534"></label>
+        <button type="submit" class="btn">Enregistrer</button>
+        <button type="button" class="btn" data-act="portsParDefaut">Valeurs par défaut</button>
+        <button type="button" class="btn" data-act="verifierPorts">Revérifier les ports</button>
+      </form>
+      <p class="small muted">Pris en compte au prochain démarrage de chaque processus. Studio : port <span id="studio-port"></span> (option <code>--port</code>) ; tests d’installation : 4173.</p>
+    </section>
+  </main>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <div id="fin" hidden>
+    <div class="fin-box">
+      <h2>Studio arrêté</h2>
+      <p>Tous les processus gérés sont arrêtés. Pour relancer le studio : double-clic sur <code>studio.cmd</code> (ou <code>npm run studio</code>) ; cette page se reconnecte alors toute seule.</p>
+    </div>
+  </div>
+  <script src="/studio.js"></script>
+</body>
+</html>

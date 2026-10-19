@@ -1,7 +1,7 @@
 // scripts/test-schema.ts — tests de la fusion des couches (A1, spec-atelier-glbi.md §5, §6). `npm run test:schema`.
 // Sans navigateur ni fichier : cas nominal, chaque cas d'erreur du §5 (message exact), mode `draft`, fraîcheur du JSON Schema.
 import assert from 'node:assert/strict';
-import { builtSceneSchema, glbiConfigSchema, type EditLayer, type Layer3d } from '../src/schema/glbi';
+import { bookSchema, builtSceneSchema, glbiConfigSchema, isReservedSourcePath, type Book, type EditLayer, type Layer3d } from '../src/schema/glbi';
 import { mergeLayers, type MergeOptions } from '../src/schema/merge';
 import { checkSchemaFresh } from './export-schema';
 
@@ -50,6 +50,15 @@ const EDIT: EditLayer = {
   },
 };
 const OPTS: MergeOptions = { mode: 'strict', sceneId: 'trex', glbiVersion: 2 };
+const BOOK: Book = {
+  bookId: 'dino',
+  title: L('Dinosaures', 'Dinosaurs', 'Dinosaurios'),
+  languages: ['fr', 'en', 'es'],
+  scenes: ['trex'],
+  origin: 'https://dino.editions-liger.com',
+  ogImage: 'images/og.png',
+  legal: { year: 2026, text: L('© 2026 Éditions Liger', '© 2026 Éditions Liger', '© 2026 Éditions Liger') },
+};
 
 let n = 0;
 function test(name: string, fn: () => void): void {
@@ -200,6 +209,27 @@ test('mode draft : objet affichable malgré les erreurs (libellés et nom rempla
   const r2 = mergeLayers(clone(LAYER3D), bad, { ...OPTS, mode: 'draft' });
   assert.deepEqual(r2.orphans, ['marche']);
   assert.ok(r2.draft);
+});
+
+test('dossier réservé blender/ refusé dans les chemins d’assets, sans changer le reste (ST1, DP-2)', () => {
+  const e = clone(EDIT);
+  e.scene!.loaderImage = 'blender/trex-preview.webp';
+  e.modules!.animations!.actions.walk.sound = 'Blender/textures/pas.mp3';
+  e.modules!.credits!.assets[0].asset = 'blender/roar.mp3';
+  const r = mergeLayers(clone(LAYER3D), e, OPTS);
+  hasError(r, 'scenes/trex.edit.json : scene.loaderImage : image « blender/trex-preview.webp » : dossier blender/ réservé aux fichiers de travail, non publié');
+  hasError(r, 'scenes/trex.edit.json : modules.animations.actions.walk.sound : son « Blender/textures/pas.mp3 » : dossier blender/ réservé aux fichiers de travail, non publié');
+  hasError(r, 'scenes/trex.edit.json : modules.credits.assets.0.asset : asset « blender/roar.mp3 » : dossier blender/ réservé aux fichiers de travail, non publié');
+  const ok = clone(EDIT);
+  ok.scene!.loaderImage = 'images/blender/trex-preview.webp';
+  ok.modules!.animations!.actions.walk.icon = 'blenders/walk.webp';
+  assert.deepEqual(mergeLayers(clone(LAYER3D), ok, OPTS).errors, []);
+  assert.ok(!bookSchema.safeParse({ ...BOOK, ogImage: 'blender/og.png' }).success, 'ogImage sous blender/ accepté');
+  assert.ok(bookSchema.safeParse(BOOK).success);
+  assert.equal(isReservedSourcePath('blender/trex.blend'), true);
+  assert.equal(isReservedSourcePath('BLENDER/a/b.png'), true);
+  assert.equal(isReservedSourcePath('scenes/blender.glb'), false);
+  assert.equal(isReservedSourcePath('blender.png'), false);
 });
 
 test('JSON Schema de la couche 3D commité à jour', () => {
