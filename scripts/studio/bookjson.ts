@@ -144,6 +144,28 @@ export function validateBook(obj: unknown): { ok: true; book: Book; text: string
   return { ok: true, book: r.data, text: formatBook(r.data) };
 }
 
+/** Valeur affichée dans un refus : « vide », ou entre guillemets avec tout caractère hors ASCII imprimable rendu visible. */
+export function visibleValue(v: unknown): string {
+  if (typeof v !== 'string') return JSON.stringify(v) ?? String(v);
+  if (v === '') return 'vide';
+  return `"${v.replace(/[^\x21-\x7e]/g, (c) => (c === ' ' ? '␠' : `\\u${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`))}"`;
+}
+
+/**
+ * Messages de `bookSchema` complétés de la valeur reçue pour les champs en ASCII (identifiants, adresse, chemin d'image),
+ * où un `/` final, une espace ou un caractère invisible ne se voient pas dans le champ (correctif ST2 du 20/10). Le message
+ * du contrat est gardé tel quel.
+ */
+export function withReceivedValues(errors: string[], obj: unknown): string[] {
+  return errors.map((e) => {
+    const m = /^book\.json : (bookId|origin|ogImage|scenes\.\d+) : /.exec(e);
+    if (!m) return e;
+    let v: unknown = obj;
+    for (const k of m[1].split('.')) v = isObj(v) || Array.isArray(v) ? (v as Record<string, unknown>)[k] : undefined;
+    return v === undefined ? e : `${e} (valeur reçue : ${visibleValue(v)})`;
+  });
+}
+
 // ---------------------------------------------------------------------------------------------------------
 // Scènes, dossier d'un nouveau livre
 // ---------------------------------------------------------------------------------------------------------

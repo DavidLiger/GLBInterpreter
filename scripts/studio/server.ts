@@ -35,6 +35,7 @@ import {
   NEW_BOOK_DIRS,
   SCENE_PATTERN_SOURCE,
   validateBook,
+  withReceivedValues,
 } from './bookjson';
 import { LANGUAGES, RESERVED_SOURCE_DIR } from '../../src/schema/glbi';
 import {
@@ -767,15 +768,17 @@ function composeForOpenBook(form: ReturnType<typeof formFromBody>) {
 function validateForm(body: Record<string, unknown>): Result {
   const form = formFromBody(body.livre);
   if (body.creation === true) {
-    const v = validateBook(composeBook(form));
-    return { ok: v.ok, erreurs: v.ok ? [] : v.errors };
+    const obj = composeBook(form);
+    const v = validateBook(obj);
+    return { ok: v.ok, erreurs: v.ok ? [] : withReceivedValues(v.errors, obj) };
   }
   if (!book) return fail('aucun livre ouvert');
   const errors: string[] = [];
   const diskId = book.info.file.content.bookIdOnDisk;
   if (diskId !== null && form.bookId.trim() !== diskId) errors.push(BOOKID_REFUSED(diskId));
-  const v = validateBook(composeForOpenBook(form));
-  if (!v.ok) errors.push(...v.errors);
+  const obj = composeForOpenBook(form);
+  const v = validateBook(obj);
+  if (!v.ok) errors.push(...withReceivedValues(v.errors, obj));
   return { ok: !errors.length, erreurs: errors };
 }
 
@@ -804,8 +807,9 @@ async function saveBook(body: Record<string, unknown>): Promise<Result> {
   const form = formFromBody(body.livre);
   const diskId = disk.content.bookIdOnDisk;
   if (diskId !== null && form.bookId.trim() !== diskId) return fail(BOOKID_REFUSED(diskId));
-  const v = validateBook(composeForOpenBook(form));
-  if (!v.ok) return { ok: false, error: `book.json non écrit : refusé par bookSchema (${v.errors.length} message(s))`, erreurs: v.errors };
+  const obj = composeForOpenBook(form);
+  const v = validateBook(obj);
+  if (!v.ok) return { ok: false, error: `book.json non écrit : refusé par bookSchema (${v.errors.length} message(s))`, erreurs: withReceivedValues(v.errors, obj) };
   let existing: string | null = null;
   try {
     existing = fs.readFileSync(target, 'utf8');
@@ -849,14 +853,16 @@ async function createBook(body: Record<string, unknown>): Promise<Result> {
   const name = String(body.dossier ?? '').trim();
   const nameError = folderNameError(name);
   if (nameError) return fail(nameError);
-  const form = formFromBody(body.livre);
-  const v = validateBook(composeBook(form));
-  if (!v.ok) return { ok: false, error: `livre non créé : book.json refusé par bookSchema (${v.errors.length} message(s))`, erreurs: v.errors };
+  // Correctif ST2 (20/10) : un dossier qui contient déjà un livre est refusé avant toute validation du formulaire.
   const target = path.join(parent, name);
   if (fs.existsSync(target)) {
     if (!fs.statSync(target).isDirectory()) return fail(`${target} existe et n'est pas un dossier`);
     if (fs.existsSync(path.join(target, 'book.json'))) return fail(`${target} contient déjà un book.json : l'ouvrir plutôt que créer un livre`);
   }
+  const form = formFromBody(body.livre);
+  const obj = composeBook(form);
+  const v = validateBook(obj);
+  if (!v.ok) return { ok: false, error: `livre non créé : book.json refusé par bookSchema (${v.errors.length} message(s))`, erreurs: withReceivedValues(v.errors, obj) };
   const live = PROCESSES.filter((n) => running(entries[n]));
   if (book && live.length && body.confirme !== true) {
     return { ok: false, confirm: `Le nouveau livre sera ouvert, ce qui arrête : ${live.map((n) => entries[n].label).join(', ')}. Continuer ?` };

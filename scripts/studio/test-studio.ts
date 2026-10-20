@@ -20,6 +20,8 @@ import {
   readableBook,
   SCENE_PATTERN_SOURCE,
   validateBook,
+  visibleValue,
+  withReceivedValues,
 } from './bookjson';
 import { SCENE_ID_PATTERN } from '../../src/schema/glbi';
 import {
@@ -272,6 +274,18 @@ test('formulaire : lu, recomposé, réécrit à l’identique ; unlockThreshold 
   assert.equal(readableBook(undefined, 2026).bookIdOnDisk, null);
   assert.equal(SCENE_PATTERN_SOURCE, SCENE_ID_PATTERN.source, 'motif envoyé à la page : celui du Zod');
   assert.deepEqual(addedScenes(['a', 'b'], ['b', 'c', 'a', 'd']), ['c', 'd']);
+});
+
+test('refus : valeur reçue montrée pour bookId, origin, ogImage et les scènes (vide, / final, caractère invisible)', () => {
+  assert.equal(visibleValue(''), 'vide');
+  assert.equal(visibleValue('https://dino.editions-liger.com/'), '"https://dino.editions-liger.com/"');
+  assert.equal(visibleValue('https://dino\u2011x.com '), '"https://dino\\u2011x.com␠"');
+  const obj = composeBook({ ...emptyForm(2026), bookId: 'a', title: L('a', 'b', 'c'), scenes: ['ok', 'pas ok'], origin: '' });
+  const v = validateBook(obj);
+  assert.ok(!v.ok);
+  const shown = withReceivedValues(v.errors, obj);
+  assert.ok(shown.some((e) => e.startsWith('book.json : origin : ') && e.endsWith('(valeur reçue : vide)')), shown.join('\n'));
+  assert.ok(shown.some((e) => e.startsWith('book.json : scenes.1 : ') && e.endsWith('(valeur reçue : "pas␠ok")')), shown.join('\n'));
 });
 
 test('nouveau livre : nom de dossier ; Blender : version la plus récente', () => {

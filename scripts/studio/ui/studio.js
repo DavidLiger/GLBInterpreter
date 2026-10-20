@@ -358,7 +358,7 @@ function renderForm() {
     ${F.bookIdLocked ? '<p class="small muted">bookId d’un livre existant : non modifiable (clé de progression et nom du cache, figés après publication) ; pour un autre bookId, créer un autre livre.</p>' : ''}
     <div class="fields">${fieldText('Titre FR', 'title.fr')}${fieldText('Titre EN', 'title.en')}${fieldText('Titre ES', 'title.es')}</div>
     <div class="fields">
-      ${fieldText('Adresse imprimée (origin)', 'origin', 'spellcheck="false" placeholder="https://dino.editions-liger.com"')}
+      ${fieldText('Adresse imprimée (origin)', 'origin', 'spellcheck="false" placeholder="ex. https://dino.editions-liger.com"')}
       <label class="col">Image de partage (ogImage) <select data-f="ogImage" id="f-og"></select></label>
     </div>
     <div class="fields">
@@ -370,7 +370,7 @@ function renderForm() {
     <p class="small muted">L’ordre des scènes est l’<strong>ordre de déblocage</strong> (progression du lecteur) : glisser une ligne, ou ↑ ↓. Retirer une scène laisse ses fichiers sur le disque. Renommer une scène est refusé (identifiant écrit dans le GLB par l’addon, clé de progression, QR imprimés) : retirer puis ajouter crée une autre scène.</p>
     <ol class="scene-list" id="f-scenes"></ol>
     <div class="row wrap">
-      <label class="col">Nouvelle scène <input type="text" id="f-new-id" spellcheck="false" placeholder="identifiant, ex. trex"></label>
+      <label class="col">Nouvelle scène <input type="text" id="f-new-id" spellcheck="false" placeholder="ex. trex"></label>
       <label class="col">Position <select id="f-new-pos"></select></label>
       <button type="button" class="btn" data-act="ajouterScene">Ajouter</button>
     </div>
