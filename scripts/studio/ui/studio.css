@@ -1,4 +1,4 @@
-/* Studio GLBI (ST1) : page locale, sans framework. */
+/* Studio GLBI (ST1, ST2) : page locale, sans framework. */
 :root {
   --bg: #f4f4f2;
   --card: #ffffff;
@@ -131,3 +131,26 @@ td .date { display: block; color: var(--muted); font-size: 11.5px; }
 #fin { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; }
 #fin[hidden] { display: none; }
 .fin-box { background: var(--card); padding: 24px 28px; border-radius: 10px; max-width: 520px; }
+
+/* ST2 : formulaire de book.json, création d'un livre, Blender. */
+.col { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); }
+.col input, .col select { color: var(--text); font-size: 14px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 8px 0; }
+.fields .narrow { max-width: 110px; }
+select { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); }
+input[readonly] { opacity: .75; }
+details.sub { margin: 10px 0; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; }
+details.sub > summary { cursor: pointer; font-weight: 600; }
+details.sub form { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.form-box { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.form-box h3 { margin: 0; font-size: 13px; text-transform: uppercase; letter-spacing: .02em; color: var(--muted); }
+.scene-list { list-style: none; margin: 4px 0; padding: 0; counter-reset: sc; }
+.scene-list li { display: flex; gap: 6px; align-items: center; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; margin: 3px 0; background: var(--bg); counter-increment: sc; }
+.scene-list li::before { content: counter(sc) "."; color: var(--muted); min-width: 22px; font-size: 12.5px; }
+.scene-list li.drag-over { border-color: var(--accent); }
+.scene-list .grip { cursor: grab; color: var(--muted); user-select: none; }
+.scene-list .sid { flex: 1; font-family: var(--mono); font-size: 12.5px; }
+.form-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+#blender form { display: flex; flex-direction: column; gap: 6px; }
+#scenes { overflow-x: auto; }
+#blender form > .btn, #creer > .btn { align-self: flex-start; }

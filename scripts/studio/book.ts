@@ -4,10 +4,13 @@
 // sa taille ou sa date change. L'état de `out/` et de `public/dev-book/` (livre, mode, date, commit) est noté dans
 // `.studio/etat.json`, jamais dans `out/` ; une sortie est périmée si un fichier du dossier source (hors `blender/`) est plus
 // récent que son build.
+// ST2 : `book.json` lu pour le formulaire (champs lisibles, empreinte de lecture), écriture par fichier temporaire du même
+// dossier puis renommage, copie du gabarit de scène sans écraser, réglages de Blender (§4, §8).
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { bookSchema, formatIssues, isReservedSourcePath, RESERVED_SOURCE_DIR } from '../../src/schema/glbi';
+import { bookSchema, formatIssues, IMAGE_EXTENSIONS, isReservedSourcePath, RESERVED_SOURCE_DIR } from '../../src/schema/glbi';
+import { pickBlenderDir, readableBook, type ReadableBook } from './bookjson';
 import type { CheckSummary, OutputMode, OutputRecord, Stamp } from './rules';
 
 export const posix = (p: string) => p.split(path.sep).join('/');
@@ -63,6 +66,23 @@ export interface BookInfo {
   newest: { rel: string; mtime: number } | null;
   /** Dernier `book:check` lancé par le studio sur ce livre. */
   check: (CheckSummary & { date: number }) | { date: number; error: string } | null;
+  /** `book.json` pour le formulaire (ST2) : empreinte de la lecture, champs lisibles, validité. */
+  file: BookFileInfo;
+  /** Images du dossier source (hors `blender/` et fichiers cachés), pour le menu `ogImage`. */
+  images: string[];
+  /** `icon.png` présent (icône du livre, obligatoire : erreur de `book:check` sinon). */
+  icon: boolean;
+}
+
+export interface BookFileInfo {
+  /** Empreinte (taille, date) du `book.json` lu ; `null` s'il est absent. */
+  stamp: Stamp | null;
+  /** JSON analysable. */
+  readable: boolean;
+  /** Accepté par `bookSchema`. */
+  valid: boolean;
+  /** Champs lisibles (formulaire prérempli), `unlockThreshold` conservé, `bookId` du disque. */
+  content: ReadableBook;
 }
 
 export class OpenBook {
@@ -71,7 +91,10 @@ export class OpenBook {
   private sceneIds: string[] = [];
 
   constructor(dir: string, typed: string | null) {
-    this.info = { dir, typed, bookId: null, title: null, scenes: [], errors: [], newest: null, check: null };
+    this.info = {
+      dir, typed, bookId: null, title: null, scenes: [], errors: [], newest: null, check: null, images: [], icon: false,
+      file: { stamp: null, readable: false, valid: false, content: readableBook(undefined, new Date().getFullYear()) },
+    };
     this.refresh();
   }
 
@@ -84,6 +107,7 @@ export class OpenBook {
       this.sceneIds = [];
       this.info.errors = ['book.json absent du dossier'];
       this.info.bookId = this.info.title = null;
+      this.info.file = { stamp: null, readable: false, valid: false, content: readableBook(undefined, new Date().getFullYear()) };
     } else if (!this.bookStamp || st.size !== this.bookStamp.size || st.mtime !== this.bookStamp.mtime) {
       this.bookStamp = st;
       this.readBookJson(bookFile);
@@ -100,21 +124,33 @@ export class OpenBook {
       blend: stat(`${RESERVED_SOURCE_DIR}/${id}.blend`),
       check: per ? (per[id] ?? { errors: 0, warnings: 0 }) : null,
     }));
-    this.info.newest = newestSourceFile(this.info.dir);
+    const walk = walkSource(this.info.dir);
+    this.info.newest = walk.newest;
+    this.info.images = walk.images;
+    this.info.icon = !!stampOf(path.join(this.info.dir, 'icon.png'));
+  }
+
+  /** Relecture immédiate de `book.json` (après une écriture du studio), puis du tableau. */
+  reload(): void {
+    this.bookStamp = null;
+    this.refresh();
   }
 
   private readBookJson(file: string): void {
     let raw: unknown;
+    const year = new Date().getFullYear();
     try {
       raw = JSON.parse(fs.readFileSync(file, 'utf8'));
     } catch (e) {
       this.info.errors = [`book.json : JSON illisible (${(e as Error).message})`];
       this.sceneIds = [];
       this.info.bookId = this.info.title = null;
+      this.info.file = { stamp: this.bookStamp, readable: false, valid: false, content: readableBook(undefined, year) };
       return;
     }
     const r = bookSchema.safeParse(raw);
     this.info.errors = r.success ? [] : formatIssues(r.error, 'book.json : ');
+    this.info.file = { stamp: this.bookStamp, readable: true, valid: r.success, content: readableBook(raw, year) };
     // Ce qui est lisible sert au tableau, même si le livre est refusé.
     const o = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
     this.sceneIds = Array.isArray(o.scenes) ? o.scenes.filter((s): s is string => typeof s === 'string') : [];
@@ -126,7 +162,17 @@ export class OpenBook {
 
 /** Fichier le plus récent d'un dossier source, sans `blender/` ni fichiers cachés (temporaires de l'atelier). */
 export function newestSourceFile(dir: string): { rel: string; mtime: number } | null {
+  return walkSource(dir).newest;
+}
+
+/**
+ * Parcours du dossier source, sans `blender/` ni fichiers cachés : fichier le plus récent (base du « périmé ») et images
+ * (menu `ogImage` du formulaire, ST2), triées.
+ */
+export function walkSource(dir: string): { newest: { rel: string; mtime: number } | null; images: string[] } {
   let best: { rel: string; mtime: number } | null = null;
+  const images: string[] = [];
+  const imageRe = new RegExp(`\\.(${IMAGE_EXTENSIONS.join('|')})$`, 'i');
   const walk = (d: string) => {
     let entries: fs.Dirent[];
     try {
@@ -141,6 +187,7 @@ export function newestSourceFile(dir: string): { rel: string; mtime: number } | 
       if (isReservedSourcePath(rel)) continue;
       if (e.isDirectory()) walk(full);
       else if (e.isFile()) {
+        if (imageRe.test(e.name)) images.push(rel);
         try {
           const m = fs.statSync(full).mtimeMs;
           if (!best || m > best.mtime) best = { rel, mtime: m };
@@ -151,14 +198,17 @@ export function newestSourceFile(dir: string): { rel: string; mtime: number } | 
     }
   };
   walk(dir);
-  return best;
+  return { newest: best, images: images.sort() };
 }
 
 /**
  * Dossier de livre à ouvrir : chemin saisi (relatif au repo admis), ramené à sa casse réelle ; doit contenir `book.json`.
  * Renvoie le chemin réel, ou un message d'erreur.
  */
-export function resolveBookDir(input: string, root: string): { dir: string; typed: string | null } | { error: string } {
+export function resolveBookDir(
+  input: string,
+  root: string,
+): { dir: string; typed: string | null } | { error: string; createHere?: { parent: string; name: string } } {
   const typedRaw = input.trim().replace(/^"(.*)"$/, '$1');
   if (!typedRaw) return { error: 'chemin du livre vide' };
   const typed = path.resolve(root, typedRaw);
@@ -166,7 +216,7 @@ export function resolveBookDir(input: string, root: string): { dir: string; type
   if (!dir) return { error: `dossier introuvable : ${typed}` };
   if (!fs.statSync(dir).isDirectory()) return { error: `pas un dossier : ${dir}` };
   if (!fs.existsSync(path.join(dir, 'book.json'))) {
-    return { error: `${dir} ne contient pas de book.json : choisir le dossier d'un livre (la création d'un livre depuis le studio n'existe pas encore)` };
+    return { error: `${dir} ne contient pas de book.json : choisir le dossier d'un livre, ou « Créer un livre ici »`, createHere: { parent: path.dirname(dir), name: path.basename(dir) } };
   }
   return { dir, typed: typed === dir ? null : typed };
 }
@@ -224,6 +274,8 @@ export function recordOutput(outBookJson: string, source: string, mode: OutputMo
 export interface Reglages {
   recents: string[];
   ports: { atelier: number; dev: number; test: number };
+  /** Blender (ST2, §8) : `blender.exe` (détecté au premier lancement, modifiable) et gabarit de scène facultatif. */
+  blender: { exe: string | null; gabarit: string | null; detecte: boolean };
 }
 
 export const DEFAULT_PORTS: Reglages['ports'] = { atelier: 4100, dev: 3000, test: 8001 };
@@ -232,7 +284,7 @@ export const TESTS_PORT = 4173;
 export const MAX_RECENTS = 10;
 
 export function readReglages(file: string): Reglages {
-  const r: Reglages = { recents: [], ports: { ...DEFAULT_PORTS } };
+  const r: Reglages = { recents: [], ports: { ...DEFAULT_PORTS }, blender: { exe: null, gabarit: null, detecte: false } };
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (Array.isArray(raw?.recents)) r.recents = raw.recents.filter((x: unknown): x is string => typeof x === 'string').slice(0, MAX_RECENTS);
@@ -240,6 +292,10 @@ export function readReglages(file: string): Reglages {
       const v = raw?.ports?.[k];
       if (Number.isInteger(v) && v >= 1024 && v <= 65534) r.ports[k] = v;
     }
+    const b = raw?.blender;
+    if (typeof b?.exe === 'string' && b.exe) r.blender.exe = b.exe;
+    if (typeof b?.gabarit === 'string' && b.gabarit) r.blender.gabarit = b.gabarit;
+    r.blender.detecte = b?.detecte === true;
   } catch {
     // absent ou illisible : valeurs par défaut
   }
@@ -249,4 +305,70 @@ export function readReglages(file: string): Reglages {
 export function writeReglages(file: string, r: Reglages): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(r, null, 2)}\n`);
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Écriture de book.json, gabarit de scène, Blender (ST2)
+// ---------------------------------------------------------------------------------------------------------
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Écriture par fichier temporaire du même dossier (`.<nom>.<pid>.tmp`, caché : ignoré par le « périmé » et la scrutation),
+ * puis renommage ; 5 essais sous Windows (renommage refusé un instant si le fichier est ouvert ailleurs), comme l'atelier.
+ */
+export async function writeFileAtomic(target: string, text: string): Promise<void> {
+  const tmp = path.join(path.dirname(target), `.${path.basename(target)}.${process.pid}.tmp`);
+  fs.writeFileSync(tmp, text, 'utf8');
+  for (let attempt = 1; ; attempt++) {
+    try {
+      fs.renameSync(tmp, target);
+      return;
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code;
+      if (attempt >= 5 || (code !== 'EPERM' && code !== 'EBUSY' && code !== 'EACCES')) {
+        fs.rmSync(tmp, { force: true });
+        throw e;
+      }
+      await sleep(100 * attempt);
+    }
+  }
+}
+
+/**
+ * Copie du gabarit en `blender/<id>.blend`, **seulement si le fichier n'existe pas** (DP-2 : le studio le crée une fois,
+ * ne l'écrase jamais ; copie exclusive, sans fenêtre entre le test et l'écriture). Message pour le journal et la page.
+ */
+export function copyTemplate(dir: string, id: string, gabarit: string): { copied: boolean; message: string } {
+  const rel = `${RESERVED_SOURCE_DIR}/${id}.blend`;
+  const target = path.join(dir, RESERVED_SOURCE_DIR, `${id}.blend`);
+  if (fs.existsSync(target)) return { copied: false, message: `${rel} existe déjà : non remplacé` };
+  if (!stampOf(gabarit)) return { copied: false, message: `gabarit introuvable (${gabarit}) : ${rel} non créé` };
+  try {
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.copyFileSync(gabarit, target, fs.constants.COPYFILE_EXCL);
+    return { copied: true, message: `${rel} créé depuis le gabarit` };
+  } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    return { copied: false, message: code === 'EEXIST' ? `${rel} existe déjà : non remplacé` : `${rel} non créé (${(e as Error).message})` };
+  }
+}
+
+/** `blender.exe` de la version la plus récente sous `C:\Program Files\Blender Foundation\` (`Blender <version>`) ; `null` sinon. */
+export function detectBlender(): string | null {
+  if (process.platform !== 'win32') return null;
+  const bases = [process.env.ProgramFiles, process.env.ProgramW6432, 'C:\\Program Files'].filter((x): x is string => !!x);
+  for (const base of [...new Set(bases)]) {
+    const foundation = path.join(base, 'Blender Foundation');
+    let names: string[];
+    try {
+      names = fs.readdirSync(foundation);
+    } catch {
+      continue;
+    }
+    const withExe = names.filter((n) => stampOf(path.join(foundation, n, 'blender.exe')));
+    const best = pickBlenderDir(withExe);
+    if (best) return path.join(foundation, best, 'blender.exe');
+  }
+  return null;
 }

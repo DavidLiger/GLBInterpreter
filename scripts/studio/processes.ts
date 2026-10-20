@@ -442,3 +442,72 @@ export function openBrowser(url: string): void {
     console.log(`studio : ouvrir ${url} dans le navigateur`);
   }
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// Blender (ST2, §8) : processus indépendant
+// ---------------------------------------------------------------------------------------------------------
+
+const psQuote = (s: string) => `'${s.replace(/'/g, "''")}'`;
+
+/**
+ * Lance `exe` sur `file`, **indépendant du studio** : ni géré, ni noté dans `.studio/pids.json`, ni arrêté par « Tout
+ * arrêter et quitter », sortie hors journal (Blender garde le travail non enregistré).
+ * - Windows : `Start-Process` de PowerShell (comme un double-clic : sa propre console, hors de l'arbre et de la console du
+ *   studio ; son parent, PowerShell, se termine aussitôt, donc il n'est jamais proposé comme reste d'un studio tué) ;
+ * - ailleurs : processus détaché dans son propre groupe, rattaché au système à la fin du studio.
+ * Renvoie le PID de Blender (`null` s'il est inconnu) ou un message d'échec.
+ */
+export async function launchIndependent(exe: string, file: string, cwd: string): Promise<{ pid: number | null } | { error: string }> {
+  if (IS_WIN) {
+    const script = [
+      '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8',
+      'try {',
+      `  $p = Start-Process -FilePath ${psQuote(exe)} -ArgumentList ${psQuote(`"${file}"`)} -WorkingDirectory ${psQuote(cwd)} -PassThru -ErrorAction Stop`,
+      '  "PID $($p.Id)"',
+      '} catch { "ERREUR $($_.Exception.Message)" }',
+    ].join('\n');
+    const encoded = Buffer.from(script, 'utf16le').toString('base64');
+    // Réponse lue dès la première ligne : Blender peut hériter de la sortie de PowerShell et la garder ouverte (la fin du
+    // flux n'est donc pas attendue).
+    return new Promise((resolve) => {
+      let out = '';
+      let done = false;
+      const finish = (r: { pid: number | null } | { error: string }) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        p.stdout.destroy();
+        resolve(r);
+      };
+      const p = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+        windowsHide: true,
+      });
+      const timer = setTimeout(() => finish({ error: 'lancement de Blender sans réponse de PowerShell (30 s)' }), 30_000);
+      p.stdout.on('data', (d: Buffer) => {
+        out += d.toString('utf8');
+        const pid = /^PID (\d+)/m.exec(out);
+        if (pid) return finish({ pid: Number(pid[1]) });
+        const err = /^ERREUR (.*)\r?\n/m.exec(out);
+        if (err) finish({ error: err[1].trim() });
+      });
+      p.on('error', (e) => finish({ error: e.message }));
+      p.on('exit', () => setTimeout(() => {
+        const err = /^ERREUR (.*)$/m.exec(out);
+        finish(err ? { error: err[1].trim() } : { error: 'lancement de Blender : PowerShell terminé sans réponse' });
+      }, 200));
+    });
+  }
+  return new Promise((resolve) => {
+    try {
+      const p = spawn(exe, [file], { cwd, stdio: 'ignore', detached: true });
+      p.once('error', (e) => resolve({ error: e.message }));
+      p.once('spawn', () => {
+        p.unref();
+        resolve({ pid: p.pid ?? null });
+      });
+    } catch (e) {
+      resolve({ error: (e as Error).message });
+    }
+  });
+}

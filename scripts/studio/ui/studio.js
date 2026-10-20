@@ -1,6 +1,8 @@
-// Studio GLBI (ST1) : page locale servie par scripts/studio/server.ts. JS sans framework.
-// État reçu par le flux /__studio/events (événements `etat`, `journal`, `bye`) ; toute action par POST /__studio/action
-// (JSON, en-tête x-glbi-studio). Marqueur du studio (contrôle de fin de build) : glbi-studio-st1.
+// Studio GLBI (ST1, ST2) : page locale servie par scripts/studio/server.ts. JS sans framework.
+// État reçu par le flux /__studio/events (événements `etat`, `journal`, `bye`, `second`) ; toute action par POST
+// /__studio/action (JSON, en-tête x-glbi-studio). Marqueur du studio (contrôle de fin de build) : glbi-studio-st1.
+// ST2 : formulaire de book.json (valeurs gardées dans la page, validées par le serveur avec bookSchema ; aucune règle du
+// contrat recopiée ici : le motif des identifiants de scène et les langues viennent du serveur), création d'un livre, Blender.
 'use strict';
 
 const STUDIO_MARKER = 'glbi-studio-st1';
@@ -39,18 +41,22 @@ function toast(text, error) {
   setTimeout(() => el.remove(), error ? 12000 : 5000);
 }
 
-async function act(action, extra = {}) {
-  let r;
+/** Action sans message affiché (validation en direct du formulaire). */
+async function post(action, extra = {}) {
   try {
     const res = await fetch('/__studio/action', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-glbi-studio': '1' },
       body: JSON.stringify({ action, ...extra }),
     });
-    r = await res.json().catch(() => ({ ok: false, error: `réponse ${res.status}` }));
+    return await res.json().catch(() => ({ ok: false, error: `réponse ${res.status}` }));
   } catch {
-    r = { ok: false, error: 'studio injoignable' };
+    return { ok: false, error: 'studio injoignable' };
   }
+}
+
+async function act(action, extra = {}) {
+  const r = await post(action, extra);
   if (r.confirm) {
     if (window.confirm(r.confirm)) return act(action, { ...extra, confirme: true });
     return r;
@@ -140,6 +146,7 @@ function renderBook() {
   $('book-head').innerHTML = `<p><strong>${h(b.title ?? '(sans titre)')}</strong> <span class="muted">· ${h(b.bookId ?? '?')} · ${b.scenes.length} scène(s)</span></p>
     <p class="mono small">${h(b.dir)}</p>
     ${b.typed ? `<p class="small muted">Saisi « ${h(b.typed)} », ramené à la casse réelle.</p>` : ''}
+    ${!b.icon ? '<p class="small warn-t">icon.png absent : icône du livre obligatoire (PNG carré ≥ 512 px), erreur de book:check tant qu’elle manque.</p>' : ''}
     ${b.errors.length ? `<ul class="checklines">${b.errors.map((e) => `<li class="err-t">${h(e)}</li>`).join('')}</ul>` : ''}`;
   const rows = b.scenes.map((s) => {
     let check = '<span class="muted">—</span>';
@@ -149,11 +156,18 @@ function renderBook() {
       if (s.check.warnings) parts.push(`<span class="warn-t">${s.check.warnings} avert.</span>`);
       check = parts.length ? parts.join(' ') : '<span class="ok-t">aucun message</span>';
     }
+    const bl = S.blender;
+    const openWhy = !s.blend.present ? `blender/${s.id}.blend absent` : !bl.exe ? 'chemin de blender.exe non réglé (section Blender)' : !bl.exeOk ? 'blender.exe introuvable (section Blender)' : '';
+    const tplWhy = !bl.gabarit ? 'aucun gabarit réglé (section Blender) : rien n’est créé' : !bl.gabaritOk ? 'gabarit introuvable (section Blender)' : '';
+    const blend = s.blend.present
+      ? `<span class="ok-t">${h(s.id)}.blend</span>${s.blend.mtime ? `<span class="date">${frDate(s.blend.mtime)}</span>` : ''}`
+      : `<span class="absent">absent</span><br><button class="btn small" data-act="creerDepuisGabarit" data-scene="${h(s.id)}" ${tplWhy ? `disabled title="${h(tplWhy)}"` : ''}>Créer depuis le gabarit</button>`;
     return `<tr><td class="mono">${h(s.id)}</td><td>${cell(s.glb, 'GLB')}</td><td>${cell(s.edit, 'edit.json')}</td>
-      <td>${s.blend.present ? `<span class="ok-t">${h(s.id)}.blend</span>` : '<span class="absent">absent</span>'}</td><td>${check}</td></tr>`;
+      <td>${blend}</td><td>${check}</td>
+      <td><button class="btn small" data-act="ouvrirBlender" data-scene="${h(s.id)}" ${openWhy ? `disabled title="${h(openWhy)}"` : ''}>Ouvrir dans Blender</button></td></tr>`;
   });
   $('scenes').innerHTML = b.scenes.length
-    ? `<table><thead><tr><th>Scène</th><th>scenes/&lt;id&gt;.glb</th><th>scenes/&lt;id&gt;.edit.json</th><th>blender/&lt;id&gt;.blend</th><th>Dernier book:check</th></tr></thead><tbody>${rows.join('')}</tbody></table>`
+    ? `<table><thead><tr><th>Scène</th><th>scenes/&lt;id&gt;.glb</th><th>scenes/&lt;id&gt;.edit.json</th><th>blender/&lt;id&gt;.blend</th><th>Dernier book:check</th><th>Blender</th></tr></thead><tbody>${rows.join('')}</tbody></table>`
     : '<p class="muted">Aucune scène lisible dans book.json.</p>';
   const c = b.check;
   if (!c) $('check').innerHTML = '<p class="small muted">book:check pas encore lancé depuis le studio sur ce livre.</p>';
@@ -264,7 +278,381 @@ function render() {
   renderTasks();
   renderTabs();
   renderPorts();
+  syncForm();
+  renderBlender();
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// book.json : formulaire du livre ouvert (ST2, spec-app-bureau.md §4)
+// ---------------------------------------------------------------------------------------------------------
+
+// F : formulaire du livre ouvert. `base` : empreinte de book.json quand le formulaire a été rempli (une empreinte différente
+// sur le disque = modification à la main) ; `loaded` : valeurs alors lues (formulaire modifié = valeurs différentes).
+let F = null;
+let validateTimer = null;
+
+const clone = (v) => JSON.parse(JSON.stringify(v));
+const sameStamp = (a, b) => (!a && !b) || (!!a && !!b && a.size === b.size && Math.abs(a.mtime - b.mtime) < 1);
+const getPath = (o, p) => p.split('.').reduce((x, k) => (x == null ? undefined : x[k]), o);
+function setPath(o, p, v) {
+  const ks = p.split('.');
+  const last = ks.pop();
+  const t = ks.reduce((x, k) => (x[k] ??= {}), o);
+  t[last] = v;
+}
+const formDirty = () => !!F && JSON.stringify(F.values) !== F.loaded;
+const scenePattern = () => new RegExp(S.schema.scenePattern);
+
+function loadForm() {
+  const b = S.book;
+  const c = b.file.content;
+  F = {
+    dir: b.dir,
+    base: b.file.stamp,
+    values: clone(c.form),
+    loaded: JSON.stringify(c.form),
+    bookIdLocked: c.bookIdOnDisk !== null,
+    unlock: c.unlockThreshold,
+    hasUnlock: Object.prototype.hasOwnProperty.call(c, 'unlockThreshold'),
+    readable: b.file.readable,
+    valid: b.file.valid,
+    exists: !!b.file.stamp,
+    errors: [],
+    saving: false,
+    reloadOn: null,
+    images: null,
+  };
+  renderForm();
+  validateSoon(0);
+}
+
+/** Appelé à chaque état reçu : formulaire (re)rempli au changement de livre ou après un enregistrement ; bandeau à jour. */
+function syncForm() {
+  const b = S.book;
+  if (!b) {
+    F = null;
+    $('book-form').innerHTML = '';
+    return;
+  }
+  if (!F || F.dir !== b.dir) return loadForm();
+  if (F.reloadOn && sameStamp(b.file.stamp, F.reloadOn)) return loadForm();
+  renderFormStatus();
+}
+
+function fieldText(label, path, extra = '') {
+  return `<label class="col">${h(label)} <input type="text" data-f="${path}" value="${h(getPath(F.values, path) ?? '')}" ${extra}></label>`;
+}
+
+function renderForm() {
+  const v = F.values;
+  const langs = S.schema.languages.join(', ');
+  $('book-form').innerHTML = `<form class="form-box" id="livre-form" autocomplete="off">
+    <h3>book.json</h3>
+    <div id="f-status"></div>
+    <div class="fields">
+      <label class="col">bookId <input type="text" data-f="bookId" value="${h(v.bookId)}" spellcheck="false" ${F.bookIdLocked ? 'readonly title="bookId d’un livre existant : non modifiable"' : ''}></label>
+      <label class="col">Langues <input type="text" value="${h(langs)}" readonly title="exigées par le contrat (bookSchema)"></label>
+    </div>
+    ${F.bookIdLocked ? '<p class="small muted">bookId d’un livre existant : non modifiable (clé de progression et nom du cache, figés après publication) ; pour un autre bookId, créer un autre livre.</p>' : ''}
+    <div class="fields">${fieldText('Titre FR', 'title.fr')}${fieldText('Titre EN', 'title.en')}${fieldText('Titre ES', 'title.es')}</div>
+    <div class="fields">
+      ${fieldText('Adresse imprimée (origin)', 'origin', 'spellcheck="false" placeholder="https://dino.editions-liger.com"')}
+      <label class="col">Image de partage (ogImage) <select data-f="ogImage" id="f-og"></select></label>
+    </div>
+    <div class="fields">
+      <label class="col narrow">Année <input type="number" min="2000" max="2100" data-f="legal.year" value="${h(v.legal.year)}"></label>
+      ${fieldText('Mention légale FR', 'legal.text.fr')}${fieldText('EN', 'legal.text.en')}${fieldText('ES', 'legal.text.es')}
+    </div>
+    ${F.hasUnlock ? `<p class="small muted">unlockThreshold : <code>${h(JSON.stringify(F.unlock))}</code> (mini-jeu, hors formulaire) : conservé tel quel.</p>` : ''}
+    <h3>Scènes</h3>
+    <p class="small muted">L’ordre des scènes est l’<strong>ordre de déblocage</strong> (progression du lecteur) : glisser une ligne, ou ↑ ↓. Retirer une scène laisse ses fichiers sur le disque. Renommer une scène est refusé (identifiant écrit dans le GLB par l’addon, clé de progression, QR imprimés) : retirer puis ajouter crée une autre scène.</p>
+    <ol class="scene-list" id="f-scenes"></ol>
+    <div class="row wrap">
+      <label class="col">Nouvelle scène <input type="text" id="f-new-id" spellcheck="false" placeholder="identifiant, ex. trex"></label>
+      <label class="col">Position <select id="f-new-pos"></select></label>
+      <button type="button" class="btn" data-act="ajouterScene">Ajouter</button>
+    </div>
+    <p class="small muted" id="f-tpl"></p>
+    <ul class="checklines" id="f-errors"></ul>
+    <div class="form-actions">
+      <button type="submit" class="btn primary" id="f-save">Enregistrer book.json</button>
+      <button type="button" class="btn" data-act="reprendre">Reprendre le fichier du disque</button>
+      <span class="small" id="f-dirty"></span>
+    </div>
+  </form>`;
+  renderSceneList();
+  renderFormStatus();
+}
+
+function renderSceneList() {
+  const list = F.values.scenes;
+  const disk = new Set((S.book?.scenes ?? []).map((s) => s.id));
+  $('f-scenes').innerHTML = list.map((id, i) => `<li draggable="true" data-i="${i}"><span class="grip" title="glisser">⠿</span>
+      <span class="sid">${h(id)}${disk.has(id) ? '' : ' <span class="badge warn">ajoutée, à enregistrer</span>'}</span>
+      <button type="button" class="btn small" data-act="monterScene" data-i="${i}" ${i === 0 ? 'disabled' : ''} title="monter">↑</button>
+      <button type="button" class="btn small" data-act="descendreScene" data-i="${i}" ${i === list.length - 1 ? 'disabled' : ''} title="descendre">↓</button>
+      <button type="button" class="btn small danger" data-act="retirerScene" data-i="${i}">Retirer</button></li>`).join('')
+    || '<li class="muted">aucune scène (au moins une est exigée)</li>';
+  const pos = $('f-new-pos');
+  pos.innerHTML = `<option value="${list.length}">à la fin</option>${list.map((id, i) => `<option value="${i}">avant ${h(id)} (n° ${i + 1})</option>`).join('')}`;
+}
+
+function renderFormStatus() {
+  if (!F || !$('f-status')) return;
+  const b = S.book;
+  const parts = [];
+  if (!F.saving && !sameStamp(b.file.stamp, F.base)) {
+    parts.push(`<div class="bandeau warn"><p><strong>book.json modifié à la main</strong> depuis sa lecture par le studio${b.file.stamp ? '' : ' (fichier supprimé)'}.
+      « Enregistrer » demandera confirmation avant d’écraser.</p>
+      <div class="actions"><button type="button" class="btn" data-act="reprendre">Reprendre le fichier du disque</button></div></div>`);
+  }
+  if (F.exists && !F.valid) {
+    parts.push(`<div class="bandeau err"><p>book.json ${F.readable ? 'refusé par bookSchema' : 'illisible'} à la lecture (messages ci-dessus) : formulaire prérempli avec ce qui est lisible ; rien n’est écrit tant que l’ensemble n’est pas valide.</p></div>`);
+  }
+  if (!F.exists) parts.push('<div class="bandeau err"><p>book.json absent du dossier : « Enregistrer » le crée.</p></div>');
+  $('f-status').innerHTML = parts.join('');
+  $('f-errors').innerHTML = F.errors.map((e) => `<li class="err-t">${h(e)}</li>`).join('');
+  $('f-save').disabled = F.errors.length > 0 || F.saving;
+  $('f-save').title = F.errors.length ? 'formulaire refusé par bookSchema : voir les messages' : '';
+  $('f-dirty').innerHTML = formDirty() ? '<span class="warn-t">modifications non enregistrées</span>' : '<span class="muted">formulaire identique au fichier lu</span>';
+  const bl = S.blender;
+  $('f-tpl').textContent = bl.gabarit
+    ? `Gabarit réglé : à l’enregistrement, copié en blender/<scène>.blend pour chaque scène ajoutée, seulement si le fichier n’existe pas.`
+    : 'Aucun gabarit de scène réglé (section Blender) : aucun .blend n’est créé à l’ajout.';
+  // Menu ogImage : images présentes dans le dossier du livre.
+  const imgs = JSON.stringify(b.images);
+  const og = $('f-og');
+  if (F.images !== imgs && document.activeElement !== og) {
+    F.images = imgs;
+    const cur = F.values.ogImage;
+    const opts = [['', '(aucune)'], ...b.images.map((i) => [i, i])];
+    if (cur && !b.images.includes(cur)) opts.push([cur, `${cur} (introuvable dans le dossier)`]);
+    og.innerHTML = opts.map(([v, l]) => `<option value="${h(v)}" ${v === cur ? 'selected' : ''}>${h(l)}</option>`).join('');
+  }
+}
+
+function validateSoon(ms = 250) {
+  clearTimeout(validateTimer);
+  validateTimer = setTimeout(async () => {
+    if (!F) return;
+    const dir = F.dir;
+    const r = await post('validerLivre', { livre: F.values });
+    if (!F || F.dir !== dir) return;
+    F.errors = r.erreurs ?? (r.error ? [r.error] : []);
+    renderFormStatus();
+  }, ms);
+}
+
+function formEdited() {
+  renderFormStatus();
+  validateSoon();
+}
+
+async function saveForm() {
+  if (!F || F.saving) return;
+  F.saving = true;
+  renderFormStatus();
+  const r = await act('enregistrerLivre', { livre: F.values, base: F.base });
+  F.saving = false;
+  if (r.erreurs) F.errors = r.erreurs;
+  if (r.ok) {
+    if (r.inchange) loadForm();
+    else F.reloadOn = r.stamp ?? null;
+  }
+  renderFormStatus();
+}
+
+function moveScene(from, to) {
+  const l = F.values.scenes;
+  if (to < 0 || to >= l.length || from === to) return;
+  const [x] = l.splice(from, 1);
+  l.splice(to, 0, x);
+  renderSceneList();
+  formEdited();
+}
+
+function addScene() {
+  const input = $('f-new-id');
+  const id = input.value.trim();
+  if (!id) return toast('identifiant de la scène vide', true);
+  if (!scenePattern().test(id)) return toast(`identifiant « ${id} » refusé : lettres, chiffres, _ et - (motif du contrat : ${S.schema.scenePattern})`, true);
+  if (F.values.scenes.includes(id)) return toast(`scène « ${id} » déjà dans la liste (renommer une scène est refusé)`, true);
+  const at = Number($('f-new-pos').value);
+  F.values.scenes.splice(Number.isInteger(at) ? at : F.values.scenes.length, 0, id);
+  input.value = '';
+  renderSceneList();
+  formEdited();
+}
+
+document.addEventListener('input', (ev) => {
+  const t = ev.target;
+  if (F && t.dataset?.f && t.closest('#livre-form')) {
+    setPath(F.values, t.dataset.f, t.value);
+    formEdited();
+  }
+});
+document.addEventListener('change', (ev) => {
+  const t = ev.target;
+  if (F && t.id === 'f-og') {
+    F.values.ogImage = t.value;
+    formEdited();
+  }
+});
+document.addEventListener('submit', (ev) => {
+  if (ev.target.id === 'livre-form') {
+    ev.preventDefault();
+    saveForm();
+  }
+});
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Enter' && ev.target.id === 'f-new-id') {
+    ev.preventDefault();
+    addScene();
+  }
+});
+
+// Glisser-déposer dans la liste des scènes.
+let dragFrom = null;
+document.addEventListener('dragstart', (ev) => {
+  const li = ev.target.closest?.('#f-scenes li[data-i]');
+  if (!li) return;
+  dragFrom = Number(li.dataset.i);
+  ev.dataTransfer.effectAllowed = 'move';
+  ev.dataTransfer.setData('text/plain', String(dragFrom));
+});
+document.addEventListener('dragover', (ev) => {
+  const li = ev.target.closest?.('#f-scenes li[data-i]');
+  if (!li || dragFrom === null) return;
+  ev.preventDefault();
+  for (const x of document.querySelectorAll('#f-scenes li.drag-over')) if (x !== li) x.classList.remove('drag-over');
+  li.classList.add('drag-over');
+});
+document.addEventListener('drop', (ev) => {
+  const li = ev.target.closest?.('#f-scenes li[data-i]');
+  if (!li || dragFrom === null) return;
+  ev.preventDefault();
+  const to = Number(li.dataset.i);
+  const from = dragFrom;
+  dragFrom = null;
+  moveScene(from, to);
+});
+document.addEventListener('dragend', () => {
+  dragFrom = null;
+  for (const x of document.querySelectorAll('#f-scenes li.drag-over')) x.classList.remove('drag-over');
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Créer un livre (ST2, §4)
+// ---------------------------------------------------------------------------------------------------------
+
+let createNameEdited = false;
+let createTimer = null;
+let createFilled = false;
+
+function createValues() {
+  const f = $('creer').elements;
+  const scene = f.scene.value.trim();
+  return {
+    livre: {
+      bookId: f.bookId.value,
+      title: { fr: f['title.fr'].value, en: f['title.en'].value, es: f['title.es'].value },
+      scenes: scene ? [scene] : [],
+      origin: f.origin.value,
+      ogImage: '',
+      legal: { year: f['legal.year'].value, text: { fr: f['legal.text.fr'].value, en: f['legal.text.en'].value, es: f['legal.text.es'].value } },
+    },
+    parent: f.parent.value,
+    dossier: f.dossier.value.trim(),
+  };
+}
+
+function fillCreateDefaults() {
+  if (createFilled || !S) return;
+  createFilled = true;
+  const f = $('creer').elements;
+  const text = `© ${S.year} Éditions Liger`;
+  f['legal.year'].value = S.year;
+  for (const l of ['fr', 'en', 'es']) f[`legal.text.${l}`].value = text;
+  if (S.book && !f.parent.value) f.parent.value = S.book.dir.replace(/[\\/][^\\/]+$/, '');
+}
+
+function validateCreateSoon() {
+  clearTimeout(createTimer);
+  createTimer = setTimeout(async () => {
+    const r = await post('validerLivre', { creation: true, livre: createValues().livre });
+    $('creer-erreurs').innerHTML = (r.erreurs ?? []).map((e) => `<li class="err-t">${h(e)}</li>`).join('');
+  }, 250);
+}
+
+$('creer').addEventListener('input', (ev) => {
+  const f = $('creer').elements;
+  if (ev.target.name === 'dossier') createNameEdited = f.dossier.value.trim() !== '';
+  if (ev.target.name === 'bookId' && !createNameEdited) f.dossier.value = f.bookId.value.trim();
+  validateCreateSoon();
+});
+
+$('creer-livre').addEventListener('toggle', () => {
+  fillCreateDefaults();
+  if ($('creer-livre').open) validateCreateSoon();
+});
+
+$('creer').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const v = createValues();
+  const r = await act('creerLivre', { ...v, dossier: v.dossier || v.livre.bookId.trim() });
+  if (r.erreurs) $('creer-erreurs').innerHTML = r.erreurs.map((e) => `<li class="err-t">${h(e)}</li>`).join('');
+  if (r.ok) {
+    $('creer').reset();
+    createFilled = false;
+    createNameEdited = false;
+    $('creer-livre').open = false;
+    $('creer-erreurs').innerHTML = '';
+  }
+});
+
+/** Dossier sans book.json à l'ouverture : formulaire de création prérempli (« Créer un livre ici »). */
+function offerCreateHere(c) {
+  const d = $('creer-livre');
+  d.open = true;
+  fillCreateDefaults();
+  const f = $('creer').elements;
+  f.parent.value = c.parent;
+  f.dossier.value = c.name;
+  createNameEdited = true;
+  d.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  toast(`« Créer un livre ici » : ${c.parent} → ${c.name}`);
+  validateCreateSoon();
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Blender (ST2, §8)
+// ---------------------------------------------------------------------------------------------------------
+
+let blenderKey = null;
+function renderBlender() {
+  const f = $('blender-form');
+  const bl = S.blender;
+  const key = JSON.stringify([bl.exe, bl.gabarit]);
+  if (blenderKey !== key && !f.contains(document.activeElement)) {
+    f.elements.exe.value = bl.exe ?? '';
+    f.elements.gabarit.value = bl.gabarit ?? '';
+    blenderKey = key;
+  }
+  $('blender-exe-etat').innerHTML = !bl.exe
+    ? `<span class="warn-t">non réglé</span>${S.studio.windows ? ' : « Détecter » cherche dans C:\\Program Files\\Blender Foundation\\Blender &lt;version&gt;\\' : ''}`
+    : bl.exeOk ? '<span class="ok-t">trouvé</span>' : '<span class="err-t">introuvable</span>';
+  $('blender-gabarit-etat').innerHTML = !bl.gabarit
+    ? '<span class="muted">aucun gabarit : rien n’est créé à l’ajout d’une scène</span>'
+    : bl.gabaritOk ? '<span class="ok-t">trouvé</span>' : '<span class="err-t">introuvable</span>';
+  for (const b of document.querySelectorAll('[data-quoi]')) b.hidden = !S.studio.windows;
+}
+
+$('blender-form').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const f = ev.target.elements;
+  blenderKey = null;
+  act('blender', { exe: f.exe.value, gabarit: f.gabarit.value });
+});
 
 // ---------------------------------------------------------------------------------------------------------
 // Journal
@@ -332,6 +720,32 @@ document.addEventListener('click', async (ev) => {
   if (!b || b.disabled) return;
   const a = b.dataset.act;
   if (a === 'journal') return selectJournal(b.dataset.nom);
+  // Formulaire de book.json (dans la page, rien n'est écrit avant « Enregistrer »).
+  if (a === 'ajouterScene') return addScene();
+  if (a === 'monterScene' || a === 'descendreScene') {
+    const i = Number(b.dataset.i);
+    return moveScene(i, a === 'monterScene' ? i - 1 : i + 1);
+  }
+  if (a === 'retirerScene') {
+    F.values.scenes.splice(Number(b.dataset.i), 1);
+    renderSceneList();
+    return formEdited();
+  }
+  if (a === 'reprendre') {
+    if (formDirty() && !window.confirm('Abandonner les modifications du formulaire et reprendre book.json du disque ?')) return;
+    return loadForm();
+  }
+  if (a === 'parcourir' && b.dataset.quoi) {
+    toast('boîte de dialogue ouverte (elle peut apparaître derrière le navigateur)');
+    const r = await act('parcourir', { quoi: b.dataset.quoi });
+    if (!r.chemin) return;
+    const target = { 'creer-parent': $('creer').elements.parent, 'blender-exe': $('blender-form').elements.exe, 'blender-gabarit': $('blender-form').elements.gabarit }[b.dataset.cible];
+    if (target) {
+      target.value = r.chemin;
+      target.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    return;
+  }
   const ask = a === 'demarrer' ? CONFIRMS[b.dataset.nom] : CONFIRMS[a];
   const q = ask?.();
   if (q && !window.confirm(q)) return;
@@ -340,22 +754,32 @@ document.addEventListener('click', async (ev) => {
     const r = await act('parcourir');
     if (r.chemin) {
       $('chemin').value = r.chemin;
-      await act('ouvrir', { chemin: r.chemin });
+      await openBook(r.chemin);
     }
     return;
   }
+  if (a === 'ouvrir') return openBook(b.dataset.chemin);
   const extra = {};
   if (b.dataset.nom) extra.nom = b.dataset.nom;
   if (b.dataset.chemin) extra.chemin = b.dataset.chemin;
   if (b.dataset.pid) extra.pid = Number(b.dataset.pid);
+  if (b.dataset.scene) extra.scene = b.dataset.scene;
   if (a === 'demarrer' && b.dataset.nom) selectJournal(b.dataset.nom);
+  if (a === 'detecterBlender') blenderKey = null;
   await act(a, extra);
 });
+
+/** Ouvrir un livre ; formulaire non enregistré : confirmation ; dossier sans book.json : « Créer un livre ici ». */
+async function openBook(chemin) {
+  if (formDirty() && !window.confirm('Le formulaire de book.json a des modifications non enregistrées. Ouvrir un autre livre quand même ?')) return;
+  const r = await act('ouvrir', { chemin });
+  if (r.creer) offerCreateHere(r.creer);
+}
 
 $('ouvrir').addEventListener('submit', (ev) => {
   ev.preventDefault();
   const chemin = $('chemin').value.trim();
-  if (chemin) act('ouvrir', { chemin });
+  if (chemin) openBook(chemin);
 });
 
 $('ports').addEventListener('submit', (ev) => {
@@ -406,6 +830,19 @@ function connect() {
   es.addEventListener('journal', (e) => {
     const d = JSON.parse(e.data);
     appendJournal(d.nom, d.lignes);
+  });
+  // Second lancement du studio (studio.cmd) alors que cet onglet est connecté : pas de nouvel onglet, annonce ici.
+  es.addEventListener('second', () => {
+    toast('Studio déjà lancé : second lancement ignoré, pas de nouvel onglet (cette page reste celle du studio).');
+    const title = document.title;
+    let n = 0;
+    const t = setInterval(() => {
+      document.title = n % 2 ? title : '● Studio déjà ouvert ici';
+      if (++n >= 10) {
+        clearInterval(t);
+        document.title = title;
+      }
+    }, 600);
   });
   es.addEventListener('bye', () => {
     stopped = true;

@@ -17,13 +17,30 @@
 // Chemins : repo et livre ramenés à leur casse réelle (`fs.realpathSync.native`) ; toutes les commandes partent de là.
 // Fichiers du studio : .studio/ (etat.json, pids.json, reglages.json, journaux/, book-check.json), ignoré par Git.
 // Aucun fichier de src/ n'importe ce dossier ; le contrôle de fin de build cherche le marqueur `glbi-studio-st1` dans out/.
+//
+// ST2 (spec-app-bureau.md §4, §8) : le studio est le seul outil qui écrit `book.json` (formulaire validé par `bookSchema`,
+// création d'un livre, ajout, retrait et ordre des scènes ; `bookId` d'un livre existant et renommage d'une scène refusés) ;
+// Blender ouvert sur `blender/<id>.blend` en processus indépendant (jamais arrêté par le studio), gabarit de scène copié
+// sans jamais écraser. Second lancement : la page n'est rouverte que si aucun onglet n'est connecté.
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ChildProcess } from 'node:child_process';
 import {
+  addedScenes,
+  composeBook,
+  folderNameError,
+  formFromBody,
+  NEW_BOOK_DIRS,
+  SCENE_PATTERN_SOURCE,
+  validateBook,
+} from './bookjson';
+import { LANGUAGES, RESERVED_SOURCE_DIR } from '../../src/schema/glbi';
+import {
+  copyTemplate,
   DEFAULT_PORTS,
+  detectBlender,
   gitState,
   MAX_RECENTS,
   OpenBook,
@@ -36,6 +53,7 @@ import {
   TESTS_PORT,
   writeEtat,
   writeReglages,
+  writeFileAtomic,
   type Etat,
   type Reglages,
 } from './book';
@@ -47,6 +65,7 @@ import {
   Journal,
   killTreeNow,
   launch,
+  launchIndependent,
   npmRun,
   openBrowser,
   PidFile,
@@ -407,6 +426,13 @@ interface Result {
   /** Changement de livre : confirmation demandée (processus en cours). */
   confirm?: string;
   chemin?: string | null;
+  /** Dossier sans book.json : « Créer un livre ici » proposé (ST2). */
+  creer?: { parent: string; name: string };
+  /** Messages de `bookSchema` (`formatIssues`) : book.json non écrit (ST2). */
+  erreurs?: string[];
+  /** Empreinte de book.json après enregistrement (base du formulaire, ST2). */
+  stamp?: { size: number; mtime: number } | null;
+  inchange?: boolean;
 }
 
 const fail = (error: string): Result => ({ ok: false, error });
@@ -664,7 +690,7 @@ function remember(dir: string): void {
 
 async function openBookAction(input: string, confirmed: boolean): Promise<Result> {
   const r = resolveBookDir(input, ROOT);
-  if ('error' in r) return fail(r.error);
+  if ('error' in r) return { ok: false, error: r.error, creer: r.createHere };
   if (book && samePath(book.info.dir, r.dir)) {
     book.refresh();
     changed();
@@ -685,26 +711,251 @@ async function openBookAction(input: string, confirmed: boolean): Promise<Result
   return { ok: true, message: `livre ouvert : ${r.dir}` };
 }
 
-/** « Parcourir… » (Windows) : boîte de dialogue de dossiers ouverte par le serveur (PowerShell, FolderBrowserDialog). */
-async function browse(): Promise<Result> {
+type BrowseKind = 'livre' | 'parent' | 'blender' | 'gabarit';
+
+/**
+ * « Parcourir… » (Windows) : boîte de dialogue ouverte par le serveur (PowerShell) : dossier d'un livre ou dossier parent d'un
+ * nouveau livre (`FolderBrowserDialog`), `blender.exe` ou gabarit `.blend` (`OpenFileDialog`, ST2).
+ */
+async function browse(kind: BrowseKind = 'livre'): Promise<Result> {
   if (!IS_WIN) return fail('« Parcourir… » n’existe que sous Windows : saisir le chemin');
-  const start = (book?.info.dir ?? realCase(path.join(ROOT, 'books')) ?? ROOT).replace(/'/g, "''");
-  const out = await powershell(
-    [
-      'Add-Type -AssemblyName System.Windows.Forms',
-      '$f = New-Object System.Windows.Forms.Form',
-      '$f.TopMost = $true',
+  const q = (x: string) => `'${x.replace(/'/g, "''")}'`;
+  const startDir = book?.info.dir ?? realCase(path.join(ROOT, 'books')) ?? ROOT;
+  let dialog: string[];
+  if (kind === 'livre' || kind === 'parent') {
+    const start = kind === 'parent' && book ? path.dirname(book.info.dir) : startDir;
+    dialog = [
       '$d = New-Object System.Windows.Forms.FolderBrowserDialog',
-      "$d.Description = 'Dossier du livre (contenant book.json)'",
-      '$d.ShowNewFolderButton = $false',
-      `$d.SelectedPath = '${start}'`,
+      `$d.Description = ${q(kind === 'parent' ? 'Dossier parent du nouveau livre' : 'Dossier du livre (contenant book.json)')}`,
+      `$d.ShowNewFolderButton = $${kind === 'parent' ? 'true' : 'false'}`,
+      `$d.SelectedPath = ${q(start)}`,
       'if ($d.ShowDialog($f) -eq [System.Windows.Forms.DialogResult]::OK) { $d.SelectedPath }',
-      '$f.Dispose()',
-    ].join('\n'),
+    ];
+  } else {
+    const current = kind === 'blender' ? reglages.blender.exe : reglages.blender.gabarit;
+    const initial = current ? path.dirname(current) : kind === 'blender' ? 'C:\\Program Files\\Blender Foundation' : startDir;
+    dialog = [
+      '$d = New-Object System.Windows.Forms.OpenFileDialog',
+      `$d.Title = ${q(kind === 'blender' ? 'Programme Blender (blender.exe)' : 'Gabarit de scène (.blend)')}`,
+      `$d.Filter = ${q(kind === 'blender' ? 'blender.exe|blender.exe|Programmes (*.exe)|*.exe' : 'Fichiers Blender (*.blend)|*.blend')}`,
+      `$d.InitialDirectory = ${q(initial)}`,
+      'if ($d.ShowDialog($f) -eq [System.Windows.Forms.DialogResult]::OK) { $d.FileName }',
+    ];
+  }
+  const out = await powershell(
+    ['Add-Type -AssemblyName System.Windows.Forms', '$f = New-Object System.Windows.Forms.Form', '$f.TopMost = $true', ...dialog, '$f.Dispose()'].join('\n'),
     30 * 60_000,
   );
   const chemin = out.split(/\r?\n/).map((l) => l.trim()).find(Boolean) ?? null;
   return { ok: true, chemin };
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// book.json (ST2, §4) : formulaire, enregistrement, création d'un livre
+// ---------------------------------------------------------------------------------------------------------
+
+const unquote = (v: unknown) => String(v ?? '').trim().replace(/^"(.*)"$/, '$1').trim();
+const isStamp = (v: unknown): v is { size: number; mtime: number } =>
+  !!v && typeof v === 'object' && Number.isFinite((v as { size?: unknown }).size) && Number.isFinite((v as { mtime?: unknown }).mtime);
+
+const BOOKID_REFUSED = (id: string) =>
+  `changer le bookId d’un livre existant est refusé (« ${id} » : clé de progression et nom du cache, figés après publication) : créer un autre livre`;
+
+/** Objet composé du formulaire pour le livre ouvert : `unlockThreshold` du disque repris tel quel. */
+function composeForOpenBook(form: ReturnType<typeof formFromBody>) {
+  const c = book!.info.file.content;
+  return composeBook(form, { unlockThreshold: c.unlockThreshold });
+}
+
+/** Validation en direct du formulaire (aucune écriture) : messages de `bookSchema` et refus du studio. */
+function validateForm(body: Record<string, unknown>): Result {
+  const form = formFromBody(body.livre);
+  if (body.creation === true) {
+    const v = validateBook(composeBook(form));
+    return { ok: v.ok, erreurs: v.ok ? [] : v.errors };
+  }
+  if (!book) return fail('aucun livre ouvert');
+  const errors: string[] = [];
+  const diskId = book.info.file.content.bookIdOnDisk;
+  if (diskId !== null && form.bookId.trim() !== diskId) errors.push(BOOKID_REFUSED(diskId));
+  const v = validateBook(composeForOpenBook(form));
+  if (!v.ok) errors.push(...v.errors);
+  return { ok: !errors.length, erreurs: errors };
+}
+
+/** Copie du gabarit pour des scènes nouvellement ajoutées (seulement si `blender/<id>.blend` n'existe pas). */
+function templateFor(dir: string, ids: string[]): string[] {
+  const g = reglages.blender.gabarit;
+  if (!g || !ids.length) return [];
+  return ids.map((id) => {
+    const c = copyTemplate(dir, id, g);
+    studioJournal.note(c.message);
+    return c.message;
+  });
+}
+
+/**
+ * « Enregistrer » : book.json du formulaire, validé par `bookSchema` (jamais écrit s'il est refusé), clés dans l'ordre du
+ * contrat ; contenu identique : rien n'est écrit ; fichier modifié à la main depuis la lecture (`base`) ou invalide sur le
+ * disque : confirmation ; fichier temporaire puis renommage ; gabarit copié pour les scènes ajoutées.
+ */
+async function saveBook(body: Record<string, unknown>): Promise<Result> {
+  if (!book) return fail('aucun livre ouvert');
+  const dir = book.info.dir;
+  const target = path.join(dir, 'book.json');
+  book.reload();
+  const disk = book.info.file;
+  const form = formFromBody(body.livre);
+  const diskId = disk.content.bookIdOnDisk;
+  if (diskId !== null && form.bookId.trim() !== diskId) return fail(BOOKID_REFUSED(diskId));
+  const v = validateBook(composeForOpenBook(form));
+  if (!v.ok) return { ok: false, error: `book.json non écrit : refusé par bookSchema (${v.errors.length} message(s))`, erreurs: v.errors };
+  let existing: string | null = null;
+  try {
+    existing = fs.readFileSync(target, 'utf8');
+  } catch {
+    // absent
+  }
+  if (existing === v.text) return { ok: true, message: 'book.json identique au formulaire : rien écrit', stamp: disk.stamp, inchange: true };
+  if (body.confirme !== true && disk.stamp) {
+    if (!isStamp(body.base) || body.base.size !== disk.stamp.size || Math.abs(body.base.mtime - disk.stamp.mtime) >= 1) {
+      return { ok: false, confirm: 'book.json a été modifié à la main depuis sa lecture par le studio. L’écraser avec le contenu du formulaire ?' };
+    }
+    if (!disk.valid) {
+      return { ok: false, confirm: `book.json actuel ${disk.readable ? 'refusé par bookSchema' : 'illisible'} : le remplacer par le formulaire (ce qui n’était pas lisible est perdu) ?` };
+    }
+  }
+  try {
+    await writeFileAtomic(target, v.text);
+  } catch (e) {
+    return fail(`book.json non écrit : ${(e as Error).message}`);
+  }
+  studioJournal.note(`book.json écrit : ${target}`);
+  const before = disk.readable ? disk.content.form.scenes : [];
+  const msgs = templateFor(dir, addedScenes(before, v.book.scenes));
+  book.reload();
+  changed();
+  return { ok: true, message: ['book.json enregistré', ...msgs].join(' ; '), stamp: book.info.file.stamp };
+}
+
+/**
+ * « Créer un livre » : dossier parent + nom du dossier (proposé = `bookId`) ; book.json (au moins une scène, validé par
+ * `bookSchema`), dossiers scenes/, blender/, images/, icons/, sounds/ ; gabarit copié pour les scènes ; livre ouvert.
+ * Un dossier existant est accepté s'il ne contient pas de book.json (« Créer un livre ici »).
+ */
+async function createBook(body: Record<string, unknown>): Promise<Result> {
+  const task = Object.values(entries).find((e) => e.kind === 'task' && running(e));
+  if (task) return fail(`${task.label} en cours : l'arrêter ou attendre sa fin avant de créer un livre`);
+  const parentTyped = unquote(body.parent);
+  if (!parentTyped) return fail('dossier parent vide');
+  const parent = realCase(path.resolve(ROOT, parentTyped));
+  if (!parent || !fs.statSync(parent).isDirectory()) return fail(`dossier parent introuvable : ${path.resolve(ROOT, parentTyped)}`);
+  const name = String(body.dossier ?? '').trim();
+  const nameError = folderNameError(name);
+  if (nameError) return fail(nameError);
+  const form = formFromBody(body.livre);
+  const v = validateBook(composeBook(form));
+  if (!v.ok) return { ok: false, error: `livre non créé : book.json refusé par bookSchema (${v.errors.length} message(s))`, erreurs: v.errors };
+  const target = path.join(parent, name);
+  if (fs.existsSync(target)) {
+    if (!fs.statSync(target).isDirectory()) return fail(`${target} existe et n'est pas un dossier`);
+    if (fs.existsSync(path.join(target, 'book.json'))) return fail(`${target} contient déjà un book.json : l'ouvrir plutôt que créer un livre`);
+  }
+  const live = PROCESSES.filter((n) => running(entries[n]));
+  if (book && live.length && body.confirme !== true) {
+    return { ok: false, confirm: `Le nouveau livre sera ouvert, ce qui arrête : ${live.map((n) => entries[n].label).join(', ')}. Continuer ?` };
+  }
+  try {
+    for (const d of NEW_BOOK_DIRS) fs.mkdirSync(path.join(target, d), { recursive: true });
+    await writeFileAtomic(path.join(target, 'book.json'), v.text);
+  } catch (e) {
+    return fail(`livre non créé : ${(e as Error).message}`);
+  }
+  const real = realCase(target) ?? target;
+  studioJournal.note(`livre créé : ${real} (book.json, ${NEW_BOOK_DIRS.map((d) => `${d}/`).join(', ')})`);
+  const msgs = templateFor(real, v.book.scenes);
+  const opened = await openBookAction(real, true);
+  if (!opened.ok) return { ok: false, error: `livre créé dans ${real}, mais non ouvert : ${opened.error}` };
+  return { ok: true, message: [`livre créé : ${real}`, ...msgs, 'icon.png à ajouter (icône du livre, obligatoire)'].join(' ; ') };
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Blender (ST2, §8)
+// ---------------------------------------------------------------------------------------------------------
+
+function saveReglages(): void {
+  try {
+    writeReglages(REGLAGES_FILE, reglages);
+  } catch (e) {
+    studioJournal.note(`.studio/reglages.json non écrit (${(e as Error).message})`);
+  }
+}
+
+/** Réglages de Blender : `blender.exe` et gabarit (vides : non réglés) ; chaque fichier doit exister. */
+function setBlender(body: Record<string, unknown>): Result {
+  const exe = unquote(body.exe);
+  const gabarit = unquote(body.gabarit);
+  const exeReal = exe ? realCase(path.resolve(exe)) : null;
+  if (exe && (!exeReal || !stampOf(exeReal))) return fail(`blender.exe introuvable : ${path.resolve(exe)}`);
+  const gabaritReal = gabarit ? realCase(path.resolve(ROOT, gabarit)) : null;
+  if (gabarit && (!gabaritReal || !stampOf(gabaritReal))) return fail(`gabarit introuvable : ${path.resolve(ROOT, gabarit)}`);
+  if (gabaritReal && !/\.blend$/i.test(gabaritReal)) return fail('gabarit : un fichier .blend est attendu');
+  reglages.blender = { exe: exeReal, gabarit: gabaritReal, detecte: true };
+  saveReglages();
+  changed();
+  return { ok: true, message: 'réglages de Blender enregistrés' };
+}
+
+function detectBlenderAction(): Result {
+  const found = detectBlender();
+  reglages.blender.detecte = true;
+  if (!found) {
+    saveReglages();
+    return fail('aucun blender.exe trouvé dans C:\\Program Files\\Blender Foundation\\Blender <version>\\ : saisir son chemin');
+  }
+  reglages.blender.exe = found;
+  saveReglages();
+  changed();
+  return { ok: true, message: `Blender détecté : ${found}` };
+}
+
+/** Scène de book.json (lue sur le disque) ; sinon message. */
+function sceneOf(v: unknown): { id: string; blend: string } | { error: string } {
+  if (!book) return { error: 'aucun livre ouvert' };
+  const id = String(v ?? '');
+  if (!book.info.scenes.some((s) => s.id === id)) return { error: `scène « ${id} » absente de book.json (enregistrer d'abord le formulaire)` };
+  return { id, blend: path.join(book.info.dir, RESERVED_SOURCE_DIR, `${id}.blend`) };
+}
+
+/** « Ouvrir dans Blender » : `blender/<id>.blend`, processus indépendant (non géré, non arrêté, hors journal). */
+async function openInBlender(body: Record<string, unknown>): Promise<Result> {
+  const sc = sceneOf(body.scene);
+  if ('error' in sc) return fail(sc.error);
+  const rel = `${RESERVED_SOURCE_DIR}/${sc.id}.blend`;
+  if (!stampOf(sc.blend)) return fail(`${rel} absent : « Ouvrir dans Blender » désactivé (« Créer depuis le gabarit » ou « Enregistrer sous » dans Blender)`);
+  const exe = reglages.blender.exe;
+  if (!exe) return fail('chemin de blender.exe non réglé (section Blender)');
+  if (!stampOf(exe)) return fail(`blender.exe introuvable : ${exe} (section Blender)`);
+  const r = await launchIndependent(exe, sc.blend, path.dirname(sc.blend));
+  if ('error' in r) {
+    studioJournal.note(`Blender non lancé sur ${sc.blend} : ${r.error}`);
+    return fail(`Blender non lancé : ${r.error}`);
+  }
+  studioJournal.note(`Blender ouvert sur ${sc.blend}${r.pid ? ` (PID ${r.pid})` : ''} : processus indépendant, ni suivi ni arrêté par le studio`);
+  return { ok: true, message: `Blender ouvert sur ${rel}` };
+}
+
+/** « Créer depuis le gabarit » : copie en `blender/<id>.blend` seulement si le fichier n'existe pas ; sans gabarit, rien. */
+function createFromTemplate(body: Record<string, unknown>): Result {
+  const sc = sceneOf(body.scene);
+  if ('error' in sc) return fail(sc.error);
+  const g = reglages.blender.gabarit;
+  if (!g) return fail('aucun gabarit de scène réglé (section Blender) : rien n’est créé');
+  const c = copyTemplate(book!.info.dir, sc.id, g);
+  studioJournal.note(c.message);
+  book!.refresh();
+  changed();
+  return c.copied ? { ok: true, message: c.message } : fail(c.message);
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -783,6 +1034,15 @@ function view() {
     portIssues,
     relance,
     journals: journals().map((j) => ({ name: j.name, label: JOURNAL_LABELS[j.name as Name | 'studio'] })),
+    // ST2 : contrat de book.json envoyé tel quel (aucune règle recopiée dans la page), réglages de Blender.
+    schema: { scenePattern: SCENE_PATTERN_SOURCE, languages: LANGUAGES },
+    year: new Date().getFullYear(),
+    blender: {
+      exe: reglages.blender.exe,
+      exeOk: !!reglages.blender.exe && !!stampOf(reglages.blender.exe),
+      gabarit: reglages.blender.gabarit,
+      gabaritOk: !!reglages.blender.gabarit && !!stampOf(reglages.blender.gabarit),
+    },
   };
 }
 
@@ -895,7 +1155,21 @@ async function action(body: Record<string, unknown>): Promise<Result> {
     case 'ouvrir':
       return openBookAction(String(body.chemin ?? ''), body.confirme === true);
     case 'parcourir':
-      return browse();
+      return browse((['livre', 'parent', 'blender', 'gabarit'] as const).find((k) => k === body.quoi) ?? 'livre');
+    case 'validerLivre':
+      return validateForm(body);
+    case 'enregistrerLivre':
+      return saveBook(body);
+    case 'creerLivre':
+      return createBook(body);
+    case 'blender':
+      return setBlender(body);
+    case 'detecterBlender':
+      return detectBlenderAction();
+    case 'ouvrirBlender':
+      return openInBlender(body);
+    case 'creerDepuisGabarit':
+      return createFromTemplate(body);
     case 'oublierRecent':
       reglages.recents = reglages.recents.filter((r) => !samePath(r, String(body.chemin ?? '')));
       writeReglages(REGLAGES_FILE, reglages);
@@ -991,8 +1265,18 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse): void {
   if (p === '/__studio/events') return events(req, res);
   if (p === '/__studio/etat') return sendJson(res, 200, view());
   if (p === '/__studio/ping') {
-    if (url.searchParams.get('second') === '1') studioJournal.note('second lancement du studio : page rouverte, pas de second studio');
-    return sendJson(res, 200, { studio: STUDIO_MARKER, pid: process.pid, root: ROOT });
+    // Second lancement (point ajouté à la clôture de ST1) : la page n'est rouverte que si aucun onglet n'est connecté ;
+    // sinon, les onglets connectés l'annoncent.
+    const onglets = clients.size;
+    if (url.searchParams.get('second') === '1') {
+      studioJournal.note(
+        onglets
+          ? `second lancement du studio : ${onglets} onglet(s) déjà connecté(s), pas de nouvel onglet ni de second studio`
+          : 'second lancement du studio : aucun onglet connecté, page rouverte ; pas de second studio',
+      );
+      if (onglets) send('second', { at: Date.now() });
+    }
+    return sendJson(res, 200, { studio: STUDIO_MARKER, pid: process.pid, root: ROOT, onglets });
   }
   if (p === '/__studio/journal') {
     const n = url.searchParams.get('nom') ?? '';
@@ -1055,7 +1339,7 @@ function parseArgs(argv: string[]): { port: number; open: boolean } {
 
 /** Port du studio occupé : studio déjà lancé (page ouverte) ou autre processus (PID signalé). */
 async function portTaken(p: number): Promise<never> {
-  const ping = await new Promise<{ studio?: string; pid?: number } | null>((resolve) => {
+  const ping = await new Promise<{ studio?: string; pid?: number; onglets?: number } | null>((resolve) => {
     const r = http.get({ host: HOST, port: p, path: '/__studio/ping?second=1', headers: { host: `${HOST}:${p}` }, timeout: 3_000 }, (res) => {
       let t = '';
       res.on('data', (d) => (t += d));
@@ -1071,8 +1355,12 @@ async function portTaken(p: number): Promise<never> {
     r.on('error', () => resolve(null));
   });
   if (ping?.studio === STUDIO_MARKER) {
-    console.log(`studio : déjà lancé (PID ${ping.pid}) : page http://${HOST}:${p}/ ouverte dans le navigateur ; cette fenêtre se ferme dans 5 s`);
-    openBrowser(`http://${HOST}:${p}/`);
+    if (ping.onglets) {
+      console.log(`studio : déjà lancé (PID ${ping.pid}), page http://${HOST}:${p}/ déjà ouverte dans un onglet (pas de nouvel onglet) ; cette fenêtre se ferme dans 5 s`);
+    } else {
+      console.log(`studio : déjà lancé (PID ${ping.pid}) : page http://${HOST}:${p}/ ouverte dans le navigateur ; cette fenêtre se ferme dans 5 s`);
+      openBrowser(`http://${HOST}:${p}/`);
+    }
     await sleep(5_000);
     process.exit(0);
   }
@@ -1100,6 +1388,13 @@ async function main(): Promise<void> {
   }
 
   await findRestes();
+  // Blender (ST2, §8) : chemin détecté au premier lancement, puis modifiable dans la page.
+  if (!reglages.blender.detecte) {
+    reglages.blender.detecte = true;
+    if (!reglages.blender.exe) reglages.blender.exe = detectBlender();
+    if (reglages.blender.exe) studioJournal.note(`Blender détecté : ${reglages.blender.exe}`);
+    saveReglages();
+  }
   // Livre ouvert au dernier lancement (aucun processus démarré).
   const last = reglages.recents[0];
   if (last) {

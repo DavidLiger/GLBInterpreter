@@ -1,6 +1,6 @@
 <!doctype html>
-<!-- Studio de fabrication d'un livre (ST1, spec-app-bureau.md). Servi par scripts/studio/server.ts ; jamais dans un livre
-     (marqueur cherché par le contrôle de fin de build : glbi-studio-st1). -->
+<!-- Studio de fabrication d'un livre (ST1, ST2 : book.json et Blender ; spec-app-bureau.md). Servi par scripts/studio/server.ts ;
+     jamais dans un livre (marqueur cherché par le contrôle de fin de build : glbi-studio-st1). -->
 <html lang="fr" data-studio="glbi-studio-st1">
 <head>
   <meta charset="utf-8">
@@ -30,7 +30,39 @@
         <button type="button" class="btn" data-act="parcourir" id="parcourir" hidden>Parcourir…</button>
       </form>
       <div id="recents"></div>
+      <details id="creer-livre" class="sub">
+        <summary>Créer un livre</summary>
+        <form id="creer" autocomplete="off">
+          <div class="row">
+            <label class="grow col">Dossier parent
+              <input name="parent" type="text" spellcheck="false" placeholder="ex. D:\Livres">
+            </label>
+            <button type="button" class="btn" data-act="parcourir" data-quoi="parent" data-cible="creer-parent" hidden>Parcourir…</button>
+          </div>
+          <div class="fields">
+            <label class="col">bookId <input name="bookId" type="text" spellcheck="false" placeholder="ex. dino"></label>
+            <label class="col">Nom du dossier <input name="dossier" type="text" spellcheck="false" placeholder="= bookId"></label>
+            <label class="col">Première scène <input name="scene" type="text" spellcheck="false" placeholder="ex. trex"></label>
+          </div>
+          <div class="fields">
+            <label class="col">Titre FR <input name="title.fr" type="text"></label>
+            <label class="col">Titre EN <input name="title.en" type="text"></label>
+            <label class="col">Titre ES <input name="title.es" type="text"></label>
+          </div>
+          <label class="col">Adresse imprimée (origin) <input name="origin" type="text" spellcheck="false" placeholder="https://dino.editions-liger.com"></label>
+          <div class="fields">
+            <label class="col narrow">Année <input name="legal.year" type="number" min="2000" max="2100"></label>
+            <label class="col">Mention légale FR <input name="legal.text.fr" type="text"></label>
+            <label class="col">EN <input name="legal.text.en" type="text"></label>
+            <label class="col">ES <input name="legal.text.es" type="text"></label>
+          </div>
+          <p class="small muted">Crée book.json et les dossiers scenes/, blender/, images/, icons/, sounds/, puis ouvre le livre. L’icône du livre (icon.png, PNG carré ≥ 512 px) est à ajouter ensuite. Le bookId ne pourra plus changer.</p>
+          <ul class="checklines" id="creer-erreurs"></ul>
+          <button type="submit" class="btn primary" id="creer-bouton">Créer le livre</button>
+        </form>
+      </details>
       <div id="book-head"></div>
+      <div id="book-form"></div>
       <div id="scenes"></div>
       <div id="check"></div>
     </section>
@@ -57,6 +89,29 @@
       </div>
       <div class="tabs" id="tabs" role="tablist"></div>
       <pre id="journal" tabindex="0" aria-label="Journal"></pre>
+    </section>
+
+    <section class="card wide" id="blender">
+      <h2>Blender</h2>
+      <form id="blender-form" autocomplete="off">
+        <div class="row">
+          <label class="grow col">Programme blender.exe
+            <input name="exe" type="text" spellcheck="false" placeholder="C:\Program Files\Blender Foundation\Blender 4.5\blender.exe">
+          </label>
+          <button type="button" class="btn" data-act="parcourir" data-quoi="blender" data-cible="blender-exe" hidden>Parcourir…</button>
+          <button type="button" class="btn" data-act="detecterBlender">Détecter</button>
+        </div>
+        <p class="small" id="blender-exe-etat"></p>
+        <div class="row">
+          <label class="grow col">Gabarit de scène (.blend, facultatif)
+            <input name="gabarit" type="text" spellcheck="false" placeholder="ex. D:\Livres\gabarit-scene.blend">
+          </label>
+          <button type="button" class="btn" data-act="parcourir" data-quoi="gabarit" data-cible="blender-gabarit" hidden>Parcourir…</button>
+        </div>
+        <p class="small" id="blender-gabarit-etat"></p>
+        <button type="submit" class="btn">Enregistrer</button>
+      </form>
+      <p class="small muted">« Ouvrir dans Blender » (tableau des scènes) lance Blender sur <code>blender/&lt;scène&gt;.blend</code> du livre ouvert, en processus indépendant : ni suivi, ni journal, jamais arrêté par le studio (« Tout arrêter et quitter » compris). Le gabarit (GLBI_ROOT, empty de cible, lampe Sun, réglages d’export) est copié en <code>blender/&lt;scène&gt;.blend</code> à l’ajout d’une scène et par « Créer depuis le gabarit », jamais par-dessus un fichier existant ; sans gabarit, rien n’est créé.</p>
     </section>
 
     <section class="card wide" id="reglages">
