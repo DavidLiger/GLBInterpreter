@@ -138,6 +138,14 @@ export function npmRun(root: string, script: string, args: string[] = []): Launc
   return { file: process.execPath, args: [npmCli(), '--prefix', root, 'run', script, ...(args.length ? ['--', ...args] : [])] };
 }
 
+/**
+ * `npx <paquet> <args>` sans shell (ST3) : `node <npm-cli.js> exec --yes --package=<paquet> -- <commande> <args>` ; `--yes`
+ * évite la question d'installation (de toute façon sautée sans terminal). Le dossier de départ est choisi par l'appelant.
+ */
+export function npmExec(pkg: string, command: string, args: string[] = []): Launch {
+  return { file: process.execPath, args: [npmCli(), 'exec', '--yes', `--package=${pkg}`, '--', command, ...args] };
+}
+
 /** Ligne de commande affichable (guillemets autour des arguments à espaces). */
 export const showCommand = (l: Launch): string =>
   [l.file, ...l.args].map((a) => (/[\s"]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)).join(' ');

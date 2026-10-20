@@ -1,8 +1,10 @@
-// Studio GLBI (ST1, ST2) : page locale servie par scripts/studio/server.ts. JS sans framework.
+// Studio GLBI (ST1, ST2, ST3) : page locale servie par scripts/studio/server.ts. JS sans framework.
 // État reçu par le flux /__studio/events (événements `etat`, `journal`, `bye`, `second`) ; toute action par POST
 // /__studio/action (JSON, en-tête x-glbi-studio). Marqueur du studio (contrôle de fin de build) : glbi-studio-st1.
 // ST2 : formulaire de book.json (valeurs gardées dans la page, validées par le serveur avec bookSchema ; aucune règle du
 // contrat recopiée ici : le motif des identifiants de scène et les langues viennent du serveur), création d'un livre, Blender.
+// ST3 : essais sur téléphone (publication d'essai et QR d'essai, adresse Wi-Fi et QR du serveur de test, QR d'impression) ;
+// images des QR par GET /__studio/qr (sans effet).
 'use strict';
 
 const STUDIO_MARKER = 'glbi-studio-st1';
@@ -243,7 +245,10 @@ function renderTasks() {
     const m = byName(n);
     const run = isRunning(m);
     const needBook = n === 'book-check' || n === 'build' || n === 'dev-book';
-    const blocked = needBook && !S.book ? 'aucun livre ouvert' : m.exclusive && ex && ex.name !== n ? `${ex.label} en cours` : '';
+    const pub = byName('publier');
+    const blocked = needBook && !S.book ? 'aucun livre ouvert'
+      : m.exclusive && ex && ex.name !== n ? `${ex.label} en cours`
+      : (n === 'build' || n === 'suite') && isRunning(pub) ? `${pub.label} en cours (elle envoie out/)` : '';
     return `<div class="proc"><div class="proc-head"><span class="proc-name">${h(m.label)}</span>${m.startedAt ? badge(m) : '<span class="badge">jamais lancée</span>'}
       <span class="proc-meta">${[timeOf(m), m.pid ? `PID ${m.pid}` : ''].filter(Boolean).join(' · ')}</span>
       ${run ? `<button class="btn" data-act="arreter" data-nom="${n}">Arrêter</button>` : `<button class="btn primary" data-act="demarrer" data-nom="${n}" ${blocked ? `disabled title="${h(blocked)}"` : ''}>Lancer</button>`}
@@ -282,6 +287,7 @@ function render() {
   renderPorts();
   syncForm();
   renderBlender();
+  renderPhone();
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -663,6 +669,170 @@ $('blender-form').addEventListener('submit', (ev) => {
 });
 
 // ---------------------------------------------------------------------------------------------------------
+// Essais sur téléphone (ST3, spec-app-bureau.md §7, §9)
+// ---------------------------------------------------------------------------------------------------------
+
+/** QR affiché par visionneuse (un seul à la fois : une caméra en lit un sans hésiter), adresse IP choisie. */
+const QV = { essai: 0, reseau: 0, impression: 0 };
+let lanIp = null;
+
+/** Remplace le contenu seulement s'il a changé (pas de clignotement des images, focus gardé). */
+function setHtml(id, html) {
+  const el = $(id);
+  if (el.dataset.html === html) return;
+  el.dataset.html = html;
+  el.innerHTML = html;
+}
+
+/** Visionneuse : menu des QR, ‹ ›, image, adresse codée. `items` : { label, url, src }. */
+function qrViewer(key, items) {
+  if (!items.length) return '';
+  const i = Math.min(QV[key], items.length - 1);
+  QV[key] = i;
+  const it = items[i];
+  return `<div class="qr"><div class="qr-nav">
+      <button type="button" class="btn small" data-act="qrPrec" data-q="${key}" ${i === 0 ? 'disabled' : ''} title="précédent">‹</button>
+      <select data-q-select="${key}" aria-label="QR affiché">${items.map((x, j) => `<option value="${j}" ${j === i ? 'selected' : ''}>${h(x.label)}</option>`).join('')}</select>
+      <button type="button" class="btn small" data-act="qrSuiv" data-q="${key}" ${i === items.length - 1 ? 'disabled' : ''} title="suivant">›</button>
+    </div>
+    <img src="${h(it.src)}" alt="QR : ${h(it.url)}">
+    <div class="qr-url">${h(it.url)}</div></div>`;
+}
+
+const qrSrc = (params) => `/__studio/qr?${new URLSearchParams(params).toString()}`;
+
+let essaiKey = null;
+function renderEssaiForm() {
+  const f = $('essai-form');
+  if (essaiKey !== S.essai.projet && !f.contains(document.activeElement)) {
+    f.elements.projet.value = S.essai.projet;
+    essaiKey = S.essai.projet;
+  }
+}
+
+function taskLine(m, startLabel, primary, blocked) {
+  const run = isRunning(m);
+  return `<div class="line">${run
+    ? `<button type="button" class="btn" data-act="arreter" data-nom="${m.name}">Arrêter</button>`
+    : `<button type="button" class="btn ${primary ? 'primary' : ''}" data-act="demarrer" data-nom="${m.name}" ${blocked ? `disabled title="${h(blocked)}"` : ''}>${h(startLabel)}</button>`}
+    ${m.startedAt ? badge(m) : ''}<span class="proc-meta">${timeOf(m)}</span>
+    <button type="button" class="btn small" data-act="journal" data-nom="${m.name}">journal</button></div>
+    ${m.detail ? `<p class="small">${h(m.detail)}</p>` : ''}`;
+}
+
+function renderEssai() {
+  const E3 = S.essai;
+  const b = S.book;
+  const pub = byName('publier');
+  const cf = byName('cloudflare');
+  const out = S.outputs.out;
+  const writer = ['build', 'suite'].map(byName).find(isRunning);
+  const c = E3.cloudflare;
+  const cfState = !c ? '<span class="muted">non vérifiée (vérifiée au début de chaque publication)</span>'
+    : c.connecte === true ? `<span class="ok-t">connecté</span>${c.compte ? ` <span class="small">${h(c.compte)}</span>` : ''}`
+    : c.connecte === false ? '<span class="err-t">non connecté</span>'
+    : '<span class="warn-t">réponse de wrangler non reconnue (voir le journal)</span>';
+  const pubBlocked = !b ? 'aucun livre ouvert' : !out.ok ? `${out.message} : reconstruire le livre (Build du livre)`
+    : writer ? `${writer.label} en cours` : isRunning(cf) ? `${cf.label} en cours` : '';
+  const p = E3.publication;
+  const parts = [`<p class="small">Adresse d’essai : <a href="${h(E3.adresse)}" target="_blank" rel="noopener">${h(E3.adresse)}</a> · wrangler ${h(E3.wrangler)} (npx)</p>`];
+  parts.push(`<p class="small"><span class="badge ${out.ok ? 'ok' : 'warn'}">${out.ok ? 'à jour' : 'refusé'}</span> ${h(out.message)}</p>`);
+  if (!out.ok && b) parts.push('<div class="line"><button type="button" class="btn small" data-act="demarrer" data-nom="build">Build du livre</button></div>');
+  parts.push(`<p class="small"><strong>Cloudflare</strong> ${cfState}</p>`);
+  parts.push(taskLine(cf, 'Se connecter à Cloudflare', c?.connecte === false, isRunning(pub) ? `${pub.label} en cours` : ''));
+  parts.push(taskLine(pub, 'Publier un essai', true, pubBlocked));
+  if (!b) {
+    // rien de plus
+  } else if (!p) {
+    parts.push('<p class="small muted">Pas encore de publication d’essai de ce livre depuis le studio.</p>');
+  } else {
+    parts.push(`<p class="small">Dernière publication : <a href="${h(p.adresse)}" target="_blank" rel="noopener">${h(p.adresse)}</a>, le ${frDate(Date.parse(p.date))} (build du ${frDate(Date.parse(p.build))})
+      ${E3.outPublie ? '<span class="badge ok">out/ actuel publié</span>' : '<span class="badge warn">out/ reconstruit depuis : à republier</span>'}</p>`);
+    if (p.deploiement) parts.push(`<p class="small muted">Ce déploiement : ${h(p.deploiement)}</p>`);
+    const items = E3.qr.map((q) => ({ label: q.scene, url: q.url, src: qrSrc({ type: 'essai', scene: q.scene, v: p.date }) }));
+    parts.push(items.length ? qrViewer('essai', items) : '<p class="small warn-t">QR d’essai absents de dist/qr-essai/ : publier à nouveau.</p>');
+  }
+  parts.push(`<ol><li>Appareil photo de l’iPhone sur le QR d’essai : la scène s’ouvre dans Safari (adresse d’essai).</li>
+    <li>Partager → « Sur l’écran d’accueil », puis ouvrir le livre depuis son icône (le téléchargement se fait dans l’app).</li>
+    <li>Dans l’app : menu → « Scanner un QR code » lit les mêmes QR (racine de la page).</li></ol>
+    <p class="small muted">Les QR d’essai (dist/qr-essai/&lt;bookId&gt;/) codent l’adresse d’essai ; out/book.json garde l’adresse imprimée (origin) : on publie en essai ce qui sera publié en vrai.</p>`);
+  setHtml('essai', parts.join(''));
+}
+
+function renderReseau() {
+  const R = S.reseau;
+  const srv = byName('serveur-test');
+  const out = S.outputs.out;
+  const parts = [];
+  if (!R.adresses.length) {
+    setHtml('reseau', '<p class="small warn-t">Aucune adresse du réseau local trouvée (Wi-Fi coupé ?).</p>');
+    return;
+  }
+  if (!R.adresses.some((a) => a.ip === lanIp)) lanIp = R.adresses[0].ip;
+  parts.push(`<label class="col">Adresse du PC sur le réseau local <select data-lan-ip>${R.adresses.map((a) => `<option value="${h(a.ip)}" ${a.ip === lanIp ? 'selected' : ''}>${h(a.ip)} — ${h(a.nom)}${a.virtuelle ? ' (virtuelle ?)' : ''}</option>`).join('')}</select></label>`);
+  const origin = `http://${lanIp}:${R.port}`;
+  const blocked = !S.book ? 'aucun livre ouvert' : !out.ok ? `${out.message} : reconstruire le livre` : '';
+  if (srv.state !== 'prêt') {
+    parts.push(`<div class="line">${isRunning(srv)
+      ? `${badge(srv)} <span class="small">${h(srv.detail ?? 'démarrage du serveur de test…')}</span>`
+      : `<button type="button" class="btn primary" data-act="demarrer" data-nom="serveur-test" ${blocked ? `disabled title="${h(blocked)}"` : ''}>Démarrer le serveur de test</button>`}</div>`);
+    if (!isRunning(srv) && blocked) parts.push(`<p class="small warn-t">${h(blocked)}</p>`);
+  } else {
+    const scenes = S.book ? S.book.scenes.map((x) => x.id) : [];
+    const items = [
+      ...scenes.map((id) => ({ label: `scène ${id}`, url: `${origin}/s/${id}/`, src: qrSrc({ type: 'reseau', ip: lanIp, scene: id, v: R.port }) })),
+      { label: 'menu du livre', url: `${origin}/`, src: qrSrc({ type: 'reseau', ip: lanIp, scene: '', v: R.port }) },
+    ];
+    parts.push(qrViewer('reseau', items));
+  }
+  parts.push(`<ol><li>Téléphone sur le même Wi-Fi que le PC.</li>
+    <li>Chrome du téléphone : <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code> → Enabled, saisir <code class="qr-url">${h(origin)}</code>, puis Relaunch (une fois, et à refaire si l’adresse change).</li>
+    <li>Filmer le QR avec l’appareil photo, ouvrir l’adresse dans Chrome.</li>
+    <li>Après un essai raté : « Clear site data » (Effacer les données du site) avant de recommencer.</li></ol>
+    <p class="small muted">Le téléphone ne joint pas le PC : choisir une autre adresse ci-dessus, ou autoriser Node.js sur les réseaux privés dans le pare-feu de Windows.</p>`);
+  setHtml('reseau', parts.join(''));
+}
+
+function renderImpression() {
+  const b = S.book;
+  const I = S.impression;
+  if (!b) return setHtml('impression', '<p class="small muted">Aucun livre ouvert.</p>');
+  if (!I.items.length) {
+    return setHtml('impression', `<p class="small muted">Aucun QR d’impression dans dist/qr/${h(b.bookId ?? '?')}/ : « Build du livre » les écrit.</p>`);
+  }
+  const items = I.items.map((q) => ({ label: q.fichier.replace(/\.svg$/, ''), url: q.url ?? '(adresse inconnue : urls.txt absent)', src: qrSrc({ type: 'impression', scene: q.scene, v: I.date ?? 0 }) }));
+  setHtml('impression', `<p class="small">dist/qr/${h(b.bookId)}/ — build du ${I.date ? frDate(I.date) : '?'}</p>
+    ${qrViewer('impression', items)}
+    <ol><li>Ouvrir le livre sur le téléphone (serveur de test par Wi-Fi, ou essai publié).</li>
+    <li>Menu du livre → « Scanner un QR code », filmer le QR affiché ici : la scène s’ouvre (adresse imprimée = origin de book.json).</li></ol>
+    <p class="small muted">Ces QR codent l’adresse imprimée : l’appareil photo du téléphone ouvrirait cette adresse, pas l’essai.</p>`);
+}
+
+function renderPhone() {
+  renderEssaiForm();
+  renderEssai();
+  renderReseau();
+  renderImpression();
+}
+
+$('essai-form').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  essaiKey = null;
+  act('reglerEssai', { projet: ev.target.elements.projet.value });
+});
+
+document.addEventListener('change', (ev) => {
+  const t = ev.target;
+  if (t.dataset?.qSelect) {
+    QV[t.dataset.qSelect] = Number(t.value);
+    renderPhone();
+  } else if (t.dataset && 'lanIp' in t.dataset) {
+    lanIp = t.value;
+    renderPhone();
+  }
+});
+
+// ---------------------------------------------------------------------------------------------------------
 // Journal
 // ---------------------------------------------------------------------------------------------------------
 
@@ -719,6 +889,7 @@ const CONFIRMS = {
     const live = ['serveur-test', 'dev'].filter((n) => isRunning(byName(n))).map((n) => byName(n).label);
     return live.length ? `Le build arrête d’abord : ${live.join(', ')}, puis supprime out/ et .next/. Continuer ?` : null;
   },
+  publier: () => `Publier out/ (livre « ${S.book?.bookId ?? '?'} ») sur ${S.essai.adresse} ? L’essai précédent est remplacé (même adresse : installation et progression gardées sur les téléphones).`,
   arreterRestes: () => 'Arrêter les processus restés d’un studio précédent (arbre complet) ?',
   arreterPid: () => 'Arrêter ce processus (arbre complet) ?',
 };
@@ -749,6 +920,12 @@ document.addEventListener('click', async (ev) => {
   if (a === 'explHaut') return E.liste?.parent && explGo(E.liste.parent);
   if (a === 'explAller') return explGo(b.dataset.chemin);
   if (a === 'explChoisir') return explChoose();
+  // Visionneuses de QR (ST3).
+  if (a === 'qrPrec' || a === 'qrSuiv') {
+    QV[b.dataset.q] += a === 'qrPrec' ? -1 : 1;
+    if (QV[b.dataset.q] < 0) QV[b.dataset.q] = 0;
+    return renderPhone();
+  }
   const ask = a === 'demarrer' ? CONFIRMS[b.dataset.nom] : CONFIRMS[a];
   const q = ask?.();
   if (q && !window.confirm(q)) return;

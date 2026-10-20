@@ -22,8 +22,16 @@
 // création d'un livre, ajout, retrait et ordre des scènes ; `bookId` d'un livre existant et renommage d'une scène refusés) ;
 // Blender ouvert sur `blender/<id>.blend` en processus indépendant (jamais arrêté par le studio), gabarit de scène copié
 // sans jamais écraser. Second lancement : la page n'est rouverte que si aucun onglet n'est connecté.
+//
+// ST3 (spec-app-bureau.md §7, §9) : « Publier un essai » (tâche : `wrangler whoami` puis `wrangler pages deploy <repo>/out
+// --project-name <projet> --branch main`, par `npx wrangler@4.151.1`, sans shell, depuis le dossier parent du repo) refusé si
+// out/ n'est pas le livre ouvert, en mode normal, à jour ; jamais en même temps qu'un build ou la suite complète (qui
+// suppriment out/). « Se connecter à Cloudflare » (`wrangler login`, navigateur ouvert). QR d'essai écrits dans
+// dist/qr-essai/<bookId>/<id>.svg (→ https://<projet>.pages.dev/s/<id>), build inchangé. Adresse Wi-Fi du PC et QR du serveur
+// de test, QR d'impression du build (dist/qr/<bookId>/) : affichés dans la page (GET /__studio/qr, sans effet).
 import fs from 'node:fs';
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { ChildProcess } from 'node:child_process';
@@ -59,8 +67,30 @@ import {
   writeFileAtomic,
   type BrowseKind,
   type Etat,
+  type Publication,
   type Reglages,
 } from './book';
+import {
+  DEPLOY_BRANCH,
+  lanAddresses,
+  lanSceneUrl,
+  parseDeploy,
+  parseWhoami,
+  printQrFile,
+  printQrs,
+  projectNameError,
+  projectUrl,
+  qrSvg,
+  readOutBook,
+  safeId,
+  trialQrFile,
+  trialQrScenes,
+  WRANGLER_PACKAGE,
+  WRANGLER_VERSION,
+  writeTrialQrs,
+  type DeployResult,
+  type WhoAmI,
+} from './essai';
 import {
   belongsToRepo,
   exited,
@@ -70,6 +100,7 @@ import {
   killTreeNow,
   launch,
   launchIndependent,
+  npmExec,
   npmRun,
   openBrowser,
   PidFile,
@@ -131,7 +162,7 @@ const CASE_WARNING =
 // ---------------------------------------------------------------------------------------------------------
 
 type ProcessName = 'atelier' | 'dev' | 'serveur-test';
-type TaskName = 'book-check' | 'dev-book' | 'build' | 'test-engine' | 'test-schema' | 'suite';
+type TaskName = 'book-check' | 'dev-book' | 'build' | 'test-engine' | 'test-schema' | 'suite' | 'publier' | 'cloudflare';
 type Name = ProcessName | TaskName;
 type State = 'arrêté' | 'démarrage' | 'prêt' | 'en cours' | 'terminé' | 'erreur';
 
@@ -163,6 +194,8 @@ const JOURNAL_LABELS: Record<Name | 'studio', string> = {
   'test-engine': 'test:engine',
   'test-schema': 'test:schema',
   suite: 'Suite complète',
+  publier: 'Publication d’essai',
+  cloudflare: 'Connexion à Cloudflare',
 };
 
 function entry(name: Name, kind: Entry['kind'], exclusive = false): Entry {
@@ -182,7 +215,13 @@ const entries: Record<Name, Entry> = {
   'test-engine': entry('test-engine', 'task'),
   'test-schema': entry('test-schema', 'task'),
   suite: entry('suite', 'task', true),
+  // ST3 : la publication lit out/ (refusée pendant un build ou la suite, qui le suppriment, et inversement) ; la connexion
+  // n'écrit rien du repo.
+  publier: entry('publier', 'task'),
+  cloudflare: entry('cloudflare', 'task'),
 };
+/** Tâches qui suppriment ou réécrivent out/ : jamais pendant une publication d'essai. */
+const OUT_WRITERS: TaskName[] = ['build', 'suite'];
 const PROCESSES: ProcessName[] = ['atelier', 'dev', 'serveur-test'];
 const studioJournal = new Journal('studio', JOURNAUX);
 const journals = (): Journal[] => [studioJournal, ...Object.values(entries).map((e) => e.journal)];
@@ -198,6 +237,8 @@ let restes: Leftover[] = [];
 let portIssues: { port: number; usage: string; reason: string | null; owners: { pid: number; command: string; ours: boolean }[] }[] = [];
 /** Processus arrêtés par un changement de livre, proposés à la relance. */
 let relance: ProcessName[] | null = null;
+/** Connexion de wrangler à Cloudflare, lue au dernier `wrangler whoami` (début de chaque publication) ou après `login`. */
+let cloudflare: (WhoAmI & { date: number }) | null = null;
 
 const running = (e: Entry) => e.state === 'démarrage' || e.state === 'prêt' || e.state === 'en cours';
 const exclusiveRunning = (): Entry | null => Object.values(entries).find((e) => e.exclusive && running(e)) ?? null;
@@ -215,10 +256,10 @@ function saveEtat(): void {
   }
 }
 
-/** Lance `l` pour `e` depuis le repo (casse réelle) ; PID noté dans .studio/pids.json jusqu'à sa fin. */
-function spawnFor(e: Entry, l: Launch): ChildProcess {
-  e.journal.note(`$ ${showCommand(l)}`);
-  const child = launch(l, ROOT, e.journal);
+/** Lance `l` pour `e` depuis le repo (casse réelle), ou `cwd` ; PID noté dans .studio/pids.json jusqu'à sa fin. */
+function spawnFor(e: Entry, l: Launch, cwd: string = ROOT): ChildProcess {
+  e.journal.note(`$ ${showCommand(l)}${cwd !== ROOT ? `   (depuis ${cwd})` : ''}`);
+  const child = launch(l, cwd, e.journal);
   e.child = child;
   const pid = child.pid;
   if (pid) pids.add({ pid, nom: e.name, debut: new Date().toISOString(), commande: showCommand(l) });
@@ -260,12 +301,25 @@ interface Step {
   /** Contrôle ou préparation ; un message = refus (tâche en erreur). */
   before?: () => Promise<string | null> | string | null;
   launch: () => Launch;
-  after?: () => void;
+  /** Dossier de départ (défaut : le repo). */
+  cwd?: string;
+  /** Lecture de la sortie de l'étape (code 0) ; un message = échec de la tâche (ST3 : `wrangler whoami`). */
+  check?: (lines: string[]) => string | null;
+  /** Après succès ; un texte = détail affiché à la fin de la tâche (ST3 : adresse publiée). */
+  after?: () => void | string | Promise<void | string>;
+}
+
+/** Sorties d'un processus terminé lues jusqu'au bout (les dernières lignes peuvent arriver après `exit`) ; 2 s au plus. */
+function streamsClosed(child: ChildProcess): Promise<void> {
+  const done = (st: ChildProcess['stdout']) => !st || st.destroyed || st.readableEnded;
+  if (done(child.stdout) && done(child.stderr)) return Promise.resolve();
+  return Promise.race([new Promise<void>((r) => child.once('close', () => r())), sleep(2_000).then(() => undefined)]);
 }
 
 /** Tâche : étapes dans l'ordre, arrêt à la première en échec. Renvoie vrai si toutes ont réussi. */
 async function runTask(e: Entry, steps: Step[]): Promise<boolean> {
   begin(e, 'en cours');
+  let doneDetail: string | null = null;
   for (const [i, s] of steps.entries()) {
     e.detail = steps.length > 1 ? `étape ${i + 1}/${steps.length} : ${s.label}` : null;
     changed();
@@ -285,19 +339,34 @@ async function runTask(e: Entry, steps: Step[]): Promise<boolean> {
       finish(e, 'erreur', null, (err as Error).message);
       return false;
     }
-    const code = await exited(spawnFor(e, l));
+    const lines: string[] = [];
+    // Sortie du programme seulement (pas les lignes « [studio] » : la commande affichée, les notes).
+    if (s.check) e.journal.onLine = (line) => void (line.startsWith('[studio] ') || lines.push(line));
+    const child = spawnFor(e, l, s.cwd);
+    const code = await exited(child);
+    if (s.check) {
+      await streamsClosed(child);
+      e.journal.onLine = null;
+    }
     if (e.stopping) break;
     if (code !== 0) {
       finish(e, 'erreur', code, steps.length > 1 ? `échec à l'étape ${i + 1} : ${s.label}` : null);
       return false;
     }
-    s.after?.();
+    const failed = s.check ? s.check(lines) : null;
+    if (failed) {
+      e.journal.note(failed);
+      finish(e, 'erreur', null, failed);
+      return false;
+    }
+    const d = await s.after?.();
+    if (typeof d === 'string') doneDetail = d;
   }
   if (e.stopping) {
     finish(e, 'arrêté', null);
     return false;
   }
-  finish(e, 'terminé', 0);
+  finish(e, 'terminé', 0, doneDetail);
   return true;
 }
 
@@ -589,7 +658,17 @@ function startTask(name: TaskName): Result {
     const ex = exclusiveRunning();
     if (ex) return fail(`une seule tâche à la fois parmi build, suite complète et dev:book : ${ex.label} en cours`);
   }
-  const needsBook = name === 'book-check' || name === 'build' || name === 'dev-book';
+  if (OUT_WRITERS.includes(name) && running(entries.publier)) {
+    return fail('publication d’essai en cours (elle envoie out/) : attendre sa fin, ou l’arrêter');
+  }
+  if (name === 'publier') {
+    const w = OUT_WRITERS.map((n) => entries[n]).find(running);
+    if (w) return fail(`${w.label} en cours (il supprime et réécrit out/) : attendre sa fin avant de publier`);
+  }
+  if ((name === 'publier' && running(entries.cloudflare)) || (name === 'cloudflare' && running(entries.publier))) {
+    return fail(`${entries[name === 'publier' ? 'cloudflare' : 'publier'].label} en cours : attendre sa fin`);
+  }
+  const needsBook = name === 'book-check' || name === 'build' || name === 'dev-book' || name === 'publier';
   if (needsBook) {
     const noBook = requireBook();
     if (noBook) return fail(noBook);
@@ -658,9 +737,149 @@ function startTask(name: TaskName): Result {
       ];
       break;
     }
+    case 'publier': {
+      const r = publishSteps();
+      if ('error' in r) return fail(r.error);
+      steps = r.steps;
+      void runTask(e, steps);
+      return { ok: true, message: `publication d’essai lancée vers ${projectUrl(reglages.essai.projet)} (premier lancement : téléchargement de wrangler par npx, une minute environ)` };
+    }
+    case 'cloudflare':
+      steps = [
+        {
+          label: 'wrangler login (navigateur ouvert, 2 min au plus)',
+          cwd: path.dirname(ROOT),
+          launch: () => npmExec(WRANGLER_PACKAGE, 'wrangler', ['login']),
+        },
+        whoamiStep(),
+      ];
+      void runTask(e, steps);
+      return { ok: true, message: 'connexion à Cloudflare : autoriser wrangler dans la page du navigateur qui s’ouvre (2 min au plus)' };
   }
   void runTask(e, steps);
   return { ok: true, message: `lancement : ${e.label}${name === 'suite' ? ' (environ 9 min sous Windows)' : ''}` };
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Publication d'essai (ST3, §9)
+// ---------------------------------------------------------------------------------------------------------
+
+/** `wrangler whoami` : connexion lue dans la sortie (code 0 dans les deux cas) ; non connecté = échec de la tâche. */
+function whoamiStep(): Step {
+  return {
+    label: 'connexion à Cloudflare (wrangler whoami)',
+    cwd: path.dirname(ROOT),
+    launch: () => npmExec(WRANGLER_PACKAGE, 'wrangler', ['whoami']),
+    check: (lines) => {
+      const w = parseWhoami(lines);
+      cloudflare = { ...w, date: Date.now() };
+      changed();
+      if (w.connecte === false) return 'wrangler n’est pas connecté à Cloudflare : « Se connecter à Cloudflare », puis publier à nouveau';
+      return null;
+    },
+  };
+}
+
+/**
+ * Étapes de « Publier un essai » : out/ du livre ouvert, mode normal, à jour (refus sinon, avant et juste avant l'envoi) ;
+ * wrangler connecté ; `wrangler pages deploy <repo>/out --project-name <projet> --branch main` depuis le dossier parent du
+ * repo (méthode d'Î16) ; puis QR d'essai écrits et publication notée dans .studio/etat.json.
+ */
+function publishSteps(): { steps: Step[] } | { error: string } {
+  const refused = (v: OutputVerdict) => `${v.message} : publication refusée, reconstruire le livre ouvert (Build du livre)`;
+  const first = outVerdict();
+  if (!first.ok || !first.record) return { error: refused(first) };
+  const projet = reglages.essai.projet;
+  const bad = projectNameError(projet);
+  if (bad) return { error: bad };
+  const rec = first.record;
+  const parent = path.dirname(ROOT);
+  const outDir = path.join(ROOT, 'out');
+  let deploy: DeployResult = { termine: false, deploiement: null, alias: null };
+  return {
+    steps: [
+      whoamiStep(),
+      {
+        label: `envoi de out/ vers ${projectUrl(projet)}`,
+        cwd: parent,
+        before: () => {
+          const v = outVerdict();
+          if (!v.ok || !v.record) return refused(v);
+          if (v.record.date !== rec.date) return 'out/ reconstruit pendant la publication : relancer « Publier un essai »';
+          return null;
+        },
+        launch: () => npmExec(WRANGLER_PACKAGE, 'wrangler', ['pages', 'deploy', outDir, '--project-name', projet, '--branch', DEPLOY_BRANCH]),
+        check: (lines) => {
+          deploy = parseDeploy(lines);
+          return null;
+        },
+        after: async () => {
+          const e = entries.publier;
+          const adresse = projectUrl(projet);
+          if (!deploy.termine) e.journal.note('fin du déploiement non reconnue dans la sortie de wrangler (code 0) : vérifier l’adresse');
+          const ob = readOutBook(OUT_BOOK);
+          let qr = 'QR d’essai non écrits';
+          if ('error' in ob) e.journal.note(`QR d’essai non écrits : ${ob.error}`);
+          else {
+            try {
+              const urls = await writeTrialQrs(ROOT, ob.bookId, projet, ob.scenes);
+              qr = `${urls.length} QR d’essai dans dist/qr-essai/${ob.bookId}/`;
+              e.journal.note(`${qr} (${adresse}/s/<scène>)`);
+            } catch (err) {
+              e.journal.note(`QR d’essai non écrits : ${(err as Error).message}`);
+            }
+            const pub: Publication = {
+              projet, adresse, deploiement: deploy.deploiement ?? deploy.alias, date: new Date().toISOString(), build: rec.date,
+              source: rec.source, commit: rec.commit, scenes: ob.scenes,
+            };
+            etat.publications[ob.bookId] = pub;
+            saveEtat();
+          }
+          const extra = deploy.alias ? ` ; alias ${deploy.alias} : la branche ${DEPLOY_BRANCH} n’est pas la production du projet, l’adresse stable n’est pas mise à jour` : '';
+          e.journal.note(`publié : ${adresse}${deploy.deploiement ? ` (ce déploiement : ${deploy.deploiement})` : ''}${extra}`);
+          return `publié sur ${adresse}${deploy.deploiement ? ` (ce déploiement : ${deploy.deploiement})` : ''} ; ${qr}${extra}`;
+        },
+      },
+    ],
+  };
+}
+
+/** Projet Cloudflare Pages des essais (`.studio/reglages.json`). */
+function setTrialProject(body: Record<string, unknown>): Result {
+  const projet = String(body.projet ?? '').trim();
+  const bad = projectNameError(projet);
+  if (bad) return fail(bad);
+  if (running(entries.publier)) return fail('publication d’essai en cours : changer de projet après sa fin');
+  reglages.essai = { projet };
+  saveReglages();
+  changed();
+  return { ok: true, message: `projet d’essai : ${projet} (${projectUrl(projet)})` };
+}
+
+/** Port du serveur de test (celui du serveur lancé, sinon le réglage). */
+const testPort = () => entries['serveur-test'].port ?? reglages.ports.test;
+
+/**
+ * GET /__studio/qr (sans effet) : `type=essai` (dist/qr-essai/<bookId>/<id>.svg), `type=impression` (dist/qr/<bookId>/), ou
+ * `type=reseau&ip=<adresse du PC>[&scene=<id>]` (adresse du serveur de test par le réseau local, QR fait à la demande).
+ */
+async function serveQr(url: URL, res: http.ServerResponse): Promise<void> {
+  const type = url.searchParams.get('type');
+  const scene = url.searchParams.get('scene') ?? '';
+  const bookId = book?.info.bookId ?? '';
+  let svg: string | null = null;
+  if (type === 'essai' || type === 'impression') {
+    const f = type === 'essai' ? trialQrFile(ROOT, bookId, scene) : printQrFile(ROOT, bookId, scene);
+    if (f) svg = fs.readFileSync(f, 'utf8');
+  } else if (type === 'reseau') {
+    const ip = url.searchParams.get('ip') ?? '';
+    const known = lanAddresses(os.networkInterfaces()).some((a) => a.ip === ip);
+    const sceneOk = scene === '' || (safeId(scene) && !!book?.info.scenes.some((s) => s.id === scene));
+    if (known && sceneOk) svg = await qrSvg(lanSceneUrl(ip, testPort(), scene || null));
+  }
+  if (!svg) return sendJson(res, 404, fail('QR introuvable'));
+  res.writeHead(200, { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+  res.end(svg);
 }
 
 /** Résumé par scène du dernier book:check (`--report`), pour le tableau du livre. */
@@ -699,7 +918,7 @@ async function openBookAction(input: string, confirmed: boolean): Promise<Result
     changed();
     return { ok: true, message: 'livre déjà ouvert' };
   }
-  const task = Object.values(entries).find((e) => e.kind === 'task' && running(e));
+  const task = Object.values(entries).find((e) => e.kind === 'task' && e.name !== 'cloudflare' && running(e));
   if (task) return fail(`${task.label} en cours : l'arrêter ou attendre sa fin avant de changer de livre`);
   const live = PROCESSES.filter((n) => running(entries[n]));
   if (book && live.length && !confirmed) {
@@ -844,7 +1063,7 @@ async function saveBook(body: Record<string, unknown>): Promise<Result> {
  * Un dossier existant est accepté s'il ne contient pas de book.json (« Créer un livre ici »).
  */
 async function createBook(body: Record<string, unknown>): Promise<Result> {
-  const task = Object.values(entries).find((e) => e.kind === 'task' && running(e));
+  const task = Object.values(entries).find((e) => e.kind === 'task' && e.name !== 'cloudflare' && running(e));
   if (task) return fail(`${task.label} en cours : l'arrêter ou attendre sa fin avant de créer un livre`);
   const parentTyped = unquote(body.parent);
   if (!parentTyped) return fail('dossier parent vide');
@@ -1045,6 +1264,27 @@ function view() {
       gabarit: reglages.blender.gabarit,
       gabaritOk: !!reglages.blender.gabarit && !!stampOf(reglages.blender.gabarit),
     },
+    // ST3 : publication d'essai, réseau local (serveur de test), QR d'impression du build.
+    essai: trialView(),
+    reseau: { adresses: lanAddresses(os.networkInterfaces()), port: testPort() },
+    impression: book?.info.bookId ? printQrs(ROOT, book.info.bookId) : { items: [], date: null },
+  };
+}
+
+function trialView() {
+  const projet = reglages.essai.projet;
+  const id = book?.info.bookId ?? null;
+  const pub = id ? (etat.publications[id] ?? null) : null;
+  const out = etat.out;
+  return {
+    projet,
+    adresse: projectUrl(projet),
+    wrangler: WRANGLER_VERSION,
+    cloudflare,
+    publication: pub,
+    /** out/ actuel = celui de la dernière publication de ce livre. */
+    outPublie: !!pub && !!out && out.date === pub.build && samePath(out.source, pub.source),
+    qr: pub && id ? trialQrScenes(ROOT, id, pub.scenes ?? []).map((s) => ({ scene: s, url: `${pub.adresse}/s/${s}` })) : [],
   };
 }
 
@@ -1190,6 +1430,8 @@ async function action(body: Record<string, unknown>): Promise<Result> {
       return openInBlender(body);
     case 'creerDepuisGabarit':
       return createFromTemplate(body);
+    case 'reglerEssai':
+      return setTrialProject(body);
     case 'oublierRecent':
       reglages.recents = reglages.recents.filter((r) => !samePath(r, String(body.chemin ?? '')));
       writeReglages(REGLAGES_FILE, reglages);
@@ -1284,6 +1526,10 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse): void {
   if (req.method !== 'GET' && req.method !== 'HEAD') return forbid(req, res, `méthode ${req.method} non admise`);
   if (p === '/__studio/events') return events(req, res);
   if (p === '/__studio/etat') return sendJson(res, 200, view());
+  if (p === '/__studio/qr') {
+    serveQr(url, res).catch((e: Error) => sendJson(res, 500, fail(e.message)));
+    return;
+  }
   if (p === '/__studio/ping') {
     // Second lancement (point ajouté à la clôture de ST1) : la page n'est rouverte que si aucun onglet n'est connecté ;
     // sinon, les onglets connectés l'annoncent.

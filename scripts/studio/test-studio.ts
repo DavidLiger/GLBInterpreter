@@ -3,12 +3,28 @@
 // temporaire (dossier réservé blender/, fichier le plus récent, ouverture d'un livre, casse réelle).
 // ST2 : forme écrite de book.json (ordre des clés, octet pour octet), formulaire, champs conservés, gabarit sans écraser,
 // version de Blender la plus récente, nom de dossier d'un nouveau livre.
+// ST3 : nom du projet Pages, sorties de wrangler (whoami, pages deploy), adresses du réseau local, QR d'essai et d'impression,
+// réglages et état (projet par défaut, publications).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { listSourceFiles } from '../book-check';
-import { copyTemplate, listDir, newestSourceFile, OpenBook, resolveBookDir, walkSource, writeFileAtomic } from './book';
+import { copyTemplate, listDir, newestSourceFile, OpenBook, readEtat, readReglages, resolveBookDir, walkSource, writeFileAtomic } from './book';
+import {
+  DEFAULT_PROJECT,
+  lanAddresses,
+  lanSceneUrl,
+  parseDeploy,
+  parseWhoami,
+  printQrs,
+  printQrScene,
+  projectNameError,
+  trialQrFile,
+  trialQrScenes,
+  trialSceneUrl,
+  writeTrialQrs,
+} from './essai';
 import {
   addedScenes,
   composeBook,
@@ -50,7 +66,7 @@ function test(name: string, fn: () => void | Promise<void>): void {
   else ok();
 }
 
-console.log('test:studio — studio de fabrication (ST1, ST2)');
+console.log('test:studio — studio de fabrication (ST1, ST2, ST3)');
 
 test('Host et Origin : 127.0.0.1 et localhost du port seulement', () => {
   assert.equal(hostAllowed('127.0.0.1:4000', undefined, 4000), true);
@@ -345,6 +361,86 @@ test('gabarit copié seulement si blender/<id>.blend n’existe pas ; écriture 
     assert.ok('error' in notBook && notBook.createHere?.name === 'images', '« Créer un livre ici » proposé');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ST3 : projet Pages, sorties de wrangler, adresses des QR', () => {
+  assert.equal(projectNameError('glbi-essai'), null);
+  assert.ok(projectNameError(''));
+  assert.ok(projectNameError('Glbi-Essai'), 'majuscules refusées');
+  assert.ok(projectNameError('-essai') && projectNameError('essai-'), 'tiret au bord refusé');
+  assert.ok(projectNameError('a'.repeat(59)));
+  assert.equal(trialSceneUrl('glbi-essai', 'trex'), 'https://glbi-essai.pages.dev/s/trex');
+  assert.equal(lanSceneUrl('192.168.1.20', 8001, 'trex'), 'http://192.168.1.20:8001/s/trex/');
+  assert.equal(lanSceneUrl('192.168.1.20', 8001, null), 'http://192.168.1.20:8001/');
+
+  // wrangler 4.151.1 : whoami sort en code 0 qu'il soit connecté ou non.
+  assert.deepEqual(parseWhoami(['Getting User settings...', 'You are not authenticated. Please run `wrangler login`.']), { connecte: false, compte: null });
+  assert.deepEqual(
+    parseWhoami(['👋 You are logged in with an OAuth Token, associated with the email david@example.com.']),
+    { connecte: true, compte: 'david@example.com' },
+  );
+  assert.deepEqual(parseWhoami(['👋 You are logged in with an User API Token. Unable to retrieve email for this user.']), { connecte: true, compte: null });
+  assert.equal(parseWhoami(['rien']).connecte, null);
+
+  assert.deepEqual(parseDeploy(['Uploading... (12/12)', '✨ Deployment complete! Take a peek over at https://a1b2c3.glbi-essai.pages.dev']), {
+    termine: true, deploiement: 'https://a1b2c3.glbi-essai.pages.dev', alias: null,
+  });
+  assert.equal(parseDeploy(['✨ Deployment complete! Take a peek over at https://x.p.pages.dev', '✨ Deployment alias URL: https://essai.p.pages.dev']).alias, 'https://essai.p.pages.dev');
+  assert.equal(parseDeploy(['Error']).termine, false);
+
+  const lan = lanAddresses({
+    lo: [{ address: '127.0.0.1', family: 'IPv4', internal: true }],
+    'vEthernet (WSL)': [{ address: '172.20.48.1', family: 'IPv4', internal: false }],
+    Ethernet: [{ address: '192.168.1.30', family: 'IPv4', internal: false }],
+    'Wi-Fi': [
+      { address: 'fe80::1', family: 'IPv6', internal: false },
+      { address: '192.168.1.20', family: 4, internal: false },
+    ],
+    autre: [{ address: '169.254.10.2', family: 'IPv4', internal: false }],
+  });
+  assert.deepEqual(lan.map((a) => a.ip), ['192.168.1.20', '192.168.1.30', '172.20.48.1'], 'Wi-Fi d’abord, virtuelle en dernier');
+  assert.equal(lan[2].virtuelle, true);
+  assert.equal(printQrScene('01-trex.svg'), 'trex');
+  assert.equal(printQrScene('urls.txt'), null);
+  assert.equal(printQrScene('01-../x.svg'), null, 'identifiant refusé');
+});
+
+test('ST3 : QR d’essai et d’impression sur disque ; réglages et état', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-st3-'));
+  try {
+    const urls = await writeTrialQrs(root, 'dino', 'glbi-essai', ['trex', 'raptor']);
+    assert.deepEqual(urls, ['https://glbi-essai.pages.dev/s/trex', 'https://glbi-essai.pages.dev/s/raptor']);
+    const f = trialQrFile(root, 'dino', 'trex');
+    assert.ok(f && fs.readFileSync(f, 'utf8').startsWith('<svg'));
+    assert.equal(trialQrFile(root, 'dino', '../x'), null);
+    assert.deepEqual(trialQrScenes(root, 'dino', ['raptor', 'ptero', 'trex']), ['raptor', 'trex']);
+    await writeTrialQrs(root, 'dino', 'glbi-essai', ['ptero']);
+    assert.deepEqual(trialQrScenes(root, 'dino', ['trex', 'ptero']), ['ptero'], 'dossier vidé avant écriture');
+    await assert.rejects(writeTrialQrs(root, '../x', 'glbi-essai', ['trex']));
+
+    const qr = path.join(root, 'dist', 'qr', 'dino');
+    fs.mkdirSync(qr, { recursive: true });
+    fs.writeFileSync(path.join(qr, '01-trex.svg'), '<svg/>');
+    fs.writeFileSync(path.join(qr, '02-raptor.svg'), '<svg/>');
+    fs.writeFileSync(path.join(qr, 'urls.txt'), '01-trex.svg\thttps://dino.example/s/trex\n02-raptor.svg\thttps://dino.example/s/raptor\n');
+    const p = printQrs(root, 'dino');
+    assert.deepEqual(p.items.map((x) => [x.scene, x.url]), [['trex', 'https://dino.example/s/trex'], ['raptor', 'https://dino.example/s/raptor']]);
+    assert.ok(p.date);
+    assert.deepEqual(printQrs(root, 'absent').items, []);
+
+    const reg = path.join(root, 'reglages.json');
+    assert.equal(readReglages(reg).essai.projet, DEFAULT_PROJECT);
+    fs.writeFileSync(reg, JSON.stringify({ essai: { projet: 'Mauvais Nom' } }));
+    assert.equal(readReglages(reg).essai.projet, DEFAULT_PROJECT, 'nom refusé : valeur par défaut');
+    fs.writeFileSync(reg, JSON.stringify({ essai: { projet: 'autre-essai' } }));
+    assert.equal(readReglages(reg).essai.projet, 'autre-essai');
+    const et = path.join(root, 'etat.json');
+    assert.deepEqual(readEtat(et).publications, {});
+    fs.writeFileSync(et, JSON.stringify({ out: null, devBook: null }));
+    assert.deepEqual(readEtat(et).publications, {}, 'état de ST1/ST2 relu sans publication');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });
 

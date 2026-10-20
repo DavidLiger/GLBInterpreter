@@ -6,11 +6,13 @@
 // récent que son build.
 // ST2 : `book.json` lu pour le formulaire (champs lisibles, empreinte de lecture), écriture par fichier temporaire du même
 // dossier puis renommage, copie du gabarit de scène sans écraser, réglages de Blender (§4, §8).
+// ST3 : dernière publication d'essai par livre (`.studio/etat.json`), projet Cloudflare Pages des essais (`.studio/reglages.json`).
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { bookSchema, formatIssues, IMAGE_EXTENSIONS, isReservedSourcePath, RESERVED_SOURCE_DIR } from '../../src/schema/glbi';
 import { pickBlenderDir, readableBook, type ReadableBook } from './bookjson';
+import { DEFAULT_PROJECT, projectNameError } from './essai';
 import type { CheckSummary, OutputMode, OutputRecord, Stamp } from './rules';
 
 export const posix = (p: string) => p.split(path.sep).join('/');
@@ -225,17 +227,37 @@ export function resolveBookDir(
 // État des sorties partagées (.studio/etat.json)
 // ---------------------------------------------------------------------------------------------------------
 
+/** Publication d'essai (ST3, §9) : dernière publication réussie d'un livre. */
+export interface Publication {
+  projet: string;
+  /** Adresse stable du projet (`https://<projet>.pages.dev`), codée dans les QR d'essai. */
+  adresse: string;
+  /** Adresse propre au déploiement annoncée par wrangler (`null` si non lue). */
+  deploiement: string | null;
+  /** Fin de la publication (ISO). */
+  date: string;
+  /** Début du build publié (ISO, `OutputRecord.date` de out/). */
+  build: string;
+  source: string;
+  commit: string | null;
+  /** Scènes publiées (`out/book.json`), dans l'ordre du livre : un QR d'essai par scène. */
+  scenes: string[];
+}
+
 export interface Etat {
   out: OutputRecord | null;
   devBook: OutputRecord | null;
+  /** Dernière publication d'essai par `bookId` (ST3). */
+  publications: Record<string, Publication>;
 }
 
 export function readEtat(file: string): Etat {
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return { out: raw?.out ?? null, devBook: raw?.devBook ?? null };
+    const pubs = raw?.publications && typeof raw.publications === 'object' && !Array.isArray(raw.publications) ? raw.publications : {};
+    return { out: raw?.out ?? null, devBook: raw?.devBook ?? null, publications: pubs };
   } catch {
-    return { out: null, devBook: null };
+    return { out: null, devBook: null, publications: {} };
   }
 }
 
@@ -276,6 +298,8 @@ export interface Reglages {
   ports: { atelier: number; dev: number; test: number };
   /** Blender (ST2, §8) : `blender.exe` (détecté au premier lancement, modifiable) et gabarit de scène facultatif. */
   blender: { exe: string | null; gabarit: string | null; detecte: boolean };
+  /** Publication d'essai (ST3, §9) : projet Cloudflare Pages, `glbi-essai` par défaut. */
+  essai: { projet: string };
 }
 
 export const DEFAULT_PORTS: Reglages['ports'] = { atelier: 4100, dev: 3000, test: 8001 };
@@ -284,7 +308,9 @@ export const TESTS_PORT = 4173;
 export const MAX_RECENTS = 10;
 
 export function readReglages(file: string): Reglages {
-  const r: Reglages = { recents: [], ports: { ...DEFAULT_PORTS }, blender: { exe: null, gabarit: null, detecte: false } };
+  const r: Reglages = {
+    recents: [], ports: { ...DEFAULT_PORTS }, blender: { exe: null, gabarit: null, detecte: false }, essai: { projet: DEFAULT_PROJECT },
+  };
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
     if (Array.isArray(raw?.recents)) r.recents = raw.recents.filter((x: unknown): x is string => typeof x === 'string').slice(0, MAX_RECENTS);
@@ -296,6 +322,8 @@ export function readReglages(file: string): Reglages {
     if (typeof b?.exe === 'string' && b.exe) r.blender.exe = b.exe;
     if (typeof b?.gabarit === 'string' && b.gabarit) r.blender.gabarit = b.gabarit;
     r.blender.detecte = b?.detecte === true;
+    const projet = raw?.essai?.projet;
+    if (typeof projet === 'string' && !projectNameError(projet)) r.essai.projet = projet;
   } catch {
     // absent ou illisible : valeurs par défaut
   }

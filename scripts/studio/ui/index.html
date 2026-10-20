@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Studio de fabrication d'un livre (ST1, ST2 : book.json et Blender ; spec-app-bureau.md). Servi par scripts/studio/server.ts ;
+<!-- Studio de fabrication d'un livre (ST1, ST2 : book.json et Blender ; ST3 : essais sur téléphone ; spec-app-bureau.md). Servi par scripts/studio/server.ts ;
      jamais dans un livre (marqueur cherché par le contrôle de fin de build : glbi-studio-st1). -->
 <html lang="fr" data-studio="glbi-studio-st1">
 <head>
@@ -80,6 +80,30 @@
     <section class="card" id="taches">
       <h2>Tâches</h2>
       <div id="tasks"></div>
+    </section>
+
+    <section class="card wide" id="telephone">
+      <h2>Essais sur téléphone</h2>
+      <div class="tel-grid">
+        <div class="tel">
+          <h3>Publier un essai (iPhone, HTTPS)</h3>
+          <form id="essai-form" class="row" autocomplete="off">
+            <label class="grow col">Projet Cloudflare Pages
+              <input name="projet" type="text" spellcheck="false" placeholder="ex. glbi-essai">
+            </label>
+            <button type="submit" class="btn">Enregistrer</button>
+          </form>
+          <div id="essai"></div>
+        </div>
+        <div class="tel">
+          <h3>Serveur de test par Wi-Fi (Android)</h3>
+          <div id="reseau"></div>
+        </div>
+        <div class="tel">
+          <h3>QR d’impression (scanner interne)</h3>
+          <div id="impression"></div>
+        </div>
+      </div>
     </section>
 
     <section class="card wide" id="journal-card">

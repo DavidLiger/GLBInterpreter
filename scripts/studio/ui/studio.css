@@ -1,4 +1,4 @@
-/* Studio GLBI (ST1, ST2) : page locale, sans framework. */
+/* Studio GLBI (ST1, ST2, ST3) : page locale, sans framework. */
 :root {
   --bg: #f4f4f2;
   --card: #ffffff;
@@ -168,3 +168,18 @@ details.sub form { margin-top: 8px; display: flex; flex-direction: column; gap: 
 #expl-liste li.sel { background: var(--run-bg); color: var(--run); }
 #expl-liste .ico { width: 18px; text-align: center; color: var(--muted); }
 #expl-liste .nom { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ST3 : essais sur téléphone (publication d'essai, serveur de test par Wi-Fi, QR d'impression). */
+.tel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.tel { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.tel h3 { margin: 0 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: .02em; color: var(--muted); }
+.tel p { margin: 3px 0; }
+.tel .line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.tel ol { margin: 4px 0; padding-left: 20px; font-size: 12.5px; }
+.tel ol li { margin: 2px 0; }
+.qr { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-top: 6px; }
+.qr .qr-nav { display: flex; gap: 6px; align-items: center; width: 100%; }
+.qr .qr-nav select { flex: 1; min-width: 0; }
+/* Fond blanc et marge du QR : lisible par une caméra, en thème sombre comme en clair. */
+.qr img { width: min(280px, 100%); aspect-ratio: 1; background: #fff; border-radius: 6px; image-rendering: pixelated; }
+.qr .qr-url { font-family: var(--mono); font-size: 12px; word-break: break-all; text-align: center; user-select: all; }
