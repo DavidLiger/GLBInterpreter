@@ -27,7 +27,7 @@
           <input id="chemin" type="text" placeholder="Dossier du livre (contenant book.json), ex. D:\Livres\dino ou books/test-dino" spellcheck="false">
         </label>
         <button type="submit" class="btn primary">Ouvrir</button>
-        <button type="button" class="btn" data-act="parcourir" id="parcourir" hidden>Parcourir…</button>
+        <button type="button" class="btn" data-act="parcourir" data-quoi="livre" id="parcourir">Parcourir…</button>
       </form>
       <div id="recents"></div>
       <details id="creer-livre" class="sub">
@@ -37,7 +37,7 @@
             <label class="grow col">Dossier parent
               <input name="parent" type="text" spellcheck="false" placeholder="ex. D:\Livres">
             </label>
-            <button type="button" class="btn" data-act="parcourir" data-quoi="parent" data-cible="creer-parent" hidden>Parcourir…</button>
+            <button type="button" class="btn" data-act="parcourir" data-quoi="parent" data-cible="creer-parent">Parcourir…</button>
           </div>
           <div class="fields">
             <label class="col">bookId <input name="bookId" type="text" spellcheck="false" placeholder="ex. dino"></label>
@@ -98,7 +98,7 @@
           <label class="grow col">Programme blender.exe
             <input name="exe" type="text" spellcheck="false" placeholder="C:\Program Files\Blender Foundation\Blender 4.5\blender.exe">
           </label>
-          <button type="button" class="btn" data-act="parcourir" data-quoi="blender" data-cible="blender-exe" hidden>Parcourir…</button>
+          <button type="button" class="btn" data-act="parcourir" data-quoi="blender" data-cible="blender-exe">Parcourir…</button>
           <button type="button" class="btn" data-act="detecterBlender">Détecter</button>
         </div>
         <p class="small" id="blender-exe-etat"></p>
@@ -106,7 +106,7 @@
           <label class="grow col">Gabarit de scène (.blend, facultatif)
             <input name="gabarit" type="text" spellcheck="false" placeholder="ex. D:\Livres\gabarit-scene.blend">
           </label>
-          <button type="button" class="btn" data-act="parcourir" data-quoi="gabarit" data-cible="blender-gabarit" hidden>Parcourir…</button>
+          <button type="button" class="btn" data-act="parcourir" data-quoi="gabarit" data-cible="blender-gabarit">Parcourir…</button>
         </div>
         <p class="small" id="blender-gabarit-etat"></p>
         <button type="submit" class="btn">Enregistrer</button>
@@ -133,6 +133,30 @@
     <div class="fin-box">
       <h2>Studio arrêté</h2>
       <p>Tous les processus gérés sont arrêtés. Pour relancer le studio : double-clic sur <code>studio.cmd</code> (ou <code>npm run studio</code>) ; cette page se reconnecte alors toute seule.</p>
+    </div>
+  </div>
+  <div id="explorateur" hidden>
+    <div class="expl-box" role="dialog" aria-modal="true" aria-labelledby="expl-titre">
+      <div class="row between"><h2 id="expl-titre">Parcourir</h2><button type="button" class="btn small" data-act="explFermer" title="Échap">Fermer</button></div>
+      <form id="expl-aller" class="row" autocomplete="off">
+        <button type="button" class="btn small" data-act="explHaut" title="Dossier parent">↑</button>
+        <label class="grow"><span class="sr">Dossier</span><input id="expl-chemin" type="text" spellcheck="false"></label>
+        <button type="submit" class="btn small">Aller</button>
+      </form>
+      <div class="row wrap small" id="expl-raccourcis"></div>
+      <ul id="expl-liste" tabindex="0"></ul>
+      <p class="small muted" id="expl-aide"></p>
+      <div class="row between">
+        <span class="small mono" id="expl-choix"></span>
+        <button type="button" class="btn primary" data-act="explChoisir" id="expl-choisir">Choisir</button>
+      </div>
+    </div>
+  </div>
+  <div id="veille" hidden>
+    <div class="fin-box">
+      <h2>Studio ouvert dans un autre onglet</h2>
+      <p>Un seul onglet du studio est actif à la fois : celui-ci est en veille (il ne reçoit plus l’état et n’envoie plus d’action). Fermer cet onglet, ou le reprendre ici (l’autre passe alors en veille).</p>
+      <button type="button" class="btn primary" id="veille-reprendre">Utiliser cet onglet</button>
     </div>
   </div>
   <script src="/studio.js"></script>

@@ -41,8 +41,9 @@ function toast(text, error) {
   setTimeout(() => el.remove(), error ? 12000 : 5000);
 }
 
-/** Action sans message affiché (validation en direct du formulaire). */
+/** Action sans message affiché (validation en direct du formulaire). Sans réponse après 10 s : signalé (correctif ST2). */
 async function post(action, extra = {}) {
+  const slow = setTimeout(() => toast(`le studio ne répond pas encore (${action}) : un autre onglet du studio, ou un processus bloqué ? Voir le journal du studio.`, true), 10_000);
   try {
     const res = await fetch('/__studio/action', {
       method: 'POST',
@@ -52,6 +53,8 @@ async function post(action, extra = {}) {
     return await res.json().catch(() => ({ ok: false, error: `réponse ${res.status}` }));
   } catch {
     return { ok: false, error: 'studio injoignable' };
+  } finally {
+    clearTimeout(slow);
   }
 }
 
@@ -90,7 +93,6 @@ function renderTop() {
   $('top-book').textContent = b ? `${b.bookId ?? '?'} — ${b.dir}` : 'aucun livre ouvert';
   $('top-book').title = b ? b.dir : '';
   $('top-pid').textContent = `PID du studio : ${S.studio.pid} · port ${S.studio.port}`;
-  $('parcourir').hidden = !S.studio.windows;
   $('studio-port').textContent = S.studio.port;
 }
 
@@ -413,6 +415,7 @@ function renderFormStatus() {
   $('f-status').innerHTML = parts.join('');
   $('f-errors').innerHTML = F.errors.map((e) => `<li class="err-t">${h(e)}</li>`).join('');
   $('f-save').disabled = F.errors.length > 0 || F.saving;
+  $('f-save').textContent = F.saving ? 'Enregistrement…' : 'Enregistrer book.json';
   $('f-save').title = F.errors.length ? 'formulaire refusé par bookSchema : voir les messages' : '';
   $('f-dirty').innerHTML = formDirty() ? '<span class="warn-t">modifications non enregistrées</span>' : '<span class="muted">formulaire identique au fichier lu</span>';
   const bl = S.blender;
@@ -599,7 +602,13 @@ $('creer-livre').addEventListener('toggle', () => {
 $('creer').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const v = createValues();
+  const btn = $('creer-bouton');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  btn.textContent = 'Création…';
   const r = await act('creerLivre', { ...v, dossier: v.dossier || v.livre.bookId.trim() });
+  btn.disabled = false;
+  btn.textContent = 'Créer le livre';
   if (r.erreurs) $('creer-erreurs').innerHTML = r.erreurs.map((e) => `<li class="err-t">${h(e)}</li>`).join('');
   if (r.ok) {
     $('creer').reset();
@@ -644,7 +653,6 @@ function renderBlender() {
   $('blender-gabarit-etat').innerHTML = !bl.gabarit
     ? '<span class="muted">aucun gabarit : rien n’est créé à l’ajout d’une scène</span>'
     : bl.gabaritOk ? '<span class="ok-t">trouvé</span>' : '<span class="err-t">introuvable</span>';
-  for (const b of document.querySelectorAll('[data-quoi]')) b.hidden = !S.studio.windows;
 }
 
 $('blender-form').addEventListener('submit', (ev) => {
@@ -735,29 +743,15 @@ document.addEventListener('click', async (ev) => {
     if (formDirty() && !window.confirm('Abandonner les modifications du formulaire et reprendre book.json du disque ?')) return;
     return loadForm();
   }
-  if (a === 'parcourir' && b.dataset.quoi) {
-    toast('boîte de dialogue ouverte (elle peut apparaître derrière le navigateur)');
-    const r = await act('parcourir', { quoi: b.dataset.quoi });
-    if (!r.chemin) return;
-    const target = { 'creer-parent': $('creer').elements.parent, 'blender-exe': $('blender-form').elements.exe, 'blender-gabarit': $('blender-form').elements.gabarit }[b.dataset.cible];
-    if (target) {
-      target.value = r.chemin;
-      target.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    return;
-  }
+  // « Parcourir… » : explorateur de la page (correctif ST2).
+  if (a === 'parcourir') return explOpen(b.dataset.quoi ?? 'livre', b.dataset.cible ?? null);
+  if (a === 'explFermer') return explClose();
+  if (a === 'explHaut') return E.liste?.parent && explGo(E.liste.parent);
+  if (a === 'explAller') return explGo(b.dataset.chemin);
+  if (a === 'explChoisir') return explChoose();
   const ask = a === 'demarrer' ? CONFIRMS[b.dataset.nom] : CONFIRMS[a];
   const q = ask?.();
   if (q && !window.confirm(q)) return;
-  if (a === 'parcourir') {
-    toast('boîte de dialogue ouverte (elle peut apparaître derrière le navigateur)');
-    const r = await act('parcourir');
-    if (r.chemin) {
-      $('chemin').value = r.chemin;
-      await openBook(r.chemin);
-    }
-    return;
-  }
   if (a === 'ouvrir') return openBook(b.dataset.chemin);
   const extra = {};
   if (b.dataset.nom) extra.nom = b.dataset.nom;
@@ -803,9 +797,124 @@ setInterval(() => {
 // donc cet onglet (il n'en ouvre pas un autre).
 let es = null;
 let retryTimer = null;
+/** Identifiant de cet onglet : un onglet qui se connecte remplace les autres (un seul onglet actif, correctif ST2). */
+const TAB_ID = Math.random().toString(36).slice(2);
+/** Mis en veille par un autre onglet du studio : plus de reconnexion tant que « Utiliser cet onglet » n'est pas cliqué. */
+let replaced = false;
+
+// ---------------------------------------------------------------------------------------------------------
+// Explorateur de la page (« Parcourir… », correctif ST2) : liste fournie par le serveur (action `lister`, lecture seule)
+// ---------------------------------------------------------------------------------------------------------
+
+const E = { quoi: null, cible: null, liste: null, sel: null };
+const EXPL = {
+  livre: { titre: 'Ouvrir un livre', aide: 'Entrer dans le dossier du livre (repéré « livre » : il contient book.json), puis « Choisir ce dossier » ; ou « Ouvrir » sur sa ligne.', dossier: true },
+  parent: { titre: 'Dossier parent du nouveau livre', aide: 'Entrer dans le dossier qui contiendra le livre, puis « Choisir ce dossier ». Le dossier du livre est créé par « Créer le livre ».', dossier: true },
+  blender: { titre: 'Programme blender.exe', aide: 'Choisir blender.exe (C:\\Program Files\\Blender Foundation\\Blender <version>\\).', dossier: false },
+  gabarit: { titre: 'Gabarit de scène (.blend)', aide: 'Choisir le fichier .blend préparé comme gabarit.', dossier: false },
+};
+const joinPath = (dir, name) => (dir.endsWith(E.liste.sep) ? dir + name : dir + E.liste.sep + name);
+
+async function explOpen(quoi, cible) {
+  E.quoi = quoi;
+  E.cible = cible;
+  E.sel = null;
+  $('expl-titre').textContent = EXPL[quoi].titre;
+  $('expl-aide').textContent = EXPL[quoi].aide;
+  $('explorateur').hidden = false;
+  const current = cible === 'creer-parent' ? $('creer').elements.parent.value : cible === 'blender-exe' ? $('blender-form').elements.exe.value : cible === 'blender-gabarit' ? $('blender-form').elements.gabarit.value : '';
+  const start = current && !EXPL[quoi].dossier ? current.replace(/[\\/][^\\/]*$/, '') : current;
+  if (!(await explGo(start, true))) await explGo('');
+}
+
+function explClose() {
+  $('explorateur').hidden = true;
+  E.liste = null;
+}
+
+async function explGo(chemin, quiet = false) {
+  const r = await post('lister', { quoi: E.quoi, chemin: chemin ?? '' });
+  if (!r.ok) {
+    if (!quiet) toast(r.error, true);
+    return false;
+  }
+  E.liste = r.liste;
+  E.sel = null;
+  explRender();
+  return true;
+}
+
+function explRender() {
+  const l = E.liste;
+  $('expl-chemin').value = l.chemin;
+  const btn = (nom, chemin) => `<button type="button" class="btn small" data-act="explAller" data-chemin="${h(chemin)}">${h(nom)}</button>`;
+  $('expl-raccourcis').innerHTML = [...l.lecteurs.map((d) => btn(d, d)), ...l.raccourcis.map((r) => btn(r.nom, r.chemin))].join('');
+  const rows = [
+    ...(l.parent ? [`<li data-dir="${h(l.parent)}"><span class="ico">↑</span><span class="nom">..</span></li>`] : []),
+    ...l.dossiers.map((d) => `<li data-dir="${h(joinPath(l.chemin, d.nom))}"><span class="ico">📁</span><span class="nom">${h(d.nom)}</span>${
+      d.livre ? `<span class="badge ok">livre</span>${E.quoi === 'livre' ? `<button type="button" class="btn small primary" data-ouvrir="${h(joinPath(l.chemin, d.nom))}">Ouvrir</button>` : ''}` : ''}</li>`),
+    ...l.fichiers.map((f) => `<li data-file="${h(joinPath(l.chemin, f))}" class="${E.sel === joinPath(l.chemin, f) ? 'sel' : ''}"><span class="ico">📄</span><span class="nom">${h(f)}</span></li>`),
+  ];
+  $('expl-liste').innerHTML = rows.join('') || '<li class="muted">dossier vide</li>';
+  if (l.coupe) $('expl-liste').insertAdjacentHTML('beforeend', `<li class="muted">… ${l.coupe} entrée(s) non affichée(s)</li>`);
+  const dirMode = EXPL[E.quoi].dossier;
+  $('expl-choisir').textContent = dirMode ? 'Choisir ce dossier' : 'Choisir ce fichier';
+  $('expl-choisir').disabled = !dirMode && !E.sel;
+  $('expl-choix').textContent = dirMode ? l.chemin : (E.sel ?? 'aucun fichier choisi');
+  $('expl-liste').scrollTop = 0;
+}
+
+function explChoose(chemin) {
+  const value = chemin ?? (EXPL[E.quoi].dossier ? E.liste.chemin : E.sel);
+  if (!value) return;
+  const d = { quoi: E.quoi, cible: E.cible, chemin: value };
+  explClose();
+  onBrowsed(d);
+}
+
+$('expl-liste').addEventListener('click', (ev) => {
+  const open = ev.target.closest('[data-ouvrir]');
+  if (open) return explChoose(open.dataset.ouvrir);
+  const li = ev.target.closest('li');
+  if (!li) return;
+  if (li.dataset.dir) return explGo(li.dataset.dir);
+  if (li.dataset.file) {
+    E.sel = li.dataset.file;
+    explRender();
+  }
+});
+$('expl-liste').addEventListener('dblclick', (ev) => {
+  const li = ev.target.closest('li[data-file]');
+  if (li) explChoose(li.dataset.file);
+});
+$('expl-aller').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  explGo($('expl-chemin').value);
+});
+$('explorateur').addEventListener('mousedown', (ev) => {
+  if (ev.target.id === 'explorateur') explClose();
+});
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape' && !$('explorateur').hidden) explClose();
+});
+
+/** Chemin choisi dans l'explorateur (« Parcourir… »). */
+function onBrowsed(d) {
+  if (!d.chemin) return;
+  if (d.quoi === 'livre') {
+    $('chemin').value = d.chemin;
+    openBook(d.chemin);
+    return;
+  }
+  const target = { 'creer-parent': $('creer').elements.parent, 'blender-exe': $('blender-form').elements.exe, 'blender-gabarit': $('blender-form').elements.gabarit }[d.cible];
+  if (target) {
+    target.value = d.chemin;
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
 
 function reconnectSoon() {
-  if (retryTimer) return;
+  if (retryTimer || replaced) return;
   retryTimer = setTimeout(() => {
     retryTimer = null;
     connect();
@@ -814,7 +923,13 @@ function reconnectSoon() {
 
 function connect() {
   if (es) es.close();
-  es = new EventSource('/__studio/events');
+  if (replaced) return;
+  es = new EventSource(`/__studio/events?onglet=${TAB_ID}`);
+  es.addEventListener('remplace', () => {
+    replaced = true;
+    es.close();
+    $('veille').hidden = false;
+  });
   es.addEventListener('etat', (e) => {
     const next = JSON.parse(e.data);
     if (next.marker !== STUDIO_MARKER) return;
@@ -855,6 +970,7 @@ function connect() {
     selectJournal(journalName);
   });
   es.onerror = () => {
+    if (replaced) return;
     if (!stopped && S) {
       $('top-pid').textContent = 'studio injoignable : reconnexion…';
       $('top-pid').classList.add('err-t');
@@ -862,5 +978,12 @@ function connect() {
     if (es.readyState === EventSource.CLOSED) reconnectSoon();
   };
 }
+
+document.addEventListener('click', (ev) => {
+  if (!ev.target.closest('#veille-reprendre')) return;
+  replaced = false;
+  $('veille').hidden = true;
+  connect();
+});
 
 connect();

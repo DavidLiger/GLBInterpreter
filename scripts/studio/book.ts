@@ -372,3 +372,77 @@ export function detectBlender(): string | null {
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// Explorateur de la page (« Parcourir… », correctif ST2 du 20/10) : lecture seule du disque
+// ---------------------------------------------------------------------------------------------------------
+
+/** Ce que l'explorateur choisit : dossier d'un livre, dossier parent d'un nouveau livre, `blender.exe`, gabarit `.blend`. */
+export type BrowseKind = 'livre' | 'parent' | 'blender' | 'gabarit';
+
+export interface DirListing {
+  /** Dossier listé (casse réelle). */
+  chemin: string;
+  parent: string | null;
+  dossiers: { nom: string; livre: boolean }[];
+  /** Fichiers que ce choix accepte (`.exe` pour Blender, `.blend` pour le gabarit) ; aucun pour un dossier. */
+  fichiers: string[];
+  /** Entrées non affichées (au-delà de la limite). */
+  coupe: number;
+}
+
+const LIST_LIMIT = 2000;
+
+/** Contenu d'un dossier pour l'explorateur : dossiers (ceux qui contiennent book.json marqués), fichiers acceptés ; sans fichiers cachés. */
+export function listDir(dir: string, kind: BrowseKind): DirListing | { error: string } {
+  const real = realCase(dir);
+  if (!real) return { error: `dossier introuvable : ${dir}` };
+  let entries: fs.Dirent[];
+  try {
+    if (!fs.statSync(real).isDirectory()) return { error: `pas un dossier : ${real}` };
+    entries = fs.readdirSync(real, { withFileTypes: true });
+  } catch (e) {
+    return { error: `${real} : lecture impossible (${(e as NodeJS.ErrnoException).code ?? (e as Error).message})` };
+  }
+  const fileRe = kind === 'blender' ? /\.exe$/i : kind === 'gabarit' ? /\.blend$/i : null;
+  const byName = (a: string, b: string) => a.localeCompare(b, 'fr', { sensitivity: 'base', numeric: true });
+  const dossiers: DirListing['dossiers'] = [];
+  const fichiers: string[] = [];
+  for (const e of entries) {
+    if (e.name.startsWith('.') || e.name.startsWith('$')) continue;
+    let isDir = e.isDirectory();
+    if (e.isSymbolicLink()) {
+      try {
+        isDir = fs.statSync(path.join(real, e.name)).isDirectory();
+      } catch {
+        continue;
+      }
+    }
+    if (isDir) dossiers.push({ nom: e.name, livre: false });
+    else if (fileRe?.test(e.name)) fichiers.push(e.name);
+  }
+  dossiers.sort((a, b) => byName(a.nom, b.nom));
+  fichiers.sort(byName);
+  const total = dossiers.length + fichiers.length;
+  const shownDirs = dossiers.slice(0, LIST_LIMIT);
+  const shownFiles = fichiers.slice(0, Math.max(0, LIST_LIMIT - shownDirs.length));
+  for (const d of shownDirs.slice(0, 500)) d.livre = !!stampOf(path.join(real, d.nom, 'book.json'));
+  const up = path.dirname(real);
+  return { chemin: real, parent: up === real ? null : up, dossiers: shownDirs, fichiers: shownFiles, coupe: total - shownDirs.length - shownFiles.length };
+}
+
+/** Lecteurs présents (Windows : `C:\`, `D:\`…) ; ailleurs, la racine. */
+export function drives(): string[] {
+  if (process.platform !== 'win32') return ['/'];
+  const out: string[] = [];
+  for (let c = 65; c <= 90; c++) {
+    const d = `${String.fromCharCode(c)}:\\`;
+    try {
+      fs.accessSync(d);
+      out.push(d);
+    } catch {
+      // absent
+    }
+  }
+  return out;
+}

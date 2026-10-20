@@ -41,7 +41,9 @@ import {
   copyTemplate,
   DEFAULT_PORTS,
   detectBlender,
+  drives,
   gitState,
+  listDir,
   MAX_RECENTS,
   OpenBook,
   readEtat,
@@ -54,6 +56,7 @@ import {
   writeEtat,
   writeReglages,
   writeFileAtomic,
+  type BrowseKind,
   type Etat,
   type Reglages,
 } from './book';
@@ -71,7 +74,6 @@ import {
   PidFile,
   portBusy,
   portOwners,
-  powershell,
   processInfo,
   showCommand,
   stopTree,
@@ -711,43 +713,37 @@ async function openBookAction(input: string, confirmed: boolean): Promise<Result
   return { ok: true, message: `livre ouvert : ${r.dir}` };
 }
 
-type BrowseKind = 'livre' | 'parent' | 'blender' | 'gabarit';
+const BROWSE_KINDS: readonly BrowseKind[] = ['livre', 'parent', 'blender', 'gabarit'];
 
 /**
- * « Parcourir… » (Windows) : boîte de dialogue ouverte par le serveur (PowerShell) : dossier d'un livre ou dossier parent d'un
- * nouveau livre (`FolderBrowserDialog`), `blender.exe` ou gabarit `.blend` (`OpenFileDialog`, ST2).
+ * « Parcourir… » (correctif ST2 du 20/10, choix de David) : explorateur dans la page, au premier plan, nourri par ce serveur
+ * (lecture seule du disque : dossiers, livres repérés par leur book.json, `.exe` ou `.blend` selon le choix). Remplace la boîte
+ * de dialogue Windows ouverte par PowerShell, qui s'affichait derrière le navigateur. Le sélecteur de fichiers du navigateur ne
+ * donne jamais le chemin complet : il ne peut pas servir ici.
  */
-async function browse(kind: BrowseKind = 'livre'): Promise<Result> {
-  if (!IS_WIN) return fail('« Parcourir… » n’existe que sous Windows : saisir le chemin');
-  const q = (x: string) => `'${x.replace(/'/g, "''")}'`;
-  const startDir = book?.info.dir ?? realCase(path.join(ROOT, 'books')) ?? ROOT;
-  let dialog: string[];
-  if (kind === 'livre' || kind === 'parent') {
-    const start = kind === 'parent' && book ? path.dirname(book.info.dir) : startDir;
-    dialog = [
-      '$d = New-Object System.Windows.Forms.FolderBrowserDialog',
-      `$d.Description = ${q(kind === 'parent' ? 'Dossier parent du nouveau livre' : 'Dossier du livre (contenant book.json)')}`,
-      `$d.ShowNewFolderButton = $${kind === 'parent' ? 'true' : 'false'}`,
-      `$d.SelectedPath = ${q(start)}`,
-      'if ($d.ShowDialog($f) -eq [System.Windows.Forms.DialogResult]::OK) { $d.SelectedPath }',
-    ];
-  } else {
-    const current = kind === 'blender' ? reglages.blender.exe : reglages.blender.gabarit;
-    const initial = current ? path.dirname(current) : kind === 'blender' ? 'C:\\Program Files\\Blender Foundation' : startDir;
-    dialog = [
-      '$d = New-Object System.Windows.Forms.OpenFileDialog',
-      `$d.Title = ${q(kind === 'blender' ? 'Programme Blender (blender.exe)' : 'Gabarit de scène (.blend)')}`,
-      `$d.Filter = ${q(kind === 'blender' ? 'blender.exe|blender.exe|Programmes (*.exe)|*.exe' : 'Fichiers Blender (*.blend)|*.blend')}`,
-      `$d.InitialDirectory = ${q(initial)}`,
-      'if ($d.ShowDialog($f) -eq [System.Windows.Forms.DialogResult]::OK) { $d.FileName }',
-    ];
+function browseList(body: Record<string, unknown>): Result & { liste?: unknown } {
+  const kind = BROWSE_KINDS.find((k) => k === body.quoi) ?? 'livre';
+  let dir = unquote(body.chemin);
+  if (!dir) {
+    const books = realCase(path.join(ROOT, 'books')) ?? ROOT;
+    const exe = reglages.blender.exe;
+    const gab = reglages.blender.gabarit;
+    const start =
+      kind === 'livre' ? (book ? path.dirname(book.info.dir) : books)
+      : kind === 'parent' ? (book ? path.dirname(book.info.dir) : books)
+      : kind === 'blender' ? (exe ? path.dirname(exe) : IS_WIN ? 'C:\\Program Files\\Blender Foundation' : ROOT)
+      : gab ? path.dirname(gab) : (book?.info.dir ?? books);
+    dir = realCase(start) ? start : ROOT;
   }
-  const out = await powershell(
-    ['Add-Type -AssemblyName System.Windows.Forms', '$f = New-Object System.Windows.Forms.Form', '$f.TopMost = $true', ...dialog, '$f.Dispose()'].join('\n'),
-    30 * 60_000,
-  );
-  const chemin = out.split(/\r?\n/).map((l) => l.trim()).find(Boolean) ?? null;
-  return { ok: true, chemin };
+  const l = listDir(path.resolve(ROOT, dir), kind);
+  if ('error' in l) return fail(l.error);
+  const raccourcis = [
+    ...(book ? [{ nom: 'Livre ouvert', chemin: book.info.dir }] : []),
+    { nom: 'Livres du repo (books/)', chemin: path.join(ROOT, 'books') },
+    { nom: 'Dossier personnel', chemin: process.env.USERPROFILE ?? process.env.HOME ?? ROOT },
+    ...reglages.recents.slice(0, 5).map((r) => ({ nom: `Récent : ${path.basename(r)}`, chemin: r })),
+  ].filter((r) => !!realCase(r.chemin));
+  return { ok: true, liste: { ...l, quoi: kind, lecteurs: drives(), raccourcis, sep: path.sep } };
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -1050,7 +1046,13 @@ function view() {
 // Événements (SSE)
 // ---------------------------------------------------------------------------------------------------------
 
+/**
+ * Onglets connectés (flux d'événements). Correctif ST2 : un seul onglet actif ; un onglet qui se connecte remplace les autres,
+ * qui reçoivent `remplace` et cessent de se reconnecter (chaque flux garde une des 6 connexions que le navigateur ouvre vers le
+ * studio ; plusieurs onglets les épuisaient, et toute action restait alors en attente).
+ */
 const clients = new Set<http.ServerResponse>();
+const tabOf = new Map<http.ServerResponse, string>();
 /** « Tout arrêter et quitter », Ctrl+C… : arrêt en cours. */
 let quitting = false;
 let lastSent = '';
@@ -1094,12 +1096,24 @@ function events(req: http.IncomingMessage, res: http.ServerResponse): void {
   res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8', 'cache-control': 'no-store', connection: 'keep-alive' });
   res.write(`retry: ${SSE_RETRY_MS}\n`);
   res.write(`event: etat\ndata: ${JSON.stringify(view())}\n\n`);
+  const tab = new URL(req.url ?? '/', 'http://x').searchParams.get('onglet') ?? '';
+  for (const c of [...clients]) {
+    if (tabOf.get(c) !== tab) {
+      c.write(`event: remplace\ndata: {}\n\n`);
+      studioJournal.note('studio ouvert dans un autre onglet : ancien onglet mis en veille');
+    }
+    clients.delete(c);
+    tabOf.delete(c);
+    c.end();
+  }
   clients.add(res);
+  tabOf.set(res, tab);
   tabSeenAt = Date.now();
   const ping = setInterval(() => res.write(': ping\n\n'), 15_000);
   req.on('close', () => {
     clearInterval(ping);
     clients.delete(res);
+    tabOf.delete(res);
   });
 }
 
@@ -1154,8 +1168,8 @@ async function action(body: Record<string, unknown>): Promise<Result> {
   switch (a) {
     case 'ouvrir':
       return openBookAction(String(body.chemin ?? ''), body.confirme === true);
-    case 'parcourir':
-      return browse((['livre', 'parent', 'blender', 'gabarit'] as const).find((k) => k === body.quoi) ?? 'livre');
+    case 'lister':
+      return browseList(body);
     case 'validerLivre':
       return validateForm(body);
     case 'enregistrerLivre':

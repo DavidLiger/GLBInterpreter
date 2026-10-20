@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { listSourceFiles } from '../book-check';
-import { copyTemplate, newestSourceFile, OpenBook, resolveBookDir, walkSource, writeFileAtomic } from './book';
+import { copyTemplate, listDir, newestSourceFile, OpenBook, resolveBookDir, walkSource, writeFileAtomic } from './book';
 import {
   addedScenes,
   composeBook,
@@ -317,6 +317,16 @@ test('gabarit copié seulement si blender/<id>.blend n’existe pas ; écriture 
     assert.ok(opened.info.file.valid && opened.info.file.stamp);
     assert.equal(opened.info.file.content.form.ogImage, 'images/og.png');
     assert.equal(opened.info.icon, false, 'icon.png absent signalé');
+    // Explorateur de la page : dossiers (livres repérés), fichiers acceptés selon le choix, fichiers cachés exclus.
+    fs.mkdirSync(path.join(dir, '.cache'));
+    const l = listDir(dir, 'gabarit');
+    assert.ok(!('error' in l));
+    assert.deepEqual(l.dossiers, [{ nom: 'livre', livre: true }]);
+    assert.deepEqual(l.fichiers, ['gabarit.blend']);
+    assert.equal(l.parent, path.dirname(l.chemin));
+    const d = listDir(dir, 'livre');
+    assert.ok(!('error' in d) && d.fichiers.length === 0);
+    assert.ok('error' in listDir(path.join(dir, 'absent'), 'livre'));
     const notBook = resolveBookDir(path.join(book, 'images'), '/');
     assert.ok('error' in notBook && notBook.createHere?.name === 'images', '« Créer un livre ici » proposé');
   } finally {
