@@ -148,6 +148,12 @@ test('rapport de book:check : résumé par scène et lignes du livre', () => {
   assert.equal(s.ok, false);
   assert.deepEqual(s.perScene, { trex: { errors: 1, warnings: 1 } });
   assert.equal(s.bookLines.length, 1);
+  // ST4 : toutes les lignes, dans l'ordre du rapport (classées par outil dans la page).
+  assert.deepEqual(s.lines.map((l) => [l.level, l.origin, l.scene, l.message]), [
+    ['error', 'edit', 'trex', 'a'],
+    ['warning', 'build', 'trex', 'b'],
+    ['warning', 'build', null, 'fichier(s) source non référencé(s)'],
+  ]);
   assert.equal(summarizeReport(null), null);
 });
 

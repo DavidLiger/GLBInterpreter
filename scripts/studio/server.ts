@@ -190,7 +190,7 @@ const JOURNAL_LABELS: Record<Name | 'studio', string> = {
   'serveur-test': 'Serveur de test',
   'book-check': 'book:check',
   'dev-book': 'dev:book',
-  build: 'Build du livre',
+  build: 'Préparer le livre',
   'test-engine': 'test:engine',
   'test-schema': 'test:schema',
   suite: 'Suite complète',
@@ -632,7 +632,7 @@ async function startTestServer(): Promise<Result> {
   const ex = exclusiveRunning();
   if (ex && ex.name !== 'dev-book') return fail(`${ex.label} en cours : attendre sa fin (il écrit out/)`);
   const v = outVerdict();
-  if (!v.ok) return fail(`${v.message} : serveur de test refusé, reconstruire le livre ouvert (Build du livre)`);
+  if (!v.ok) return fail(`${v.message} : serveur de test refusé : « Préparer le livre » d’abord`);
   if (!fs.existsSync(HTTP_SERVER_BIN)) return fail('http-server absent de node_modules : lancer npm i -D -E http-server@14.1.1');
   const p = reglages.ports.test;
   const busy = await requireFreePort(p, 'serveur de test');
@@ -688,7 +688,7 @@ function startTask(name: TaskName): Result {
           launch: () => npmRun(ROOT, 'book:check', ['--source', dir, '--report', CHECK_REPORT]),
         },
       ];
-      void runTask(e, steps).then(() => readCheck(dir));
+      void runTask(e, steps).then(() => readCheck(dir, e.startedAt));
       return { ok: true, message: 'book:check lancé' };
     case 'dev-book':
       void runDevBook();
@@ -786,7 +786,7 @@ function whoamiStep(): Step {
  * repo (méthode d'Î16) ; puis QR d'essai écrits et publication notée dans .studio/etat.json.
  */
 function publishSteps(): { steps: Step[] } | { error: string } {
-  const refused = (v: OutputVerdict) => `${v.message} : publication refusée, reconstruire le livre ouvert (Build du livre)`;
+  const refused = (v: OutputVerdict) => `${v.message} : publication refusée : « Préparer le livre » d’abord`;
   const first = outVerdict();
   if (!first.ok || !first.record) return { error: refused(first) };
   const projet = reglages.essai.projet;
@@ -882,8 +882,11 @@ async function serveQr(url: URL, res: http.ServerResponse): Promise<void> {
   res.end(svg);
 }
 
-/** Résumé par scène du dernier book:check (`--report`), pour le tableau du livre. */
-function readCheck(dir: string): void {
+/**
+ * Résumé par scène du dernier book:check (`--report`), pour le tableau du livre. Date = début de la vérification (ST4 : un
+ * fichier modifié pendant qu'elle tourne rend l'étape « Vérifier » à refaire).
+ */
+function readCheck(dir: string, startedAt: number | null): void {
   if (!book || book.info.dir !== dir) return;
   let raw: unknown = null;
   try {
@@ -892,7 +895,8 @@ function readCheck(dir: string): void {
     // absent : échec inattendu ou arrêt
   }
   const s = summarizeReport(raw);
-  book.info.check = s ? { ...s, date: Date.now() } : { date: Date.now(), error: 'pas de rapport (arrêt ou échec inattendu) : voir le journal de book:check' };
+  const date = startedAt ?? Date.now();
+  book.info.check = s ? { ...s, date } : { date, error: 'pas de rapport (arrêt ou échec inattendu) : voir le journal de book:check' };
   book.refresh();
   changed();
 }

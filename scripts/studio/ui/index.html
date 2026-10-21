@@ -1,188 +1,210 @@
 <!doctype html>
-<!-- Studio de fabrication d'un livre (ST1, ST2 : book.json et Blender ; ST3 : essais sur téléphone ; spec-app-bureau.md). Servi par scripts/studio/server.ts ;
-     jamais dans un livre (marqueur cherché par le contrôle de fin de build : glbi-studio-st1). -->
+<!-- Studio de fabrication d'un livre (ST1 ; ST2 : book.json et Blender ; ST3 : essais sur téléphone ; ST4 : parcours en six étapes et
+     design ; spec-app-bureau.md). Servi par scripts/studio/server.ts ; jamais dans un livre (marqueur cherché par le contrôle de fin
+     de build : glbi-studio-st1). Aucune ressource venue d'Internet : la page marche hors ligne. -->
 <html lang="fr" data-studio="glbi-studio-st1">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>Studio GLBI</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/studio.css">
 </head>
 <body>
+<div class="app">
   <header class="top">
-    <div class="brand">Studio GLBI</div>
-    <div class="top-book" id="top-book">aucun livre ouvert</div>
-    <div class="top-pid" id="top-pid"></div>
-    <button type="button" class="btn danger" data-act="quitter">Tout arrêter et quitter</button>
+    <div class="brand">Studio <span>GLBI</span></div>
+    <div class="book-id" id="top-book"><span class="path">aucun livre ouvert</span></div>
+    <span class="conn" id="conn" hidden></span>
+    <button type="button" class="btn ghost sm" data-act="changerLivre">Changer de livre</button>
+    <button type="button" class="btn sm" data-act="quitter">Tout arrêter et quitter</button>
   </header>
 
-  <div id="bandeaux" aria-live="polite"></div>
+  <div class="alertes" id="alertes" aria-live="polite"></div>
 
-  <main class="grid">
-    <section class="card" id="livre">
-      <h2>Livre</h2>
-      <form id="ouvrir" class="row" autocomplete="off">
-        <label class="grow"><span class="sr">Dossier du livre</span>
-          <input id="chemin" type="text" placeholder="Dossier du livre (contenant book.json), ex. D:\Livres\dino ou books/test-dino" spellcheck="false">
-        </label>
-        <button type="submit" class="btn primary">Ouvrir</button>
-        <button type="button" class="btn" data-act="parcourir" data-quoi="livre" id="parcourir">Parcourir…</button>
-      </form>
-      <div id="recents"></div>
-      <details id="creer-livre" class="sub">
-        <summary>Créer un livre</summary>
-        <form id="creer" autocomplete="off">
-          <div class="row">
-            <label class="grow col">Dossier parent
-              <input name="parent" type="text" spellcheck="false" placeholder="ex. D:\Livres">
-            </label>
-            <button type="button" class="btn" data-act="parcourir" data-quoi="parent" data-cible="creer-parent">Parcourir…</button>
-          </div>
-          <div class="fields">
-            <label class="col">bookId <input name="bookId" type="text" spellcheck="false" placeholder="ex. dino"></label>
-            <label class="col">Nom du dossier <input name="dossier" type="text" spellcheck="false" placeholder="= bookId"></label>
-            <label class="col">Première scène <input name="scene" type="text" spellcheck="false" placeholder="ex. trex"></label>
-          </div>
-          <div class="fields">
-            <label class="col">Titre FR <input name="title.fr" type="text"></label>
-            <label class="col">Titre EN <input name="title.en" type="text"></label>
-            <label class="col">Titre ES <input name="title.es" type="text"></label>
-          </div>
-          <label class="col">Adresse imprimée (origin) <input name="origin" type="text" spellcheck="false" placeholder="ex. https://dino.editions-liger.com"></label>
-          <div class="fields">
-            <label class="col narrow">Année <input name="legal.year" type="number" min="2000" max="2100"></label>
-            <label class="col">Mention légale FR <input name="legal.text.fr" type="text"></label>
-            <label class="col">EN <input name="legal.text.en" type="text"></label>
-            <label class="col">ES <input name="legal.text.es" type="text"></label>
-          </div>
-          <p class="small muted">Crée book.json et les dossiers scenes/, blender/, images/, icons/, sounds/, puis ouvre le livre. L’icône du livre (icon.png, PNG carré ≥ 512 px) est à ajouter ensuite. Le bookId ne pourra plus changer.</p>
-          <ul class="checklines" id="creer-erreurs"></ul>
-          <button type="submit" class="btn primary" id="creer-bouton">Créer le livre</button>
-        </form>
-      </details>
-      <div id="book-head"></div>
-      <div id="book-form"></div>
-      <div id="scenes"></div>
-      <div id="check"></div>
-    </section>
+  <div class="main">
+    <aside class="side">
+      <section class="card" aria-labelledby="parcours-titre">
+        <h2 class="eyebrow pad" id="parcours-titre">Fabrication du livre</h2>
+        <ol class="steps" id="etapes"></ol>
+      </section>
+      <nav class="card" aria-label="Coulisses">
+        <ul class="group">
+          <li><button type="button" class="row-link" data-act="feuille" data-f="journaux"><span class="dot" id="dot-proc"></span><span class="lbl">Journaux et processus</span><span class="meta" id="meta-proc"></span><span class="chev" aria-hidden="true">›</span></button></li>
+          <li><button type="button" class="row-link" data-act="feuille" data-f="reglages"><span class="dot" id="dot-reglages"></span><span class="lbl">Réglages</span><span class="meta">Blender, essai, ports</span><span class="chev" aria-hidden="true">›</span></button></li>
+          <li><button type="button" class="row-link" data-act="feuille" data-f="outils"><span class="dot" id="dot-outils"></span><span class="lbl">Outils de développement</span><span class="chev" aria-hidden="true">›</span></button></li>
+        </ul>
+      </nav>
+    </aside>
 
-    <section class="card" id="sorties">
-      <h2>Sorties partagées</h2>
-      <div id="outputs"></div>
-    </section>
+    <main class="content">
+      <section class="card next" id="prochaine" aria-live="polite"></section>
+      <section class="card detail" id="detail" aria-live="polite"></section>
+    </main>
+  </div>
+</div>
 
-    <section class="card" id="processus">
-      <h2>Processus</h2>
+<!-- ===== Feuilles (volets repliés) ===== -->
+<dialog class="sheet wide" id="feuille-journaux" aria-labelledby="fj-titre">
+  <header class="sheet-head"><div class="grow"><h2 id="fj-titre">Journaux et processus</h2><p class="sub" id="studio-pid"></p></div>
+    <button type="button" class="btn sm" data-act="fermer">Fermer</button></header>
+  <div class="sheet-body split">
+    <div class="col-left">
+      <h3 class="eyebrow">Processus</h3>
       <div id="procs"></div>
-    </section>
-
-    <section class="card" id="taches">
-      <h2>Tâches</h2>
-      <div id="tasks"></div>
-    </section>
-
-    <section class="card wide" id="telephone">
-      <h2>Essais sur téléphone</h2>
-      <div class="tel-grid">
-        <div class="tel">
-          <h3>Publier un essai (iPhone, HTTPS)</h3>
-          <form id="essai-form" class="row" autocomplete="off">
-            <label class="grow col">Projet Cloudflare Pages
-              <input name="projet" type="text" spellcheck="false" placeholder="ex. glbi-essai">
-            </label>
-            <button type="submit" class="btn">Enregistrer</button>
-          </form>
-          <div id="essai"></div>
-        </div>
-        <div class="tel">
-          <h3>Serveur de test par Wi-Fi (Android)</h3>
-          <div id="reseau"></div>
-        </div>
-        <div class="tel">
-          <h3>QR d’impression (scanner interne)</h3>
-          <div id="impression"></div>
-        </div>
-      </div>
-    </section>
-
-    <section class="card wide" id="journal-card">
+      <h3 class="eyebrow">Sorties partagées</h3>
+      <div id="outputs"></div>
+    </div>
+    <div class="col-right">
       <div class="row between">
-        <h2>Journal</h2>
-        <label class="small"><input type="checkbox" id="suivre" checked> suivre la fin</label>
+        <div class="chips" id="tabs" role="tablist" aria-label="Journaux"></div>
+        <label class="check"><input type="checkbox" id="suivre" checked> suivre la fin</label>
       </div>
-      <div class="tabs" id="tabs" role="tablist"></div>
       <pre id="journal" tabindex="0" aria-label="Journal"></pre>
-    </section>
+    </div>
+  </div>
+</dialog>
 
-    <section class="card wide" id="blender">
-      <h2>Blender</h2>
-      <form id="blender-form" autocomplete="off">
-        <div class="row">
-          <label class="grow col">Programme blender.exe
+<dialog class="sheet" id="feuille-reglages" aria-labelledby="fr-titre">
+  <header class="sheet-head"><div class="grow"><h2 id="fr-titre">Réglages</h2><p class="sub">Pris en compte tout de suite, sauf les ports (au prochain démarrage de chaque processus).</p></div>
+    <button type="button" class="btn sm" data-act="fermer">Fermer</button></header>
+  <div class="sheet-body">
+    <section class="block">
+      <h3>Blender</h3>
+      <form id="blender-form" class="form" autocomplete="off">
+        <div class="field-row">
+          <label class="field grow">Programme blender.exe
             <input name="exe" type="text" spellcheck="false" placeholder="ex. C:\Program Files\Blender Foundation\Blender 5.1\blender.exe">
           </label>
           <button type="button" class="btn" data-act="parcourir" data-quoi="blender" data-cible="blender-exe">Parcourir…</button>
           <button type="button" class="btn" data-act="detecterBlender">Détecter</button>
         </div>
-        <p class="small" id="blender-exe-etat"></p>
-        <div class="row">
-          <label class="grow col">Gabarit de scène (.blend, facultatif)
+        <p class="hint" id="blender-exe-etat"></p>
+        <div class="field-row">
+          <label class="field grow">Gabarit de scène (.blend, facultatif)
             <input name="gabarit" type="text" spellcheck="false" placeholder="ex. D:\Livres\gabarit-scene.blend">
           </label>
           <button type="button" class="btn" data-act="parcourir" data-quoi="gabarit" data-cible="blender-gabarit">Parcourir…</button>
         </div>
-        <p class="small" id="blender-gabarit-etat"></p>
-        <button type="submit" class="btn">Enregistrer</button>
+        <p class="hint" id="blender-gabarit-etat"></p>
+        <div class="form-actions"><button type="submit" class="btn primary">Enregistrer</button></div>
       </form>
-      <p class="small muted">« Ouvrir dans Blender » (tableau des scènes) lance Blender sur <code>blender/&lt;scène&gt;.blend</code> du livre ouvert, en processus indépendant : ni suivi, ni journal, jamais arrêté par le studio (« Tout arrêter et quitter » compris). Le gabarit (GLBI_ROOT, empty de cible, lampe Sun, réglages d’export) est copié en <code>blender/&lt;scène&gt;.blend</code> à l’ajout d’une scène et par « Créer depuis le gabarit », jamais par-dessus un fichier existant ; sans gabarit, rien n’est créé.</p>
+      <p class="hint">« Ouvrir dans Blender » lance Blender sur <code>blender/&lt;scène&gt;.blend</code> du livre ouvert, à part : ni suivi, ni journal, jamais arrêté par le studio (« Tout arrêter et quitter » compris). Le gabarit (GLBI_ROOT, empty de cible, lampe Sun, réglages d’export) est copié en <code>blender/&lt;scène&gt;.blend</code> à l’ajout d’une scène et par « Créer depuis le gabarit », jamais par-dessus un fichier existant ; sans gabarit, rien n’est créé.</p>
     </section>
-
-    <section class="card wide" id="reglages">
-      <h2>Ports</h2>
-      <form id="ports" class="row wrap">
-        <label>Atelier <input type="number" name="atelier" min="1024" max="65534"></label>
-        <label>Lecteur de développement <input type="number" name="dev" min="1024" max="65534"></label>
-        <label>Serveur de test <input type="number" name="test" min="1024" max="65534"></label>
-        <button type="submit" class="btn">Enregistrer</button>
-        <button type="button" class="btn" data-act="portsParDefaut">Valeurs par défaut</button>
-        <button type="button" class="btn" data-act="verifierPorts">Revérifier les ports</button>
+    <section class="block">
+      <h3>Essai sur iPhone (Cloudflare Pages)</h3>
+      <form id="essai-form" class="form" autocomplete="off">
+        <div class="field-row">
+          <label class="field grow">Projet Cloudflare Pages
+            <input name="projet" type="text" spellcheck="false" placeholder="ex. glbi-essai">
+          </label>
+          <button type="submit" class="btn">Enregistrer</button>
+        </div>
       </form>
-      <p class="small muted">Pris en compte au prochain démarrage de chaque processus. Studio : port <span id="studio-port"></span> (option <code>--port</code>) ; tests d’installation : 4173.</p>
+      <div id="essai-reglages"></div>
     </section>
-  </main>
-
-  <div id="toast" role="status" aria-live="polite"></div>
-  <div id="fin" hidden>
-    <div class="fin-box">
-      <h2>Studio arrêté</h2>
-      <p>Tous les processus gérés sont arrêtés. Pour relancer le studio : double-clic sur <code>studio.cmd</code> (ou <code>npm run studio</code>) ; cette page se reconnecte alors toute seule.</p>
-    </div>
+    <section class="block">
+      <h3>Ports</h3>
+      <form id="ports" class="form" autocomplete="off">
+        <div class="field-row wrap">
+          <label class="field">Atelier <input type="number" name="atelier" min="1024" max="65534"></label>
+          <label class="field">Lecteur de développement <input type="number" name="dev" min="1024" max="65534"></label>
+          <label class="field">Serveur de test <input type="number" name="test" min="1024" max="65534"></label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn">Enregistrer</button>
+          <button type="button" class="btn ghost" data-act="portsParDefaut">Valeurs par défaut</button>
+          <button type="button" class="btn ghost" data-act="verifierPorts">Revérifier les ports</button>
+        </div>
+      </form>
+      <p class="hint">Studio : port <span id="studio-port"></span> (option <code>--port</code>) ; tests d’installation : 4173.</p>
+    </section>
   </div>
-  <div id="explorateur" hidden>
-    <div class="expl-box" role="dialog" aria-modal="true" aria-labelledby="expl-titre">
-      <div class="row between"><h2 id="expl-titre">Parcourir</h2><button type="button" class="btn small" data-act="explFermer" title="Échap">Fermer</button></div>
-      <form id="expl-aller" class="row" autocomplete="off">
-        <button type="button" class="btn small" data-act="explHaut" title="Dossier parent">↑</button>
-        <label class="grow"><span class="sr">Dossier</span><input id="expl-chemin" type="text" spellcheck="false"></label>
-        <button type="submit" class="btn small">Aller</button>
-      </form>
-      <div class="row wrap small" id="expl-raccourcis"></div>
-      <ul id="expl-liste" tabindex="0"></ul>
-      <p class="small muted" id="expl-aide"></p>
-      <div class="row between">
-        <span class="small mono" id="expl-choix"></span>
-        <button type="button" class="btn primary" data-act="explChoisir" id="expl-choisir">Choisir</button>
+</dialog>
+
+<dialog class="sheet" id="feuille-outils" aria-labelledby="fo-titre">
+  <header class="sheet-head"><div class="grow"><h2 id="fo-titre">Outils de développement</h2><p class="sub">Seulement après un patch du code : le parcours n’en a pas besoin.</p></div>
+    <button type="button" class="btn sm" data-act="fermer">Fermer</button></header>
+  <div class="sheet-body"><div id="tasks" class="rows"></div></div>
+</dialog>
+
+<dialog class="sheet" id="feuille-livre" aria-labelledby="fl-titre">
+  <header class="sheet-head"><div class="grow"><h2 id="fl-titre">Informations du livre</h2><p class="sub">book.json : enregistré seulement par « Enregistrer book.json ».</p></div>
+    <button type="button" class="btn sm" data-act="fermer">Fermer</button></header>
+  <div class="sheet-body"><div id="book-form"></div></div>
+</dialog>
+
+<dialog class="sheet" id="feuille-creer" aria-labelledby="fc-titre">
+  <header class="sheet-head"><div class="grow"><h2 id="fc-titre">Créer un livre</h2><p class="sub">Crée book.json et les dossiers scenes/, blender/, images/, icons/, sounds/, puis ouvre le livre.</p></div>
+    <button type="button" class="btn sm" data-act="fermer">Fermer</button></header>
+  <div class="sheet-body">
+    <form id="creer" class="form" autocomplete="off">
+      <div class="field-row">
+        <label class="field grow">Dossier parent
+          <input name="parent" type="text" spellcheck="false" placeholder="ex. D:\Livres">
+        </label>
+        <button type="button" class="btn" data-act="parcourir" data-quoi="parent" data-cible="creer-parent">Parcourir…</button>
       </div>
-    </div>
+      <div class="fields">
+        <label class="field">Identifiant du livre (bookId) <input name="bookId" type="text" spellcheck="false" placeholder="ex. dino"></label>
+        <label class="field">Nom du dossier <input name="dossier" type="text" spellcheck="false" placeholder="= bookId"></label>
+        <label class="field">Première scène <input name="scene" type="text" spellcheck="false" placeholder="ex. trex"></label>
+      </div>
+      <div class="fields">
+        <label class="field">Titre en français <input name="title.fr" type="text"></label>
+        <label class="field">en anglais <input name="title.en" type="text"></label>
+        <label class="field">en espagnol <input name="title.es" type="text"></label>
+      </div>
+      <label class="field">Adresse imprimée (origin) <input name="origin" type="text" spellcheck="false" placeholder="ex. https://dino.editions-liger.com"></label>
+      <div class="fields legal">
+        <label class="field">Année <input name="legal.year" type="number" min="2000" max="2100"></label>
+        <label class="field">Mention légale en français <input name="legal.text.fr" type="text"></label>
+        <label class="field">en anglais <input name="legal.text.en" type="text"></label>
+        <label class="field">en espagnol <input name="legal.text.es" type="text"></label>
+      </div>
+      <p class="hint">L’identifiant du livre ne pourra plus changer (clé de la progression et du cache sur les téléphones). L’icône du livre (icon.png, image carrée de 512 px ou plus) est à déposer ensuite dans le dossier.</p>
+      <ul class="errors" id="creer-erreurs"></ul>
+      <div class="form-actions"><button type="submit" class="btn primary" id="creer-bouton">Créer le livre</button></div>
+    </form>
   </div>
-  <div id="veille" hidden>
-    <div class="fin-box">
-      <h2>Studio ouvert dans un autre onglet</h2>
-      <p>Un seul onglet du studio est actif à la fois : celui-ci est en veille (il ne reçoit plus l’état et n’envoie plus d’action). Fermer cet onglet, ou le reprendre ici (l’autre passe alors en veille).</p>
-      <button type="button" class="btn primary" id="veille-reprendre">Utiliser cet onglet</button>
-    </div>
+</dialog>
+
+<dialog class="sheet" id="explorateur" aria-labelledby="expl-titre">
+  <header class="sheet-head"><div class="grow"><h2 id="expl-titre">Parcourir</h2><p class="sub" id="expl-aide"></p></div>
+    <button type="button" class="btn sm" data-act="explFermer">Fermer</button></header>
+  <div class="sheet-body expl">
+    <form id="expl-aller" class="field-row" autocomplete="off">
+      <button type="button" class="btn sm" data-act="explHaut" title="Dossier parent" aria-label="Dossier parent">↑</button>
+      <label class="grow"><span class="sr">Dossier</span><input id="expl-chemin" type="text" spellcheck="false"></label>
+      <button type="submit" class="btn sm">Aller</button>
+    </form>
+    <div class="chips" id="expl-raccourcis"></div>
+    <ul id="expl-liste" tabindex="0"></ul>
   </div>
-  <script src="/studio.js"></script>
+  <footer class="sheet-foot">
+    <span class="mono small grow" id="expl-choix"></span>
+    <button type="button" class="btn primary" data-act="explChoisir" id="expl-choisir">Choisir</button>
+  </footer>
+</dialog>
+
+<!-- ===== Alertes (confirmations au style Apple) ===== -->
+<dialog class="alert" id="alerte" aria-labelledby="alerte-titre">
+  <div class="alert-text"><h2 id="alerte-titre"></h2><p id="alerte-message"></p></div>
+  <div class="alert-buttons" id="alerte-boutons"></div>
+</dialog>
+<dialog class="alert" id="fin" aria-labelledby="fin-titre">
+  <div class="alert-text"><h2 id="fin-titre">Studio arrêté</h2>
+    <p>Tous les processus gérés sont arrêtés. Pour relancer le studio : double-clic sur <code>studio.cmd</code> (ou <code>npm run studio</code>) ; cette page se reconnecte alors toute seule.</p></div>
+</dialog>
+<dialog class="alert" id="veille" aria-labelledby="veille-titre">
+  <div class="alert-text"><h2 id="veille-titre">Studio ouvert dans un autre onglet</h2>
+    <p>Un seul onglet du studio est actif à la fois : celui-ci est en veille. Fermer cet onglet, ou le reprendre ici (l’autre passe alors en veille).</p></div>
+  <div class="alert-buttons"><button type="button" class="alert-btn strong" id="veille-reprendre">Utiliser cet onglet</button></div>
+</dialog>
+
+<!-- Messages passagers : « popover » (couche supérieure), remontés au-dessus d’une feuille ouverte. -->
+<div id="toast" popover="manual" role="status" aria-live="polite"></div>
+<script src="/studio.js"></script>
 </body>
 </html>

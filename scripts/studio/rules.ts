@@ -176,13 +176,16 @@ export interface CheckSummary {
   perScene: Record<string, { errors: number; warnings: number }>;
   /** Lignes du livre (sans scène), à afficher sous le tableau. */
   bookLines: ReportFileLine[];
+  /** Toutes les lignes, dans l'ordre du rapport (ST4 : la page les classe par outil et les reformule, sans les modifier). */
+  lines: ReportFileLine[];
 }
 
 export function summarizeReport(raw: unknown): CheckSummary | null {
   if (!raw || typeof raw !== 'object' || !Array.isArray((raw as { lines?: unknown }).lines)) return null;
   const lines = (raw as { lines: ReportFileLine[] }).lines;
-  const s: CheckSummary = { ok: !!(raw as { ok?: unknown }).ok, errors: 0, warnings: 0, perScene: {}, bookLines: [] };
+  const s: CheckSummary = { ok: !!(raw as { ok?: unknown }).ok, errors: 0, warnings: 0, perScene: {}, bookLines: [], lines: [] };
   for (const l of lines) {
+    s.lines.push({ level: l.level, origin: l.origin, scene: l.scene ?? null, message: String(l.message) });
     const err = l.level === 'error';
     if (err) s.errors++;
     else s.warnings++;
