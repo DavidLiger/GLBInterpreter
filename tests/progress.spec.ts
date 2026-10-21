@@ -166,13 +166,19 @@ test('menu de collection : carte débloquée qui ouvre la scène sans quiz, remi
   // Remise à zéro : annulée puis confirmée
   await page.goto(`${SERVER}/#/`);
   const reset = page.getByRole('button', { name: 'Effacer ma collection' });
-  await reset.click();
+  // Au clavier : dans le WebKit de Playwright, le bandeau « nouvelle version » du service worker, fixé en bas de l'écran,
+  // recouvre le bouton depuis que le menu a quatre scènes (AC1) et reçoit le clic de la souris.
+  const pressReset = async () => {
+    await reset.focus();
+    await page.keyboard.press('Enter');
+  };
+  await pressReset();
   const dialog = page.getByRole('dialog', { name: 'Effacer ta collection ?' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: 'Annuler' }).click();
   await expect(dialog).toBeHidden();
   expect((await progress(page))?.unlockedScenes).toEqual(['trex']);
-  await reset.click();
+  await pressReset();
   await page.getByRole('dialog', { name: 'Effacer ta collection ?' }).getByRole('button', { name: 'Effacer' }).click();
   await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 0 sur 4 découvertes');
   expect(await progress(page)).toBeNull();
