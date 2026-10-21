@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import type { Document, Node as GNode } from '@gltf-transform/core';
 import sharp from 'sharp';
 import { readGlbFile, referencedNodeNames } from './glb-pipeline';
-import { bookSchema, formatIssues, GLBI_ROOT_NAME, isReservedSourcePath, type Book, type GlbiConfig, type ModelCredit } from '../src/schema/glbi';
+import { bookSchema, EVENT_TIME_TOLERANCE_S, formatIssues, GLBI_ROOT_NAME, isReservedSourcePath, type Book, type GlbiConfig, type ModelCredit } from '../src/schema/glbi';
 import { mergeLayers } from '../src/schema/merge';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -159,6 +159,16 @@ function descendants(node: GNode): Set<GNode> {
 
 const SRC_KEYS = { src_name: 'name', src_author: 'author', src_license: 'license', src_url: 'url' } as const;
 
+/** Durée d'un clip glTF telle que la calcule three.js (`AnimationClip.resetDuration`) : dernier instant de ses pistes. */
+function clipDuration(anim: { listSamplers(): { getInput(): { getMax(t: number[]): number[] } | null }[] }): number {
+  let d = 0;
+  for (const s of anim.listSamplers()) d = Math.max(d, s.getInput()?.getMax([0])[0] ?? 0);
+  return d;
+}
+
+/** Secondes à la française, à la milliseconde (`9,200`). */
+const seconds = (t: number) => t.toFixed(3).replace('.', ',');
+
 /** Origine d'un message de `mergeLayers` : fichier nommé en tête du message. */
 function mergeOrigin(message: string, id: string): ReportOrigin {
   if (message.startsWith(`scenes/${id}.glb`)) return 'glb';
@@ -289,6 +299,17 @@ export async function readScene(
       });
       if (!animated) warn(`${label} : ${r.where} : le clip « ${r.clip} » n'anime ni « ${r.object} » ni ses descendants`);
     }
+    // Actions combinées (AC1, spec-actions-combinees.md §8) : instant d'un événement au-delà de la fin du clip (couche 3D).
+    for (const a of animations.actions) {
+      const anim = glbAnims.find((x) => x.getName() === a.clip);
+      if (!anim || !a.events?.length) continue;
+      const d = clipDuration(anim);
+      for (const ev of a.events) {
+        if (ev.time > d + EVENT_TIME_TOLERANCE_S) {
+          err(`${glbRel} (couche 3D) : action « ${a.id} » : événement « ${ev.id} » à ${seconds(ev.time)} s, clip de ${seconds(d)} s`, 'glb');
+        }
+      }
+    }
     const declared = new Set(refs.map((r) => r.clip));
     const undeclared = glbClipNames.filter((n) => !declared.has(n));
     if (undeclared.length) warn(`${label} : clip(s) du GLB non déclaré(s) : ${undeclared.join(', ')}`);
@@ -330,6 +351,13 @@ export async function readScene(
     if (a.sound) {
       assets.add(a.sound);
       sounds.add(a.sound);
+    }
+    // Sons d'événement (AC1) : sons de la scène pour V-10 et pour la copie des assets.
+    for (const ev of a.events ?? []) {
+      if (ev.sound) {
+        assets.add(ev.sound);
+        sounds.add(ev.sound);
+      }
     }
   }
   if (config.modules.audio?.ambientSound) {

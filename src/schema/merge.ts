@@ -47,6 +47,11 @@ export interface MergeResult {
   edit: EditLayer | null;
   /** Identifiants d'actions présents dans la couche éditoriale et absents du GLB (conservés dans le fichier). */
   orphans: string[];
+  /**
+   * Événements édités (`actions.<id>.events.<eventId>`) d'une action du GLB, absents des événements de cette action dans le
+   * GLB (AC1, spec-actions-combinees.md §8) : conservés dans le fichier, à rattacher ou supprimer dans l'atelier (AC3).
+   */
+  eventOrphans: { action: string; event: string }[];
   errors: string[];
   warnings: string[];
 }
@@ -54,7 +59,9 @@ export interface MergeResult {
 /** Clés propres à la couche éditoriale : refusées dans le GLB avec un renvoi vers `edit.json`. */
 const EDIT_KEYS = new Set<string>(['name', 'loaderImage', 'label', 'icon', 'sound', ...CAMERA_FRAMING_KEYS, 'audio', 'quiz', 'credits']);
 /** Clés propres à la couche 3D : refusées dans `edit.json` avec un renvoi vers l'addon. */
-const LAYER3D_KEYS = new Set<string>(['id', 'target', 'mode', 'idle', 'object', 'type', 'clip', 'trigger', 'loop']);
+const LAYER3D_KEYS = new Set<string>(['id', 'target', 'mode', 'idle', 'object', 'type', 'clip', 'trigger', 'loop', 'transition', 'time']);
+/** Clés d'action propres aux actions combinées (AC1) : refusées sur `idle` (pas d'événements ni de coupe sur le repos). */
+const ACTION_ONLY_KEYS = new Set<string>(['events', 'transition']);
 
 const where = (p: readonly PropertyKey[]) => (p.length ? p.map(String).join('.') : '(racine)');
 
@@ -72,6 +79,7 @@ export function layerIssues(error: z.ZodError, layer: '3d' | 'edit', glbFile: st
       for (const k of i.keys) {
         let why: string;
         if (atModules && (RESERVED_MODULES as readonly string[]).includes(k)) why = `module réservé « ${k} », non activable en v1 (spec-extras-blender.md §6)`;
+        else if (i.path[i.path.length - 1] === 'idle' && ACTION_ONLY_KEYS.has(k)) why = `clé « ${k} » non admise : pas de ${k === 'events' ? 'marqueurs' : 'coupe au noir'} sur idle (spec-actions-combinees.md §4, §6)`;
         else if (layer === '3d' && EDIT_KEYS.has(k)) why = `clé « ${k} » non admise, elle appartient à ${editFile}`;
         else if (layer === 'edit' && LAYER3D_KEYS.has(k)) why = `clé « ${k} » non admise, elle appartient au GLB (addon)`;
         else why = `clé « ${k} » inconnue`;
@@ -116,6 +124,9 @@ function build(l3: Layer3d, e: EditLayer | null, fallback: boolean): Record<stri
               icon: ed?.icon,
               sound: ed?.sound,
               loop: a.loop,
+              transition: a.transition,
+              // Événements dans l'ordre du GLB ; son pris dans la couche éditoriale (AC1, DP-6).
+              events: a.events?.map((ev) => defined({ id: ev.id, time: ev.time, sound: ed?.events?.[ev.id]?.sound })),
             });
           }),
         }
@@ -147,7 +158,7 @@ export function mergeLayers(raw3d: unknown, rawEdit: unknown, opts: MergeOptions
   const errors: string[] = [];
   const warnings: string[] = [];
   const result = (r: Partial<MergeResult>): MergeResult => ({
-    config: null, draft: null, layer3d: null, edit: null, orphans: [], ...r, errors, warnings,
+    config: null, draft: null, layer3d: null, edit: null, orphans: [], eventOrphans: [], ...r, errors, warnings,
   });
 
   // --- Version de la couche 3D (rupture D-8.9 : un GLB de l'addon v0.1 n'est pas migré) ---
@@ -180,6 +191,7 @@ export function mergeLayers(raw3d: unknown, rawEdit: unknown, opts: MergeOptions
   // --- 2. Couche éditoriale ---
   let edit: EditLayer | null = null;
   let rawActionKeys: string[] = [];
+  let rawActions: Record<string, unknown> = {};
   if (rawEdit === undefined) {
     errors.push(`${scene} : ${editFile} absent ; ouvrir la scène dans l'atelier (npm run atelier -- --source <dossier>)`);
   } else {
@@ -188,13 +200,24 @@ export function mergeLayers(raw3d: unknown, rawEdit: unknown, opts: MergeOptions
     else errors.push(...layerIssues(pe.error, 'edit', glbFile, editFile));
     // Orphelins relevés aussi sur un fichier invalide (atelier : rattacher ou supprimer).
     const ra = (rawEdit as { modules?: { animations?: { actions?: unknown } } } | null)?.modules?.animations?.actions;
-    if (ra && typeof ra === 'object' && !Array.isArray(ra)) rawActionKeys = Object.keys(ra);
+    if (ra && typeof ra === 'object' && !Array.isArray(ra)) {
+      rawActions = ra as Record<string, unknown>;
+      rawActionKeys = Object.keys(ra);
+    }
   }
 
   // --- 3. Cohérence croisée ---
   const anims = l3.modules.animations;
   const glbIds = anims?.actions.map((a) => a.id) ?? [];
   const orphans = rawActionKeys.filter((k) => !glbIds.includes(k));
+  // Événements édités absents du GLB, relevés aussi sur un fichier invalide (comme les actions orphelines).
+  const eventOrphans: { action: string; event: string }[] = [];
+  for (const a of anims?.actions ?? []) {
+    const re = (rawActions[a.id] as { events?: unknown } | null | undefined)?.events;
+    if (!re || typeof re !== 'object' || Array.isArray(re)) continue;
+    const known = new Set((a.events ?? []).map((ev) => ev.id));
+    for (const k of Object.keys(re)) if (!known.has(k)) eventOrphans.push({ action: a.id, event: k });
+  }
   if (edit) {
     if (!anims && orphans.length) {
       errors.push(`${editFile} : actions éditées mais le GLB n'a pas de module animations`);
@@ -203,7 +226,16 @@ export function mergeLayers(raw3d: unknown, rawEdit: unknown, opts: MergeOptions
     }
     if (!edit.scene?.name) errors.push(`${scene} : nom de la scène (scene.name) absent de ${editFile} ; à renseigner dans l'atelier`);
     for (const a of anims?.actions ?? []) {
-      if (!edit.modules?.animations?.actions[a.id]?.label) errors.push(`${scene} : action « ${a.id} » sans libellé ; à renseigner dans l'atelier`);
+      const ed = edit.modules?.animations?.actions[a.id];
+      if (!ed?.label) errors.push(`${scene} : action « ${a.id} » sans libellé ; à renseigner dans l'atelier`);
+      // Actions combinées (AC1, spec-actions-combinees.md §8) : événement du GLB sans son, événement édité inconnu du GLB.
+      const glbEvents = (a.events ?? []).map((ev) => ev.id);
+      for (const o of eventOrphans.filter((x) => x.action === a.id)) {
+        errors.push(`${editFile} : action « ${a.id} » : événement « ${o.event} » absent du GLB (événements du GLB : ${glbEvents.join(', ') || 'aucun'})`);
+      }
+      for (const ev of glbEvents) {
+        if (!ed?.events?.[ev]?.sound) warnings.push(`${scene} : événement « ${ev} » de l'action « ${a.id} » sans son (ignoré) ; à renseigner dans l'atelier`);
+      }
     }
     if (edit.modules?.camera && !l3.modules.camera) {
       errors.push(`${editFile} : modules.camera réglé mais pas de cible dans le GLB (camera.target, addon)`);
@@ -226,5 +258,5 @@ export function mergeLayers(raw3d: unknown, rawEdit: unknown, opts: MergeOptions
     draft = onlyGlb.success ? onlyGlb.data : null;
   }
 
-  return result({ config: errors.length ? null : config, draft, layer3d: l3, edit, orphans });
+  return result({ config: errors.length ? null : config, draft, layer3d: l3, edit, orphans, eventOrphans });
 }

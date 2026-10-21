@@ -1,6 +1,13 @@
 // scripts/glb-pipeline.ts — optimisation des GLB d'un livre (Î7). Utilisé par build-book.ts et glb-report.ts.
 //
-// Ordre : extras étrangers retirés → prune (protégé) → dedup sans MATERIAL → textures (KTX2 ou WebP) → meshopt.
+// Ordre : extras étrangers retirés → resample → prune (protégé) → dedup sans MATERIAL → textures (KTX2 ou WebP) → meshopt.
+// - `resample` (AC1, spec-actions-combinees.md §8) : retire les clés d'animation redondantes (clips cuits, plusieurs
+//   armatures par clip commun), sans perte au-delà de la tolérance de gltf-transform (1e-4) ; la première et la dernière clé
+//   de chaque piste sont gardées, la durée des clips (borne des événements) est donc inchangée, et contrôlée (survie).
+//   Avant `prune`, qui retire les accesseurs remplacés. Interpolations LINEAR et STEP seulement (CUBICSPLINE intact).
+// - Extras : scène → `glbi_` ; nœuds → `glbi_` et `src_` ; maillages, primitives, matériaux, textures, animations, skins et
+//   caméras → `glbi_` et `src_` aussi (AC1, point ouvert d'Î7) : le lecteur n'en lit aucun et `keepExtras` garderait sinon
+//   une propriété inutilisée qui porte un extra étranger.
 // - `meshopt()` de gltf-transform appelle lui-même `reorder` + `quantize` : pas de passe `quantize` séparée
 //   (le doublon signalé au test du 09/10 est confirmé ; une passe `quantize` après `meshopt` en CLI réécrit le fichier
 //   sans EXT_meshopt_compression, d'où la hausse 3,21 → 3,27 Mo constatée).
@@ -24,6 +31,7 @@ import {
   PropertyType,
   TextureChannel,
   type Document,
+  type Property,
 } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, KHRTextureBasisu } from '@gltf-transform/extensions';
 import {
@@ -33,6 +41,7 @@ import {
   listTextureSlots,
   meshopt,
   prune,
+  resample,
   textureCompress,
 } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
@@ -44,6 +53,10 @@ export const TEXTURE_MODES: readonly TextureMode[] = ['auto', 'ktx2', 'webp', 'k
 /** Préfixes d'extras conservés : scène → `glbi_` ; nœuds → `glbi_` et `src_` (spec-extras-blender.md §3). */
 const SCENE_KEEP = /^glbi_/;
 const NODE_KEEP = /^(glbi_|src_)/;
+/** Autres propriétés (maillages, matériaux, textures…) : mêmes préfixes que les nœuds (AC1). */
+const OTHER_KEEP = NODE_KEEP;
+/** Écart toléré sur la durée d'un clip avant et après optimisation (contrôle de survie, AC1). */
+const CLIP_DURATION_TOLERANCE_S = 0.001;
 /** Marqueur temporaire posé sur les nœuds protégés pendant `prune` (retiré ensuite). */
 const KEEP_MARK = 'glbi__keep';
 
@@ -112,13 +125,46 @@ export interface GlbSnapshot {
   sceneExtraKeys: string[];
   /** Clés d'extras de nœud hors `glbi_` / `src_`. */
   foreignNodeExtraKeys: string[];
+  /** Clés d'extras hors `glbi_` / `src_` des autres propriétés, préfixées par leur type (`material.foo`). */
+  foreignOtherExtraKeys: string[];
+  /** Durée de chaque clip (dernier instant de ses pistes, comme three.js), par nom. */
+  clipDurations: Record<string, number>;
+  /**
+   * Nombre total de clés d'animation (instants de tous les échantillonneurs) et mémoire de leurs pistes une fois lues par
+   * three.js (instants et valeurs en Float32 : `GLTFLoader` déquantifie les sorties normalisées), en octets, par piste.
+   */
+  keyframes: number;
+  animationBytes: number;
+  /** Attributs de sommet de chaque maillage, par nom (`Armature_Trex_mesh` → `JOINTS_0, NORMAL, POSITION, TEXCOORD_0…`). */
+  vertexAttributes: Map<string, string[]>;
   textures: { mime: string; bytes: number }[];
   extensions: string[];
+}
+
+/** Autres propriétés porteuses d'extras, avec leur préfixe de type (maillages et primitives, matériaux, textures…). */
+function otherProperties(doc: Document): (readonly [string, Property])[] {
+  const root = doc.getRoot();
+  return [
+    ...root.listMeshes().flatMap((m) => [['mesh', m] as const, ...m.listPrimitives().map((p) => ['primitive', p] as const)]),
+    ...root.listMaterials().map((m) => ['material', m] as const),
+    ...root.listTextures().map((t) => ['texture', t] as const),
+    ...root.listAnimations().map((a) => ['animation', a] as const),
+    ...root.listSkins().map((k) => ['skin', k] as const),
+    ...root.listCameras().map((c) => ['camera', c] as const),
+  ];
 }
 
 export function snapshot(doc: Document): GlbSnapshot {
   const root = doc.getRoot();
   const nodes = root.listNodes();
+  const anims = root.listAnimations();
+  const samplers = anims.flatMap((a) => a.listSamplers());
+  // Par nom de maillage, pas de nœud : `meshopt` (quantize) déplace le maillage d'un nœud animé sur un enfant sans nom.
+  const vertexAttributes = new Map<string, string[]>();
+  for (const mesh of root.listMeshes()) {
+    const sem = new Set([...(vertexAttributes.get(mesh.getName()) ?? []), ...mesh.listPrimitives().flatMap((p) => p.listSemantics())]);
+    vertexAttributes.set(mesh.getName(), [...sem].sort());
+  }
   const pick = (ex: Record<string, unknown>, re: RegExp) =>
     JSON.stringify(Object.fromEntries(Object.entries(ex).filter(([k]) => re.test(k)).sort(([a], [b]) => a.localeCompare(b))));
   return {
@@ -132,6 +178,11 @@ export function snapshot(doc: Document): GlbSnapshot {
     nodeNames: new Set(nodes.map((n) => n.getName())),
     sceneExtraKeys: root.listScenes().flatMap((s) => Object.keys(s.getExtras() ?? {})),
     foreignNodeExtraKeys: [...new Set(nodes.flatMap((n) => Object.keys(n.getExtras() ?? {}).filter((k) => !NODE_KEEP.test(k))))],
+    foreignOtherExtraKeys: [...new Set(otherProperties(doc).flatMap(([t, p]) => Object.keys(p.getExtras() ?? {}).filter((k) => !OTHER_KEEP.test(k)).map((k) => `${t}.${k}`)))].sort(),
+    clipDurations: Object.fromEntries(anims.map((a) => [a.getName(), Math.max(0, ...a.listSamplers().map((sp) => sp.getInput()?.getMax([0])[0] ?? 0))])),
+    keyframes: samplers.reduce((sum, sp) => sum + (sp.getInput()?.getCount() ?? 0), 0),
+    animationBytes: samplers.reduce((sum, sp) => sum + 4 * ((sp.getInput()?.getCount() ?? 0) + (sp.getOutput()?.getCount() ?? 0) * (sp.getOutput()?.getElementSize() ?? 0)), 0),
+    vertexAttributes,
     textures: root.listTextures().map((t) => ({ mime: t.getMimeType(), bytes: t.getImage()?.byteLength ?? 0 })),
     extensions: root.listExtensionsUsed().map((e) => e.extensionName).sort(),
   };
@@ -152,13 +203,27 @@ export function compareSnapshots(before: GlbSnapshot, after: GlbSnapshot, protec
     const added = after.clips.filter((c) => !before.clips.includes(c));
     issues.push(`clips modifiés (perdus : ${lost.join(', ') || '—'} ; ajoutés : ${added.join(', ') || '—'})`);
   }
+  // Durées des clips (AC1) : la borne des événements (`time ≤ durée`) est contrôlée sur le GLB source.
+  for (const [name, d] of Object.entries(before.clipDurations)) {
+    const a = after.clipDurations[name];
+    if (a !== undefined && Math.abs(a - d) > CLIP_DURATION_TOLERANCE_S) issues.push(`durée du clip « ${name} » modifiée (${d.toFixed(3)} s → ${a.toFixed(3)} s)`);
+  }
   if (!same(before.srcCredits, after.srcCredits)) issues.push('propriétés src_* des nœuds modifiées ou perdues');
+  // Attributs de sommet (point ouvert d'Î7, AC1) : UV, couleurs, normales, os… de chaque maillage encore présent.
+  // Un maillage absent après (fusionné par `dedup` avec un identique, ou inutilisé) n'est pas comparé.
+  for (const [mesh, attrs] of before.vertexAttributes) {
+    const kept = after.vertexAttributes.get(mesh);
+    if (!kept) continue;
+    const lost = attrs.filter((x) => !kept.includes(x));
+    if (lost.length) issues.push(`attributs de sommet perdus sur le maillage « ${mesh} » : ${lost.join(', ')}`);
+  }
   for (const name of protect) {
     if (before.nodeNames.has(name) && !after.nodeNames.has(name)) issues.push(`nœud « ${name} » (référencé par la config) supprimé`);
   }
   const foreignScene = after.sceneExtraKeys.filter((k) => !SCENE_KEEP.test(k));
   if (foreignScene.length) issues.push(`extras de scène hors glbi_ restants : ${foreignScene.join(', ')}`);
   if (after.foreignNodeExtraKeys.length) issues.push(`extras de nœud hors glbi_/src_ restants : ${after.foreignNodeExtraKeys.join(', ')}`);
+  if (after.foreignOtherExtraKeys.length) issues.push(`extras hors glbi_/src_ restants : ${after.foreignOtherExtraKeys.join(', ')}`);
   return issues;
 }
 
@@ -193,9 +258,12 @@ export function referencedNodeNamesInGlb(doc: Document): string[] {
 // Étapes
 // ---------------------------------------------------------------------------------------------------------
 
-/** Retire les extras de scène hors `glbi_` et de nœud hors `glbi_` / `src_`. Renvoie les clés retirées. */
-export function stripForeignExtras(doc: Document): { scene: string[]; node: string[] } {
-  const removed = { scene: new Set<string>(), node: new Set<string>() };
+/**
+ * Retire les extras de scène hors `glbi_`, et ceux des nœuds et des autres propriétés (maillages, primitives, matériaux,
+ * textures, animations, skins, caméras) hors `glbi_` / `src_`. Renvoie les clés retirées (`other` : préfixées par le type).
+ */
+export function stripForeignExtras(doc: Document): { scene: string[]; node: string[]; other: string[] } {
+  const removed = { scene: new Set<string>(), node: new Set<string>(), other: new Set<string>() };
   const filter = (ex: Record<string, unknown>, keep: RegExp, into: Set<string>) => {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(ex)) {
@@ -206,7 +274,12 @@ export function stripForeignExtras(doc: Document): { scene: string[]; node: stri
   };
   for (const s of doc.getRoot().listScenes()) s.setExtras(filter(s.getExtras() ?? {}, SCENE_KEEP, removed.scene));
   for (const n of doc.getRoot().listNodes()) n.setExtras(filter(n.getExtras() ?? {}, NODE_KEEP, removed.node));
-  return { scene: [...removed.scene].sort(), node: [...removed.node].sort() };
+  for (const [type, p] of otherProperties(doc)) {
+    const keys = new Set<string>();
+    p.setExtras(filter(p.getExtras() ?? {}, OTHER_KEEP, keys));
+    for (const k of keys) removed.other.add(`${type}.${k}`);
+  }
+  return { scene: [...removed.scene].sort(), node: [...removed.node].sort(), other: [...removed.other].sort() };
 }
 
 let ktxChecked: { ok: boolean; version: string | null; reason: string } | null = null;
@@ -299,12 +372,15 @@ export interface OptimizeOptions {
   /** Garder tous les empties feuilles (cartouche de test : POI et éléments nommés dans la config TS). */
   keepLeaves?: boolean;
   textures?: TextureMode;
+  /** `resample` des animations (AC1) ; `false` seulement pour mesurer son effet (`glb-report --no-resample`). Défaut : vrai. */
+  resample?: boolean;
 }
 
 export interface OptimizeResult {
   textures: Exclude<TextureMode, 'auto'>;
   notes: string[];
-  stripped: { scene: string[]; node: string[] };
+  stripped: { scene: string[]; node: string[]; other: string[] };
+  resampled: boolean;
 }
 
 /** Optimise le document en place (voir l'ordre en tête de fichier). */
@@ -315,6 +391,10 @@ export async function optimizeDocument(doc: Document, opts: OptimizeOptions = {}
 
   // 1. Extras étrangers retirés AVANT prune (sinon `keepExtras` garderait les nœuds qui n'en portent que d'étrangers).
   const stripped = stripForeignExtras(doc);
+
+  // 1 bis. Clés d'animation redondantes (AC1) ; avant prune, qui retire les accesseurs remplacés.
+  const resampled = opts.resample ?? true;
+  if (resampled) await doc.transform(resample());
 
   // 2. Nœuds protégés : marqueur temporaire, puis prune qui garde les nœuds porteurs d'extras.
   const protect = new Set(opts.protect ?? referencedNodeNamesInGlb(doc));
@@ -341,7 +421,7 @@ export async function optimizeDocument(doc: Document, opts: OptimizeOptions = {}
   // 4. Géométrie et animations : Meshopt (inclut reorder + quantize).
   await doc.transform(meshopt({ encoder: MeshoptEncoder, level: 'high' }));
 
-  return { textures: mode, notes, stripped };
+  return { textures: mode, notes, stripped, resampled };
 }
 
 export interface FileResult extends OptimizeResult {

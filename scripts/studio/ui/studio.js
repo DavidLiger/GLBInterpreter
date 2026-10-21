@@ -352,7 +352,8 @@ const Q = '« ([^»]+) »';
 const rx = (s) => new RegExp(s);
 // [motif, outil, correction, phrase] : le premier motif qui correspond l'emporte. `correction` : ce que propose le studio
 // (blender : ouvrir le .blend ; atelier : ouvrir l'atelier ; livre : « Modifier le livre » ; dossier : copier le chemin).
-// Motifs tirés des textes de scripts/book-check.ts, src/schema/merge.ts et src/schema/glbi.ts (base 5643449).
+// Motifs tirés des textes de scripts/book-check.ts, src/schema/merge.ts et src/schema/glbi.ts (base 5643449 ; événements,
+// coupe au noir et clés mal placées ajoutés en AC1).
 const EXPLAIN = [
   // Dossier du livre, book.json
   [/book\.json absent$/, 'studio', 'livre', 'book.json manque dans le dossier : créer le livre dans le studio (« Changer de livre »).'],
@@ -380,6 +381,12 @@ const EXPLAIN = [
   [rx(`camera\\.target ${Q} introuvable`), 'blender', 'blender', (m) => `La cible de la caméra « ${m[1]} » n’existe pas dans le modèle exporté : vérifier son nom dans Blender.`],
   [rx(`\\.object ${Q} introuvable dans le GLB`), 'blender', 'blender', (m) => `L’objet « ${m[1]} » n’existe pas dans le modèle exporté : vérifier son nom dans Blender.`],
   [rx(`clip ${Q} en double dans le GLB`), 'blender', 'blender', (m) => `Deux animations s’appellent « ${m[1]} » : renommer l’une d’elles dans Blender.`],
+  // Actions combinées (AC1) : marqueurs de la timeline (événements) et coupe au noir, écrits par l'addon
+  [rx(`action ${Q} : événement ${Q} à ([\\d,]+) s, clip de ([\\d,]+) s`), 'blender', 'blender', (m) => `Le marqueur « ${m[1]}:${m[2]} » est placé à ${m[3]} s, après la fin de l’animation du bouton (${m[4]} s) : le déplacer dans la timeline de Blender, puis exporter.`],
+  [rx(`id d'événement en double ${Q}`), 'blender', 'blender', (m) => `Deux marqueurs du même bouton s’appellent « ${m[1]} » : renommer l’un d’eux dans la timeline de Blender, puis exporter.`],
+  [/clé « (events|transition) » non admise : pas de/, 'blender', 'blender', (m) => (m[1] === 'events' ? 'Des marqueurs ont été posés pour l’animation de repos, qui n’en accepte pas : les placer sur l’animation d’un bouton dans Blender, puis exporter.' : 'L’animation de repos est marquée « coupe au noir » : la coupe ne vaut que pour un bouton ; décocher dans l’addon, puis exporter.')],
+  [/\.events\.\d+\.time : instant négatif/, 'blender', 'blender', 'Un marqueur est placé avant le début de l’animation du bouton : le déplacer dans la timeline de Blender, puis exporter.'],
+  [rx(`clé ${Q} non admise, elle appartient à scenes/`), 'blender', 'blender', (m) => `Le modèle exporté contient « ${m[1]} », un réglage qui se fait dans l’atelier : exporter à nouveau avec l’addon actuel.`],
   [/n'a qu'un clip « Animation »/, 'blender', 'blender', 'Le modèle n’a qu’une animation « Animation » : à l’export, le mode d’animation doit être « Actions » (l’addon le règle).'],
   [rx(`(\\d+) nœuds nommés ${Q}`), 'blender', 'blender', (m) => `${m[1]} objets s’appellent « ${m[2]} » dans Blender : leur donner des noms différents.`],
   [/porte un maillage \(un empty est attendu/, 'blender', 'blender', 'La cible de la caméra est un objet avec un maillage : choisir un objet vide (empty) dans l’addon.'],
@@ -396,6 +403,9 @@ const EXPLAIN = [
   [/actions éditées mais le GLB n'a pas de module animations/, 'atelier', 'atelier', 'La scène exportée et ses réglages ne correspondent plus : les réglages ont des boutons, le modèle exporté n’a pas d’animation.'],
   [/nom de la scène \(scene\.name\) absent/, 'atelier', 'atelier', 'La scène n’a pas encore de nom : le donner dans l’atelier (en français, anglais et espagnol).'],
   [rx(`action ${Q} sans libellé`), 'atelier', 'atelier', (m) => `Le bouton « ${m[1]} » n’a pas de texte : l’écrire dans l’atelier (en français, anglais et espagnol).`],
+  [rx(`événement ${Q} de l'action ${Q} sans son`), 'atelier', 'atelier', (m) => `Le marqueur « ${m[1]} » du bouton « ${m[2]} » n’a pas de son : rien ne sera joué à cet instant tant qu’il n’est pas choisi dans l’atelier.`],
+  [rx(`action ${Q} : événement ${Q} absent du GLB \\(événements du GLB : (.*)\\)`), 'atelier', 'atelier', (m) => `La scène exportée et ses réglages ne correspondent plus : les réglages donnent un son au marqueur « ${m[2]} » du bouton « ${m[1]} », que le modèle n’a pas (il a : ${m[3]}). Le retirer dans l’atelier, ou remettre le marqueur dans Blender.`],
+  [rx(`clé ${Q} non admise, elle appartient au GLB`), 'atelier', 'atelier', (m) => `Les réglages de la scène contiennent « ${m[1]} », qui se règle dans Blender (addon) : le retirer du fichier des réglages de la scène.`],
   [/cadrage non réglé/, 'atelier', 'atelier', 'Le cadrage n’est pas réglé : le lecteur prendra un cadrage par défaut (onglet Caméra de l’atelier).'],
   [rx(`son ${Q} sans entrée dans modules\\.credits\\.assets`), 'atelier', 'atelier', (m) => `Le son « ${m[1]} » n’a pas de crédit : l’ajouter dans l’atelier.`],
   [rx(`crédit pour ${Q}, asset non utilisé`), 'atelier', 'atelier', (m) => `Un crédit concerne « ${m[1]} », que la scène n’utilise pas : le retirer dans l’atelier.`],

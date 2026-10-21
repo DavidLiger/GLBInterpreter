@@ -480,9 +480,10 @@ async function writeOptimizedScene(sourceDir: string, outDir: string, rel: strin
   try {
     const r = await optimizeGlbFile(path.join(sourceDir, rel), path.join(outDir, rel), { protect, textures });
     for (const s of r.survival) err(`${rel} : optimisation : ${s}`);
-    const stripped = [...r.stripped.scene.map((k) => `scène.${k}`), ...r.stripped.node.map((k) => `nœud.${k}`)];
+    const stripped = [...r.stripped.scene.map((k) => `scène.${k}`), ...r.stripped.node.map((k) => `nœud.${k}`), ...r.stripped.other];
+    const keys = r.before.keyframes ? ` ; clés d'animation ${r.before.keyframes} → ${r.after.keyframes}` : '';
     console.log(
-      `build-book : ${rel} ${formatMiB(r.inBytes)} → ${formatMiB(r.outBytes)} (textures ${r.textures})` +
+      `build-book : ${rel} ${formatMiB(r.inBytes)} → ${formatMiB(r.outBytes)} (textures ${r.textures})${keys}` +
         (stripped.length ? ` ; extras retirés : ${stripped.join(', ')}` : ''),
     );
     return r.survival.length === 0;

@@ -16,12 +16,19 @@
 //   octave plus haut que trex), plus long que le clip (on entend la coupure à l'interruption et à la fin du clip) ; ambiance `jungle.wav` : bourdonnement doux de 2 s qui boucle sans coupure ;
 // - action « walk » du raptor en boucle (`loop: true`, Î11) : couvre le son qui boucle avec l'action et s'arrête avec elle ;
 // - image de chargement de « trex » en bruit aléatoire (≈ 3 MiB, Î10) : avec `--part-mib 1`, au moins un fichier du livre est
-//   découpé, ce qui garde la couverture des tests de recomposition et de reprise (tests/install.spec.ts) sur un livre v1.
+//   découpé, ce qui garde la couverture des tests de recomposition et de reprise (tests/install.spec.ts) sur un livre v1 ;
+// - scène « duo » ajoutée en fin (AC1, spec-actions-combinees.md §11) : deux armatures (`Armature_Chasseur`, acteur
+//   principal, et `Armature_Proie`) animées par des clips communs cuits à 30 i/s (clés redondantes : terrain du `resample`),
+//   cible caméra `start` animée pendant « chasse », événements avec sons (`chasse` : morsure, souffle sans son, fuite ;
+//   `chute` : impact), action « chute » en coupe au noir (`transition: "cut"`), « regard » sans événement ; sans quiz.
+//   Les GLB de trex, raptor et ptero sont écrits par `makeGlb`, inchangé : mêmes octets qu'avant AC1 ;
+// - un dossier `blender/` déjà posé dans le livre de test (raptor réel, point de clôture de ST1) est conservé : seul le reste
+//   du dossier est effacé et réécrit.
 import fs from 'node:fs';
 import path from 'node:path';
-import { Document, NodeIO, type Node as GNode } from '@gltf-transform/core';
+import { Document, NodeIO, type Node as GNode, type TypedArray } from '@gltf-transform/core';
 import sharp from 'sharp';
-import { EDIT_LAYER_VERSION, LAYER3D_VERSION, type Book, type EditLayer, type Layer3d } from '../src/schema/glbi';
+import { EDIT_LAYER_VERSION, LAYER3D_VERSION, RESERVED_SOURCE_DIR, type Book, type EditLayer, type Layer3d } from '../src/schema/glbi';
 
 const dir = path.resolve(process.cwd(), process.argv[2] ?? 'books/test-dino');
 
@@ -165,15 +172,184 @@ function editLayer(id: string, name: ReturnType<typeof L>): EditLayer {
   };
 }
 
+
+// ---------------------------------------------------------------------------------------------------------
+// Scène « duo » (AC1) : deux personnages, clips communs, cible animée, événements, coupe au noir
+// ---------------------------------------------------------------------------------------------------------
+
+const DUO_FPS = 30;
+const DUO_CLIPS = { idle: 2, chasse: 4, chute: 2, regard: 1.5 } as const;
+type DuoClip = keyof typeof DUO_CLIPS;
+
+/** Couche 3D de « duo » : instants des événements = marqueurs posés dans Blender (secondes depuis le début du clip). */
+function duoLayer3d(): Layer3d {
+  const actor = 'Armature_Chasseur';
+  return {
+    version: LAYER3D_VERSION,
+    scene: { id: 'duo' },
+    modules: {
+      camera: { target: 'start' },
+      animations: {
+        mode: 'buttons',
+        idle: { object: actor, clip: 'idle', loop: true },
+        actions: [
+          {
+            id: 'chasse', object: actor, type: 'armature', clip: 'chasse', trigger: 'button', loop: false,
+            events: [{ id: 'morsure', time: 2 }, { id: 'souffle', time: 2.5 }, { id: 'fuite', time: 3.2 }],
+          },
+          { id: 'chute', object: actor, type: 'armature', clip: 'chute', trigger: 'button', loop: false, transition: 'cut', events: [{ id: 'impact', time: 1.5 }] },
+          { id: 'regard', object: actor, type: 'armature', clip: 'regard', trigger: 'button', loop: false },
+        ],
+      },
+    },
+  };
+}
+
+/** Couche éditoriale de « duo » : sons d'événement (« souffle » volontairement sans son : avertissement de book:check). */
+function duoEditLayer(): EditLayer {
+  const credit = (f: string, title: string) => ({ asset: `sounds/${f}.wav`, title, author: 'GLBInterpreter', license: 'CC0' });
+  return {
+    version: EDIT_LAYER_VERSION,
+    scene: { name: L('La poursuite', 'The chase', 'La persecución'), loaderImage: 'images/duo-preview.png' },
+    modules: {
+      camera: {
+        zoom: 0.5, minDistance: 2, maxDistance: 20, minPolarAngle: 0, maxPolarAngle: 1.57, minAzimuthAngle: -3.14, maxAzimuthAngle: 3.14, enableZoom: true,
+      },
+      animations: {
+        actions: {
+          chasse: {
+            label: L('Chasser', 'Chase', 'Perseguir'), icon: 'icons/walk.png', sound: 'sounds/duo_chasse.wav',
+            events: { morsure: { sound: 'sounds/duo_morsure.wav' }, fuite: { sound: 'sounds/duo_fuite.wav' } },
+          },
+          chute: { label: L('Tomber', 'Fall', 'Caer'), icon: 'icons/eat.png', events: { impact: { sound: 'sounds/duo_impact.wav' } } },
+          regard: { label: L('Regarder', 'Look', 'Mirar'), icon: 'icons/roar.png', sound: 'sounds/duo_regard.wav' },
+        },
+      },
+      audio: { ambientSound: 'sounds/jungle.wav' },
+      credits: {
+        assets: [
+          credit('duo_chasse', 'Chasse (test)'),
+          credit('duo_regard', 'Regard (test)'),
+          credit('duo_morsure', 'Morsure (test)'),
+          credit('duo_fuite', 'Fuite (test)'),
+          credit('duo_impact', 'Impact (test)'),
+          { asset: 'sounds/jungle.wav', title: 'Jungle (test)', author: 'GLBInterpreter', license: 'CC0', source: 'https://example.org/jungle' },
+        ],
+      },
+    },
+  };
+}
+
+/** Courbe par morceaux sur [0, d] : `at(t)` → valeur ; échantillonnée à 30 i/s comme un clip cuit par Blender. */
+const bake = (d: number, at: (t: number) => number[]) => {
+  const n = Math.round(d * DUO_FPS);
+  const times: number[] = [];
+  const values: number[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / DUO_FPS;
+    times.push(Math.min(t, d));
+    values.push(...at(t));
+  }
+  return { times, values };
+};
+const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+/** 0 avant `a`, 1 après `b`, linéaire entre les deux. */
+const ramp = (t: number, a: number, b: number) => clamp01((t - a) / (b - a));
+/** Quaternion d'une rotation d'angle `a` autour de Z. */
+const rotZ = (a: number) => [0, 0, Math.sin(a / 2), Math.cos(a / 2)];
+
+/**
+ * GLB de « duo » : deux armatures de 2 os (maillage skinné chacune), empty `start` (cible), GLBI_ROOT. Chaque clip est
+ * commun : il anime les deux personnages (translation de l'armature, rotation de l'os de queue) et, pour « chasse », la cible.
+ * Pistes cuites à 30 i/s, avec des paliers (clés redondantes que `resample` retire sans changer le mouvement).
+ */
+async function makeDuoGlb(file: string, layer: Layer3d): Promise<void> {
+  const doc = new Document();
+  const buffer = doc.createBuffer();
+  const scene = doc.createScene('Scene');
+
+  const character = (name: string, x: number, credit: boolean) => {
+    const arm = doc.createNode(name).setTranslation([x, 0, 0]);
+    const boneRoot = doc.createNode(`${name}_root`);
+    const boneTail = doc.createNode(`${name}_tail`).setTranslation([0, 1, 0]);
+    boneRoot.addChild(boneTail);
+    arm.addChild(boneRoot);
+    const acc = (type: 'VEC3' | 'VEC4' | 'MAT4', a: TypedArray) => doc.createAccessor().setType(type).setBuffer(buffer).setArray(a);
+    const prim = doc.createPrimitive()
+      .setAttribute('POSITION', acc('VEC3', new Float32Array([-0.5, 0, 0, 0.5, 0, 0, 0, 2, 0])))
+      .setAttribute('JOINTS_0', acc('VEC4', new Uint16Array([0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0])))
+      .setAttribute('WEIGHTS_0', acc('VEC4', new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0])));
+    const ibm = acc('MAT4', new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, -1, 0, 1]));
+    const skin = doc.createSkin(`${name}_skin`).addJoint(boneRoot).addJoint(boneTail).setInverseBindMatrices(ibm).setSkeleton(boneRoot);
+    const body = doc.createNode(`${name}_body`).setMesh(doc.createMesh(`${name}_mesh`).addPrimitive(prim)).setSkin(skin);
+    if (credit) body.setExtras({ src_name: 'Dinosaures de test (duo)', src_author: 'GLBInterpreter', src_license: 'CC0', src_url: 'https://example.org/dino-test' });
+    arm.addChild(body);
+    scene.addChild(arm);
+    return { arm, tail: boneTail };
+  };
+  const hunter = character('Armature_Chasseur', -2, true);
+  const prey = character('Armature_Proie', 1, false);
+  const target: GNode = doc.createNode('start').setTranslation([-0.5, 1, 0]);
+  scene.addChild(target);
+
+  // Mouvements de chaque clip : position des deux armatures et de la cible, angle de queue des deux personnages.
+  const motion: Record<DuoClip, (t: number) => { h: number; p: number; c: number; ha: number; pa: number; pz?: number }> = {
+    idle: (t) => ({ h: -2, p: 1, c: -0.5, ha: 0.1 * Math.sin(Math.PI * t), pa: -0.1 * Math.sin(Math.PI * t) }),
+    // Le chasseur court jusqu'à la proie (0–2 s, morsure à 2 s), la proie fuit (3,2 s) ; la cible suit le milieu.
+    chasse: (t) => {
+      const h = -2 + 2.5 * ramp(t, 0, 2);
+      const p = 1 + 2 * ramp(t, 3.2, 4);
+      return { h, p, c: (h + p) / 2, ha: t < 2 ? 0.4 * Math.sin(4 * Math.PI * t) : 0.6, pa: t > 3.2 ? 0.4 * Math.sin(4 * Math.PI * t) : 0 };
+    },
+    // Le chasseur bascule (queue à 90°) et touche le sol à 1,5 s ; la proie ne bouge pas (palier sur tout le clip).
+    chute: (t) => ({ h: -2, p: 1, c: -0.5, ha: (Math.PI / 2) * ramp(t, 0.5, 1.5), pa: 0 }),
+    regard: (t) => ({ h: -2, p: 1, c: -0.5, ha: 0.3 * ramp(t, 0, 0.5) - 0.3 * ramp(t, 1, 1.5), pa: 0 }),
+  };
+  for (const [name, d] of Object.entries(DUO_CLIPS) as [DuoClip, number][]) {
+    const anim = doc.createAnimation(name);
+    const m = motion[name];
+    const channel = (node: GNode, pathName: 'translation' | 'rotation', at: (t: number) => number[]) => {
+      const { times, values } = bake(d, at);
+      const input = doc.createAccessor().setBuffer(buffer).setType('SCALAR').setArray(new Float32Array(times));
+      const output = doc.createAccessor().setBuffer(buffer).setType(pathName === 'rotation' ? 'VEC4' : 'VEC3').setArray(new Float32Array(values));
+      const sampler = doc.createAnimationSampler().setInput(input).setOutput(output).setInterpolation('LINEAR');
+      anim.addSampler(sampler).addChannel(doc.createAnimationChannel().setTargetNode(node).setTargetPath(pathName).setSampler(sampler));
+    };
+    channel(hunter.arm, 'translation', (t) => [m(t).h, 0, 0]);
+    channel(prey.arm, 'translation', (t) => [m(t).p, 0, 0]);
+    channel(hunter.tail, 'rotation', (t) => rotZ(m(t).ha));
+    channel(prey.tail, 'rotation', (t) => rotZ(m(t).pa));
+    // Cible caméra : animée seulement dans « chasse » (DP-7 : la caméra la suit, AC2).
+    if (name === 'chasse') channel(target, 'translation', (t) => [m(t).c, 1, 0]);
+  }
+
+  scene.addChild(doc.createNode('GLBI_ROOT').setExtras({ glbi_version: LAYER3D_VERSION, glbi_config: JSON.stringify(layer) }));
+  await new NodeIO().write(file, doc);
+}
+
+/** Efface le dossier du livre de test sauf le dossier réservé `blender/` (point de clôture de ST1). */
+function clearTestBook(): boolean {
+  if (!fs.existsSync(dir)) return false;
+  let kept = false;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.isDirectory() && e.name.toLowerCase() === RESERVED_SOURCE_DIR) {
+      kept = true;
+      continue;
+    }
+    fs.rmSync(path.join(dir, e.name), { recursive: true, force: true });
+  }
+  return kept;
+}
+
 async function main(): Promise<void> {
-  fs.rmSync(dir, { recursive: true, force: true });
+  const keptBlender = clearTestBook();
   for (const sub of ['scenes', 'images', 'icons', 'sounds']) fs.mkdirSync(path.join(dir, sub), { recursive: true });
 
   const book: Book = {
     bookId: 'test-dino',
     title: L('Dinos de test', 'Test dinos', 'Dinos de prueba'),
     languages: ['fr', 'en', 'es'],
-    scenes: ['trex', 'raptor', 'ptero'],
+    scenes: ['trex', 'raptor', 'ptero', 'duo'],
     origin: 'https://dino.editions-liger.com',
     ogImage: 'images/og.png',
     legal: { year: 2026, text: L('© Éditions Liger', '© Éditions Liger', '© Éditions Liger') },
@@ -195,8 +371,11 @@ async function main(): Promise<void> {
     if (sc.id === 'raptor') delete edit.modules!.quiz;
     fs.writeFileSync(path.join(dir, `scenes/${sc.id}.edit.json`), `${JSON.stringify(edit, null, 2)}\n`);
   }
+  // « duo » en fin de livre (AC1).
+  await makeDuoGlb(path.join(dir, 'scenes/duo.glb'), duoLayer3d());
+  fs.writeFileSync(path.join(dir, 'scenes/duo.edit.json'), `${JSON.stringify(duoEditLayer(), null, 2)}\n`);
 
-  for (const f of ['images/og.png', 'images/raptor-preview.png', 'images/ptero-preview.png', 'icons/walk.png', 'icons/roar.png', 'icons/eat.png']) {
+  for (const f of ['images/og.png', 'images/raptor-preview.png', 'images/ptero-preview.png', 'images/duo-preview.png', 'icons/walk.png', 'icons/roar.png', 'icons/eat.png']) {
     fs.writeFileSync(path.join(dir, f), PNG_1X1);
   }
   // Bruit pseudo-aléatoire (graine fixe : même fichier à chaque génération) : un PNG incompressible de ≈ 3 MiB.
@@ -221,7 +400,14 @@ async function main(): Promise<void> {
     }
   }
   fs.writeFileSync(path.join(dir, 'sounds/jungle.wav'), ambientWav());
-  console.log(`make-test-book : livre de test écrit dans ${dir}`);
+  // « duo » : son d'action (même bip que les autres scènes, 2 s) et sons d'événement brefs (0,3 s), de hauteurs distinctes.
+  fs.writeFileSync(path.join(dir, 'sounds/duo_chasse.wav'), actionWav(330));
+  fs.writeFileSync(path.join(dir, 'sounds/duo_regard.wav'), actionWav(440));
+  const blip = (freq: number) => wav(0.3, (t) => 0.5 * Math.min(1, t / 0.01, (0.3 - t) / 0.03) * Math.sin(2 * Math.PI * freq * t));
+  fs.writeFileSync(path.join(dir, 'sounds/duo_morsure.wav'), blip(660));
+  fs.writeFileSync(path.join(dir, 'sounds/duo_fuite.wav'), blip(880));
+  fs.writeFileSync(path.join(dir, 'sounds/duo_impact.wav'), blip(220));
+  console.log(`make-test-book : livre de test écrit dans ${dir}${keptBlender ? ` (dossier ${RESERVED_SOURCE_DIR}/ conservé)` : ''}`);
 }
 
 main().catch((e) => {

@@ -1,7 +1,7 @@
 // scripts/glb-report.ts — mesure de taille et test de survie du pipeline GLB (Î7), sans build.
 //
 //   npx tsx scripts/glb-report.ts <fichier.glb> [<fichier.glb>…] [--textures auto|ktx2|webp|keep] [--scenes 15]
-//                                 [--keep-leaves] [--protect <nom>[,<nom>…]] [--out <dossier>]
+//                                 [--keep-leaves] [--protect <nom>[,<nom>…]] [--out <dossier>] [--no-resample]
 //
 // Nœuds protégés de `prune` : par défaut ceux que cite la config de GLBI_ROOT (cible caméra, objets animés) ;
 // --protect remplace cette liste.
@@ -10,6 +10,8 @@
 // (GLBI_ROOT et ses extras glbi_*, noms des clips, propriétés src_*, nœuds protégés). Projection pour un livre de
 // N scènes (exigence 1) : N × taille moyenne d'une scène + application (out/ hors scènes et médias, si un build existe).
 // Les GLB optimisés sont écrits dans --out (défaut : dossier temporaire supprimé à la fin).
+// Animations (AC1) : clés et octets décodés avant → après, durée de chaque clip. --no-resample : pipeline sans `resample`,
+// pour mesurer son effet (comparer deux passes sur le même fichier) ; le build l'applique toujours.
 // Code de sortie 1 si un contrôle de survie échoue.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -23,10 +25,11 @@ interface Args {
   keepLeaves: boolean;
   protect: string[];
   out: string | null;
+  resample: boolean;
 }
 
 function parse(argv: string[]): Args {
-  const a: Args = { files: [], textures: 'auto', scenes: 15, keepLeaves: false, protect: [], out: null };
+  const a: Args = { files: [], textures: 'auto', scenes: 15, keepLeaves: false, protect: [], out: null, resample: true };
   for (let i = 0; i < argv.length; i++) {
     const v = argv[i];
     const next = () => {
@@ -42,6 +45,7 @@ function parse(argv: string[]): Args {
     else if (v === '--keep-leaves') a.keepLeaves = true;
     else if (v === '--protect') a.protect.push(...next().split(',').map((s) => s.trim()).filter(Boolean));
     else if (v === '--out') a.out = next();
+    else if (v === '--no-resample') a.resample = false;
     else if (v.startsWith('--')) throw new Error(`option inconnue « ${v} »`);
     else a.files.push(v);
   }
@@ -66,6 +70,8 @@ function appBytes(outDir: string): number | null {
   return total;
 }
 
+const kio = (bytes: number) => `${(bytes / 1024).toFixed(1)} Kio`;
+
 async function main(): Promise<void> {
   const args = parse(process.argv.slice(2));
   const tmp = args.out ? null : fs.mkdtempSync(path.join(os.tmpdir(), 'glbi-report-'));
@@ -80,23 +86,27 @@ async function main(): Promise<void> {
         textures: args.textures,
         keepLeaves: args.keepLeaves,
         protect: args.protect.length ? args.protect : undefined,
+        resample: args.resample,
       });
       sizes.push(r.outBytes);
       const delta = ((r.outBytes / r.inBytes - 1) * 100).toFixed(0);
       console.log(`\n${file}`);
-      console.log(`  taille       : ${formatMiB(r.inBytes)} → ${formatMiB(r.outBytes)} (${Number(delta) > 0 ? '+' : ''}${delta} %), ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+      console.log(`  taille       : ${formatMiB(r.inBytes)} → ${formatMiB(r.outBytes)} (${r.inBytes} → ${r.outBytes} octets, ${Number(delta) > 0 ? '+' : ''}${delta} %), ${((Date.now() - t0) / 1000).toFixed(1)} s`);
       console.log(`  textures     : ${r.textures}${r.notes.length ? ` (${r.notes.join(' ; ')})` : ''} ; ${r.before.textures.map((t) => `${t.mime} ${formatMiB(t.bytes)}`).join(', ') || 'aucune'} → ${r.after.textures.map((t) => `${t.mime} ${formatMiB(t.bytes)}`).join(', ') || 'aucune'}`);
       console.log(`  extensions   : ${r.after.extensions.join(', ') || 'aucune'}`);
-      console.log(`  clips        : ${r.after.clips.length} (${r.after.clips.join(', ')})`);
+      console.log(`  clips        : ${r.after.clips.length} (${r.after.clips.map((c) => `${c} ${r.after.clipDurations[c]?.toFixed(3)} s`).join(', ')})`);
+      console.log(`  animations   : resample ${r.resampled ? 'oui' : 'non'} ; ${r.before.keyframes} → ${r.after.keyframes} clés, ${kio(r.before.animationBytes)} → ${kio(r.after.animationBytes)} en mémoire (Float32, lecteur)`);
+      const attrs = [...r.after.vertexAttributes].map(([n, a]) => `${n} [${a.join(', ')}]`);
+      console.log(`  sommets      : ${attrs.join(' ; ') || 'aucun maillage'}`);
       const cut = (t: string) => (t.length > 110 ? `${t.slice(0, 110)}…` : t);
       console.log(`  GLBI_ROOT    : ${r.after.glbiRoot.length ? r.after.glbiRoot.map(cut).join(' | ') : 'absent'}`);
       console.log(`  protégés     : ${r.protect.join(', ') || '—'}`);
       console.log(`  crédits src_ : ${r.after.srcCredits.length} nœud(s)`);
-      console.log(`  extras retirés : scène [${r.stripped.scene.join(', ') || '—'}] ; nœuds [${r.stripped.node.join(', ') || '—'}]`);
+      console.log(`  extras retirés : scène [${r.stripped.scene.join(', ') || '—'}] ; nœuds [${r.stripped.node.join(', ') || '—'}] ; autres [${r.stripped.other.join(', ') || '—'}]`);
       if (r.survival.length) {
         failed = true;
         for (const s of r.survival) console.error(`  ÉCHEC survie : ${s}`);
-      } else console.log('  survie       : OK (GLBI_ROOT, clips, src_*, nœuds protégés ; aucun extra étranger)');
+      } else console.log('  survie       : OK (GLBI_ROOT, clips et durées, src_*, nœuds protégés, attributs de sommet ; aucun extra étranger)');
       if (args.out) console.log(`  écrit        : ${dst}`);
     }
     const mean = sizes.reduce((s, v) => s + v, 0) / sizes.length;

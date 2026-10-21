@@ -5,7 +5,8 @@
 //
 // Source unique du contrat : `layer3dSchema` (src/schema/glbi.ts), exporté par `z.toJSONSchema(…, { io: 'input' })`.
 // L'export couvre la forme (types, motifs, bornes, clés interdites, valeurs par défaut) ; les `superRefine` (identifiants
-// d'action en double) n'y figurent pas : l'addon les contrôle lui-même et le build reste l'autorité finale.
+// d'action ou d'événement en double) n'y figurent pas : l'addon les contrôle lui-même et le build reste l'autorité finale.
+// Actions combinées (AC1) : `transition` et `events` ajoutés, facultatifs ; `$id` inchangé (couche 3D, version 2).
 // `npm run book:check` échoue si le fichier commité diffère de ce que produirait ce script (`checkSchemaFresh`).
 import fs from 'node:fs';
 import path from 'node:path';

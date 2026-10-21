@@ -135,18 +135,50 @@ export const idleSchema = z.strictObject({
 /** Identifiant d'action : clé de jointure entre les deux couches (D-8.9). Sans drapeau `i` (voir SCENE_ID_PATTERN). */
 export const actionIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, 'identifiant d’action : lettres, chiffres, _ et -');
 
-/** Une action = un bouton (point 4 validé). */
-export const actionSchema = z.strictObject({
-  id: actionIdSchema,
-  object: blenderNameSchema,
-  type: z.enum(['armature', 'mesh']),
-  clip: blenderNameSchema,
-  trigger: z.literal('button'),
-  label: localizedTextSchema,
-  icon: imagePathSchema.optional(),
-  sound: audioPathSchema.optional(),
-  loop: z.boolean().default(false),
-});
+/**
+ * Événement d'une action (DP-6, spec-actions-combinees.md §4) : marqueur `<action>:<événement>` de la timeline de Blender.
+ * Identifiant au format des identifiants d'action, unique dans l'action ; `time` en secondes depuis le début du clip
+ * (`0 ≤ time ≤ durée du clip`, borne haute contrôlée par le build, qui connaît le clip). Pas d'événements sur `idle`.
+ */
+export const eventIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, 'identifiant d’événement : lettres, chiffres, _ et -');
+const eventTimeSchema = z.number({ error: 'instant en secondes attendu' }).min(0, 'instant négatif (secondes depuis le début du clip, ≥ 0)');
+
+/**
+ * Passage d'une action à une autre (DP-8, spec-actions-combinees.md §6) : `fade` (fondu de poses, comportement d'avant) ou
+ * `cut` (coupe au noir à l'entrée et à la sortie de l'action). Absent = `fade` ; l'addon omet le champ pour `fade`.
+ * Pas de valeur par défaut : une scène sans `transition` garde son `scenes/<id>.json` publié à l'identique.
+ */
+export const TRANSITIONS = ['fade', 'cut'] as const;
+const transitionSchema = z.enum(TRANSITIONS);
+
+/** Écart toléré entre l'instant d'un événement (arrondi à la milliseconde par l'addon) et la fin du clip (Float32). */
+export const EVENT_TIME_TOLERANCE_S = 0.0005;
+
+/** Règle croisée (perdue à l'export du JSON Schema : l'addon la contrôle aussi) : `id` d'événement unique dans l'action. */
+function uniqueEventIds(a: { events?: { id: string }[] }, ctx: z.RefinementCtx): void {
+  const seen = new Set<string>();
+  (a.events ?? []).forEach((ev, i) => {
+    if (seen.has(ev.id)) ctx.addIssue({ code: 'custom', path: ['events', i, 'id'], message: `id d'événement en double « ${ev.id} »` });
+    seen.add(ev.id);
+  });
+}
+
+/** Une action = un bouton (point 4 validé). `transition` et `events` : actions combinées (AC1, DP-6, DP-8), facultatifs. */
+export const actionSchema = z
+  .strictObject({
+    id: actionIdSchema,
+    object: blenderNameSchema,
+    type: z.enum(['armature', 'mesh']),
+    clip: blenderNameSchema,
+    trigger: z.literal('button'),
+    label: localizedTextSchema,
+    icon: imagePathSchema.optional(),
+    sound: audioPathSchema.optional(),
+    loop: z.boolean().default(false),
+    transition: transitionSchema.optional(),
+    events: z.array(z.strictObject({ id: eventIdSchema, time: eventTimeSchema, sound: audioPathSchema.optional() })).optional(),
+  })
+  .superRefine(uniqueEventIds);
 
 function uniqueActionIds(a: { actions: { id: string }[] }, ctx: z.RefinementCtx): void {
   const seen = new Set<string>();
@@ -243,15 +275,19 @@ export type GlbiConfig = z.infer<typeof glbiConfigSchema>;
 // mauvaise couche est refusé (messages de la fusion, `./merge.ts`). La fusion des deux doit passer `glbiConfigSchema`.
 // ---------------------------------------------------------------------------------------------------------
 
-/** Action, partie 3D (addon) : identifiant, objet, clip, boucle. */
-export const action3dSchema = z.strictObject({
-  id: actionIdSchema,
-  object: blenderNameSchema,
-  type: z.enum(['armature', 'mesh']),
-  clip: blenderNameSchema,
-  trigger: z.literal('button'),
-  loop: z.boolean().default(false),
-});
+/** Action, partie 3D (addon) : identifiant, objet, clip, boucle ; transition et événements (instants des marqueurs). */
+export const action3dSchema = z
+  .strictObject({
+    id: actionIdSchema,
+    object: blenderNameSchema,
+    type: z.enum(['armature', 'mesh']),
+    clip: blenderNameSchema,
+    trigger: z.literal('button'),
+    loop: z.boolean().default(false),
+    transition: transitionSchema.optional(),
+    events: z.array(z.strictObject({ id: eventIdSchema, time: eventTimeSchema })).optional(),
+  })
+  .superRefine(uniqueEventIds);
 
 /**
  * Couche 3D : `glbi_config` de `GLBI_ROOT`, écrite par l'addon GLBGenerator (spec-atelier-glbi.md §3).
@@ -281,6 +317,8 @@ export const actionEditSchema = z.strictObject({
   label: localizedTextSchema.optional(),
   icon: imagePathSchema.optional(),
   sound: audioPathSchema.optional(),
+  /** Son de chaque événement (DP-6), indexé par l'`id` de l'événement du GLB (l'instant appartient au GLB). */
+  events: z.record(eventIdSchema, z.strictObject({ sound: audioPathSchema.optional() })).optional(),
 });
 
 /**
