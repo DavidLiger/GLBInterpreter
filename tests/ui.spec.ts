@@ -144,6 +144,29 @@ test('fenêtre Informations : dialogue modal, Échap, fond, fermer, focus rendu 
   await expect(dialog).toBeHidden();
 });
 
+test('dialogue fermé puis rouvert avant l’image suivante : reste ouvert (événement close en retard, clôture d’AC2)', async ({ page }) => {
+  // Chromium envoie `close` à l'image suivante : annuler puis rouvrir avant elle refermait le dialogue (fenêtre de remise à
+  // zéro du menu, test de progress.spec.ts en échec sous Windows). Reproduction déterministe : deux clics séparés par une
+  // tâche, avant toute image.
+  await install(page);
+  await page.getByRole('button', { name: /^Installer$/ }).click();
+  await expect(installHeading(page)).toBeHidden({ timeout: 120_000 });
+  await page.goto(`${SERVER}/#/`);
+  await page.getByTestId('collection-reset').click();
+  const dialog = page.getByRole('dialog', { name: 'Effacer ta collection ?' });
+  await expect(dialog).toBeVisible();
+  await page.evaluate(async () => {
+    const d = document.querySelector('[data-testid="collection-reset-dialog"]') as HTMLDialogElement;
+    (d.querySelector('button') as HTMLButtonElement).click(); // Annuler
+    await new Promise((r) => setTimeout(r, 0));
+    (document.querySelector('[data-testid="collection-reset"]') as HTMLButtonElement).click(); // rouvert avant l'image
+  });
+  await page.waitForTimeout(300);
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Annuler' }).click();
+  await expect(dialog).toBeHidden();
+});
+
 test('écran d’installation : dialogue nommé par son titre, focus sur le titre, Échap sans effet', async ({ page }) => {
   await install(page);
   const gate = page.getByRole('dialog', { name: 'Installer le livre' });

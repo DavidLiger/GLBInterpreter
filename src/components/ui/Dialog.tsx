@@ -10,6 +10,10 @@
 //   jour du service worker et la console de débogage Eruda (`#/debug`, tests sans Mac, Î16).
 // - Sans `onClose`, le dialogue ne se ferme pas : Échap est ignoré ; si le navigateur le ferme quand même (Chrome
 //   n'autorise pas toujours à annuler un second Échap), il est rouvert.
+// - Événement `close` en retard (correctif de la clôture d'AC2, 26/10/2026) : Chromium l'envoie à l'image suivante, pas
+//   au moment de `close()`. Un dialogue fermé puis rouvert avant cette image (annuler puis rouvrir aussitôt ; cadence
+//   d'images basse) recevait l'événement de la fermeture précédente et se refermait. Un `close` reçu alors que le
+//   dialogue est de nouveau ouvert est ignoré : il ne décrit plus son état.
 import { useEffect, useRef, type ReactNode } from "react";
 
 interface DialogProps {
@@ -84,7 +88,9 @@ export default function Dialog({ open, onClose, modal = true, labelledBy, classN
         onCloseRef.current?.();
       }}
       onClose={() => {
-        if (!openRef.current) return;
+        // Fermeture voulue par la page (`open` faux), ou événement en retard d'une fermeture précédente (dialogue rouvert
+        // depuis) : rien à faire.
+        if (!openRef.current || ref.current?.open) return;
         if (onCloseRef.current) onCloseRef.current();
         else {
           // Fermé par le navigateur alors qu'il ne doit pas l'être : rouvert.
