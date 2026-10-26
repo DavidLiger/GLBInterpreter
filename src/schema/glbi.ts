@@ -151,6 +151,13 @@ const eventTimeSchema = z.number({ error: 'instant en secondes attendu' }).min(0
 export const TRANSITIONS = ['fade', 'cut'] as const;
 const transitionSchema = z.enum(TRANSITIONS);
 
+/**
+ * Position de la caméra pendant une action (DP-19, spec-actions-combinees.md §16) : nom d'un empty de la scène, animé par
+ * clés de position dans le clip ; pendant l'action, la caméra est posée sur lui et regarde la cible (`camera.target`, exigée
+ * par la fusion). Facultatif, pas sur `idle` ; règle de nom des objets Blender (V-08 au build).
+ */
+const cameraPositionSchema = blenderNameSchema;
+
 /** Écart toléré entre l'instant d'un événement (arrondi à la milliseconde par l'addon) et la fin du clip (Float32). */
 export const EVENT_TIME_TOLERANCE_S = 0.0005;
 
@@ -163,7 +170,10 @@ function uniqueEventIds(a: { events?: { id: string }[] }, ctx: z.RefinementCtx):
   });
 }
 
-/** Une action = un bouton (point 4 validé). `transition` et `events` : actions combinées (AC1, DP-6, DP-8), facultatifs. */
+/**
+ * Une action = un bouton (point 4 validé). `transition` et `events` : actions combinées (AC1, DP-6, DP-8) ; `cameraPosition` :
+ * empty de position de la caméra (AC2, DP-19) ; tous facultatifs.
+ */
 export const actionSchema = z
   .strictObject({
     id: actionIdSchema,
@@ -176,6 +186,7 @@ export const actionSchema = z
     sound: audioPathSchema.optional(),
     loop: z.boolean().default(false),
     transition: transitionSchema.optional(),
+    cameraPosition: cameraPositionSchema.optional(),
     events: z.array(z.strictObject({ id: eventIdSchema, time: eventTimeSchema, sound: audioPathSchema.optional() })).optional(),
   })
   .superRefine(uniqueEventIds);
@@ -275,7 +286,7 @@ export type GlbiConfig = z.infer<typeof glbiConfigSchema>;
 // mauvaise couche est refusé (messages de la fusion, `./merge.ts`). La fusion des deux doit passer `glbiConfigSchema`.
 // ---------------------------------------------------------------------------------------------------------
 
-/** Action, partie 3D (addon) : identifiant, objet, clip, boucle ; transition et événements (instants des marqueurs). */
+/** Action, partie 3D (addon) : identifiant, objet, clip, boucle ; transition, position de caméra, événements (marqueurs). */
 export const action3dSchema = z
   .strictObject({
     id: actionIdSchema,
@@ -285,6 +296,7 @@ export const action3dSchema = z
     trigger: z.literal('button'),
     loop: z.boolean().default(false),
     transition: transitionSchema.optional(),
+    cameraPosition: cameraPositionSchema.optional(),
     events: z.array(z.strictObject({ id: eventIdSchema, time: eventTimeSchema })).optional(),
   })
   .superRefine(uniqueEventIds);

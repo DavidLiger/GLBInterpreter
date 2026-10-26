@@ -6,6 +6,7 @@
 // boucle, arrêt (`stop`) ou fin naturelle (`ended`). Aucun son n'est écouté : on vérifie que le bon son part et s'arrête.
 import { unlockAllScenes } from './progress-helpers';
 import { fullscreenElement, sceneLaunched } from './scene-helpers';
+import { INSTRUMENT, watchIdle } from './audio-helpers';
 import { expect, test, type Page } from '@playwright/test';
 
 const SERVER = 'http://localhost:4173';
@@ -15,38 +16,7 @@ test.beforeEach(async ({ page }) => {
   await unlockAllScenes(page);
 });
 
-declare global {
-  interface Window {
-    __audioLog: { freq: number; loop: boolean; stopped: boolean; ended: boolean }[];
-  }
-}
-
-const INSTRUMENT = () => {
-  window.__audioLog = [];
-  if (typeof AudioBufferSourceNode === 'undefined') return; // navigateur sans Web Audio : test sauté (install)
-  const estimate = (buf: AudioBuffer) => {
-    const d = buf.getChannelData(0);
-    const n = Math.min(d.length, Math.floor(buf.sampleRate * 0.15));
-    let z = 0;
-    for (let i = 1; i < n; i++) if (d[i - 1] < 0 !== d[i] < 0) z++;
-    return Math.round(z / 2 / (n / buf.sampleRate));
-  };
-  const P = AudioBufferSourceNode.prototype as AudioBufferSourceNode & { __i?: number };
-  const start = P.start;
-  const stop = P.stop;
-  P.start = function (this: AudioBufferSourceNode & { __i?: number }, ...a: [number?, number?, number?]) {
-    if (this.buffer && this.buffer.length > 1) {
-      const entry = { freq: estimate(this.buffer), loop: this.loop, stopped: false, ended: false };
-      this.__i = window.__audioLog.push(entry) - 1;
-      this.addEventListener('ended', () => (entry.ended = true));
-    }
-    return start.apply(this, a);
-  };
-  P.stop = function (this: AudioBufferSourceNode & { __i?: number }, ...a: [number?]) {
-    if (this.__i !== undefined) window.__audioLog[this.__i].stopped = true;
-    return stop.apply(this, a);
-  };
-};
+// Script injecté et journal `window.__audioLog` : tests/audio-helpers.ts (partagés avec tests/actions.spec.ts, AC2).
 
 /** Sons en cours, par hauteur arrondie à la note (± 5 %). */
 async function playing(page: Page): Promise<string[]> {
@@ -106,16 +76,26 @@ test('ambiance en boucle dès le lancement automatique ; son par action : lancem
   await expect.poll(() => playing(page)).toEqual(['ambiance (boucle)', 'eat-trex|walk-raptor']);
 
   // Relance de la même action : un seul eat, reparti du début
+  await watchIdle(page);
   await bar.locator('[data-action-id="eat"]').click();
   await expect.poll(() => playing(page)).toEqual(['ambiance (boucle)', 'eat-trex|walk-raptor']);
   const eats = await page.evaluate(() => window.__audioLog.filter((e) => Math.abs(e.freq - 523) < 26).length);
   expect(eats).toBe(2);
 
-  // Fin d'une action sans boucle (clip de 1,25 s) : le son (2 s) est coupé à la fin du clip (décision du 16/10)
+  // Fin d'une action sans boucle (clip de 1,25 s) : le son (2 s) est coupé à la fin du clip (décision du 16/10).
+  // AC2 (test rendu robuste, intermittent dans le WebKit de Playwright sous Linux) : à faible cadence, le pas d'animation
+  // plafonné à 0,1 s ralentit le clip, qui peut finir après le son ; on vérifie donc qu'aucun son « eat » ne joue encore
+  // quand l'action se termine : coupé par la fin du clip, ou déjà fini de lui-même avant elle.
   await expect(bar).toHaveAttribute('data-current-action', '', { timeout: 5_000 });
   expect(await playing(page)).toEqual(['ambiance (boucle)']);
-  const lastEat = await page.evaluate(() => window.__audioLog.filter((e) => Math.abs(e.freq - 523) < 26).at(-1));
-  expect(lastEat?.stopped, 'coupé par la fin du clip, pas fini de lui-même').toBe(true);
+  const { lastEat, idleAt } = await page.evaluate(() => ({
+    lastEat: window.__audioLog.filter((e) => Math.abs(e.freq - 523) < 26).at(-1),
+    idleAt: window.__idleAt,
+  }));
+  expect(idleAt, 'fin de l’action relevée').toBeDefined();
+  const cutByClip = !!lastEat?.stopped && (lastEat.stoppedAt ?? Infinity) <= idleAt! + 50;
+  const endedBefore = !!lastEat?.ended && (lastEat.endedAt ?? Infinity) <= idleAt! + 50;
+  expect(cutByClip || endedBefore, `son « eat » encore joué après la fin du clip : ${JSON.stringify({ lastEat, idleAt })}`).toBe(true);
   // Ni erreur audio, ni AudioContext refusé faute de geste
   expect(lines.filter((l) => /\[AUDIO\]|AudioContext was not allowed/.test(l))).toEqual([]);
 });

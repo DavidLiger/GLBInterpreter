@@ -21,6 +21,10 @@
 //   principal, et `Armature_Proie`) animées par des clips communs cuits à 30 i/s (clés redondantes : terrain du `resample`),
 //   cible caméra `start` animée pendant « chasse », événements avec sons (`chasse` : morsure, souffle sans son, fuite ;
 //   `chute` : impact), action « chute » en coupe au noir (`transition: "cut"`), « regard » sans événement ; sans quiz.
+//   AC2 : les deux armatures ont des os de **même nom** (`Os_racine`, `Os_queue` : personnages tirés du même squelette,
+//   v0.3) ; « regard » dure 3 s et déclare un empty de position de la caméra, `CamRegard` (DP-19), animé dans son clip
+//   (arc de 120° autour de la cible, en montant) et immobile ailleurs ; action « course » en boucle (clip de 1 s), deux
+//   événements par tour (`pas_g` 0,25 s, `pas_d` 0,75 s, même son) : événements redéclenchés à chaque tour.
 //   Les GLB de trex, raptor et ptero sont écrits par `makeGlb`, inchangé : mêmes octets qu'avant AC1 ;
 // - un dossier `blender/` déjà posé dans le livre de test (raptor réel, point de clôture de ST1) est conservé : seul le reste
 //   du dossier est effacé et réécrit.
@@ -178,7 +182,7 @@ function editLayer(id: string, name: ReturnType<typeof L>): EditLayer {
 // ---------------------------------------------------------------------------------------------------------
 
 const DUO_FPS = 30;
-const DUO_CLIPS = { idle: 2, chasse: 4, chute: 2, regard: 1.5 } as const;
+const DUO_CLIPS = { idle: 2, chasse: 4, chute: 2, regard: 3, course: 1 } as const;
 type DuoClip = keyof typeof DUO_CLIPS;
 
 /** Couche 3D de « duo » : instants des événements = marqueurs posés dans Blender (secondes depuis le début du clip). */
@@ -198,7 +202,13 @@ function duoLayer3d(): Layer3d {
             events: [{ id: 'morsure', time: 2 }, { id: 'souffle', time: 2.5 }, { id: 'fuite', time: 3.2 }],
           },
           { id: 'chute', object: actor, type: 'armature', clip: 'chute', trigger: 'button', loop: false, transition: 'cut', events: [{ id: 'impact', time: 1.5 }] },
-          { id: 'regard', object: actor, type: 'armature', clip: 'regard', trigger: 'button', loop: false },
+          // DP-19 (AC2) : caméra posée sur l'empty `CamRegard` pendant « regard » (fondu), regard sur la cible `start`.
+          { id: 'regard', object: actor, type: 'armature', clip: 'regard', trigger: 'button', loop: false, cameraPosition: 'CamRegard' },
+          // AC2 : action en boucle à événements (redéclenchés à chaque tour), arrêtée par son propre bouton.
+          {
+            id: 'course', object: actor, type: 'armature', clip: 'course', trigger: 'button', loop: true,
+            events: [{ id: 'pas_g', time: 0.25 }, { id: 'pas_d', time: 0.75 }],
+          },
         ],
       },
     },
@@ -223,6 +233,7 @@ function duoEditLayer(): EditLayer {
           },
           chute: { label: L('Tomber', 'Fall', 'Caer'), icon: 'icons/eat.png', events: { impact: { sound: 'sounds/duo_impact.wav' } } },
           regard: { label: L('Regarder', 'Look', 'Mirar'), icon: 'icons/roar.png', sound: 'sounds/duo_regard.wav' },
+          course: { label: L('Courir', 'Run', 'Correr'), icon: 'icons/walk.png', events: { pas_g: { sound: 'sounds/duo_pas.wav' }, pas_d: { sound: 'sounds/duo_pas.wav' } } },
         },
       },
       audio: { ambientSound: 'sounds/jungle.wav' },
@@ -233,6 +244,7 @@ function duoEditLayer(): EditLayer {
           credit('duo_morsure', 'Morsure (test)'),
           credit('duo_fuite', 'Fuite (test)'),
           credit('duo_impact', 'Impact (test)'),
+          credit('duo_pas', 'Pas (test)'),
           { asset: 'sounds/jungle.wav', title: 'Jungle (test)', author: 'GLBInterpreter', license: 'CC0', source: 'https://example.org/jungle' },
         ],
       },
@@ -259,8 +271,10 @@ const ramp = (t: number, a: number, b: number) => clamp01((t - a) / (b - a));
 const rotZ = (a: number) => [0, 0, Math.sin(a / 2), Math.cos(a / 2)];
 
 /**
- * GLB de « duo » : deux armatures de 2 os (maillage skinné chacune), empty `start` (cible), GLBI_ROOT. Chaque clip est
- * commun : il anime les deux personnages (translation de l'armature, rotation de l'os de queue) et, pour « chasse », la cible.
+ * GLB de « duo » : deux armatures de 2 os aux noms identiques (maillage skinné chacune), empty `start` (cible), empty
+ * `CamRegard` (position de la caméra pendant « regard », AC2), GLBI_ROOT. Chaque clip est commun : il anime les deux
+ * personnages (translation de l'armature, rotation de l'os de queue) et, pour « chasse », la cible ; « regard » anime aussi
+ * `CamRegard`.
  * Pistes cuites à 30 i/s, avec des paliers (clés redondantes que `resample` retire sans changer le mouvement).
  */
 async function makeDuoGlb(file: string, layer: Layer3d): Promise<void> {
@@ -270,8 +284,9 @@ async function makeDuoGlb(file: string, layer: Layer3d): Promise<void> {
 
   const character = (name: string, x: number, credit: boolean) => {
     const arm = doc.createNode(name).setTranslation([x, 0, 0]);
-    const boneRoot = doc.createNode(`${name}_root`);
-    const boneTail = doc.createNode(`${name}_tail`).setTranslation([0, 1, 0]);
+    // Même squelette pour les deux personnages (AC2) : os de même nom dans le GLB.
+    const boneRoot = doc.createNode('Os_racine');
+    const boneTail = doc.createNode('Os_queue').setTranslation([0, 1, 0]);
     boneRoot.addChild(boneTail);
     arm.addChild(boneRoot);
     const acc = (type: 'VEC3' | 'VEC4' | 'MAT4', a: TypedArray) => doc.createAccessor().setType(type).setBuffer(buffer).setArray(a);
@@ -291,6 +306,14 @@ async function makeDuoGlb(file: string, layer: Layer3d): Promise<void> {
   const prey = character('Armature_Proie', 1, false);
   const target: GNode = doc.createNode('start').setTranslation([-0.5, 1, 0]);
   scene.addChild(target);
+  // Empty de position de la caméra (DP-19) : arc de 120° autour de la cible pendant « regard », de 2,5 m à 3,5 m de haut,
+  // à 6 m de la cible ; au repos, à son point de départ.
+  const camAt = (t: number) => {
+    const a = (Math.PI / 3) * (1 - 2 * ramp(t, 0, DUO_CLIPS.regard));
+    return [-0.5 + 6 * Math.sin(a), 2.5 + ramp(t, 0, DUO_CLIPS.regard), 6 * Math.cos(a)];
+  };
+  const camRegard: GNode = doc.createNode('CamRegard').setTranslation(camAt(0) as [number, number, number]);
+  scene.addChild(camRegard);
 
   // Mouvements de chaque clip : position des deux armatures et de la cible, angle de queue des deux personnages.
   const motion: Record<DuoClip, (t: number) => { h: number; p: number; c: number; ha: number; pa: number; pz?: number }> = {
@@ -303,7 +326,9 @@ async function makeDuoGlb(file: string, layer: Layer3d): Promise<void> {
     },
     // Le chasseur bascule (queue à 90°) et touche le sol à 1,5 s ; la proie ne bouge pas (palier sur tout le clip).
     chute: (t) => ({ h: -2, p: 1, c: -0.5, ha: (Math.PI / 2) * ramp(t, 0.5, 1.5), pa: 0 }),
-    regard: (t) => ({ h: -2, p: 1, c: -0.5, ha: 0.3 * ramp(t, 0, 0.5) - 0.3 * ramp(t, 1, 1.5), pa: 0 }),
+    regard: (t) => ({ h: -2, p: 1, c: -0.5, ha: 0.3 * ramp(t, 0, 0.5) - 0.3 * ramp(t, 2.5, 3), pa: 0 }),
+    // Course sur place : queues qui battent, une fois par demi-tour (début et fin identiques : la boucle ne saute pas).
+    course: (t) => ({ h: -2, p: 1, c: -0.5, ha: 0.4 * Math.sin(2 * Math.PI * t), pa: -0.4 * Math.sin(2 * Math.PI * t) }),
   };
   for (const [name, d] of Object.entries(DUO_CLIPS) as [DuoClip, number][]) {
     const anim = doc.createAnimation(name);
@@ -321,6 +346,8 @@ async function makeDuoGlb(file: string, layer: Layer3d): Promise<void> {
     channel(prey.tail, 'rotation', (t) => rotZ(m(t).pa));
     // Cible caméra : animée seulement dans « chasse » (DP-7 : la caméra la suit, AC2).
     if (name === 'chasse') channel(target, 'translation', (t) => [m(t).c, 1, 0]);
+    // Position de la caméra : animée seulement dans « regard » (DP-19, AC2).
+    if (name === 'regard') channel(camRegard, 'translation', camAt);
   }
 
   scene.addChild(doc.createNode('GLBI_ROOT').setExtras({ glbi_version: LAYER3D_VERSION, glbi_config: JSON.stringify(layer) }));
@@ -407,6 +434,7 @@ async function main(): Promise<void> {
   fs.writeFileSync(path.join(dir, 'sounds/duo_morsure.wav'), blip(660));
   fs.writeFileSync(path.join(dir, 'sounds/duo_fuite.wav'), blip(880));
   fs.writeFileSync(path.join(dir, 'sounds/duo_impact.wav'), blip(220));
+  fs.writeFileSync(path.join(dir, 'sounds/duo_pas.wav'), blip(550));
   console.log(`make-test-book : livre de test écrit dans ${dir}${keptBlender ? ` (dossier ${RESERVED_SOURCE_DIR}/ conservé)` : ''}`);
 }
 

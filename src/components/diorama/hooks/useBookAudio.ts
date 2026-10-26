@@ -72,6 +72,8 @@ export default function useBookAudio(bookId: string, sounds: SceneSounds, autoUn
     };
   }, [autoUnlock]);
   const onAction = useCallback((id: string, phase: ActionPhase) => engineRef.current?.onAction(id, phase), []);
+  /** Événement d'une action franchi (son d'événement, AC2). */
+  const onEvent = useCallback((actionId: string, eventId: string) => engineRef.current?.onEvent(actionId, eventId), []);
   const setVolume = useCallback((v: number) => engineRef.current?.setVolume(v), []);
   const toggleMute = useCallback(() => engineRef.current?.toggleMute(), []);
   /** Page masquée : le lecteur est libéré puis rechargé (WebDioramaLoader) ; l'audio s'arrête avec lui. */
@@ -81,5 +83,5 @@ export default function useBookAudio(bookId: string, sounds: SceneSounds, autoUn
     setBlocked(false);
   }, []);
 
-  return { settings, blocked, unlock, onAction, setVolume, toggleMute, release };
+  return { settings, blocked, unlock, onAction, onEvent, setVolume, toggleMute, release };
 }

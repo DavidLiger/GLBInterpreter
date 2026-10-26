@@ -228,15 +228,17 @@ export function compareSnapshots(before: GlbSnapshot, after: GlbSnapshot, protec
 }
 
 /**
- * Noms de nœuds cités par une config `glbi_config` (cible caméra, objets animés) : à protéger de `prune`.
- * Lecture tolérante (la config est validée ailleurs, par le schéma Zod de build-book).
+ * Noms de nœuds cités par une config `glbi_config` (cible caméra, objets animés, empties de position de la caméra, AC2) : à
+ * protéger de `prune` (un empty de position sans clé serait une feuille vide, supprimée). Lecture tolérante (la config est
+ * validée ailleurs, par le schéma Zod de build-book).
  */
 export function referencedNodeNames(config: unknown): string[] {
   const names = new Set<string>();
   const m = (config as { modules?: Record<string, unknown> } | null)?.modules;
   const camera = m?.camera as { target?: unknown } | undefined;
-  const anims = m?.animations as { idle?: { object?: unknown }; actions?: { object?: unknown }[] } | undefined;
-  for (const v of [camera?.target, anims?.idle?.object, ...(Array.isArray(anims?.actions) ? anims.actions.map((a) => a?.object) : [])]) {
+  const anims = m?.animations as { idle?: { object?: unknown }; actions?: { object?: unknown; cameraPosition?: unknown }[] } | undefined;
+  const actions = Array.isArray(anims?.actions) ? anims.actions : [];
+  for (const v of [camera?.target, anims?.idle?.object, ...actions.map((a) => a?.object), ...actions.map((a) => a?.cameraPosition)]) {
     if (typeof v === 'string' && v) names.add(v);
   }
   return [...names];

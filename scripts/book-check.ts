@@ -268,6 +268,12 @@ export async function readScene(
     const t = findNode(camera.target, 'camera.target');
     if (t?.getMesh()) warn(`${label} : camera.target « ${camera.target} » porte un maillage (un empty est attendu, V-04)`);
   }
+  // Position de la caméra pendant une action (AC2, DP-19) : empty du GLB, comme la cible.
+  for (const a of animations?.actions ?? []) {
+    if (!a.cameraPosition) continue;
+    const p = findNode(a.cameraPosition, `action « ${a.id} » : cameraPosition`);
+    if (p?.getMesh()) warn(`${label} : action « ${a.id} » : cameraPosition « ${a.cameraPosition} » porte un maillage (un empty est attendu, DP-19)`);
+  }
 
   // --- Clips : contrôle dans les deux sens (spec §3) ---
   const glbAnims = root.listAnimations();

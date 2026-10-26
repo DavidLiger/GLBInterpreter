@@ -16,10 +16,12 @@ type Props = {
   currentId: string | null;
   /** Derniers événements `id:phase` (attribut `data-action-log`, lu par les tests). */
   log?: string[];
+  /** Derniers événements d'action franchis `action:événement` (AC2, attribut `data-event-log`, lu par les tests). */
+  eventLog?: string[];
   onTrigger: (id: string) => void;
 };
 
-export default function ActionButtons({ actions, lang, currentId, log = [], onTrigger }: Props) {
+export default function ActionButtons({ actions, lang, currentId, log = [], eventLog = [], onTrigger }: Props) {
   const { t } = useTranslation();
   if (!actions.length) return null;
   return (
@@ -30,6 +32,7 @@ export default function ActionButtons({ actions, lang, currentId, log = [], onTr
       data-testid="action-buttons"
       data-current-action={currentId ?? ""}
       data-action-log={log.join(" ")}
+      data-event-log={eventLog.join(" ")}
     >
       {actions.map((a) => {
         const active = a.id === currentId;

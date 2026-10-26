@@ -1,14 +1,18 @@
 // scripts/test-engine.ts — tests du moteur sans navigateur (Î10b). `npm run test:engine`.
 // Cadrage orbital (`lib/orbitFraming.ts`), mode `buttons` (`lib/buttonsPlayer.ts`), boucle unique (`lib/frameTasks.ts`),
 // éclairage de secours (`lib/fallbackLights.ts`), lecture libre d'un clip (`lib/clipPreview.ts`), onglet Caméra de l'atelier (`src/atelier/cameraForm.ts`, A4),
-// audio Web Audio (`lib/audioEngine.ts`, Î11 : AudioContext simulé, aucun son réel), progression du livre
+// audio Web Audio (`lib/audioEngine.ts`, Î11 : AudioContext simulé, aucun son réel), actions combinées (AC2 : événements,
+// coupe au noir, caméra `lib/cameraRig.ts`, sons d'événement, os de même nom lus par GLTFLoader), progression du livre
 // (`src/components/book/progress.ts`, Î13 : règles de déblocage, valeur illisible, stockage indisponible), lecture d'un
 // QR par le scanner interne (`src/components/book/scanTarget.ts`, Î14 : adresse du livre, miroir, autre livre).
 // Les mixers tournent sur une scène three minimale (un os animé), le temps est avancé à la main.
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
 import { ORBIT_DEFAULTS, orbitPosition, resolveOrbit, sceneRadius } from '../src/components/diorama/lib/orbitFraming';
-import { ButtonsPlayer, type ActionEvent } from '../src/components/diorama/lib/buttonsPlayer';
+import { ButtonsPlayer, CUT_FADE, type ActionEvent, type ButtonsPlayerConfig, type CameraOwner, type CutState } from '../src/components/diorama/lib/buttonsPlayer';
+import { CAMERA_ENTER_S, CAMERA_RETURN_S, CameraRig, type CameraMode, type RigControls } from '../src/components/diorama/lib/cameraRig';
+import { Document as GDocument, NodeIO } from '@gltf-transform/core';
+import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FrameTasks } from '../src/components/diorama/lib/frameTasks';
 import { addFallbackLightsIfNone, FALLBACK_LIGHTS_NAME } from '../src/components/diorama/lib/fallbackLights';
 import { ClipPreview } from '../src/components/diorama/lib/clipPreview';
@@ -263,6 +267,312 @@ test('clip absent du GLB : avertissement, bouton sans effet', () => {
   p.trigger('walk');
   assert.equal(warnings.length, 2);
   assert.deepEqual(p.actionIds, []);
+});
+
+// ────────────── Actions combinées (AC2) ──────────────
+console.log('Actions combinées : événements, coupe au noir, caméra (AC2)');
+
+/** Mode buttons sur un rig de clips donnés ; journal commun des phases, événements, coupes et caméra. */
+function ac2(actions: ButtonsPlayerConfig['actions'], durations: Record<string, number>) {
+  const { root, clips, mixer } = rig({ idle: 1, ...durations });
+  const log: string[] = [];
+  const cuts: CutState[] = [];
+  const cams: CameraOwner[] = [];
+  const player = new ButtonsPlayer(mixer, clips, { idle: { clip: 'idle', loop: true }, actions }, {
+    onAction: (e: ActionEvent) => log.push(`${e.id}:${e.phase}`),
+    onEvent: (e) => log.push(`${e.action}@${e.event}`),
+    onCut: (c) => {
+      cuts.push(c);
+      if (c.black) log.push('NOIR');
+    },
+    onCamera: (c) => cams.push(c),
+    ...quiet,
+  });
+  /** Une image de la boucle unique : tick, mixer, postUpdate (ordre de WebDioramaLoader). */
+  const frame = (dt: number) => {
+    player.tick(dt);
+    mixer.update(dt);
+    player.postUpdate();
+  };
+  const step = (seconds: number, dt = 1 / 60) => {
+    for (let t = 0; t < seconds - 1e-9; t += dt) frame(dt);
+  };
+  const action = (name: string) => mixer.existingAction(clips.find((c) => c.name === name)!)!;
+  player.start();
+  log.length = 0;
+  cams.length = 0;
+  return { root, mixer, player, log, cuts, cams, frame, step, action };
+}
+
+test('événements : franchis après le mixer, triés par instant, même quand une image en saute plusieurs ; instant 0 à la première image', () => {
+  const s = ac2([{ id: 'chasse', clip: 'chasse', events: [{ id: 'b', time: 0.5 }, { id: 'a', time: 0.1 }, { id: 'z', time: 0 }] }], { chasse: 1 });
+  s.player.trigger('chasse');
+  assert.deepEqual(s.log, ['chasse:start'], 'rien avant la première image');
+  s.frame(0.25); // franchit 0 et 0,1 d'un coup
+  assert.deepEqual(s.log, ['chasse:start', 'chasse@z', 'chasse@a']);
+  s.frame(0.25); // 0,5 : instant atteint exactement
+  assert.deepEqual(s.log.slice(3), ['chasse@b']);
+  s.step(1);
+  assert.deepEqual(s.log, ['chasse:start', 'chasse@z', 'chasse@a', 'chasse@b', 'chasse:end'], 'chaque événement une fois, avant end');
+});
+
+test('événement à l’instant de fin du clip (à l’arrondi près) : part avant end', () => {
+  const s = ac2([{ id: 'chute', clip: 'chute', events: [{ id: 'impact', time: 0.75 }, { id: 'fin', time: 0.7504 }] }], { chute: 0.75 });
+  s.player.trigger('chute');
+  s.step(0.74, 0.1); // 0,8 > 0,75 : le clip finit dans cette image
+  assert.deepEqual(s.log, ['chute:start', 'chute@impact', 'chute@fin', 'chute:end']);
+});
+
+test('action en boucle : événements redéclenchés à chaque tour, même plusieurs tours dans une image', () => {
+  const s = ac2([{ id: 'course', clip: 'course', loop: true, events: [{ id: 'pas1', time: 0.1 }, { id: 'pas2', time: 0.3 }] }], { course: 0.4 });
+  s.player.trigger('course');
+  s.step(1, 0.05); // 2,5 tours : 2 × (pas1, pas2) puis pas1
+  assert.deepEqual(s.log, ['course:start', 'course@pas1', 'course@pas2', 'course@pas1', 'course@pas2', 'course@pas1']);
+  const t = ac2([{ id: 'vite', clip: 'vite', loop: true, events: [{ id: 'x', time: 0.01 }, { id: 'y', time: 0.03 }] }], { vite: 0.04 });
+  t.player.trigger('vite');
+  t.frame(0.1); // 2,5 tours dans une seule image (pas plafonné à 0,1 s)
+  assert.deepEqual(t.log, ['vite:start', 'vite@x', 'vite@y', 'vite@x', 'vite@y', 'vite@x']);
+});
+
+test('relance : les événements repartent du début ; interruption : ceux qui restent sont annulés', () => {
+  const s = ac2([
+    { id: 'chasse', clip: 'chasse', events: [{ id: 'm', time: 0.2 }, { id: 'f', time: 0.8 }] },
+    { id: 'regard', clip: 'regard', events: [{ id: 'r', time: 0.1 }] },
+  ], { chasse: 1, regard: 0.5 });
+  s.player.trigger('chasse');
+  s.step(0.5);
+  s.player.trigger('chasse'); // relance
+  s.step(0.5);
+  assert.deepEqual(s.log, ['chasse:start', 'chasse@m', 'chasse:interrupt', 'chasse:start', 'chasse@m']);
+  s.player.trigger('regard'); // interruption : « f » ne part pas
+  s.step(1.5);
+  assert.deepEqual(s.log.slice(5), ['chasse:interrupt', 'regard:start', 'regard@r', 'regard:end']);
+});
+
+test('coupe au noir : 0,3 s vers le noir, entrante au noir (temps 0, poids 1), puis 0,3 s vers la scène', () => {
+  const s = ac2([{ id: 'chute', clip: 'chute', transition: 'cut', events: [{ id: 'impact', time: 0 }] }], { chute: 2 });
+  s.player.trigger('chute');
+  assert.deepEqual(s.log, [], 'start émis au noir, pas au clic');
+  assert.equal(s.player.cutPhase, 'out');
+  s.step(CUT_FADE * 0.5);
+  assert.ok(near(s.cuts.at(-1)!.opacity, 0.5, 0.05), `opacité à mi-montée ${s.cuts.at(-1)!.opacity}`);
+  assert.ok(near(s.action('idle').getEffectiveWeight(), 1), 'idle joue jusqu’au noir');
+  s.step(CUT_FADE * 0.5 + 0.01);
+  assert.deepEqual(s.log, ['NOIR', 'chute:start', 'chute@impact']);
+  assert.ok(near(s.action('chute').getEffectiveWeight(), 1), 'poids 1 dès le noir, sans fondu de poses');
+  assert.ok(s.action('chute').time < 0.05, 'entrante au temps 0');
+  assert.ok(!s.action('idle').isRunning(), 'sortante arrêtée au noir');
+  assert.equal(s.player.currentId, 'chute');
+  s.step(CUT_FADE + 0.02);
+  assert.equal(s.player.cutPhase, null);
+  assert.equal(s.cuts.at(-1)!.opacity, 0);
+});
+
+test('coupe au noir : fin naturelle (end à la fin du clip, idle au noir) ; d’une action à une autre (interrupt puis start au noir)', () => {
+  const s = ac2([
+    { id: 'chute', clip: 'chute', transition: 'cut' },
+    { id: 'walk', clip: 'walk' },
+  ], { chute: 1, walk: 2 });
+  s.player.trigger('chute');
+  s.step(0.7); // noir à 0,3 s, scène à 0,6 s
+  s.step(0.65); // fin du clip (≈ 1,3 s) : end, puis montée vers le noir (atteint vers 1,6 s)
+  assert.deepEqual(s.log, ['NOIR', 'chute:start', 'chute:end']);
+  assert.equal(s.player.cutPhase, 'out', 'retour à idle par le noir');
+  assert.equal(s.player.currentId, null);
+  s.step(0.3);
+  assert.deepEqual(s.log, ['NOIR', 'chute:start', 'chute:end', 'NOIR']);
+  assert.ok(s.action('idle').isRunning() && near(s.action('idle').getEffectiveWeight(), 1));
+  s.step(0.4);
+  s.log.length = 0;
+  // Action marquée interrompue par une action en fondu : la coupe vaut aussi
+  s.player.trigger('chute');
+  s.step(0.7);
+  s.player.trigger('walk');
+  assert.deepEqual(s.log, ['NOIR', 'chute:start'], 'walk attend le noir');
+  s.step(0.31);
+  assert.deepEqual(s.log, ['NOIR', 'chute:start', 'NOIR', 'chute:interrupt', 'walk:start'], 'interrupt puis start, au noir');
+});
+
+test('coupe au noir : le dernier clic pendant la montée est retenu et exécuté au noir ; ambiance hors du mode buttons', () => {
+  const s = ac2([
+    { id: 'chute', clip: 'chute', transition: 'cut' },
+    { id: 'walk', clip: 'walk' },
+    { id: 'roar', clip: 'roar' },
+  ], { chute: 1, walk: 2, roar: 2 });
+  s.player.trigger('chute');
+  s.step(0.1);
+  s.player.trigger('walk');
+  s.player.trigger('roar');
+  s.step(0.25);
+  assert.deepEqual(s.log, ['NOIR', 'roar:start'], 'seul le dernier clic est exécuté, au noir');
+  assert.equal(s.player.currentId, 'roar');
+});
+
+test('caméra (DP-19) : action à empty de position annoncée au lancement, libérée au retour à idle ; au noir pour une coupe', () => {
+  const s = ac2([
+    { id: 'regard', clip: 'regard', cameraPosition: 'CamRegard' },
+    { id: 'walk', clip: 'walk' },
+    { id: 'chute', clip: 'chute', transition: 'cut', cameraPosition: 'CamChute' },
+  ], { regard: 0.5, walk: 0.5, chute: 0.5 });
+  s.player.trigger('regard');
+  assert.deepEqual(s.cams, [{ id: 'regard', snap: false }]);
+  s.step(1);
+  assert.deepEqual(s.cams.at(-1), { id: null, snap: false }, 'fin : retour en douceur');
+  s.player.trigger('regard');
+  s.step(0.1);
+  s.player.trigger('walk'); // interruption par une action sans empty
+  assert.deepEqual(s.cams.at(-1), { id: null, snap: false });
+  s.player.trigger('chute');
+  s.step(0.31);
+  assert.deepEqual(s.cams.at(-1), { id: 'chute', snap: true }, 'coupe : au noir, d’un coup');
+  s.step(0.6 + 0.5);
+  assert.deepEqual(s.cams.at(-1), { id: null, snap: true }, 'fin d’une action marquée : retour au noir');
+});
+
+test('sans transition ni événements : déroulé identique à Î10b (aucune coupe, aucun événement, caméra jamais prise)', () => {
+  const s = ac2([{ id: 'walk', clip: 'walk' }, { id: 'eat', clip: 'eat' }], { walk: 0.75, eat: 1.25 });
+  s.player.trigger('walk');
+  s.step(0.3);
+  s.player.trigger('eat');
+  s.step(2);
+  assert.deepEqual(s.log, ['walk:start', 'walk:interrupt', 'eat:start', 'eat:end']);
+  assert.deepEqual(s.cuts, []);
+  assert.deepEqual(s.cams, []);
+});
+
+/** Caméra et contrôles minimaux : cible `start` en (0, 1, 0), caméra en (0, 1, 5), empties de position. */
+function camRig() {
+  const scene = new THREE.Group();
+  const target = new THREE.Object3D();
+  target.position.set(0, 1, 0);
+  const camA = new THREE.Object3D();
+  camA.position.set(4, 2, 0);
+  const camB = new THREE.Object3D();
+  camB.position.set(-4, 3, 0);
+  scene.add(target, camA, camB);
+  scene.updateMatrixWorld(true);
+  const camera = new THREE.PerspectiveCamera();
+  camera.position.set(0, 1, 5);
+  const controls: RigControls = {
+    target: new THREE.Vector3(0, 1, 0), enabled: true, enableDamping: true,
+    minDistance: 2, maxDistance: 9, minPolarAngle: 0.2, maxPolarAngle: 1.5, minAzimuthAngle: -1, maxAzimuthAngle: 1,
+  };
+  const modes: CameraMode[] = [];
+  const warnings: string[] = [];
+  const rigc = new CameraRig(camera, controls, target, { regard: camA, autre: camB }, { onModeChange: (m) => modes.push(m), warn: (m) => warnings.push(m) });
+  const run = (seconds: number, dt = 1 / 60) => {
+    for (let t = 0; t < seconds - 1e-9; t += dt) rigc.update(dt);
+  };
+  const lookDir = () => camera.getWorldDirection(new THREE.Vector3());
+  return { scene, target, camA, camB, camera, controls, rig: rigc, modes, warnings, run, lookDir };
+}
+const vnear = (a: THREE.Vector3, b: THREE.Vector3, eps = 1e-6) => a.distanceTo(b) < eps;
+
+test('cible suivie (DP-7) : caméra et cible des contrôles décalées du déplacement de l’empty ; cible immobile : rien ne change', () => {
+  const c = camRig();
+  c.run(0.5);
+  assert.ok(vnear(c.camera.position, new THREE.Vector3(0, 1, 5)) && vnear(c.controls.target, new THREE.Vector3(0, 1, 0)), 'immobile : inchangé');
+  c.target.position.set(1.5, 1, -0.5);
+  c.rig.update(1 / 60);
+  assert.ok(vnear(c.controls.target, new THREE.Vector3(1.5, 1, -0.5)));
+  assert.ok(vnear(c.camera.position, new THREE.Vector3(1.5, 1, 4.5)), 'même vecteur : distance et angles gardés');
+  assert.equal(c.rig.mode, 'free');
+  assert.equal(c.controls.enabled, true);
+});
+
+test('empty de position (DP-19) : vue mémorisée, contrôles verrouillés, caméra sur l’empty, regard sur la cible ; retour en 0,5 s', () => {
+  const c = camRig();
+  c.rig.setOwner('regard', false);
+  assert.equal(c.controls.enabled, false, 'verrouillé dès le lancement');
+  assert.equal(c.controls.enableDamping, false);
+  c.run(CAMERA_ENTER_S * 0.5);
+  assert.equal(c.rig.mode, 'enter');
+  assert.ok(c.camera.position.distanceTo(c.camA.position) > 0.1, 'pas de saut : en route vers l’empty');
+  c.run(CAMERA_ENTER_S * 0.5 + 0.02);
+  assert.equal(c.rig.mode, 'locked');
+  // L'empty bouge (animé par le clip) : la caméra le suit exactement et regarde la cible
+  c.camA.position.set(3, 2.5, 2);
+  c.target.position.set(0.5, 1, 0);
+  c.scene.updateMatrixWorld(true);
+  c.rig.update(1 / 60);
+  assert.ok(vnear(c.camera.position, new THREE.Vector3(3, 2.5, 2)));
+  assert.ok(vnear(c.controls.target, new THREE.Vector3(0.5, 1, 0)));
+  const expected = new THREE.Vector3(0.5, 1, 0).sub(new THREE.Vector3(3, 2.5, 2)).normalize();
+  assert.ok(vnear(c.lookDir(), expected, 1e-5), 'regard sur la cible');
+  // Fin de l'action : retour à la vue d'avant (même écart à la cible, recalé sur sa position actuelle)
+  c.rig.setOwner(null, false);
+  c.run(CAMERA_RETURN_S * 0.5);
+  assert.equal(c.rig.mode, 'return');
+  assert.equal(c.controls.enabled, false, 'contrôles rendus seulement à la fin du retour');
+  c.run(CAMERA_RETURN_S * 0.5 + 0.02);
+  assert.equal(c.rig.mode, 'free');
+  assert.ok(vnear(c.camera.position, new THREE.Vector3(0.5, 1, 5), 1e-5), `vue d’avant : ${c.camera.position.toArray()}`);
+  assert.deepEqual(
+    [c.controls.enabled, c.controls.enableDamping, c.controls.minDistance, c.controls.maxDistance, c.controls.minPolarAngle, c.controls.maxPolarAngle, c.controls.minAzimuthAngle, c.controls.maxAzimuthAngle],
+    [true, true, 2, 9, 0.2, 1.5, -1, 1],
+    'réglages des contrôles rendus',
+  );
+  assert.deepEqual(c.modes, ['enter', 'locked', 'return', 'free']);
+});
+
+test('empty de position : d’un coup au noir ; passage direct d’un empty à l’autre ; empty introuvable : caméra libre', () => {
+  const c = camRig();
+  c.rig.setOwner('regard', true);
+  c.rig.update(1 / 60);
+  assert.equal(c.rig.mode, 'locked');
+  assert.ok(vnear(c.camera.position, c.camA.position), 'au noir : sur l’empty d’un coup');
+  c.rig.setOwner('autre', false); // interruption par une autre action à empty : pas de retour intermédiaire
+  assert.equal(c.rig.mode, 'enter');
+  c.run(CAMERA_ENTER_S + 0.02);
+  assert.ok(vnear(c.camera.position, c.camB.position));
+  assert.deepEqual(c.modes, ['locked', 'enter', 'locked']);
+  c.rig.setOwner(null, true);
+  c.rig.update(1 / 60);
+  assert.equal(c.rig.mode, 'free');
+  assert.ok(vnear(c.camera.position, new THREE.Vector3(0, 1, 5)), 'vue d’avant la première action, d’un coup');
+  assert.equal(c.controls.enabled, true);
+  c.rig.setOwner('inconnue', false);
+  assert.equal(c.rig.mode, 'free');
+  assert.equal(c.warnings.length, 1);
+});
+
+test('os de même nom dans deux personnages (GLB lu par GLTFLoader) : le clip commun anime les deux', async () => {
+  // Personnages tirés du même squelette (v0.3) : GLTFLoader rend les noms uniques (Os_queue, Os_queue_1) et nomme les
+  // pistes avec ces noms ; le mixer racine du mode buttons anime donc chaque os, sans recherche par nom brut.
+  const doc = new GDocument();
+  const buf = doc.createBuffer();
+  const scene = doc.createScene('Scene');
+  const anim = doc.createAnimation('chasse');
+  for (const [name, dy] of [['Armature_Chasseur', -1], ['Armature_Proie', 1]] as const) {
+    const arm = doc.createNode(name);
+    const tail = doc.createNode('Os_queue');
+    arm.addChild(tail);
+    scene.addChild(arm);
+    const sampler = doc.createAnimationSampler().setInterpolation('LINEAR')
+      .setInput(doc.createAccessor().setBuffer(buf).setType('SCALAR').setArray(new Float32Array([0, 1])))
+      .setOutput(doc.createAccessor().setBuffer(buf).setType('VEC3').setArray(new Float32Array([0, 0, 0, 0, 2 * dy, 0])));
+    anim.addSampler(sampler).addChannel(doc.createAnimationChannel().setTargetNode(tail).setTargetPath('translation').setSampler(sampler));
+  }
+  const idle = doc.createAnimation('idle');
+  const s0 = doc.createAnimationSampler().setInput(doc.createAccessor().setBuffer(buf).setType('SCALAR').setArray(new Float32Array([0, 1])))
+    .setOutput(doc.createAccessor().setBuffer(buf).setType('VEC3').setArray(new Float32Array([0, 0, 0, 0, 0, 0])));
+  idle.addSampler(s0).addChannel(doc.createAnimationChannel().setTargetNode(doc.getRoot().listNodes()[1]).setTargetPath('translation').setSampler(s0));
+  const glb = await new NodeIO().writeBinary(doc);
+  const gltf = await new Promise<GLTF>((ok, ko) => new GLTFLoader().parse(glb.buffer.slice(glb.byteOffset, glb.byteOffset + glb.byteLength) as ArrayBuffer, '', ok, ko));
+  const player = new ButtonsPlayer(new THREE.AnimationMixer(gltf.scene), gltf.animations, { idle: { clip: 'idle' }, actions: [{ id: 'chasse', clip: 'chasse' }] }, quiet);
+  player.start();
+  player.trigger('chasse');
+  for (let i = 0; i < 30; i++) {
+    player.tick(1 / 60);
+    player.mixer.update(1 / 60);
+  }
+  const bones: [string, number][] = [];
+  gltf.scene.traverse((o) => {
+    if (o.userData.name === 'Os_queue') bones.push([o.parent!.name, o.position.y]);
+  });
+  assert.equal(bones.length, 2);
+  const byArm = Object.fromEntries(bones);
+  assert.ok(byArm.Armature_Chasseur < -0.5 && byArm.Armature_Proie > 0.5, `os animés : ${JSON.stringify(byArm)}`);
 });
 
 // ────────────── Boucle unique ──────────────
@@ -619,6 +929,41 @@ testAsync('volume et sourdine : gain maître, persistance par livre, relus par u
   assert.deepEqual(again.engine.getSettings(), { volume: 0.25, muted: false });
   again.engine.unlock();
   assert.ok(near(again.ctx.gains[0].gain.value, 0.25));
+});
+
+testAsync('AC2 : sons d’événement en plus du son de l’action ; interruption : coupés et annulés ; fin naturelle : au bout', async () => {
+  const { ctx, engine } = audioRig();
+  engine.setSounds({
+    ambient: 'sounds/jungle.wav',
+    actions: { chasse: { sound: 'sounds/chasse.wav', loop: false } },
+    events: { chasse: { morsure: 'sounds/morsure.wav', fuite: 'sounds/fuite.wav' } },
+  });
+  engine.unlock();
+  await flush(); await flush();
+  assert.ok(ctx.decoded.includes('sounds/morsure.wav') && ctx.decoded.includes('sounds/fuite.wav'), 'préchargés et décodés avec la scène');
+  engine.onAction('chasse', 'start');
+  engine.onEvent('chasse', 'morsure');
+  engine.onEvent('chasse', 'fuite');
+  engine.onEvent('chasse', 'souffle'); // sans son : rien
+  await flush();
+  assert.deepEqual(ctx.playing().sort(), ['sounds/chasse.wav', 'sounds/fuite.wav', 'sounds/jungle.wav (boucle)', 'sounds/morsure.wav']);
+  engine.onAction('chasse', 'interrupt');
+  assert.deepEqual(ctx.playing(), ['sounds/jungle.wav (boucle)'], 'interruption : son de l’action et sons d’événement coupés');
+  // Son d'événement pas encore décodé : annulé par l'interruption
+  engine.setSounds({ actions: {}, events: { chasse: { morsure: 'sounds/morsure2.wav' } } });
+  engine.onAction('chasse', 'start');
+  engine.onEvent('chasse', 'morsure');
+  engine.onAction('chasse', 'interrupt');
+  await flush(); await flush();
+  assert.deepEqual(ctx.playing(), []);
+  // Fin naturelle : les sons d'événement vont au bout
+  engine.onAction('chasse', 'start');
+  engine.onEvent('chasse', 'morsure');
+  await flush();
+  engine.onAction('chasse', 'end');
+  assert.deepEqual(ctx.playing(), ['sounds/morsure2.wav']);
+  engine.dispose();
+  assert.deepEqual(ctx.playing(), []);
 });
 
 testAsync('Î13bis : contexte créé sans geste et resté suspendu (blocked), puis repris au premier geste', async () => {

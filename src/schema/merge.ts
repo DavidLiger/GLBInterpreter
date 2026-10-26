@@ -59,9 +59,16 @@ export interface MergeResult {
 /** Clés propres à la couche éditoriale : refusées dans le GLB avec un renvoi vers `edit.json`. */
 const EDIT_KEYS = new Set<string>(['name', 'loaderImage', 'label', 'icon', 'sound', ...CAMERA_FRAMING_KEYS, 'audio', 'quiz', 'credits']);
 /** Clés propres à la couche 3D : refusées dans `edit.json` avec un renvoi vers l'addon. */
-const LAYER3D_KEYS = new Set<string>(['id', 'target', 'mode', 'idle', 'object', 'type', 'clip', 'trigger', 'loop', 'transition', 'time']);
-/** Clés d'action propres aux actions combinées (AC1) : refusées sur `idle` (pas d'événements ni de coupe sur le repos). */
-const ACTION_ONLY_KEYS = new Set<string>(['events', 'transition']);
+const LAYER3D_KEYS = new Set<string>(['id', 'target', 'mode', 'idle', 'object', 'type', 'clip', 'trigger', 'loop', 'transition', 'cameraPosition', 'time']);
+/**
+ * Clés propres aux actions (AC1, AC2) : refusées sur `idle`, avec ce qu'elles seraient sur le repos (pas de marqueurs, de
+ * coupe au noir ni de position de caméra).
+ */
+const ACTION_ONLY_KEYS = new Map<string, string>([
+  ['events', 'pas de marqueurs sur idle (spec-actions-combinees.md §4, §6)'],
+  ['transition', 'pas de coupe au noir sur idle (spec-actions-combinees.md §4, §6)'],
+  ['cameraPosition', 'pas de position de caméra sur idle (spec-actions-combinees.md §16)'],
+]);
 
 const where = (p: readonly PropertyKey[]) => (p.length ? p.map(String).join('.') : '(racine)');
 
@@ -79,7 +86,7 @@ export function layerIssues(error: z.ZodError, layer: '3d' | 'edit', glbFile: st
       for (const k of i.keys) {
         let why: string;
         if (atModules && (RESERVED_MODULES as readonly string[]).includes(k)) why = `module réservé « ${k} », non activable en v1 (spec-extras-blender.md §6)`;
-        else if (i.path[i.path.length - 1] === 'idle' && ACTION_ONLY_KEYS.has(k)) why = `clé « ${k} » non admise : pas de ${k === 'events' ? 'marqueurs' : 'coupe au noir'} sur idle (spec-actions-combinees.md §4, §6)`;
+        else if (i.path[i.path.length - 1] === 'idle' && ACTION_ONLY_KEYS.has(k)) why = `clé « ${k} » non admise : ${ACTION_ONLY_KEYS.get(k)}`;
         else if (layer === '3d' && EDIT_KEYS.has(k)) why = `clé « ${k} » non admise, elle appartient à ${editFile}`;
         else if (layer === 'edit' && LAYER3D_KEYS.has(k)) why = `clé « ${k} » non admise, elle appartient au GLB (addon)`;
         else why = `clé « ${k} » inconnue`;
@@ -125,6 +132,7 @@ function build(l3: Layer3d, e: EditLayer | null, fallback: boolean): Record<stri
               sound: ed?.sound,
               loop: a.loop,
               transition: a.transition,
+              cameraPosition: a.cameraPosition,
               // Événements dans l'ordre du GLB ; son pris dans la couche éditoriale (AC1, DP-6).
               events: a.events?.map((ev) => defined({ id: ev.id, time: ev.time, sound: ed?.events?.[ev.id]?.sound })),
             });
@@ -186,6 +194,17 @@ export function mergeLayers(raw3d: unknown, rawEdit: unknown, opts: MergeOptions
   const l3 = p3.data;
   if (l3.scene.id !== id) {
     errors.push(`${glbFile} (couche 3D) : scene.id vaut « ${l3.scene.id} », attendu « ${id} » (nom du fichier et book.json)`);
+  }
+  // Position de caméra (AC2, DP-19, spec-actions-combinees.md §16) : la caméra regarde la cible, qui est donc exigée, et
+  // ne peut pas être posée sur la cible elle-même (direction de regard indéfinie).
+  for (const a of l3.modules.animations?.actions ?? []) {
+    if (!a.cameraPosition) continue;
+    const target = l3.modules.camera?.target;
+    if (!target) {
+      errors.push(`${glbFile} (couche 3D) : action « ${a.id} » : position de caméra « ${a.cameraPosition} » sans cible de caméra (camera.target, addon)`);
+    } else if (a.cameraPosition === target) {
+      errors.push(`${glbFile} (couche 3D) : action « ${a.id} » : position de caméra « ${a.cameraPosition} » identique à la cible de caméra (deux empties distincts attendus)`);
+    }
   }
 
   // --- 2. Couche éditoriale ---

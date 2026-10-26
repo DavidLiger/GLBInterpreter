@@ -231,6 +231,12 @@ export type ButtonsModeAction = {
   icon?: string;
   /** Son de l'action (couche éditoriale, chemin déjà résolu), joué en Web Audio (Î11, `lib/audioEngine.ts`). */
   sound?: string;
+  /** Passage par le noir à l'entrée et à la sortie de l'action (AC2, DP-8) ; absent = fondu. */
+  transition?: "fade" | "cut";
+  /** Empty de position de la caméra pendant l'action (AC2, DP-19), nom Blender. */
+  cameraPosition?: string;
+  /** Événements (AC2, DP-6) : instant dans le clip (secondes) et son (chemin déjà résolu). */
+  events?: { id: string; time: number; sound?: string }[];
 };
 
 /** Mode `buttons` (spec-extras-blender.md §4) : `idle` en boucle, un bouton par action dans l'ordre du GLB. */

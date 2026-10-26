@@ -353,7 +353,7 @@ const rx = (s) => new RegExp(s);
 // [motif, outil, correction, phrase] : le premier motif qui correspond l'emporte. `correction` : ce que propose le studio
 // (blender : ouvrir le .blend ; atelier : ouvrir l'atelier ; livre : « Modifier le livre » ; dossier : copier le chemin).
 // Motifs tirés des textes de scripts/book-check.ts, src/schema/merge.ts et src/schema/glbi.ts (base 5643449 ; événements,
-// coupe au noir et clés mal placées ajoutés en AC1).
+// coupe au noir et clés mal placées ajoutés en AC1 ; position de la caméra pendant une action, DP-19, en AC2).
 const EXPLAIN = [
   // Dossier du livre, book.json
   [/book\.json absent$/, 'studio', 'livre', 'book.json manque dans le dossier : créer le livre dans le studio (« Changer de livre »).'],
@@ -378,13 +378,22 @@ const EXPLAIN = [
   [/modules\.camera réglé mais pas de cible/, 'blender', 'blender', 'Le cadrage est réglé dans l’atelier, mais le modèle n’a pas de cible de caméra : la choisir dans l’addon, puis exporter.'],
   [rx(`animations\\.idle : clip ${Q} absent du GLB`), 'blender', 'blender', (m) => `L’animation de repos « ${m[1]} » n’est pas dans le modèle exporté.`],
   [rx(`\\(${Q}\\) : clip ${Q} absent du GLB`), 'blender', 'blender', (m) => `Le bouton « ${m[1]} » joue l’animation « ${m[2]} », qui n’est pas dans le modèle exporté.`],
+  // Position de la caméra pendant une action (AC2, DP-19) : empty choisi dans l'addon, avant les motifs plus généraux
+  [rx(`action ${Q} : cameraPosition ${Q} introuvable`), 'blender', 'blender', (m) => `La position de caméra « ${m[2]} » du bouton « ${m[1]} » n’existe pas dans le modèle exporté : vérifier le nom de l’objet vide dans Blender, ou le choix dans l’addon, puis exporter.`],
+  [rx(`action ${Q} : position de caméra ${Q} sans cible de caméra`), 'blender', 'blender', (m) => `Le bouton « ${m[1]} » place la caméra sur « ${m[2]} », mais le modèle n’a pas de cible de caméra (la caméra la regarde) : choisir la cible dans l’addon, puis exporter.`],
+  [rx(`action ${Q} : position de caméra ${Q} identique à la cible`), 'blender', 'blender', (m) => `Le bouton « ${m[1]} » place la caméra sur la cible elle-même (« ${m[2]} ») : choisir dans l’addon un autre objet vide pour la position de la caméra, puis exporter.`],
+  [rx(`action ${Q} : cameraPosition ${Q} porte un maillage`), 'blender', 'blender', (m) => `La position de caméra « ${m[2]} » du bouton « ${m[1]} » est un objet avec un maillage : choisir un objet vide (empty) dans l’addon.`],
   [rx(`camera\\.target ${Q} introuvable`), 'blender', 'blender', (m) => `La cible de la caméra « ${m[1]} » n’existe pas dans le modèle exporté : vérifier son nom dans Blender.`],
   [rx(`\\.object ${Q} introuvable dans le GLB`), 'blender', 'blender', (m) => `L’objet « ${m[1]} » n’existe pas dans le modèle exporté : vérifier son nom dans Blender.`],
   [rx(`clip ${Q} en double dans le GLB`), 'blender', 'blender', (m) => `Deux animations s’appellent « ${m[1]} » : renommer l’une d’elles dans Blender.`],
   // Actions combinées (AC1) : marqueurs de la timeline (événements) et coupe au noir, écrits par l'addon
   [rx(`action ${Q} : événement ${Q} à ([\\d,]+) s, clip de ([\\d,]+) s`), 'blender', 'blender', (m) => `Le marqueur « ${m[1]}:${m[2]} » est placé à ${m[3]} s, après la fin de l’animation du bouton (${m[4]} s) : le déplacer dans la timeline de Blender, puis exporter.`],
   [rx(`id d'événement en double ${Q}`), 'blender', 'blender', (m) => `Deux marqueurs du même bouton s’appellent « ${m[1]} » : renommer l’un d’eux dans la timeline de Blender, puis exporter.`],
-  [/clé « (events|transition) » non admise : pas de/, 'blender', 'blender', (m) => (m[1] === 'events' ? 'Des marqueurs ont été posés pour l’animation de repos, qui n’en accepte pas : les placer sur l’animation d’un bouton dans Blender, puis exporter.' : 'L’animation de repos est marquée « coupe au noir » : la coupe ne vaut que pour un bouton ; décocher dans l’addon, puis exporter.')],
+  [/clé « (events|transition|cameraPosition) » non admise : pas de/, 'blender', 'blender', (m) => ({
+    events: 'Des marqueurs ont été posés pour l’animation de repos, qui n’en accepte pas : les placer sur l’animation d’un bouton dans Blender, puis exporter.',
+    transition: 'L’animation de repos est marquée « coupe au noir » : la coupe ne vaut que pour un bouton ; décocher dans l’addon, puis exporter.',
+    cameraPosition: 'L’animation de repos a une position de caméra : elle ne vaut que pour un bouton ; la retirer dans l’addon, puis exporter.',
+  })[m[1]]],
   [/\.events\.\d+\.time : instant négatif/, 'blender', 'blender', 'Un marqueur est placé avant le début de l’animation du bouton : le déplacer dans la timeline de Blender, puis exporter.'],
   [rx(`clé ${Q} non admise, elle appartient à scenes/`), 'blender', 'blender', (m) => `Le modèle exporté contient « ${m[1]} », un réglage qui se fait dans l’atelier : exporter à nouveau avec l’addon actuel.`],
   [/n'a qu'un clip « Animation »/, 'blender', 'blender', 'Le modèle n’a qu’une animation « Animation » : à l’export, le mode d’animation doit être « Actions » (l’addon le règle).'],

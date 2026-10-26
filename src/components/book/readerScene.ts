@@ -106,13 +106,29 @@ function toCredits(built: BuiltScene, book: ReaderBook): DioramaCredits {
   };
 }
 
-/** Mode `buttons` : `idle` et actions dans l'ordre du GLB ; chemins d'icônes résolus par `at`. */
+/**
+ * Mode `buttons` : `idle` et actions dans l'ordre du GLB ; chemins d'icônes et de sons résolus par `at`. Actions combinées
+ * (AC2) : `transition`, `cameraPosition` et `events` (sons résolus) recopiés quand ils sont présents (lecture tolérante :
+ * un champ absent garde le comportement d'avant).
+ */
 function toButtons(built: BuiltScene, at: (p: string | undefined) => string | undefined): ButtonsModeConfig | undefined {
   const anim = built.modules.animations;
   if (!anim) return undefined;
   return {
     idle: { clip: anim.idle.clip, loop: anim.idle.loop ?? true },
-    actions: anim.actions.map((a) => ({ id: a.id, clip: a.clip, loop: a.loop ?? false, label: a.label, icon: at(a.icon), sound: at(a.sound) })),
+    actions: anim.actions.map((a) => ({
+      id: a.id,
+      clip: a.clip,
+      loop: a.loop ?? false,
+      label: a.label,
+      icon: at(a.icon),
+      sound: at(a.sound),
+      ...(a.transition === "cut" ? { transition: "cut" as const } : {}),
+      ...(typeof a.cameraPosition === "string" && a.cameraPosition ? { cameraPosition: a.cameraPosition } : {}),
+      ...(Array.isArray(a.events) && a.events.length
+        ? { events: a.events.filter((ev) => typeof ev?.id === "string" && Number.isFinite(ev?.time)).map((ev) => ({ id: ev.id, time: ev.time, sound: at(ev.sound) })) }
+        : {}),
+    })),
   };
 }
 

@@ -42,7 +42,8 @@ import { createGLTFLoader, type GLTFLoaderWithDecoders } from "./lib/gltfDecoder
 import { FrameTasks } from "./lib/frameTasks";
 import { sceneRadius } from "./lib/orbitFraming";
 import { addFallbackLightsIfNone } from "./lib/fallbackLights";
-import { ButtonsPlayer, type ActionEvent } from "./lib/buttonsPlayer";
+import { ButtonsPlayer, type ActionEvent, type CutState } from "./lib/buttonsPlayer";
+import { CameraRig } from "./lib/cameraRig";
 import ActionButtons from "./ui/ActionButtons";
 import useUnifiedAudio from "./hooks/useUnifiedAudio";
 import useBookAudio from "./hooks/useBookAudio";
@@ -186,8 +187,12 @@ function WebDioramaLoaderInner({
   const frameTasksRef = useRef<FrameTasks>(new FrameTasks());
   const sceneRadiusRef = useRef<number | null>(null);
   const buttonsRef = useRef<ButtonsPlayer | null>(null);
+  // Actions combinées (AC2) : caméra pendant les actions (cible suivie, empty de position) et calque de la coupe au noir
+  const cameraRigRef = useRef<CameraRig | null>(null);
+  const cutLayerRef = useRef<HTMLDivElement | null>(null);
   const [currentAction, setCurrentAction] = useState<string | null>(null);
   const [actionLog, setActionLog] = useState<string[]>([]);
+  const [eventLog, setEventLog] = useState<string[]>([]);
   const onActionRef = useRef(onAction);
   const onEngineReadyRef = useRef(onEngineReady);
   useEffect(() => {
@@ -313,6 +318,13 @@ function WebDioramaLoaderInner({
       actions: Object.fromEntries(
         (config.buttons?.actions ?? []).flatMap((a) => (a.sound ? [[a.id, { sound: a.sound, loop: a.loop }] as const] : [])),
       ),
+      // Sons d'événement (AC2) : par action, puis par événement
+      events: Object.fromEntries(
+        (config.buttons?.actions ?? []).flatMap((a) => {
+          const byEvent = Object.fromEntries((a.events ?? []).flatMap((ev) => (ev.sound ? [[ev.id, ev.sound] as const] : [])));
+          return Object.keys(byEvent).length ? [[a.id, byEvent] as const] : [];
+        }),
+      ),
     }),
     [config.ambientSound, config.buttons],
   );
@@ -321,11 +333,13 @@ function WebDioramaLoaderInner({
     blocked: audioBlocked,
     unlock: unlockAudio,
     onAction: playActionSound,
+    onEvent: playEventSound,
     setVolume: setAudioVolume,
     toggleMute,
     release: releaseBookAudio,
   } = useBookAudio(bookId, sceneSounds, autoStart && experienceStarted);
-  const sceneHasSound = !!sceneSounds.ambient || Object.keys(sceneSounds.actions).length > 0;
+  const sceneHasSound =
+    !!sceneSounds.ambient || Object.keys(sceneSounds.actions).length > 0 || Object.keys(sceneSounds.events ?? {}).length > 0;
 
   // Plein écran au premier geste dans la scène (Î13bis ; l'API exige un geste), une fois par montage du lecteur :
   //  - plein écran perdu au passage en arrière-plan (scène remontée) ;
@@ -405,7 +419,7 @@ function WebDioramaLoaderInner({
     return {
       zoom: start?.enableZoom !== false,
       buttons: !!config.buttons?.actions.length,
-      sound: v1 ? !!config.ambientSound || !!config.buttons?.actions.some((a) => a.sound) : true,
+      sound: v1 ? !!config.ambientSound || !!config.buttons?.actions.some((a) => a.sound || a.events?.some((ev) => ev.sound)) : true,
       poi: !v1 && hasPoiTree,
       subtitles: !v1 && config.pois.some(function hasDialogue(p): boolean {
         return !!p.dialogue || (p.children ?? []).some(hasDialogue);
@@ -465,6 +479,16 @@ function WebDioramaLoaderInner({
       window.removeEventListener("resize", onResize);
       window.removeEventListener("orientationchange", onResize);
     };
+  }, []);
+
+  // Calque de la coupe au noir (AC2, DP-8) : piloté à chaque image par le mode `buttons`, écrit directement dans le DOM
+  // (pas de rendu React par image). Attributs lus par les tests : `data-cut` (out, in, vide), `data-cut-count` (noirs).
+  const applyCutLayer = useCallback((c: CutState) => {
+    const el = cutLayerRef.current;
+    if (!el) return;
+    el.style.opacity = String(c.opacity);
+    el.dataset.cut = c.phase ?? "";
+    if (c.black) el.dataset.cutCount = String(Number(el.dataset.cutCount ?? "0") + 1);
   }, []);
 
   // Redimensionne caméra / renderer / composer sur la taille réelle du conteneur.
@@ -724,6 +748,14 @@ function WebDioramaLoaderInner({
                 onActionRef.current?.(e);
               },
               onChange: setCurrentAction,
+              // Actions combinées (AC2) : son d'événement, calque de la coupe au noir, empty de position de la caméra
+              onEvent: (e) => {
+                if (process.env.NODE_ENV === "development") console.info(`[buttons] ${e.action} › ${e.event} (${e.time} s)`);
+                setEventLog((log) => [...log.slice(-9), `${e.action}:${e.event}`]);
+                playEventSound(e.action, e.event);
+              },
+              onCut: applyCutLayer,
+              onCamera: (e) => cameraRigRef.current?.setOwner(e.id, e.snap),
             });
             buttonsRef.current = buttons;
             buttons.start();
@@ -818,6 +850,30 @@ function WebDioramaLoaderInner({
             prepareActions(startPOI, gltf.animations);
           }
 
+          // Caméra pendant les actions d'une scène v1 (AC2) : cible suivie (DP-7), empties de position (DP-19). Créée une
+          // fois la caméra sur la vue de départ ; la fixture n'en a pas (comportement inchangé).
+          cameraRigRef.current = null;
+          if (config.buttons) {
+            const positions: Record<string, THREE.Object3D> = {};
+            for (const a of config.buttons.actions) {
+              if (!a.cameraPosition) continue;
+              const node = findNode(emptyRefs.current, a.cameraPosition);
+              if (node) positions[a.id] = node;
+              else console.warn(`action « ${a.id} » : empty de position de la caméra « ${a.cameraPosition} » introuvable dans le GLB`);
+            }
+            cameraRigRef.current = new CameraRig(camera, controls, startObj ?? null, positions, {
+              onModeChange: (m) => {
+                const el = cutLayerRef.current;
+                if (!el) return;
+                el.dataset.camera = m;
+                el.dataset.cameraLog = [...(el.dataset.cameraLog ?? "").split(" ").filter(Boolean).slice(-9), m].join(" ");
+              },
+              onTargetMoved: () => {
+                if (cutLayerRef.current) cutLayerRef.current.dataset.targetFollowed = "1";
+              },
+            });
+          }
+
           logSceneStats(scene, renderer);
           setIsLoaded(true);
           onEngineReadyRef.current?.({
@@ -892,6 +948,9 @@ function WebDioramaLoaderInner({
       frameTasks.run(delta, performance.now());
       buttonsRef.current?.tick(delta);
       updateMixers(delta);
+      // Après le mixer (AC2) : événements franchis par le temps du clip, puis caméra (cible suivie, empty de position)
+      buttonsRef.current?.postUpdate();
+      cameraRigRef.current?.update(delta);
       controlsRef.current?.update();
 
       if (spritesheetAnimatorRef.current) {
@@ -928,6 +987,8 @@ function WebDioramaLoaderInner({
       frameTasks.clear();
       buttonsRef.current?.dispose();
       buttonsRef.current = null;
+      cameraRigRef.current = null;
+      applyCutLayer({ opacity: 0, phase: null });
       cleanupMixers();
       sceneRadiusRef.current = null;
 
@@ -1009,6 +1070,7 @@ function WebDioramaLoaderInner({
       frameTasksRef.current.clear();
       buttonsRef.current?.dispose();
       buttonsRef.current = null;
+      cameraRigRef.current = null;
       stopAllAnimations();
       cleanupMixers();
 
@@ -1280,6 +1342,21 @@ function WebDioramaLoaderInner({
       }
       className="bg-black"
     >
+          {/* Coupe au noir (AC2, DP-8) : calque noir de la page au-dessus de la vue 3D, sous les boutons (les clics restent
+              possibles : le dernier est retenu et exécuté au noir). Attributs lus par les tests : coupe (`data-cut`,
+              `data-cut-count`), mode de la caméra et ses dix derniers changements (`data-camera`, `data-camera-log`, DP-19),
+              cible suivie au moins une fois (`data-target-followed`, DP-7). */}
+          <div
+            ref={cutLayerRef}
+            data-testid="cut-layer"
+            data-cut=""
+            data-cut-count="0"
+            data-camera="free"
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-30 bg-black"
+            style={{ opacity: 0 }}
+          />
+
           {/* ✅ NOUVEAU : Badge mode dev */}
           {isDevMode && (
             <div className="fixed top-2 left-2 z-[200] px-3 py-1 bg-yellow-500 text-black text-xs font-bold rounded-full shadow-lg">
@@ -1414,6 +1491,7 @@ function WebDioramaLoaderInner({
               lang={lang}
               currentId={currentAction}
               log={actionLog}
+              eventLog={eventLog}
               onTrigger={(id) => buttonsRef.current?.trigger(id)}
             />
           )}

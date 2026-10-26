@@ -20,6 +20,12 @@
 //   - `end` : le son est coupé (fondu de 30 ms) à la fin du clip (décision de David du 16/10, test 2 d'Î11) ; pour une
 //     action `loop: true`, arrêtée par son propre bouton, le son bouclait avec elle et s'arrête avec elle.
 //
+// Sons d'événement (AC2, DP-6, spec-actions-combinees.md §4) : un événement franchi par le temps du clip (`onEvent`, mode
+// `buttons`) joue son son, en plus du son de l'action et des autres sons d'événement en cours (autant que nécessaire). À
+// l'interruption de l'action (`interrupt`, relance comprise), ses sons d'événement sont coupés (fondu de 30 ms) et un son
+// d'événement pas encore décodé ne part plus ; à la fin naturelle (`end`), ils vont au bout. Préchargés et décodés avec les
+// autres sons de la scène, sur le même gain maître (volume et sourdine du livre).
+//
 // Ambiance (`modules.audio.ambientSound`) : décodée en entier et jouée en boucle sans coupure (décision de David du 16/10,
 // option A). Mémoire : ≈ 21 Mo par minute de son stéréo 44,1 kHz décodé, rendue au déchargement de la scène.
 //
@@ -65,6 +71,8 @@ export interface SceneSounds {
   ambient?: string;
   /** Par identifiant d'action : son et boucle de l'action (couche 3D). */
   actions: Record<string, { sound: string; loop: boolean }>;
+  /** Sons d'événement (AC2) : par identifiant d'action, puis d'événement. */
+  events?: Record<string, Record<string, string>>;
 }
 
 export type ActionPhase = "start" | "interrupt" | "end";
@@ -126,6 +134,9 @@ export class AudioEngine {
 
   private launch = 0;
   private action: { id: string; launch: number; loop: boolean; voice: Voice | null } | null = null;
+  /** Sons d'événement en cours, par action ; `epoch` : incrémentée à chaque interruption de l'action. */
+  private readonly eventVoices = new Map<string, Set<Voice>>();
+  private readonly eventEpoch = new Map<string, number>();
   private ambient: { path: string; voice: Voice | null } | null = null;
 
   constructor(opts: AudioEngineOptions) {
@@ -184,7 +195,8 @@ export class AudioEngine {
     if (this.disposed) return;
     this.generation++;
     this.sounds = sounds;
-    const used = new Set([sounds.ambient, ...Object.values(sounds.actions).map((a) => a.sound)].filter((p): p is string => !!p));
+    const eventSounds = Object.values(sounds.events ?? {}).flatMap((byEvent) => Object.values(byEvent));
+    const used = new Set([sounds.ambient, ...Object.values(sounds.actions).map((a) => a.sound), ...eventSounds].filter((p): p is string => !!p));
     for (const p of [...this.bytes.keys()]) if (!used.has(p)) this.bytes.delete(p);
     for (const p of [...this.buffers.keys()]) if (!used.has(p)) this.buffers.delete(p);
     for (const p of used) {
@@ -390,11 +402,38 @@ export class AudioEngine {
       });
       return;
     }
+    // Interruption (relance comprise) : sons d'événement de l'action coupés, ceux pas encore décodés annulés (AC2)
+    if (phase === "interrupt") this.stopEventSounds(id);
     const cur = this.action;
     if (!cur || cur.id !== id) return;
     // `interrupt` ou `end` : le son s'arrête avec l'action ; un son pas encore décodé ne partira plus
     this.stopVoice(cur.voice);
     this.action = null;
+  }
+
+  /** Événement `eventId` de l'action `actionId` franchi (mode `buttons`, AC2) : son joué en plus des sons en cours. */
+  onEvent(actionId: string, eventId: string): void {
+    if (this.disposed || !this.ctx) return;
+    const path = this.sounds.events?.[actionId]?.[eventId];
+    if (!path) return;
+    const epoch = this.eventEpoch.get(actionId) ?? 0;
+    void this.decode(path).then((buf) => {
+      // Action interrompue pendant le décodage : le son ne part plus
+      if (!buf || this.disposed || (this.eventEpoch.get(actionId) ?? 0) !== epoch) return;
+      let set = this.eventVoices.get(actionId);
+      if (!set) this.eventVoices.set(actionId, (set = new Set()));
+      const voices = set;
+      const voice = this.play(buf, false, () => voices.delete(voice!));
+      if (voice) voices.add(voice);
+    });
+  }
+
+  private stopEventSounds(actionId: string): void {
+    this.eventEpoch.set(actionId, (this.eventEpoch.get(actionId) ?? 0) + 1);
+    const set = this.eventVoices.get(actionId);
+    if (!set) return;
+    for (const v of set) this.stopVoice(v);
+    set.clear();
   }
 
   private startAmbient(): void {
@@ -417,7 +456,9 @@ export class AudioEngine {
     if (this.disposed) return;
     this.disposed = true;
     this.generation++;
-    for (const v of [this.action?.voice, this.ambient?.voice]) {
+    const eventVoices = [...this.eventVoices.values()].flatMap((set) => [...set]);
+    this.eventVoices.clear();
+    for (const v of [this.action?.voice, this.ambient?.voice, ...eventVoices]) {
       try {
         v?.source.stop();
       } catch {

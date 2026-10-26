@@ -1,7 +1,7 @@
 // scripts/test-schema.ts — tests de la fusion des couches (A1, spec-atelier-glbi.md §5, §6). `npm run test:schema`.
 // Sans navigateur : cas nominal, chaque cas d'erreur du §5 (message exact), mode `draft`, fraîcheur du JSON Schema ;
 // actions combinées (AC1, spec-actions-combinees.md §7, §8) : événements, coupe au noir, instants hors durée (sur un GLB
-// écrit dans un dossier temporaire, lu par `readScene` comme au build).
+// écrit dans un dossier temporaire, lu par `readScene` comme au build) ; empty de position de la caméra (AC2, DP-19, §16).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -9,10 +9,13 @@ import path from 'node:path';
 import { Document, NodeIO } from '@gltf-transform/core';
 import { bookSchema, builtSceneSchema, glbiConfigSchema, isReservedSourcePath, type Book, type EditLayer, type Layer3d } from '../src/schema/glbi';
 import { mergeLayers, type MergeOptions } from '../src/schema/merge';
-import { checkSchemaFresh } from './export-schema';
+import { checkSchemaFresh, layer3dSchemaText } from './export-schema';
 import { readScene, Report } from './book-check';
+import { referencedNodeNames } from './glb-pipeline';
 
 const L = (fr: string, en: string, es: string) => ({ fr, en, es });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- lecture d'un JSON Schema en test
+const layer3dSchemaJson = (): any => JSON.parse(layer3dSchemaText());
 const clone = <T>(o: T): T => JSON.parse(JSON.stringify(o));
 
 /** Exemple complet de spec-atelier-glbi.md §3 et §4 (scène « trex »). */
@@ -78,7 +81,7 @@ function hasError(r: { errors: string[] }, msg: string): void {
   assert.ok(r.errors.includes(msg), `message attendu :\n    ${msg}\nobtenus :\n    ${r.errors.join('\n    ')}`);
 }
 
-console.log('test:schema — fusion des couches (A1) et actions combinées (AC1)');
+console.log('test:schema — fusion des couches (A1), actions combinées (AC1) et position de caméra (AC2)');
 
 await test('exemple complet : objet fusionné valide, ordre du GLB, version 1', () => {
   const r = mergeLayers(clone(LAYER3D), clone(EDIT), OPTS);
@@ -390,6 +393,82 @@ await test('AC1 : instant au-delà de la durée du clip (build) ; sons d’évé
     assert.equal(r.config.modules.animations!.actions[0].transition, 'cut');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+
+// ---------------------------------------------------------------------------------------------------------
+// Position de la caméra pendant une action (AC2, DP-19, spec-actions-combinees.md §16)
+// ---------------------------------------------------------------------------------------------------------
+
+await test('AC2 : cameraPosition valide (couche 3D) : recopié dans l’objet fusionné après transition ; versions et schéma inchangés', () => {
+  const g = layer3dAc1();
+  g.modules.animations!.actions[1].cameraPosition = 'CamRugir';
+  const r = mergeLayers(g, editAc1(), OPTS);
+  assert.deepEqual(r.errors, []);
+  const roar = r.config!.modules.animations!.actions[1];
+  assert.equal(roar.cameraPosition, 'CamRugir');
+  assert.deepEqual(Object.keys(roar), ['id', 'object', 'type', 'clip', 'trigger', 'label', 'icon', 'sound', 'loop', 'transition', 'cameraPosition', 'events']);
+  assert.ok(!('cameraPosition' in r.config!.modules.animations!.actions[0]), 'action sans le champ : objet fusionné inchangé');
+  assert.equal(r.config!.version, 1);
+  assert.deepEqual(referencedNodeNames(r.config).sort(), ['Armature_Trex', 'CamRugir', 'start'], 'empty protégé de prune au build');
+  const text = layer3dSchemaJson();
+  assert.equal(text.$id, 'urn:glbinterpreter:schema:layer3d/2');
+  assert.deepEqual(text.properties.modules.properties.animations.properties.actions.items.properties.cameraPosition, { type: 'string', pattern: '^[A-Za-z0-9_]+$' });
+});
+
+await test('AC2 : cameraPosition sans cible de caméra, égal à la cible, nom invalide (couche 3D)', () => {
+  const g = layer3dAc1();
+  g.modules.animations!.actions[1].cameraPosition = 'CamRugir';
+  delete g.modules.camera;
+  const e = editAc1();
+  delete e.modules!.camera;
+  hasError(mergeLayers(g, e, OPTS), 'scenes/trex.glb (couche 3D) : action « roar » : position de caméra « CamRugir » sans cible de caméra (camera.target, addon)');
+  const g2 = layer3dAc1();
+  g2.modules.animations!.actions[0].cameraPosition = 'start';
+  hasError(mergeLayers(g2, editAc1(), OPTS), 'scenes/trex.glb (couche 3D) : action « walk » : position de caméra « start » identique à la cible de caméra (deux empties distincts attendus)');
+  const g3 = layer3dAc1();
+  g3.modules.animations!.actions[0].cameraPosition = 'Cam.001';
+  hasError(mergeLayers(g3, editAc1(), OPTS), 'scenes/trex.glb (couche 3D) : modules.animations.actions.0.cameraPosition : nom Blender : lettres, chiffres et _ uniquement');
+});
+
+await test('AC2 : cameraPosition sur idle (message dédié) ou dans edit.json (appartient au GLB)', () => {
+  const g = layer3dAc1() as unknown as { modules: { animations: { idle: Record<string, unknown> } } };
+  g.modules.animations.idle.cameraPosition = 'CamRepos';
+  hasError(mergeLayers(g, editAc1(), OPTS), 'scenes/trex.glb (couche 3D) : modules.animations.idle : clé « cameraPosition » non admise : pas de position de caméra sur idle (spec-actions-combinees.md §16)');
+  const e = editAc1() as unknown as { modules: { animations: { actions: Record<string, Record<string, unknown>> } } };
+  e.modules.animations.actions.roar.cameraPosition = 'CamRugir';
+  hasError(mergeLayers(layer3dAc1(), e, OPTS), 'scenes/trex.edit.json : modules.animations.actions.roar : clé « cameraPosition » non admise, elle appartient au GLB (addon)');
+});
+
+await test('AC2 : empty de position absent du GLB (book:check, V-08) ; présent : accepté', async () => {
+  const layer = (cam: string): Layer3d => ({
+    version: 2,
+    scene: { id: 'duo' },
+    modules: {
+      camera: { target: 'start' },
+      animations: {
+        mode: 'buttons',
+        idle: { object: 'Armature_Duo', clip: 'idle', loop: true },
+        actions: [{ id: 'chasse', object: 'Armature_Duo', type: 'mesh', clip: 'chasse', trigger: 'button', loop: false, cameraPosition: cam }],
+      },
+    },
+  });
+  const edit: EditLayer = { version: 1, scene: { name: L('Duo', 'Duo', 'Dúo') }, modules: { animations: { actions: { chasse: { label: L('Chasser', 'Chase', 'Perseguir') } } } } };
+  const dir = await sourceWithGlb(layer('CamAbsente'), edit);
+  const dir2 = await sourceWithGlb(layer('Armature_Duo'), edit);
+  try {
+    const report = new Report();
+    await readScene(dir, 'duo', report);
+    assert.deepEqual(report.lines.filter((l) => l.level === 'error').map((l) => [l.origin, l.message]), [
+      ['build', 'scène « duo » : action « chasse » : cameraPosition « CamAbsente » introuvable dans le GLB (V-08)'],
+    ]);
+    const report2 = new Report();
+    assert.ok(await readScene(dir2, 'duo', report2), 'nœud présent : scène lue');
+    assert.deepEqual(report2.errors, []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir2, { recursive: true, force: true });
   }
 });
 
