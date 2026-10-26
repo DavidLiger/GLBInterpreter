@@ -153,5 +153,7 @@ test('empty de position (DP-19) : caméra posée puis retour en douceur ; interr
   await expect(layer).toHaveAttribute('data-cut-count', '1');
   await expect(layer).toHaveAttribute('data-camera', 'free');
   expect((await words(layer, 'data-camera-log')).slice(-3)).toEqual(['enter', 'locked', 'free']);
-  expect((await words(bar, 'data-action-log')).slice(-2)).toEqual(['regard:interrupt', 'chute:start']);
+  // Le journal des phases est rendu par React, après les attributs du calque écrits directement au noir : on l'attend
+  // (correctif après la suite complète sous Windows, WebKit lu avant le rendu).
+  await expect.poll(async () => (await words(bar, 'data-action-log')).slice(-2)).toEqual(['regard:interrupt', 'chute:start']);
 });
