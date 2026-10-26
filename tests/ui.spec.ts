@@ -152,7 +152,10 @@ test('dialogue fermé puis rouvert avant l’image suivante : reste ouvert (év�
   await page.getByRole('button', { name: /^Installer$/ }).click();
   await expect(installHeading(page)).toBeHidden({ timeout: 120_000 });
   await page.goto(`${SERVER}/#/`);
-  await page.getByTestId('collection-reset').click();
+  // Au clavier (comme progress.spec.ts) : dans le WebKit de Playwright, le bandeau « nouvelle version » du service worker,
+  // fixé en bas de l'écran, recouvre le bouton et reçoit le clic de la souris.
+  await page.getByTestId('collection-reset').focus();
+  await page.keyboard.press('Enter');
   const dialog = page.getByRole('dialog', { name: 'Effacer ta collection ?' });
   await expect(dialog).toBeVisible();
   await page.evaluate(async () => {
