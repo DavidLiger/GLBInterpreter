@@ -16,7 +16,8 @@
 // les 500 ms ; un fichier
 // modifié est pris en compte quand sa taille et sa date n'ont pas bougé pendant deux relevés (un GLB, en plus, quand son
 // en-tête annonce la taille du fichier : écriture par Blender terminée). Le rapport est alors recalculé et la page prévenue.
-// Le dossier réservé `blender/` (fichiers de travail, ST1) n'est ni scruté ni listé dans les menus d'assets.
+// Le dossier réservé `blender/` (fichiers de travail, ST1) n'est ni scruté ni listé dans les menus d'assets ; un fichier
+// demandé sous `blender/` à son adresse exacte est refusé (403, AC3), sans être transmis à `next dev`.
 // Protection (ST1, spec-app-bureau.md §11) : toute requête (WebSocket compris) dont l'en-tête `Host` n'est pas
 // `127.0.0.1:<port>` ou `localhost:<port>`, ou dont l'`Origin` éventuel n'est pas `http://` suivi de l'un d'eux, reçoit 403
 // (rebinding DNS, page d'un autre site).
@@ -29,7 +30,7 @@ import { createRequire } from 'node:module';
 import { checkBookSource, listSourceFiles, readScene, Report, ROOT, toPosix, type ReadSceneFn, type SceneResult } from '../book-check';
 import { checkSchemaFresh } from '../export-schema';
 import { layerIssues, mergeLayers } from '../../src/schema/merge';
-import { editLayerSchema, SCENE_ID_PATTERN, type BuiltScene, type ModelCredit } from '../../src/schema/glbi';
+import { editLayerSchema, isReservedSourcePath, RESERVED_SOURCE_DIR, SCENE_ID_PATTERN, type BuiltScene, type ModelCredit } from '../../src/schema/glbi';
 import type {
   AtelierScene,
   BookResponse,
@@ -40,7 +41,7 @@ import type {
   SaveResponse,
   SceneResponse,
 } from '../../src/atelier/api';
-import { formatEditLayer, glbActionIds, pruneEmpty } from '../../src/atelier/editLayerFile';
+import { formatEditLayer, glbActionIds, glbEventIds, pruneEmpty } from '../../src/atelier/editLayerFile';
 import { diagnoseGlb } from './diagnose';
 
 const HOST = '127.0.0.1';
@@ -229,11 +230,13 @@ async function computeScene(id: string, state: BookState, report: ReportLine[], 
 
   let draft: BuiltScene | null = null;
   let orphans: string[] = [];
+  let eventOrphans: { action: string; event: string }[] = [];
   let editIgnored = editExists && !editUsable;
   if (raw3d !== undefined) {
     // Fusion `draft` (src/schema/merge.ts) : objet affichable malgré les erreurs (libellés manquants remplacés par les `id`).
     const m = mergeLayers(raw3d, editUsable, { mode: 'draft', sceneId: id, glbiVersion: diagnostic.glbiVersion });
     orphans = m.orphans;
+    eventOrphans = m.eventOrphans;
     editIgnored ||= editUsable !== undefined && m.edit === null;
     if (m.draft) draft = { ...m.draft, build: { glb: glbRel, modelCredits: dedupeCredits(diagnostic.srcCredits) } };
   }
@@ -246,6 +249,7 @@ async function computeScene(id: string, state: BookState, report: ReportLine[], 
     edit: override ? (fs.existsSync(editFile) ? (readJsonLoose(editFile) ?? null) : null) : (rawEdit ?? null),
     draft,
     orphans,
+    eventOrphans,
     editIgnored,
     report: report.filter((l) => l.scene === id),
     diagnostic,
@@ -435,6 +439,26 @@ function sourceFile(rel: string): string | null {
   }
 }
 
+/**
+ * Chemin demandé (décodé) qui désigne le dossier réservé `blender/` du dossier source (AC3, DP-2) : d'abord le chemin résolu
+ * (`scenes/../blender/…`, casse indifférente), puis, pour un fichier qui existe, son chemin réel (Windows : nom court
+ * `BLENDE~1`, point ou espace final ignorés par le système, lien).
+ */
+function reservedRequest(rel: string): boolean {
+  if (!rel || rel.includes('\0')) return false;
+  const full = path.resolve(sourceDir, rel);
+  if (full === sourceDir || !full.startsWith(sourceDir + path.sep)) return false;
+  if (isReservedSourcePath(toPosix(path.relative(sourceDir, full)))) return true;
+  try {
+    const real = fs.realpathSync.native(full);
+    const realSource = fs.realpathSync.native(sourceDir);
+    const relReal = path.relative(realSource, real);
+    return !relReal.startsWith('..') && !path.isAbsolute(relReal) && isReservedSourcePath(toPosix(relReal));
+  } catch {
+    return false; // absent : rien à servir
+  }
+}
+
 /** Fichier du dossier source, sans cache (un réexport doit être relu), avec les requêtes `Range` (sons). */
 function serveFile(req: http.IncomingMessage, res: http.ServerResponse, full: string): void {
   const size = fs.statSync(full).size;
@@ -534,7 +558,7 @@ async function save(id: string, body: unknown): Promise<{ status: number; body: 
     return { status: 400, body: { ok: false, error: `${editRel} non écrit : couche refusée par son schéma`, messages } };
   }
   const { raw3d } = await diagnoseCached(id);
-  const text = formatEditLayer(value, glbActionIds(raw3d));
+  const text = formatEditLayer(value, glbActionIds(raw3d), glbEventIds(raw3d));
 
   const scenesDir = path.resolve(sourceDir, 'scenes');
   const target = path.resolve(scenesDir, `${id}.edit.json`);
@@ -665,6 +689,12 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse): void {
     } catch {
       res.writeHead(400);
       res.end();
+      return;
+    }
+    // Dossier réservé `blender/` (DP-2) : jamais servi, quelle que soit la casse ou le chemin (`scenes/../blender/…`).
+    if (reservedRequest(rel)) {
+      res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+      res.end(`dossier ${RESERVED_SOURCE_DIR}/ réservé aux fichiers de travail : non servi par l'atelier\n`);
       return;
     }
     const file = sourceFile(rel);

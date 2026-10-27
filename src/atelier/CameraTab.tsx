@@ -4,6 +4,8 @@
 // Distances en mètres, angles en degrés (écrits en radians), `zoom` dans [0, 1] (décision du 13/10). « Prendre la vue
 // actuelle » (◎) recopie la vue du lecteur dans un champ ; la page pose ensuite le cadrage saisi en place sur le lecteur
 // (Atelier.tsx, `applyFramingInPlace`). La cible est lue dans la couche 3D du GLB : affichée, non éditable.
+// AC3 : pendant une action à position de caméra (DP-19) et son retour, la caméra est tenue par le lecteur : « ◎ vue » et
+// « Aller à la vue de départ » sont désactivés, un bandeau le dit ; la saisie au clavier est posée au retour de la caméra.
 import { useEffect, useMemo, useState } from "react";
 import type { ReaderEngine } from "@/components/diorama/WebDioramaLoader";
 import { resolveOrbit } from "@/components/diorama/lib/orbitFraming";
@@ -39,6 +41,7 @@ export default function CameraTab({
   onBounds,
   onStartView,
   incomplete,
+  held = null,
 }: {
   camera: CameraForm;
   /** Nouvelle saisie ; `move` : la vue du lecteur passe à la vue de départ de la saisie. */
@@ -53,6 +56,11 @@ export default function CameraTab({
   onStartView: () => void;
   /** Champs signalés dans « Saisie incomplète » (onglet Caméra). */
   incomplete: Incomplete[];
+  /**
+   * Caméra tenue par le lecteur (action à position de caméra, DP-19, ou retour à la vue d'avant) ; `action` et `empty` :
+   * action en cours et son empty, `null` pendant le retour.
+   */
+  held?: { action: string | null; empty: string | null } | null;
 }) {
   // Vue actuelle du lecteur, relue 4 fois par seconde.
   const [view, setView] = useState<OrbitView | null>(null);
@@ -114,9 +122,9 @@ export default function CameraTab({
           <button
             type="button"
             className={small}
-            disabled={!view || !frame}
+            disabled={!view || !frame || !!held}
             onClick={() => take(k)}
-            title="Prendre la vue actuelle du lecteur"
+            title={held ? "Caméra tenue par l'action (position de caméra du GLB) : attendre son retour" : "Prendre la vue actuelle du lecteur"}
             data-testid={`take-${k}`}
           >
             ◎ vue
@@ -159,6 +167,20 @@ export default function CameraTab({
           <span className="block text-neutral-500">Couche 3D : se règle dans Blender (addon), non éditable ici.</span>
         </p>
       </section>
+
+      {held && (
+        <p className="rounded bg-amber-950 px-3 py-2 text-xs text-amber-200" data-testid="camera-held">
+          {held.action ? (
+            <>
+              Caméra tenue par l&apos;action « {held.action} » (posée sur l&apos;empty <span className="font-mono">{held.empty}</span>, couche 3D)
+            </>
+          ) : (
+            "Caméra en retour à la vue d'avant l'action"
+          )}
+          {" "}: elle revient seule à la fin de l&apos;action. En attendant, « ◎ vue » et « Aller à la vue de départ » sont désactivés ; une
+          valeur saisie au clavier est gardée et posée sur le lecteur au retour de la caméra.
+        </p>
+      )}
 
       <section className="flex flex-col gap-1" data-testid="camera-view">
         <h3 className="font-semibold">Vue actuelle du lecteur</h3>
@@ -244,7 +266,7 @@ export default function CameraTab({
       )}
 
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={small} disabled={!engine} onClick={onStartView} data-testid="camera-start-view">
+        <button type="button" className={small} disabled={!engine || !!held} onClick={onStartView} data-testid="camera-start-view">
           Aller à la vue de départ
         </button>
         <button

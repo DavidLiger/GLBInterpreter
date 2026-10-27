@@ -1,5 +1,6 @@
 // Forme écrite de `scenes/<id>.edit.json` (spec-atelier-glbi.md §4, A3) : clés dans l'ordre du contrat, actions dans l'ordre
-// du GLB (les entrées orphelines ensuite, dans leur ordre), indentation de 2 espaces, UTF-8 sans échappement des accents,
+// du GLB (les entrées orphelines ensuite, dans leur ordre), événements de chaque action dans l'ordre du GLB (AC3 ; les
+// événements orphelins ensuite, dans leur ordre), indentation de 2 espaces, UTF-8 sans échappement des accents,
 // retour à la ligne final, champs facultatifs vides omis (jamais "" ni null, ni objet ou tableau vide).
 // Fonctions pures partagées par le serveur de l'atelier (écriture) et la page (comparaison avec le fichier lu).
 // Imports relatifs seulement : ce fichier est aussi exécuté par `tsx` (scripts/atelier/server.ts).
@@ -44,13 +45,29 @@ const map = (f: (v: unknown) => unknown) => (v: unknown) => (Array.isArray(v) ? 
 const obj = (keys: readonly string[], each?: Record<string, (v: unknown) => unknown>) => (v: unknown) =>
   isObj(v) ? ordered(v, keys, each) : v;
 
-/** Couche éditoriale réordonnée selon le contrat ; `actionOrder` : identifiants des actions dans l'ordre du GLB. */
-export function orderEditLayer(edit: unknown, actionOrder: readonly string[]): unknown {
+/** Clés de `v` : celles de `order` d'abord (dans cet ordre), les autres ensuite, dans leur ordre. */
+const keysFirst = (v: Obj, order: readonly string[]) => [...order.filter((k) => k in v), ...Object.keys(v).filter((k) => !order.includes(k))];
+
+/** Identifiants des événements de chaque action, dans l'ordre du GLB (AC3). */
+export type EventOrder = Readonly<Record<string, readonly string[]>>;
+
+/**
+ * Couche éditoriale réordonnée selon le contrat ; `actionOrder` : identifiants des actions dans l'ordre du GLB ;
+ * `eventOrder` : événements de chaque action dans l'ordre du GLB (AC3).
+ */
+export function orderEditLayer(edit: unknown, actionOrder: readonly string[], eventOrder: EventOrder = {}): unknown {
   const actions = (v: unknown) => {
     if (!isObj(v)) return v;
-    const keys = [...actionOrder.filter((k) => k in v), ...Object.keys(v).filter((k) => !actionOrder.includes(k))];
     const out: Obj = {};
-    for (const k of keys) out[k] = obj(["label", "icon", "sound"], { label: text })(v[k]);
+    for (const k of keysFirst(v, actionOrder)) {
+      const events = (e: unknown) => {
+        if (!isObj(e)) return e;
+        const evs: Obj = {};
+        for (const id of keysFirst(e, eventOrder[k] ?? [])) evs[id] = obj(["sound"])(e[id]);
+        return evs;
+      };
+      out[k] = obj(["label", "icon", "sound", "events"], { label: text, events })(v[k]);
+    }
     return out;
   };
   return obj(["version", "scene", "modules"], {
@@ -70,8 +87,8 @@ export function orderEditLayer(edit: unknown, actionOrder: readonly string[]): u
 }
 
 /** Texte du fichier tel que l'atelier l'écrit (`edit` déjà validé par `editLayerSchema`, ou à valider). */
-export function formatEditLayer(edit: unknown, actionOrder: readonly string[]): string {
-  return `${JSON.stringify(orderEditLayer(pruneEmpty(edit) ?? {}, actionOrder), null, 2)}\n`;
+export function formatEditLayer(edit: unknown, actionOrder: readonly string[], eventOrder: EventOrder = {}): string {
+  return `${JSON.stringify(orderEditLayer(pruneEmpty(edit) ?? {}, actionOrder, eventOrder), null, 2)}\n`;
 }
 
 /** Identifiants des actions de la couche 3D brute (`glbi_config`), dans l'ordre du GLB ; `[]` si illisible. */
@@ -79,4 +96,45 @@ export function glbActionIds(layer3d: unknown): string[] {
   const actions = isObj(layer3d) && isObj(layer3d.modules) && isObj(layer3d.modules.animations) ? layer3d.modules.animations.actions : undefined;
   if (!Array.isArray(actions)) return [];
   return actions.map((a) => (isObj(a) && typeof a.id === "string" ? a.id : null)).filter((x): x is string => x !== null);
+}
+
+/** Événement d'une action de la couche 3D : identifiant et instant dans le clip (secondes), lecture seule (AC3). */
+export interface GlbEvent {
+  id: string;
+  time: number;
+}
+
+/** Action de la couche 3D brute, dans l'ordre du GLB, avec ce que l'atelier en affiche en lecture seule (AC3). */
+export interface GlbAction {
+  id: string;
+  clip: string;
+  loop: boolean;
+  /** `"cut"` : coupe au noir (DP-8) ; absent : fondu. */
+  transition: "fade" | "cut" | null;
+  /** Empty de position de la caméra pendant l'action (DP-19), `null` sinon. */
+  cameraPosition: string | null;
+  events: GlbEvent[];
+}
+
+/** Actions de la couche 3D brute (`glbi_config`), dans l'ordre du GLB (lecture tolérante) ; `[]` si illisible. */
+export function glbActionsOf(layer3d: unknown): GlbAction[] {
+  const actions = isObj(layer3d) && isObj(layer3d.modules) && isObj(layer3d.modules.animations) ? layer3d.modules.animations.actions : undefined;
+  if (!Array.isArray(actions)) return [];
+  return actions.filter((a): a is Obj => isObj(a) && typeof a.id === "string").map((a) => ({
+    id: a.id as string,
+    clip: typeof a.clip === "string" ? a.clip : "?",
+    loop: a.loop === true,
+    transition: a.transition === "cut" || a.transition === "fade" ? a.transition : null,
+    cameraPosition: typeof a.cameraPosition === "string" && a.cameraPosition ? a.cameraPosition : null,
+    events: Array.isArray(a.events)
+      ? a.events
+          .filter((e): e is Obj => isObj(e) && typeof e.id === "string")
+          .map((e) => ({ id: e.id as string, time: typeof e.time === "number" ? e.time : Number.NaN }))
+      : [],
+  }));
+}
+
+/** Événements de chaque action de la couche 3D brute, dans l'ordre du GLB (AC3). */
+export function glbEventIds(layer3d: unknown): Record<string, string[]> {
+  return Object.fromEntries(glbActionsOf(layer3d).map((a) => [a.id, a.events.map((e) => e.id)]));
 }

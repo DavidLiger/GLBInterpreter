@@ -15,8 +15,8 @@ import { ATELIER_MARKER, type BookResponse, type ChangeEvent, type PreviewRespon
 import DiagnosticTab from "./DiagnosticTab";
 import CameraTab from "./CameraTab";
 import { applyFramingInPlace, framingOf, type CameraForm } from "./cameraForm";
-import { ActionsTab, AmbianceTab, assetOptions, CreditsTab, QuizTab, SceneTab, type GlbAction } from "./EditTabs";
-import { formatEditLayer, glbActionIds } from "./editLayerFile";
+import { ActionsTab, AmbianceTab, assetOptions, CreditsTab, QuizTab, SceneTab } from "./EditTabs";
+import { formatEditLayer, glbActionIds, glbActionsOf, glbEventIds } from "./editLayerFile";
 import { formFromEdit, layerFromForm, usedAssets, type EditForm, type FieldRef, type Lang, type TabId } from "./editModel";
 import ReportTab from "./ReportTab";
 import { fieldOfMessage } from "./reportLinks";
@@ -65,15 +65,6 @@ function readLang(): Lang {
     // stockage indisponible
   }
   return "fr";
-}
-
-/** Actions de la couche 3D brute, dans l'ordre du GLB (lecture seule). */
-function glbActionsOf(layer3d: unknown): GlbAction[] {
-  const actions = (layer3d as { modules?: { animations?: { actions?: unknown } } } | null)?.modules?.animations?.actions;
-  if (!Array.isArray(actions)) return [];
-  return actions
-    .filter((a): a is { id: string; clip?: unknown; loop?: unknown } => !!a && typeof a === "object" && typeof (a as { id?: unknown }).id === "string")
-    .map((a) => ({ id: a.id, clip: typeof a.clip === "string" ? a.clip : "?", loop: a.loop === true }));
 }
 
 export default function Atelier() {
@@ -206,10 +197,12 @@ export default function Atelier() {
   // --- Saisie : couche enregistrable, champs incomplets, état « modifié » ---
   const glbActions = useMemo(() => glbActionsOf(scene?.layer3d), [scene?.layer3d]);
   const glbIds = useMemo(() => glbActionIds(scene?.layer3d), [scene?.layer3d]);
+  // Événements de chaque action dans l'ordre du GLB (AC3) : forme écrite, crédits, liens du Rapport.
+  const glbEvents = useMemo(() => glbEventIds(scene?.layer3d), [scene?.layer3d]);
   const editable = !!scene?.inBook;
   const { layer, incomplete } = useMemo(() => (form ? layerFromForm(form) : { layer: null, incomplete: [] }), [form]);
-  const layerText = layer ? formatEditLayer(layer, glbIds) : "";
-  const fileText = scene ? formatEditLayer(scene.edit ?? { version: 1 }, glbIds) : "";
+  const layerText = layer ? formatEditLayer(layer, glbIds, glbEvents) : "";
+  const fileText = scene ? formatEditLayer(scene.edit ?? { version: 1 }, glbIds, glbEvents) : "";
   const dirty = !!form && editable && (layerText !== fileText || incomplete.length > 0);
   const canSave = !!form && editable && !saving && (dirty || scene?.edit === null || !!scene?.editIgnored);
   dirtyRef.current = dirty;
@@ -302,8 +295,8 @@ export default function Atelier() {
     return () => clearTimeout(t);
   }, [focus]);
   const linkOf = useCallback(
-    (l: ReportLine) => (form && scene && editable && l.scene === scene.id ? fieldOfMessage(l.message, scene.id, form, glbIds) : null),
-    [form, scene, editable, glbIds],
+    (l: ReportLine) => (form && scene && editable && l.scene === scene.id ? fieldOfMessage(l.message, scene.id, form, glbIds, glbEvents) : null),
+    [form, scene, editable, glbIds, glbEvents],
   );
 
   // --- Lecteur : remonté seulement pour une nouvelle scène, un fichier modifié, l'écran de chargement ou l'ambiance ;
@@ -322,12 +315,36 @@ export default function Atelier() {
   // --- Caméra (A4) : le cadrage saisi (champs valides seulement) est posé en place sur le lecteur ; la caméra va à la vue
   //     de départ quand le lecteur est (re)monté, quand un champ est saisi au clavier, sur « Revenir au cadrage
   //     enregistré » et « Aller à la vue de départ » ; pas après « prendre la vue actuelle » ni en changeant de bornes.
+  // Caméra tenue par une action à `cameraPosition` (DP-19, point de clôture d'AC2) : pendant l'action et son retour, le
+  // lecteur verrouille ses OrbitControls (`enabled` faux, seul `cameraRig` y touche) puis rend, à la fin, la vue et les
+  // bornes d'avant l'action : un cadrage posé pendant ce temps serait écrasé, et « prendre la vue » lirait la vue de
+  // l'empty. Choix (AC3) : bloquer. Les boutons qui lisent ou déplacent la vue sont désactivés ; une saisie au clavier
+  // reste permise, enregistrable, et n'est posée sur le lecteur qu'une fois la caméra rendue.
+  const cameraHolders = useMemo(() => new Map(glbActions.filter((a) => a.cameraPosition).map((a) => [a.id, a.cameraPosition as string])), [glbActions]);
+  const [cameraHeld, setCameraHeld] = useState<{ action: string | null; empty: string | null } | null>(null);
+  useEffect(() => {
+    setCameraHeld(null);
+    if (!engine || !cameraHolders.size) return;
+    const read = () => {
+      if (engine.controls.enabled) return setCameraHeld((h) => (h ? null : h));
+      const id = engine.buttons?.currentId ?? null;
+      const action = id && cameraHolders.has(id) ? id : null;
+      setCameraHeld((h) => (h && h.action === action ? h : { action, empty: action ? (cameraHolders.get(action) ?? null) : null }));
+    };
+    read();
+    const t = setInterval(read, 100);
+    return () => clearInterval(t);
+  }, [engine, cameraHolders]);
+  const held = !!cameraHeld;
+
   const framing = useMemo(() => (form ? framingOf(form.camera) : null), [form]);
   const framingKey = JSON.stringify(framing);
   const skipMoveKeyRef = useRef<string | null>(null);
   const appliedRef = useRef<{ engine: ReaderEngine | null; key: string; tick: number }>({ engine: null, key: "", tick: 0 });
   useEffect(() => {
     if (!engine || !framing) return;
+    // Caméra tenue (DP-19) : rien n'est posé ; la saisie l'est au retour de la caméra (déplacement compris s'il a été demandé).
+    if (held) return;
     const prev = appliedRef.current;
     const keyChanged = prev.key !== framingKey;
     const move = prev.engine !== engine || prev.tick !== startTick || (keyChanged && skipMoveKeyRef.current !== framingKey);
@@ -335,7 +352,7 @@ export default function Atelier() {
     appliedRef.current = { engine, key: framingKey, tick: startTick };
     applyFramingInPlace(engine, framing, { bounds: cameraBounds, moveToStart: move });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `framing` suit `framingKey`
-  }, [engine, framingKey, cameraBounds, startTick]);
+  }, [engine, framingKey, cameraBounds, startTick, held]);
   const setCamera = useCallback(
     (next: CameraForm, move: boolean) => {
       if (!move) skipMoveKeyRef.current = JSON.stringify(framingOf(next));
@@ -356,7 +373,7 @@ export default function Atelier() {
   const bookScenes = book?.scenes.filter((s) => s.inBook) ?? [];
   const extraScenes = book?.scenes.filter((s) => !s.inBook) ?? [];
   const assets = useMemo(() => assetOptions(book?.assets ?? {}), [book?.assets]);
-  const used = useMemo(() => (form ? usedAssets(form, glbIds) : []), [form, glbIds]);
+  const used = useMemo(() => (form ? usedAssets(form, glbIds, glbEvents) : []), [form, glbIds, glbEvents]);
   const lastChange = book?.lastChange;
   const modelCredits = useMemo(() => {
     const seen = new Map<string, ModelCredit>();
@@ -530,6 +547,7 @@ export default function Atelier() {
                     bounds={cameraBounds}
                     onBounds={setCameraBounds}
                     onStartView={() => setStartTick((t) => t + 1)}
+                    held={cameraHeld}
                     incomplete={incomplete.filter((i) => i.tab === "camera")}
                   />
                 ),

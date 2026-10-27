@@ -8,10 +8,20 @@ import { cameraFormFromRaw, cameraLayerOf, type CameraForm } from "./cameraForm"
 export type Lang = (typeof LANGUAGES)[number];
 export type L3 = Record<Lang, string>;
 
+/** Son d'un événement de l'action (AC3, DP-6) ; l'instant appartient au GLB. */
+export interface EventForm {
+  sound: string;
+}
+
 export interface ActionForm {
   label: L3;
   icon: string;
   sound: string;
+  /**
+   * Entrées d'événements par identifiant, dans l'ordre du fichier (événements du GLB et orphelins) : conservées telles
+   * quelles à l'enregistrement (AC3 ; avant AC3, l'atelier les effaçait).
+   */
+  events: [string, EventForm][];
 }
 
 export interface CreditForm {
@@ -61,7 +71,10 @@ const str = (v: unknown) => (typeof v === "string" ? v : "");
 
 export const emptyL3 = (): L3 => ({ fr: "", en: "", es: "" });
 const l3Of = (v: unknown): L3 => (isObj(v) ? { fr: str(v.fr), en: str(v.en), es: str(v.es) } : emptyL3());
-export const emptyAction = (): ActionForm => ({ label: emptyL3(), icon: "", sound: "" });
+export const emptyAction = (): ActionForm => ({ label: emptyL3(), icon: "", sound: "", events: [] });
+/** Entrées d'événements lues dans `actions.<id>.events` (objet indexé par identifiant). */
+const eventsOf = (v: unknown): [string, EventForm][] =>
+  isObj(v) ? Object.entries(v).map(([id, e]) => [id, { sound: isObj(e) ? str(e.sound) : "" }]) : [];
 export const emptyQuiz = (): QuizForm => ({ question: emptyL3(), choices: [emptyL3(), emptyL3(), emptyL3()], correct: null, explanation: emptyL3() });
 
 /** Formulaire depuis le fichier lu (lecture tolérante : un fichier refusé par son schéma est repris champ par champ). */
@@ -81,7 +94,7 @@ export function formFromEdit(raw: unknown): EditForm {
     camera: cameraFormFromRaw(modules.camera),
     actions: Object.entries(anims).map(([id, a]) => {
       const o = isObj(a) ? a : {};
-      return [id, { label: l3Of(o.label), icon: str(o.icon), sound: str(o.sound) }];
+      return [id, { label: l3Of(o.label), icon: str(o.icon), sound: str(o.sound), events: eventsOf(o.events) }];
     }),
     ambientSound: isObj(modules.audio) ? str(modules.audio.ambientSound) : "",
     quiz: quiz
@@ -138,7 +151,8 @@ const creditEmpty = (c: CreditForm) => !c.title.trim() && !c.author.trim() && !c
 
 /**
  * Couche éditoriale à enregistrer (champs complets seulement) et liste des champs commencés mais incomplets. Les entrées
- * d'actions orphelines (absentes du GLB) sont gardées telles quelles, à rattacher ou supprimer dans l'onglet Actions.
+ * d'actions orphelines (absentes du GLB) sont gardées telles quelles, à rattacher ou supprimer dans l'onglet Actions ; de
+ * même pour les événements orphelins (AC3). Un événement sans son est omis (champ vide, règle d'A3).
  */
 export function layerFromForm(form: EditForm): { layer: Obj; incomplete: Incomplete[] } {
   const incomplete: Incomplete[] = [];
@@ -155,6 +169,7 @@ export function layerFromForm(form: EditForm): { layer: Obj; incomplete: Incompl
       label: text(a.label, { tab: "actions", field: `action.${id}.label` }, `libellé de l'action « ${id} »`),
       icon: a.icon || undefined,
       sound: a.sound || undefined,
+      events: Object.fromEntries(a.events.map(([ev, e]) => [ev, { sound: e.sound || undefined }])),
     };
   }
 
@@ -212,8 +227,12 @@ export function layerFromForm(form: EditForm): { layer: Obj; incomplete: Incompl
   return { layer, incomplete };
 }
 
-/** Assets utilisés par le formulaire (dans l'ordre : image de chargement, icônes, sons des actions, ambiance). */
-export function usedAssets(form: EditForm, glbIds: readonly string[]): { asset: string; kind: "image" | "son" }[] {
+/**
+ * Assets utilisés par le formulaire (dans l'ordre : image de chargement, icônes, sons des actions, sons des événements,
+ * ambiance). Comme au build (objet fusionné) : actions du GLB seulement, et pour les sons d'événement (AC3, V-10),
+ * événements du GLB seulement (`glbEvents` : événements de chaque action dans l'ordre du GLB).
+ */
+export function usedAssets(form: EditForm, glbIds: readonly string[], glbEvents: Readonly<Record<string, readonly string[]>> = {}): { asset: string; kind: "image" | "son" }[] {
   const out: { asset: string; kind: "image" | "son" }[] = [];
   const add = (asset: string, kind: "image" | "son") => {
     if (asset && !out.some((o) => o.asset === asset)) out.push({ asset, kind });
@@ -222,6 +241,7 @@ export function usedAssets(form: EditForm, glbIds: readonly string[]): { asset: 
   const inGlb = form.actions.filter(([id]) => glbIds.includes(id));
   for (const [, a] of inGlb) add(a.icon, "image");
   for (const [, a] of inGlb) add(a.sound, "son");
+  for (const [id, a] of inGlb) for (const ev of glbEvents[id] ?? []) add(a.events.find(([k]) => k === ev)?.[1].sound ?? "", "son");
   add(form.ambientSound, "son");
   return out;
 }

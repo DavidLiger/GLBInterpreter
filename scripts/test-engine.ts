@@ -1,6 +1,7 @@
 // scripts/test-engine.ts — tests du moteur sans navigateur (Î10b). `npm run test:engine`.
 // Cadrage orbital (`lib/orbitFraming.ts`), mode `buttons` (`lib/buttonsPlayer.ts`), boucle unique (`lib/frameTasks.ts`),
 // éclairage de secours (`lib/fallbackLights.ts`), lecture libre d'un clip (`lib/clipPreview.ts`), onglet Caméra de l'atelier (`src/atelier/cameraForm.ts`, A4),
+// couche éditoriale des actions combinées dans l'atelier (`src/atelier/editModel.ts`, `editLayerFile.ts`, `reportLinks.ts`, AC3),
 // audio Web Audio (`lib/audioEngine.ts`, Î11 : AudioContext simulé, aucun son réel), actions combinées (AC2 : événements,
 // coupe au noir, caméra `lib/cameraRig.ts`, sons d'événement, os de même nom lus par GLTFLoader), progression du livre
 // (`src/components/book/progress.ts`, Î13 : règles de déblocage, valeur illisible, stockage indisponible), lecture d'un
@@ -18,6 +19,9 @@ import { addFallbackLightsIfNone, FALLBACK_LIGHTS_NAME } from '../src/components
 import { ClipPreview } from '../src/components/diorama/lib/clipPreview';
 import { applyFramingInPlace, cameraFormFromRaw, cameraLayerOf, framingOf, takeFromView, viewOf, withFields } from '../src/atelier/cameraForm';
 import { editLayerSchema } from '../src/schema/glbi';
+import { formFromEdit, layerFromForm, usedAssets } from '../src/atelier/editModel';
+import { formatEditLayer, glbActionIds, glbActionsOf, glbEventIds } from '../src/atelier/editLayerFile';
+import { fieldOfMessage } from '../src/atelier/reportLinks';
 import {
   AudioEngine, audioSettingsKey, effectiveVolume, parseAudioSettings, withMuteToggled, withVolume, type AudioContextLike,
 } from '../src/components/diorama/lib/audioEngine';
@@ -723,6 +727,86 @@ test('cadrage posé en place : bornes sur les contrôles, caméra à la vue de d
   assert.equal(controls.minAzimuthAngle, -Infinity);
   assert.equal(controls.enableZoom, true);
 });
+
+// ────────────── Atelier, actions combinées (AC3) ──────────────
+console.log('Atelier : actions combinées (AC3)');
+{
+  const L = (fr: string, en: string, es: string) => ({ fr, en, es });
+  const layer3d = {
+    version: 2,
+    scene: { id: 'duo' },
+    modules: {
+      camera: { target: 'start' },
+      animations: {
+        mode: 'buttons',
+        idle: { object: 'A', clip: 'idle', loop: true },
+        actions: [
+          { id: 'chasse', object: 'A', type: 'armature', clip: 'chasse', trigger: 'button', loop: false, events: [{ id: 'morsure', time: 2 }, { id: 'souffle', time: 2.5 }, { id: 'fuite', time: 3.2 }] },
+          { id: 'chute', object: 'A', type: 'armature', clip: 'chute', trigger: 'button', loop: false, transition: 'cut', events: [{ id: 'impact', time: 1.5 }] },
+          { id: 'regard', object: 'A', type: 'armature', clip: 'regard', trigger: 'button', loop: false, cameraPosition: 'CamRegard' },
+        ],
+      },
+    },
+  };
+  const edit = {
+    version: 1,
+    scene: { name: L('La poursuite', 'The chase', 'La persecución') },
+    modules: {
+      animations: {
+        actions: {
+          chasse: { label: L('Chasser', 'Chase', 'Perseguir'), sound: 'sounds/chasse.wav', events: { morsure: { sound: 'sounds/morsure.wav' }, fuite: { sound: 'sounds/fuite.wav' } } },
+          chute: { label: L('Tomber', 'Fall', 'Caer'), events: { impact: { sound: 'sounds/impact.wav' } } },
+          regard: { label: L('Regarder', 'Look', 'Mirar') },
+        },
+      },
+    },
+  };
+  const ids = glbActionIds(layer3d);
+  const evs = glbEventIds(layer3d);
+
+  test('edit.json relu puis réécrit sans modification : identique, événements gardés (défaut d’AC1 corrigé)', () => {
+    const text = formatEditLayer(edit, ids, evs);
+    const again = formatEditLayer(layerFromForm(formFromEdit(JSON.parse(text))).layer, ids, evs);
+    assert.equal(again, text);
+    assert.ok(again.includes('"morsure"') && again.includes('"impact"'));
+    assert.ok(editLayerSchema.safeParse(JSON.parse(again)).success);
+  });
+
+  test('événements écrits dans l’ordre du GLB, orphelins ensuite ; événement sans son omis', () => {
+    const e = structuredClone(edit) as typeof edit & { modules: { animations: { actions: { chasse: { events: Record<string, { sound?: string }> } } } } };
+    e.modules.animations.actions.chasse.events = { vieux: { sound: 'sounds/x.wav' }, fuite: { sound: 'sounds/fuite.wav' }, souffle: {}, morsure: { sound: 'sounds/morsure.wav' } };
+    const out = JSON.parse(formatEditLayer(layerFromForm(formFromEdit(e)).layer, ids, evs));
+    assert.deepEqual(Object.keys(out.modules.animations.actions.chasse.events), ['morsure', 'fuite', 'vieux']);
+  });
+
+  test('actions du GLB lues : transition, position de caméra, événements et instants', () => {
+    const a = glbActionsOf(layer3d);
+    assert.deepEqual(a.map((x) => [x.id, x.transition, x.cameraPosition, x.events.length]), [['chasse', null, null, 3], ['chute', 'cut', null, 1], ['regard', null, 'CamRegard', 0]]);
+    assert.equal(a[0].events[2].time, 3.2);
+  });
+
+  test('sons d’événement comptés dans les sons de la scène (Crédits, V-10) ; événements orphelins non comptés', () => {
+    const f = formFromEdit({ ...edit, modules: { animations: { actions: { ...edit.modules.animations.actions, chute: { label: L('a', 'b', 'c'), events: { impact: { sound: 'sounds/impact.wav' }, perdu: { sound: 'sounds/perdu.wav' } } } } } } });
+    const sounds = usedAssets(f, ids, evs).filter((u) => u.kind === 'son').map((u) => u.asset);
+    assert.deepEqual(sounds, ['sounds/chasse.wav', 'sounds/morsure.wav', 'sounds/fuite.wav', 'sounds/impact.wav']);
+  });
+
+  test('Rapport → champ : événement sans son, orphelin, instant hors du clip, position de caméra, chemins', () => {
+    const f = formFromEdit(edit);
+    const at = (m: string) => fieldOfMessage(m, 'duo', f, ids, evs)?.field ?? null;
+    assert.equal(at('scène « duo » : événement « souffle » de l\'action « chasse » sans son (ignoré) ; à renseigner dans l\'atelier'), 'event.chasse.souffle');
+    assert.equal(at('scenes/duo.edit.json : action « chasse » : événement « morsur » absent du GLB (événements du GLB : morsure, souffle, fuite)'), 'eventOrphan.chasse.morsur');
+    assert.equal(at('scenes/duo.glb (couche 3D) : action « chute » : événement « impact » à 9,200 s, clip de 2,000 s'), 'event.chute.impact');
+    assert.equal(at('scène « duo » : action « regard » : cameraPosition « CamRegard » introuvable dans le GLB (V-08)'), 'action.regard.cameraPosition');
+    assert.equal(at('scenes/duo.glb (couche 3D) : action « regard » : position de caméra « CamRegard » sans cible de caméra (camera.target, addon)'), 'action.regard.cameraPosition');
+    assert.equal(at('scenes/duo.edit.json : modules.animations.actions.chasse.events.fuite.sound : son « x » : extension manquante'), 'event.chasse.fuite');
+    assert.equal(at('scène « duo » (objet fusionné) : modules.animations.actions.1.events.0.sound : son « x » : extension manquante'), 'event.chute.impact');
+    assert.equal(at('asset « sounds/impact.wav » introuvable dans le dossier source'), 'event.chute.impact');
+    // Motifs existants inchangés
+    assert.equal(at('scène « duo » : action « regard » sans libellé ; à renseigner dans l\'atelier'), 'action.regard.label');
+    assert.equal(at('scenes/duo.edit.json : action « marche » absente du GLB (actions du GLB : chasse, chute, regard)'), 'orphan.marche');
+  });
+}
 
 // ────────────── Audio (Î11) ──────────────
 console.log('Audio Web Audio');

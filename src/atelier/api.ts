@@ -112,6 +112,8 @@ export interface SceneResponse {
   draft: BuiltScene | null;
   /** Fusion `draft` : orphelins de la couche éditoriale. */
   orphans: string[];
+  /** Fusion `draft` : événements édités d'une action du GLB, absents des événements de cette action dans le GLB (AC3). */
+  eventOrphans: { action: string; event: string }[];
   /** `edit.json` présent mais refusé par son schéma (ou illisible) : aperçu avec la couche 3D seule. */
   editIgnored: boolean;
   /** Lignes du rapport du livre qui concernent cette scène. */

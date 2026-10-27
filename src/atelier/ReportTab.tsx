@@ -90,6 +90,24 @@ export default function ReportTab({
         </p>
       )}
 
+      {scene && (scene.eventOrphans ?? []).length > 0 && (
+        <p className="rounded bg-neutral-800 px-3 py-2 text-neutral-200">
+          Événements de edit.json absents du GLB (orphelins, à rattacher ou supprimer dans Actions) :{" "}
+          {scene.eventOrphans.map((o, i) => (
+            <span key={`${o.action}.${o.event}`}>
+              {i > 0 && ", "}
+              <button
+                type="button"
+                className="underline decoration-dotted"
+                onClick={() => onGoto({ tab: "actions", field: `eventOrphan.${o.action}.${o.event}` })}
+              >
+                {o.action} : {o.event}
+              </button>
+            </span>
+          ))}
+        </p>
+      )}
+
       {ORIGINS.map(({ origin, title, hint }) => {
         const group = lines.filter((l) => l.origin === origin);
         return (

@@ -1,6 +1,8 @@
 "use client";
 
 // Onglets d'édition de la couche éditoriale (A3, spec-atelier-glbi.md §10) : Scène, Actions, Ambiance, Quiz, Crédits.
+// Actions (AC3, spec-actions-combinees.md §10) : par action, transition et position de caméra (couche 3D, lecture seule),
+// événements dans l'ordre du GLB (identifiant et instant en lecture seule, son choisi et écouté), événements orphelins.
 // Ils modifient le formulaire de la page (editModel.ts) ; rien n'est écrit avant « Enregistrer ». Chaque champ porte un
 // attribut `data-field` (liens du Rapport). Les assets se choisissent dans des menus des fichiers présents du dossier
 // source, filtrés par extension acceptée ; un nom refusé par le contrat (caractères) est listé mais non sélectionnable.
@@ -9,7 +11,10 @@ import { audioPathSchema, imagePathSchema, IMAGE_EXTENSIONS, AUDIO_EXTENSIONS, L
 import type { ModelCredit } from "@/schema/glbi";
 import Quiz from "@/components/quiz/Quiz";
 import { TranslationProvider } from "@/contexts/TranslationContext";
-import { emptyAction, emptyL3, quizPreviewOf, type ActionForm, type CreditForm, type EditForm, type L3, type Lang, type QuizForm } from "./editModel";
+import { emptyAction, emptyL3, quizPreviewOf, type ActionForm, type CreditForm, type EditForm, type EventForm, type L3, type Lang, type QuizForm } from "./editModel";
+import type { GlbAction } from "./editLayerFile";
+
+export type { GlbAction } from "./editLayerFile";
 
 export type SetForm = (update: (f: EditForm) => EditForm) => void;
 
@@ -39,12 +44,6 @@ export function assetOptions(assets: Record<string, string[]>): AssetOptions {
       .filter((p) => (AUDIO_EXTENSIONS as readonly string[]).includes(ext(p)))
       .map((p) => ({ path: p, ok: audioPathSchema.safeParse(p).success })),
   };
-}
-
-export interface GlbAction {
-  id: string;
-  clip: string;
-  loop: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -189,18 +188,40 @@ export function ActionsTab({ form, setForm, glbActions, assets }: { form: EditFo
     }));
   const glbIds = glbActions.map((a) => a.id);
   const orphans = form.actions.filter(([id]) => !glbIds.includes(id));
-  const hasContent = (a: ActionForm) => !!(a.icon || a.sound || LANGUAGES.some((l) => a.label[l].trim()));
+  const hasContent = (a: ActionForm) => !!(a.icon || a.sound || a.events.some(([, e]) => e.sound) || LANGUAGES.some((l) => a.label[l].trim()));
+
+  // Événements (AC3) : entrée de l'événement `ev` de l'action `id` ; modification par une fonction de la liste des entrées.
+  const eventOf = (a: ActionForm, ev: string): EventForm => a.events.find(([k]) => k === ev)?.[1] ?? { sound: "" };
+  const setEvents = (id: string, update: (events: [string, EventForm][]) => [string, EventForm][]) =>
+    setForm((f) => ({
+      ...f,
+      actions: f.actions.some(([k]) => k === id)
+        ? f.actions.map(([k, v]) => [k, k === id ? { ...v, events: update(v.events) } : v])
+        : [...f.actions, [id, { ...emptyAction(), events: update([]) }]],
+    }));
+  const setEventSound = (id: string, ev: string, sound: string) =>
+    setEvents(id, (events) => (events.some(([k]) => k === ev) ? events.map(([k, e]) => [k, k === ev ? { ...e, sound } : e]) : [...events, [ev, { sound }]]));
+  const attachEvent = (id: string, orphan: string, target: string) => {
+    const a = entry(id);
+    const o = eventOf(a, orphan);
+    if (eventOf(a, target).sound && !window.confirm(`L'événement « ${target} » de « ${id} » a déjà un son : le remplacer par celui de « ${orphan} » ?`)) return;
+    setEvents(id, (events) => [...events.filter(([k]) => k !== orphan && k !== target), [target, o]]);
+  };
+  const removeEvent = (id: string, orphan: string) => {
+    if (!window.confirm(`Supprimer l'événement orphelin « ${orphan} » de l'action « ${id} » (son) ?`)) return;
+    setEvents(id, (events) => events.filter(([k]) => k !== orphan));
+  };
 
   const attach = (orphan: string, target: string) => {
     const o = entry(orphan);
-    if (hasContent(entry(target)) && !window.confirm(`L'action « ${target} » a déjà un libellé, une icône ou un son : les remplacer par ceux de « ${orphan} » ?`)) return;
+    if (hasContent(entry(target)) && !window.confirm(`L'action « ${target} » a déjà un libellé, une icône ou des sons : les remplacer par ceux de « ${orphan} » ?`)) return;
     setForm((f) => {
       const rest = f.actions.filter(([k]) => k !== orphan && k !== target);
       return { ...f, actions: [...rest, [target, o]] };
     });
   };
   const remove = (orphan: string) => {
-    if (!window.confirm(`Supprimer l'entrée orpheline « ${orphan} » (libellé, icône, son) ?`)) return;
+    if (!window.confirm(`Supprimer l'entrée orpheline « ${orphan} » (libellé, icône, son, sons d'événement) ?`)) return;
     setForm((f) => ({ ...f, actions: f.actions.filter(([k]) => k !== orphan) }));
   };
 
@@ -209,8 +230,10 @@ export function ActionsTab({ form, setForm, glbActions, assets }: { form: EditFo
       {glbActions.length === 0 && <p className="text-neutral-400">Pas de module animations dans le GLB (couche 3D) : aucune action.</p>}
       {glbActions.map((g, i) => {
         const a = entry(g.id);
+        const glbEvents = g.events.map((e) => e.id);
+        const eventOrphans = a.events.filter(([k]) => !glbEvents.includes(k));
         return (
-          <section key={g.id} className="flex flex-col gap-2 rounded border border-neutral-800 p-3">
+          <section key={g.id} className="flex flex-col gap-2 rounded border border-neutral-800 p-3" data-action={g.id}>
             <h3 className="flex flex-wrap items-baseline gap-x-3 font-semibold">
               <span>
                 {i + 1}. {g.id}
@@ -219,11 +242,79 @@ export function ActionsTab({ form, setForm, glbActions, assets }: { form: EditFo
                 clip « {g.clip} » · {g.loop ? "en boucle" : "une fois"} (GLB, lecture seule)
               </span>
             </h3>
+            <p className="flex flex-wrap gap-x-4 gap-y-1 rounded bg-neutral-900 px-2 py-1 text-xs text-neutral-300" data-testid={`action-3d-${g.id}`}>
+              <span data-field={`action.${g.id}.transition`}>
+                Transition : {g.transition === "cut" ? "coupe au noir (entrée et sortie)" : "fondu"}
+              </span>
+              <span data-field={`action.${g.id}.cameraPosition`}>
+                Caméra :{" "}
+                {g.cameraPosition ? (
+                  <>
+                    posée sur l&apos;empty <span className="font-mono">{g.cameraPosition}</span> pendant l&apos;action
+                  </>
+                ) : (
+                  "libre (suit la cible)"
+                )}
+              </span>
+              <span className="text-neutral-500">GLB, lecture seule : se règle dans Blender (addon)</span>
+            </p>
             <L3Input field={`action.${g.id}.label`} label="Libellé du bouton" value={a.label} onChange={(label) => setEntry(g.id, { ...a, label })} />
             <span className="text-xs text-neutral-400">Icône</span>
             <AssetSelect field={`action.${g.id}.icon`} kind="image" value={a.icon} options={assets.images} onChange={(icon) => setEntry(g.id, { ...a, icon })} />
             <span className="text-xs text-neutral-400">Son</span>
             <AssetSelect field={`action.${g.id}.sound`} kind="son" value={a.sound} options={assets.sounds} onChange={(sound) => setEntry(g.id, { ...a, sound })} />
+            {g.events.length > 0 && (
+              <div className="flex flex-col gap-1" data-field={`action.${g.id}.events`}>
+                <span className="text-xs text-neutral-400">Événements (marqueurs de Blender, dans l&apos;ordre du GLB ; instant en lecture seule)</span>
+                {g.events.map((ev) => (
+                  <div key={ev.id} data-field={`event.${g.id}.${ev.id}`} className="flex flex-col gap-1 rounded bg-neutral-900 p-2">
+                    <span className="text-xs">
+                      <span className="font-mono">{ev.id}</span>
+                      <span className="ml-2 text-neutral-400">à {Number.isFinite(ev.time) ? `${ev.time.toFixed(3).replace(".", ",")} s` : "?"}</span>
+                      {!eventOf(a, ev.id).sound && <span className="ml-2 text-amber-400">sans son (ignoré)</span>}
+                    </span>
+                    <AssetSelect
+                      field={`event.${g.id}.${ev.id}.sound`}
+                      kind="son"
+                      value={eventOf(a, ev.id).sound}
+                      options={assets.sounds}
+                      onChange={(sound) => setEventSound(g.id, ev.id, sound)}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+            {eventOrphans.length > 0 && (
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-neutral-400">Événements orphelins (dans edit.json, absents du GLB : marqueur renommé ou retiré dans Blender)</span>
+                {eventOrphans.map(([ev, e]) => (
+                  <div key={ev} data-field={`eventOrphan.${g.id}.${ev}`} className="flex flex-wrap items-center gap-2 rounded border border-amber-800 bg-amber-950/30 p-2">
+                    <span className="text-xs">
+                      <span className="font-mono font-semibold">{ev}</span>
+                      <span className="ml-2 text-neutral-400">{e.sound || "sans son"}</span>
+                    </span>
+                    <select
+                      className={`${input} w-auto`}
+                      value=""
+                      onChange={(x) => x.target.value && attachEvent(g.id, ev, x.target.value)}
+                      disabled={!glbEvents.length}
+                      data-testid={`attach-event-${g.id}-${ev}`}
+                    >
+                      <option value="">Rattacher à…</option>
+                      {glbEvents.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                          {eventOf(a, t).sound ? " (remplace l'existant)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="button" className={small} onClick={() => removeEvent(g.id, ev)} data-testid={`remove-event-${g.id}-${ev}`}>
+                      Supprimer
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
         );
       })}
@@ -238,6 +329,7 @@ export function ActionsTab({ form, setForm, glbActions, assets }: { form: EditFo
                   {LANGUAGES.map((l) => a.label[l]).filter(Boolean).join(" / ") || "sans libellé"}
                   {a.icon && ` · ${a.icon}`}
                   {a.sound && ` · ${a.sound}`}
+                  {a.events.length > 0 && ` · événements : ${a.events.map(([k]) => k).join(", ")}`}
                 </span>
               </p>
               <div className="flex flex-wrap items-center gap-2">
