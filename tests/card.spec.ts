@@ -184,7 +184,9 @@ test('carte dans les trois langues ; la plus chargée sur un écran de 375 × 66
     expect(box.y).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(375);
     expect(box.y + box.height).toBeLessThanOrEqual(667);
-    expect(box.width, 'échelle 1 sur l’iPhone SE en portrait (à 3 % près)').toBeGreaterThan(350 * 0.97);
+    // Échelle proche de 1 : à 5 % près, car sous Windows la barre de défilement classique de la page reste visible derrière
+    // le dialogue et retire environ 15 px de largeur (Chromium : 0,969 ; correctif de la clôture de CC1).
+    expect(box.width, 'échelle proche de 1 sur l’iPhone SE en portrait (à 5 % près)').toBeGreaterThan(350 * 0.95);
     const overflow = await card.evaluate((c) =>
       [...c.querySelectorAll('h2, .glbi-card-number, .glbi-card-subtitle, dt, dd, .glbi-card-text, footer')]
         .filter((el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1)
