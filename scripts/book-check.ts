@@ -366,6 +366,8 @@ export async function readScene(
       }
     }
   }
+  // Illustration de la carte de collection (CC1) : image copiée comme les autres ; crédit facultatif (images).
+  if (config.modules.card?.image) assets.add(config.modules.card.image);
   if (config.modules.audio?.ambientSound) {
     assets.add(config.modules.audio.ambientSound);
     sounds.add(config.modules.audio.ambientSound);
@@ -376,7 +378,7 @@ export async function readScene(
   // V-10 : chaque son a un crédit ; crédit sans usage = avertissement
   const credited = new Set(creditList.map((c) => c.asset));
   for (const s of sounds) if (!credited.has(s)) err(`${label} : son « ${s} » sans entrée dans modules.credits.assets (V-10)`);
-  const used = new Set([...sounds, ...(animations?.actions ?? []).map((a) => a.icon), config.scene.loaderImage].filter(Boolean));
+  const used = new Set([...sounds, ...(animations?.actions ?? []).map((a) => a.icon), config.scene.loaderImage, config.modules.card?.image].filter(Boolean));
   for (const c of creditList) if (!used.has(c.asset)) warn(`${label} : crédit pour « ${c.asset} », asset non utilisé par la scène`);
 
   return { id, config, modelCredits, assets, protect: referencedNodeNames(config) };
@@ -385,6 +387,28 @@ export async function readScene(
 // ---------------------------------------------------------------------------------------------------------
 // Contrôles du livre
 // ---------------------------------------------------------------------------------------------------------
+
+/**
+ * Cartes de collection (CC1, spec-carte-collection.md §6) : chaque valeur de `modules.card.fields` doit porter l'`id` d'un
+ * intitulé de `book.json.cardFields` (erreur, couche éditoriale) ; un intitulé sans valeur sur une carte est affiché « — »
+ * (avertissement). Le paragraphe manquant et les longueurs sont contrôlés par la fusion et le schéma.
+ */
+export function checkCards(book: Book, scenes: readonly SceneResult[], report: Report): void {
+  const ids = (book.cardFields ?? []).map((f) => f.id);
+  for (const s of scenes) {
+    const card = s.config.modules.card;
+    if (!card) continue;
+    const values = card.fields ?? {};
+    for (const k of Object.keys(values)) {
+      if (!ids.includes(k)) {
+        report.error(`scenes/${s.id}.edit.json : modules.card.fields : intitulé « ${k} » absent de book.json (cardFields : ${ids.join(', ') || 'aucun'})`, 'edit', s.id);
+      }
+    }
+    for (const id of ids) {
+      if (!(id in values)) report.warning(`scène « ${s.id} » : carte : caractéristique « ${id} » sans valeur (affichée « — »)`, 'fusion', s.id);
+    }
+  }
+}
 
 export interface BookCheck {
   book: Book;
@@ -424,6 +448,9 @@ export async function checkBookSource(sourceDir: string, report: Report, readSce
     const r = await readSceneFn(sourceDir, id, report);
     if (r) scenes.push(r);
   }
+
+  // --- Cartes de collection (CC1, spec-carte-collection.md §6) : valeurs de modules.card.fields contre book.json.cardFields ---
+  checkCards(book, scenes, report);
 
   // --- V-03 : existence des assets ; contrôle de taille des sources ---
   const assets = new Set<string>(scenes.flatMap((s) => [...s.assets]));

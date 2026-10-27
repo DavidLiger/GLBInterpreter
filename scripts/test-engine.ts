@@ -5,7 +5,9 @@
 // audio Web Audio (`lib/audioEngine.ts`, Î11 : AudioContext simulé, aucun son réel), actions combinées (AC2 : événements,
 // coupe au noir, caméra `lib/cameraRig.ts`, sons d'événement, os de même nom lus par GLTFLoader), progression du livre
 // (`src/components/book/progress.ts`, Î13 : règles de déblocage, valeur illisible, stockage indisponible), lecture d'un
-// QR par le scanner interne (`src/components/book/scanTarget.ts`, Î14 : adresse du livre, miroir, autre livre).
+// QR par le scanner interne (`src/components/book/scanTarget.ts`, Î14 : adresse du livre, miroir, autre livre), carte de
+// collection (`src/components/card/cardModel.ts`, CC1 : bandeau une seule fois, compte, cartes gagnées, lecture tolérante ;
+// atelier : `modules.card` gardé tel quel à l'enregistrement).
 // Les mixers tournent sur une scène three minimale (un os animé), le temps est avancé à la main.
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -29,6 +31,7 @@ import {
   ProgressStore, emptyProgress, parseProgress, progressKey, sceneAccess, withCollected, withQuizPassed, withUnlocked, type StorageLike,
 } from '../src/components/book/progress';
 import { sceneFromScan } from '../src/components/book/scanTarget';
+import { BOOK_ICON, cardCount, cardScale, earnedCards, isNewCard, parseCardFields, readerCardOf } from '../src/components/card/cardModel';
 
 let failed = 0;
 function test(name: string, fn: () => void) {
@@ -1254,6 +1257,85 @@ for (const [name, fn] of asyncTests) {
     console.error(`  ✗ ${name}\n    ${(e as Error).message}`);
   }
 }
+
+// ────────────── Carte de collection (CC1) ──────────────
+console.log('Carte de collection (CC1)');
+
+const T = (fr: string, en = fr, es = fr) => ({ fr, en, es });
+
+test('passage de collected à vrai : bandeau une seule fois (première action), jamais sur une scène sans carte', () => {
+  const store = new ProgressStore('cartes', progressStorage(), quiet);
+  let banners = 0;
+  const onStart = (sceneId: string, hasCard: boolean) => {
+    if (isNewCard(store.get(), sceneId, hasCard)) banners++;
+    store.update((p) => withCollected(p, sceneId));
+  };
+  onStart('trex', true);
+  onStart('trex', true);
+  onStart('trex', true);
+  assert.equal(banners, 1, 'une seule fois dans la session');
+  onStart('ptero', false);
+  assert.equal(banners, 1, 'scène sans carte : pas de bandeau');
+  assert.equal(store.get().collected.ptero, true, 'collected reste écrit');
+  // Rechargement : la nouveauté n'est pas enregistrée, la carte est déjà gagnée.
+  assert.equal(isNewCard(store.get(), 'trex', true), false);
+  // Valeur de progression inchangée (clé et forme d'Î13).
+  assert.deepEqual(Object.keys(store.get()).sort(), ['collected', 'quizPassed', 'unlockedScenes']);
+  // Scène manipulée avant l'arrivée des cartes : carte gagnée d'emblée, pas de bandeau.
+  assert.equal(isNewCard({ collected: { raptor: true } }, 'raptor', true), false);
+});
+
+test('compte « n cartes sur N » (N = scènes avec carte) ; cartes gagnées dans l’ordre du livre ; livre sans carte : null', () => {
+  const scenes = ['trex', 'raptor', 'ptero', 'duo'];
+  const withCard = (id: string) => id === 'trex' || id === 'raptor';
+  const p = { collected: { raptor: true, ptero: true, trex: false } };
+  assert.deepEqual(cardCount(p, scenes, withCard), { n: 1, total: 2 });
+  assert.deepEqual(earnedCards({ collected: { raptor: true, trex: true } }, scenes, withCard), ['trex', 'raptor']);
+  assert.equal(cardCount(p, scenes, () => false), null);
+});
+
+test('lecture tolérante de la carte et des intitulés ; illustration : image, sinon image de chargement, sinon icône', () => {
+  const at = (x: string) => `dev-book/${x}`;
+  const card = readerCardOf({ subtitle: T('s'), image: 'images/c.webp', fields: { taille: T('12 m'), bad: 3 }, text: T('t') }, 'images/l.png', at)!;
+  assert.equal(card.image, 'dev-book/images/c.webp');
+  assert.deepEqual(Object.keys(card.fields), ['taille']);
+  assert.equal(readerCardOf({ text: T('t') }, 'images/l.png', at)!.image, 'dev-book/images/l.png');
+  assert.equal(readerCardOf({ text: T('t') }, undefined, at)!.image, BOOK_ICON);
+  assert.equal(readerCardOf({ subtitle: T('s') }, undefined, at), undefined, 'sans paragraphe : pas de carte');
+  assert.equal(readerCardOf(undefined, undefined, at), undefined);
+  assert.deepEqual(parseCardFields([{ id: 'a', label: T('A') }, { id: 'a', label: T('A2') }, { id: 'b' }, 'x']).map((f) => f.id), ['a']);
+  assert.deepEqual(parseCardFields(undefined), []);
+});
+
+test('échelle de la carte : 1 sur l’iPhone SE en portrait (375 × 667), bornée à [0,6 ; 1,4]', () => {
+  // 375 × 667 moins les zones sûres (8 px de côté, 8 px en haut, 12 px en bas), boutons de 44 px.
+  assert.ok(near(cardScale(359, 647, 44), (359 - 8) / 350));
+  assert.ok(cardScale(359, 647, 44) >= 1 && cardScale(359, 647, 44) < 1.01);
+  assert.equal(cardScale(3000, 3000, 44), 1.4);
+  assert.equal(cardScale(100, 100, 44), 0.6);
+});
+
+test('atelier : modules.card gardé tel quel à l’enregistrement (pas encore d’onglet Carte) ; illustration comptée dans les assets', () => {
+  const raw = {
+    version: 1,
+    scene: { name: T('Tyrannosaure', 'Tyrannosaurus', 'Tiranosaurio') },
+    modules: {
+      animations: { actions: { walk: { label: T('Marcher', 'Walk', 'Caminar') } } },
+      quiz: undefined,
+      card: { subtitle: T('T. rex'), image: 'images/trex-card.png', fields: { poids: T('8 t'), taille: T('12 m') }, text: T('Un grand carnivore.') },
+      credits: { assets: [{ asset: 'images/trex-card.png', title: 'Carte', author: 'X', license: 'CC0' }] },
+    },
+  };
+  const text = `${JSON.stringify(raw, null, 2)}\n`;
+  const form = formFromEdit(JSON.parse(text));
+  const { layer, incomplete } = layerFromForm(form);
+  assert.deepEqual(incomplete, []);
+  assert.equal(formatEditLayer(layer, ['walk']), text, 'relu puis enregistré sans modification : identique octet pour octet');
+  assert.ok(editLayerSchema.safeParse(layer).success);
+  assert.deepEqual(usedAssets(form, ['walk']).map((a) => a.asset), ['images/trex-card.png']);
+  // Fichier sans carte : rien n'est ajouté.
+  assert.ok(!('card' in (layerFromForm(formFromEdit({ version: 1 })).layer.modules as object)) || (layerFromForm(formFromEdit({ version: 1 })).layer.modules as Record<string, unknown>).card === undefined);
+});
 
 if (failed) {
   console.error(`\n${failed} test(s) en échec`);

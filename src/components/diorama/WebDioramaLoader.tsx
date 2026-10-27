@@ -103,6 +103,12 @@ export interface WebDioramaLoaderProps {
    * fixture de développement), pas de bouton.
    */
   onBack?: () => void;
+  /**
+   * Livre (CC1, carte de collection) : bouton du coin bas gauche (« Carte ») et bandeau au-dessus de la barre des boutons
+   * d'animation (« Nouvelle carte ! »), affichés une fois la scène lancée. Sans ces props (atelier, fixture), rien ne change.
+   */
+  cornerBottomLeft?: React.ReactNode;
+  aboveActions?: React.ReactNode;
 }
 
 /**
@@ -173,6 +179,7 @@ interface InnerProps extends WebDioramaLoaderProps {
 // plus de vérification de cache ni de modale de téléchargement ici.
 function WebDioramaLoaderInner({
   scene: readerScene, onAction, onEngineReady, onBack, embedded = false, onRemount, refullscreenOnGesture = false,
+  cornerBottomLeft, aboveActions,
 }: InnerProps) {
   const { config, bookId } = readerScene;
   // Scène v1 du livre (Î13bis) : pas d'écran « Toucher pour commencer », lancement à la fin du chargement. La fixture
@@ -1463,6 +1470,8 @@ function WebDioramaLoaderInner({
             </div>
           )}
 
+          {cornerBottomLeft && isLoaded && !showLoaderOverlay && <div className="glbi-corner-bottom-left z-50">{cornerBottomLeft}</div>}
+
           {/* Navigation entre POI (module réservé) : sans objet sur une scène v1 à POI unique (Î13), gardée pour la fixture. */}
           {!(readerScene.kind === "v1" && config.pois.length === 1) && (
           <POIBreadcrumbs
@@ -1493,6 +1502,7 @@ function WebDioramaLoaderInner({
               log={actionLog}
               eventLog={eventLog}
               onTrigger={(id) => buttonsRef.current?.trigger(id)}
+              above={aboveActions}
             />
           )}
 

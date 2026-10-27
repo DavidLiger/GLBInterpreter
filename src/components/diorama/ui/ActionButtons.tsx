@@ -19,9 +19,11 @@ type Props = {
   /** Derniers événements d'action franchis `action:événement` (AC2, attribut `data-event-log`, lu par les tests). */
   eventLog?: string[];
   onTrigger: (id: string) => void;
+  /** Contenu posé juste au-dessus de la barre, quelle que soit sa hauteur (CC1 : bandeau « Nouvelle carte ! »). */
+  above?: React.ReactNode;
 };
 
-export default function ActionButtons({ actions, lang, currentId, log = [], eventLog = [], onTrigger }: Props) {
+export default function ActionButtons({ actions, lang, currentId, log = [], eventLog = [], onTrigger, above }: Props) {
   const { t } = useTranslation();
   if (!actions.length) return null;
   return (
@@ -53,6 +55,7 @@ export default function ActionButtons({ actions, lang, currentId, log = [], even
           </button>
         );
       })}
+      {above && <div className="glbi-actions-above">{above}</div>}
     </div>
   );
 }

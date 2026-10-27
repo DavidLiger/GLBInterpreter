@@ -1,16 +1,17 @@
 // scripts/test-schema.ts — tests de la fusion des couches (A1, spec-atelier-glbi.md §5, §6). `npm run test:schema`.
 // Sans navigateur : cas nominal, chaque cas d'erreur du §5 (message exact), mode `draft`, fraîcheur du JSON Schema ;
 // actions combinées (AC1, spec-actions-combinees.md §7, §8) : événements, coupe au noir, instants hors durée (sur un GLB
-// écrit dans un dossier temporaire, lu par `readScene` comme au build) ; empty de position de la caméra (AC2, DP-19, §16).
+// écrit dans un dossier temporaire, lu par `readScene` comme au build) ; empty de position de la caméra (AC2, DP-19, §16) ;
+// carte de collection (CC1, spec-carte-collection.md §5, §6 : intitulés, paragraphe, longueurs, livres existants valides).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Document, NodeIO } from '@gltf-transform/core';
-import { bookSchema, builtSceneSchema, glbiConfigSchema, isReservedSourcePath, type Book, type EditLayer, type Layer3d } from '../src/schema/glbi';
+import { bookSchema, builtSceneSchema, editLayerSchema, glbiConfigSchema, isReservedSourcePath, type Book, type EditLayer, type Layer3d } from '../src/schema/glbi';
 import { mergeLayers, type MergeOptions } from '../src/schema/merge';
 import { checkSchemaFresh, layer3dSchemaText } from './export-schema';
-import { readScene, Report } from './book-check';
+import { checkCards, readScene, Report, type SceneResult } from './book-check';
 import { referencedNodeNames } from './glb-pipeline';
 
 const L = (fr: string, en: string, es: string) => ({ fr, en, es });
@@ -81,7 +82,7 @@ function hasError(r: { errors: string[] }, msg: string): void {
   assert.ok(r.errors.includes(msg), `message attendu :\n    ${msg}\nobtenus :\n    ${r.errors.join('\n    ')}`);
 }
 
-console.log('test:schema — fusion des couches (A1), actions combinées (AC1) et position de caméra (AC2)');
+console.log('test:schema — fusion des couches (A1), actions combinées (AC1), position de caméra (AC2) et carte de collection (CC1)');
 
 await test('exemple complet : objet fusionné valide, ordre du GLB, version 1', () => {
   const r = mergeLayers(clone(LAYER3D), clone(EDIT), OPTS);
@@ -469,6 +470,134 @@ await test('AC2 : empty de position absent du GLB (book:check, V-08) ; présent 
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
     fs.rmSync(dir2, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Carte de collection (CC1, spec-carte-collection.md §5, §6)
+// ---------------------------------------------------------------------------------------------------------
+
+const CARD_FIELDS = [
+  { id: 'taille', label: L('Taille', 'Length', 'Longitud') },
+  { id: 'poids', label: L('Poids', 'Weight', 'Peso') },
+  { id: 'epoque', label: L('Époque', 'Period', 'Época') },
+  { id: 'regime', label: L('Régime', 'Diet', 'Dieta') },
+];
+const CARD = {
+  subtitle: L('T. rex', 'T. rex', 'T. rex'),
+  image: 'images/trex-card.webp',
+  fields: { taille: L('12 m', '12 m', '12 m'), poids: L('8 t', '8 t', '8 t'), epoque: L('Crétacé', 'Cretaceous', 'Cretácico'), regime: L('Carnivore', 'Carnivore', 'Carnívoro') },
+  text: L('Un grand carnivore.', 'A big carnivore.', 'Un gran carnívoro.'),
+};
+const editWithCard = (card: unknown): EditLayer => {
+  const e = clone(EDIT) as unknown as { modules: Record<string, unknown> };
+  e.modules.card = card;
+  return e as unknown as EditLayer;
+};
+/** Résultat de `readScene` réduit à ce que lit `checkCards`. */
+const sceneWith = (config: SceneResult['config']): SceneResult => ({ id: 'trex', config, modelCredits: [], assets: new Set(), protect: [] });
+
+await test('CC1 : livre et edit.json sans carte toujours valides ; aucune version ne change ; JSON Schema de la couche 3D inchangé', () => {
+  assert.ok(bookSchema.safeParse(BOOK).success);
+  assert.ok(editLayerSchema.safeParse(EDIT).success);
+  assert.ok(!('card' in (mergeLayers(clone(LAYER3D), clone(EDIT), OPTS).config!.modules)));
+  assert.ok(!layer3dSchemaText().includes('card'), 'aucun champ de la carte dans la couche 3D');
+});
+
+await test('CC1 : carte valide recopiée dans l’objet fusionné (après le quiz) ; cardFields de 1 à 4, id uniques', () => {
+  const r = mergeLayers(clone(LAYER3D), editWithCard(clone(CARD)), OPTS);
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.config!.modules.card, CARD);
+  assert.deepEqual(Object.keys(r.config!.modules), ['camera', 'animations', 'audio', 'quiz', 'card', 'credits']);
+  assert.ok(builtSceneSchema.safeParse({ ...r.config, build: { glb: 'scenes/trex.glb', modelCredits: [] } }).success);
+  assert.ok(bookSchema.safeParse({ ...BOOK, cardFields: CARD_FIELDS }).success);
+  const fail = (cardFields: unknown) => {
+    const p = bookSchema.safeParse({ ...BOOK, cardFields });
+    assert.ok(!p.success);
+    return p.error.issues.map((i) => `${i.path.join('.')} : ${i.message}`);
+  };
+  assert.deepEqual(fail([]), ['cardFields : au moins un intitulé (sinon, retirer cardFields)']);
+  assert.deepEqual(fail([...CARD_FIELDS, { id: 'cri', label: L('Cri', 'Call', 'Grito') }]), ['cardFields : 4 intitulés au plus']);
+  assert.deepEqual(fail([CARD_FIELDS[0], CARD_FIELDS[0]]), ['cardFields : intitulé en double « taille »']);
+  assert.deepEqual(fail([{ id: 'taille', label: L('Taille au garrot', 'Length', 'Longitud') }]), ['cardFields.0.label.fr : 16 caractères (14 au plus)']);
+});
+
+await test('CC1 : carte sans paragraphe (fusion strict) ; draft : carte omise, reste de la couche gardé', () => {
+  const { text: _t, ...noText } = CARD;
+  void _t;
+  const e = editWithCard(noText);
+  assert.ok(editLayerSchema.safeParse(e).success, 'paragraphe facultatif dans la couche (saisie en cours)');
+  const r = mergeLayers(clone(LAYER3D), e, OPTS);
+  assert.deepEqual(r.errors, ['scène « trex » : carte sans paragraphe (modules.card.text) ; à renseigner dans l\'atelier']);
+  const d = mergeLayers(clone(LAYER3D), e, { ...OPTS, mode: 'draft' });
+  assert.ok(d.draft && !('card' in d.draft.modules));
+  assert.equal(d.draft.scene.name.fr, 'Tyrannosaure', 'couche éditoriale gardée');
+});
+
+await test('CC1 : longueurs (schéma, par langue) ; carte dans le GLB ; clé inconnue', () => {
+  const card = clone(CARD);
+  card.text.es = 'x'.repeat(263);
+  card.subtitle.fr = 's'.repeat(41);
+  card.fields.taille.en = 'v'.repeat(17);
+  const r = mergeLayers(clone(LAYER3D), editWithCard(card), OPTS);
+  hasError(r, 'scenes/trex.edit.json : modules.card.text.es : 263 caractères (250 au plus)');
+  hasError(r, 'scenes/trex.edit.json : modules.card.subtitle.fr : 41 caractères (40 au plus)');
+  hasError(r, 'scenes/trex.edit.json : modules.card.fields.taille.en : 17 caractères (16 au plus)');
+  const ok = clone(CARD);
+  ok.text.es = 'x'.repeat(250);
+  ok.subtitle.fr = 's'.repeat(40);
+  ok.fields.taille.en = 'v'.repeat(16);
+  assert.deepEqual(mergeLayers(clone(LAYER3D), editWithCard(ok), OPTS).errors, [], 'longueurs maximales admises');
+  const g = clone(LAYER3D) as unknown as { modules: Record<string, unknown> };
+  g.modules.card = clone(CARD);
+  hasError(mergeLayers(g, clone(EDIT), OPTS), 'scenes/trex.glb (couche 3D) : modules : clé « card » non admise, elle appartient à scenes/trex.edit.json');
+  hasError(mergeLayers(clone(LAYER3D), editWithCard({ ...clone(CARD), title: L('a', 'b', 'c') }), OPTS), 'scenes/trex.edit.json : modules.card : clé « title » inconnue');
+});
+
+await test('CC1 : intitulé inconnu, cardFields absent (erreurs, edit.json) ; intitulé sans valeur (avertissement)', () => {
+  const config = mergeLayers(clone(LAYER3D), editWithCard({ ...clone(CARD), fields: { taille: L('12 m', '12 m', '12 m'), poid: L('8 t', '8 t', '8 t') } }), OPTS).config!;
+  const report = new Report();
+  checkCards({ ...BOOK, cardFields: CARD_FIELDS }, [sceneWith(config)], report);
+  assert.deepEqual(report.lines.map((l) => [l.level, l.origin, l.scene, l.message]), [
+    ['error', 'edit', 'trex', 'scenes/trex.edit.json : modules.card.fields : intitulé « poid » absent de book.json (cardFields : taille, poids, epoque, regime)'],
+    ['warning', 'fusion', 'trex', 'scène « trex » : carte : caractéristique « poids » sans valeur (affichée « — »)'],
+    ['warning', 'fusion', 'trex', 'scène « trex » : carte : caractéristique « epoque » sans valeur (affichée « — »)'],
+    ['warning', 'fusion', 'trex', 'scène « trex » : carte : caractéristique « regime » sans valeur (affichée « — »)'],
+  ]);
+  const none = new Report();
+  checkCards(BOOK, [sceneWith(config)], none);
+  assert.deepEqual(none.errors, [
+    'scenes/trex.edit.json : modules.card.fields : intitulé « taille » absent de book.json (cardFields : aucun)',
+    'scenes/trex.edit.json : modules.card.fields : intitulé « poid » absent de book.json (cardFields : aucun)',
+  ]);
+  const clean = new Report();
+  checkCards({ ...BOOK, cardFields: CARD_FIELDS }, [sceneWith(mergeLayers(clone(LAYER3D), editWithCard(clone(CARD)), OPTS).config!)], clean);
+  assert.deepEqual(clean.lines, []);
+});
+
+await test('CC1 : illustration copiée comme les autres assets (build) ; crédit facultatif, compté comme utilisé', async () => {
+  const layer: Layer3d = {
+    version: 2,
+    scene: { id: 'duo' },
+    modules: { animations: { mode: 'buttons', idle: { object: 'Armature_Duo', clip: 'idle', loop: true }, actions: [{ id: 'chasse', object: 'Armature_Duo', type: 'mesh', clip: 'chasse', trigger: 'button', loop: false }] } },
+  };
+  const edit: EditLayer = {
+    version: 1,
+    scene: { name: L('Duo', 'Duo', 'Dúo') },
+    modules: {
+      animations: { actions: { chasse: { label: L('Chasser', 'Chase', 'Perseguir') } } },
+      card: { image: 'images/duo-card.webp', text: L('Deux.', 'Two.', 'Dos.') },
+      credits: { assets: [{ asset: 'images/duo-card.webp', title: 'Carte', author: 'X', license: 'CC0' }] },
+    },
+  };
+  const dir = await sourceWithGlb(layer, edit);
+  try {
+    const report = new Report();
+    const r = await readScene(dir, 'duo', report);
+    assert.ok(r && r.assets.has('images/duo-card.webp'), 'illustration copiée');
+    assert.ok(!report.warnings.some((w) => w.includes('non utilisé')), 'crédit de l’illustration : utilisé');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 

@@ -201,3 +201,251 @@ dialog.glbi-screen {
   text-align: center;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
 }
+
+/*
+ * Carte de collection (CC1, spec-carte-collection.md §3) : une seule face 5:7, dessinée à taille fixe (350 × 490 px, tailles
+ * en px) et mise à l'échelle d'un bloc (`transform: scale`, `CardDialog`). Style commun à tous les livres : cadre sombre,
+ * face ivoire, accent ambre du lecteur ; aucun élément graphique propre à une marque de cartes.
+ */
+.glbi-card-box {
+  position: relative;
+  flex: none;
+  pointer-events: auto;
+}
+.glbi-card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  box-sizing: border-box;
+  padding: 7px;
+  border-radius: 18px;
+  background: linear-gradient(160deg, #292524, #0c0a09);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  color: #1c1917;
+  text-align: left;
+}
+.glbi-card-inner {
+  box-sizing: border-box;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px 7px;
+  border-radius: 12px;
+  background: #fbf7ee;
+  overflow: hidden;
+}
+.glbi-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid #f59e0b;
+}
+.glbi-card-title {
+  min-width: 0;
+  margin: 0;
+  font-size: 19px;
+  line-height: 23px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glbi-card-number {
+  flex: none;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 700;
+  color: #78350f;
+  white-space: nowrap;
+}
+.glbi-card-subtitle {
+  margin: -2px 0 0;
+  font-size: 12.5px;
+  line-height: 16px;
+  font-style: italic;
+  color: #57534e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glbi-card-image {
+  flex: none;
+  align-self: center;
+  width: 294px;
+  height: 196px; /* 3:2 */
+  border: 3px solid #1c1917;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #e7e5e4;
+}
+.glbi-card-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.glbi-card-fields {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+  margin: 0;
+}
+.glbi-card-field {
+  min-width: 0;
+  padding: 2px 7px 3px;
+  border-radius: 6px;
+  background: #f1e9d6;
+}
+.glbi-card-field dt {
+  font-size: 10px;
+  line-height: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #78716c;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glbi-card-field dd {
+  margin: 0;
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.glbi-card-text {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 16px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+.glbi-card-foot {
+  flex: none;
+  font-size: 10px;
+  line-height: 13px;
+  color: #78716c;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Fenêtre de la carte (`CardDialog`) : dialogue modal sur toute la fenêtre ; le fond (hors carte et boutons) la ferme. */
+dialog.glbi-card-dialog {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  background: transparent;
+  color: #fff;
+  overflow: hidden;
+}
+dialog.glbi-card-dialog::backdrop {
+  background: rgb(0 0 0 / 0.75);
+  backdrop-filter: blur(4px);
+}
+dialog.glbi-card-dialog[open] {
+  animation: glbi-dialog-in 0.18s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.glbi-card-dialog[open] {
+    animation: none;
+  }
+}
+.glbi-card-stage {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  pointer-events: none;
+}
+.glbi-card-controls {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+.glbi-card-controls .glbi-btn {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+/* Scène (CC1) : bouton « Carte » dans le coin bas gauche, libre (retour au menu en haut à gauche, informations en haut à
+ * droite, volume et plein écran en bas à droite) ; sur écran étroit, la barre des boutons d'animation est au-dessus. */
+.glbi-corner-bottom-left {
+  position: absolute;
+  bottom: var(--safe-bottom);
+  left: var(--safe-left);
+}
+/* Bandeau « Nouvelle carte ! » : juste au-dessus de la barre des boutons d'animation, quelle que soit sa hauteur. */
+.glbi-actions-above {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 0.5rem;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.glbi-actions-above > * {
+  pointer-events: auto;
+}
+.glbi-new-card {
+  border-radius: 9999px;
+  background: #fbbf24;
+  color: #000;
+  font-weight: 800;
+  font-size: 1.05rem;
+  line-height: 1.3;
+  min-height: 2.75rem;
+  padding: 0.55rem 1.25rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .glbi-new-card {
+    animation: glbi-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+}
+@keyframes glbi-pop {
+  from {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+}
+.glbi-new-card:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+}
+
+/* Menu de collection : place sous « Effacer ma collection » pour le bandeau du service worker « … Recharger »
+ * (fixé en bas, ServiceWorkerRegister), seulement quand il est affiché. */
+:root.glbi-sw-update .glbi-menu {
+  padding-bottom: calc(var(--safe-bottom) + 7.5rem);
+}

@@ -6,7 +6,7 @@
 // `npm run dev:book -- --source <dossier>` (scènes, GLB optimisés, assets ; non versionné). La fixture de développement
 // est ouverte par `#/dev/<scène>`.
 import { fixtureScenes, FIXTURE_BOOK_ID } from "@/content/fixtures";
-import { parseBuiltScene, parseReaderBook, sceneToEngineConfig, type ReaderBook, type ReaderScene } from "./readerScene";
+import { parseBuiltScene, parseReaderBook, sceneCard, sceneToEngineConfig, type ReaderBook, type ReaderScene } from "./readerScene";
 
 /** Dossier du livre préparé par `npm run dev:book`, servi par `next dev` depuis `public/`. */
 export const DEV_BOOK_DIR = "dev-book/";
@@ -38,7 +38,8 @@ export async function loadReaderScene(book: ReaderBook, sceneId: string): Promis
   const raw = await fetchBookJson(`${base}scenes/${encodeURIComponent(sceneId)}.json`);
   if (raw === null) return null;
   const built = parseBuiltScene(raw, sceneId);
-  return { kind: "v1", bookId: book.bookId, built, config: sceneToEngineConfig(built, book, base) };
+  const card = sceneCard(built, base);
+  return { kind: "v1", bookId: book.bookId, built, config: sceneToEngineConfig(built, book, base), ...(card ? { card } : {}) };
 }
 
 /** Scène de la fixture de développement (import dynamique, hors schéma v1). */

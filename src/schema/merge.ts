@@ -57,7 +57,7 @@ export interface MergeResult {
 }
 
 /** Clés propres à la couche éditoriale : refusées dans le GLB avec un renvoi vers `edit.json`. */
-const EDIT_KEYS = new Set<string>(['name', 'loaderImage', 'label', 'icon', 'sound', ...CAMERA_FRAMING_KEYS, 'audio', 'quiz', 'credits']);
+const EDIT_KEYS = new Set<string>(['name', 'loaderImage', 'label', 'icon', 'sound', ...CAMERA_FRAMING_KEYS, 'audio', 'quiz', 'card', 'credits']);
 /** Clés propres à la couche 3D : refusées dans `edit.json` avec un renvoi vers l'addon. */
 const LAYER3D_KEYS = new Set<string>(['id', 'target', 'mode', 'idle', 'object', 'type', 'clip', 'trigger', 'loop', 'transition', 'cameraPosition', 'time']);
 /**
@@ -108,7 +108,10 @@ function defined<T extends Record<string, unknown>>(o: T): T {
 
 const same = (s: string): LocalizedText => ({ fr: s, en: s, es: s });
 
-/** Objet fusionné, clés dans l'ordre du contrat. `fallback` : textes manquants remplacés par les identifiants (mode `draft`). */
+/**
+ * Objet fusionné, clés dans l'ordre du contrat. `fallback` : textes manquants remplacés par les identifiants (mode `draft`) ;
+ * une carte sans paragraphe est alors omise (CC1 : l'objet affichable garde le reste de la couche éditoriale).
+ */
 function build(l3: Layer3d, e: EditLayer | null, fallback: boolean): Record<string, unknown> {
   const anims = l3.modules.animations;
   const editActions = e?.modules?.animations?.actions;
@@ -141,6 +144,8 @@ function build(l3: Layer3d, e: EditLayer | null, fallback: boolean): Record<stri
       : undefined,
     audio: e?.modules?.audio,
     quiz: e?.modules?.quiz,
+    // Carte de collection (CC1) : recopiée telle quelle ; ses intitulés sont contrôlés contre book.json par le build.
+    card: e?.modules?.card && (e.modules.card.text || !fallback) ? e.modules.card : undefined,
     credits: e?.modules?.credits,
   });
   return {
@@ -244,6 +249,8 @@ export function mergeLayers(raw3d: unknown, rawEdit: unknown, opts: MergeOptions
       for (const k of orphans) errors.push(`${editFile} : action « ${k} » absente du GLB (actions du GLB : ${glbIds.join(', ')})`);
     }
     if (!edit.scene?.name) errors.push(`${scene} : nom de la scène (scene.name) absent de ${editFile} ; à renseigner dans l'atelier`);
+    // Carte de collection (CC1, spec-carte-collection.md §6) : paragraphe facultatif dans la couche, exigé par la fusion.
+    if (edit.modules?.card && !edit.modules.card.text) errors.push(`${scene} : carte sans paragraphe (modules.card.text) ; à renseigner dans l'atelier`);
     for (const a of anims?.actions ?? []) {
       const ed = edit.modules?.animations?.actions[a.id];
       if (!ed?.label) errors.push(`${scene} : action « ${a.id} » sans libellé ; à renseigner dans l'atelier`);

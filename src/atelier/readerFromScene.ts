@@ -2,6 +2,7 @@
 // `ReaderScene` v1 d'Î10a, traduite par `sceneToEngineConfig` comme dans le livre), ou, si la couche 3D est inutilisable,
 // scène de diagnostic seul (GLB affiché sans module, cible caméra = premier nœud racine, lecture libre des clips).
 import { sceneToEngineConfig, type ReaderBook, type ReaderScene } from "@/components/book/readerScene";
+import { parseCardFields } from "@/components/card/cardModel";
 import type { BuiltScene } from "@/schema/glbi";
 import type { BookResponse, SceneResponse } from "./api";
 
@@ -16,6 +17,8 @@ export function readerBookOf(book: BookResponse): ReaderBook {
       title && typeof title.fr === "string" && typeof title.en === "string" && typeof title.es === "string"
         ? { fr: title.fr, en: title.en, es: title.es }
         : undefined,
+    // Carte de collection (CC1) : intitulés lus pour l'aperçu de CC2 ; l'atelier ne montre pas encore la carte.
+    cardFields: parseCardFields(b?.cardFields),
   };
 }
 

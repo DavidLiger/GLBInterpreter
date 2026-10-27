@@ -272,6 +272,19 @@ test('book.json : forme écrite identique à JSON.stringify(…, 2) dans l’ord
   assert.equal(formatBook(w.book), w.text);
 });
 
+test('CC1 : cardFields du disque repris tel quel (pas encore dans le formulaire), écrit dans l’ordre de bookSchema', () => {
+  const cardFields = [{ id: 'taille', label: { fr: 'Taille', en: 'Length', es: 'Longitud' } }, { id: 'poids', label: { fr: 'Poids', en: 'Weight', es: 'Peso' } }];
+  const raw = { ...sampleBook, cardFields, unlockThreshold: 2 };
+  const r = readableBook(raw, 2026);
+  assert.deepEqual(r.cardFields, cardFields);
+  const again = validateBook(composeBook(formFromBody(JSON.parse(JSON.stringify(r.form))), { unlockThreshold: r.unlockThreshold, cardFields: r.cardFields }));
+  assert.ok(again.ok);
+  assert.equal(again.text, `${JSON.stringify(raw, null, 2)}\n`, 'sans modification : octet pour octet, cardFields après legal');
+  // Valeur reprise même invalide (intitulé en double) : refusée par bookSchema, rien d'écrit.
+  const bad = validateBook(composeBook(r.form, { cardFields: [cardFields[0], cardFields[0]] }));
+  assert.ok(!bad.ok && bad.errors.some((e) => e === 'book.json : cardFields : intitulé en double « taille »'));
+});
+
 test('formulaire : lu, recomposé, réécrit à l’identique ; unlockThreshold conservé ; ogImage vide omis ; refus de bookSchema', () => {
   const raw = { ...sampleBook, unlockThreshold: 3 };
   const r = readableBook(raw, 2026);

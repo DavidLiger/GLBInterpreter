@@ -6,7 +6,8 @@
 // - Forme écrite : clés dans l'ordre de `bookSchema` (objets imbriqués compris), indentation 2, UTF-8 sans échappement des
 //   accents (`JSON.stringify`), retour à la ligne final, champs facultatifs vides omis.
 // - Formulaire : valeurs saisies (textes), composées en objet puis validées par `bookSchema` ; `unlockThreshold` (sujet 5)
-//   n'est pas dans le formulaire : sa valeur sur le disque est reprise telle quelle.
+//   et `cardFields` (intitulés des cartes de collection, CC1 ; section du formulaire en CC2) ne sont pas dans le
+//   formulaire : leur valeur sur le disque est reprise telle quelle.
 // - Lecture d'un `book.json` illisible ou invalide : ce qui est lisible préremplit le formulaire.
 import { z } from 'zod';
 import { bookSchema, formatIssues, LANGUAGES, SCENE_ID_PATTERN, type Book } from '../../src/schema/glbi';
@@ -62,6 +63,8 @@ export interface ReadableBook {
   form: BookForm;
   /** `unlockThreshold` lu sur le disque (valeur brute, même invalide), repris tel quel à l'écriture. */
   unlockThreshold?: unknown;
+  /** `cardFields` lu sur le disque (CC1, valeur brute), repris tel quel à l'écriture jusqu'à la section du studio (CC2). */
+  cardFields?: unknown;
   /** `bookId` lisible sur le disque : celui d'un livre existant, non modifiable. */
   bookIdOnDisk: string | null;
 }
@@ -104,6 +107,7 @@ export function readableBook(raw: unknown, year: number): ReadableBook {
   }
   const r: ReadableBook = { form: f, bookIdOnDisk: typeof raw.bookId === 'string' && raw.bookId !== '' ? raw.bookId : null };
   if ('unlockThreshold' in raw) r.unlockThreshold = raw.unlockThreshold;
+  if ('cardFields' in raw) r.cardFields = raw.cardFields;
   return r;
 }
 
@@ -122,7 +126,7 @@ export function formFromBody(v: unknown): BookForm {
 }
 
 /** Objet `book.json` composé du formulaire, avant validation. `languages` : celles du Zod (affichées, non modifiables). */
-export function composeBook(form: BookForm, keep: { unlockThreshold?: unknown } = {}): Obj {
+export function composeBook(form: BookForm, keep: { unlockThreshold?: unknown; cardFields?: unknown } = {}): Obj {
   const y = form.legal.year.trim();
   const book: Obj = {
     bookId: form.bookId.trim(),
@@ -133,6 +137,7 @@ export function composeBook(form: BookForm, keep: { unlockThreshold?: unknown } 
     legal: { year: /^-?\d+$/.test(y) ? Number(y) : y, text: { ...form.legal.text } },
   };
   if (form.ogImage.trim()) book.ogImage = form.ogImage.trim();
+  if (keep.cardFields !== undefined) book.cardFields = keep.cardFields;
   if (keep.unlockThreshold !== undefined) book.unlockThreshold = keep.unlockThreshold;
   return book;
 }

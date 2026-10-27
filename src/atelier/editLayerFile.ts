@@ -72,7 +72,7 @@ export function orderEditLayer(edit: unknown, actionOrder: readonly string[], ev
   };
   return obj(["version", "scene", "modules"], {
     scene: obj(["name", "loaderImage"], { name: text }),
-    modules: obj(["camera", "animations", "audio", "quiz", "credits"], {
+    modules: obj(["camera", "animations", "audio", "quiz", "card", "credits"], {
       camera: obj(CAMERA_FRAMING_KEYS),
       animations: obj(["actions"], { actions }),
       audio: obj(["ambientSound"]),
@@ -80,6 +80,12 @@ export function orderEditLayer(edit: unknown, actionOrder: readonly string[], ev
         question: text,
         choices: map(obj(["text", "correct"], { text })),
         explanation: text,
+      }),
+      // Carte de collection (CC1) : valeurs des caractéristiques dans l'ordre du fichier.
+      card: obj(["subtitle", "image", "fields", "text"], {
+        subtitle: text,
+        fields: (v: unknown) => (isObj(v) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, text(x)])) : v),
+        text,
       }),
       credits: obj(["assets"], { assets: map(obj(["asset", "title", "author", "license", "source"])) }),
     }),

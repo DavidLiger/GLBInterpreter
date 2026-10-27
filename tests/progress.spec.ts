@@ -1,5 +1,6 @@
 // Progression du livre, quiz, menu de collection, écran de blocage (Î13, `spec-progression.md`), sur le livre de test
-// installé : `out/` construit depuis `books/test-dino` (trex → raptor → ptero ; quiz sur trex et ptero, raptor sans quiz).
+// installé : `out/` construit depuis `books/test-dino` (trex → raptor → ptero → duo ; quiz sur trex et ptero, raptor sans quiz).
+// CC1 : trex et raptor ont une carte de collection : le compte du menu est celui des cartes gagnées (« n cartes sur 2 »).
 // Règles de déblocage pures, valeur illisible et stockage indisponible : aussi dans `npm run test:engine`.
 import { expect, test, type Page } from '@playwright/test';
 import { PROGRESS_KEY } from './progress-helpers';
@@ -80,7 +81,9 @@ test('premier lancement par le QR de la première scène : quiz, mauvaise puis b
   expect(r.width).toBeGreaterThanOrEqual(44);
   expect(r.height).toBeGreaterThanOrEqual(44);
   await back.click();
-  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 1 sur 4 découvertes');
+  // CC1 : le livre de test a des cartes (trex, raptor) : compte des cartes gagnées ; une scène découverte
+  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 1 carte sur 2');
+  await expect(page.getByTestId('collection-scene')).toHaveCount(1);
   await expect(page.locator('canvas')).toHaveCount(0);
 });
 
@@ -100,7 +103,7 @@ test('QR d’une scène pas encore accessible : écran de blocage sans charger l
 
   // Retour au menu : quatre scènes grisées, aucune ouverte
   await page.getByRole('link', { name: 'Retour au menu' }).click();
-  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 0 sur 4 découvertes');
+  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 0 carte sur 2');
   await expect(page.getByTestId('collection-locked')).toHaveCount(4);
   await expect(page.getByTestId('collection-scene')).toHaveCount(0);
   await expect(page.getByRole('img', { name: 'Page 3 : pas encore découverte' })).toBeVisible();
@@ -135,7 +138,7 @@ test('QR d’une scène pas encore accessible : écran de blocage sans charger l
   // Menu à jour, dans l'ordre du livre, et conservé au rechargement
   await page.goto(`${SERVER}/#/`);
   await page.reload();
-  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 4 sur 4 découvertes', { timeout: 20_000 });
+  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 0 carte sur 2', { timeout: 20_000 });
   await expect(page.getByTestId('collection-scene')).toHaveText(['Tyrannosaure', 'Vélociraptor', 'Ptéranodon', 'La poursuite']);
   await expect(page.getByText('Trouve la page suivante')).toHaveCount(0);
 });
@@ -147,7 +150,7 @@ test('menu de collection : carte débloquée qui ouvre la scène sans quiz, remi
   await expect(readerShown(page)).toBeVisible({ timeout: 30_000 });
 
   await page.goto(`${SERVER}/#/`);
-  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 1 sur 4 découvertes');
+  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 0 carte sur 2');
   await expect(page.getByTestId('collection-scene')).toHaveText(['Tyrannosaure']);
   await expect(page.getByTestId('collection-hint')).toHaveText('Trouve la page suivante dans le livre et scanne son QR code !');
   await expect(page.getByTestId('collection-locked')).toHaveCount(3);
@@ -180,7 +183,8 @@ test('menu de collection : carte débloquée qui ouvre la scène sans quiz, remi
   expect((await progress(page))?.unlockedScenes).toEqual(['trex']);
   await pressReset();
   await page.getByRole('dialog', { name: 'Effacer ta collection ?' }).getByRole('button', { name: 'Effacer' }).click();
-  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 0 sur 4 découvertes');
+  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 0 carte sur 2');
+  await expect(page.getByTestId('collection-scene')).toHaveCount(0);
   expect(await progress(page)).toBeNull();
   await expect(page.getByTestId('collection-hint')).toHaveText('Pour commencer, scanne le QR code de la première page du livre !');
   await expect(page.getByRole('button', { name: 'Effacer ma collection' })).toHaveCount(0);
@@ -199,7 +203,8 @@ test('valeur illisible et stockage plein : pas d’écran d’erreur, la lecture
   await page.evaluate((k) => localStorage.setItem(k, '{pas du json'), PROGRESS_KEY);
   await page.goto(`${SERVER}/#/`);
   await page.reload();
-  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 0 sur 4 découvertes', { timeout: 20_000 });
+  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 0 carte sur 2', { timeout: 20_000 });
+  await expect(page.getByTestId('collection-scene')).toHaveCount(0);
   expect(warnings.some((w) => /\[PROGRESSION\] valeur illisible/.test(w))).toBe(true);
 
   // Stockage plein : chaque écriture échoue ; la progression vaut pour la session (navigation sans rechargement)
@@ -219,7 +224,8 @@ test('valeur illisible et stockage plein : pas d’écran d’erreur, la lecture
   await page.evaluate(() => {
     window.location.hash = '/';
   });
-  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 1 sur 4 découvertes');
+  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 0 carte sur 2');
+  await expect(page.getByTestId('collection-scene')).toHaveText(['Tyrannosaure']);
   await expect(page.getByText(/Livre illisible|Scène introuvable/)).toHaveCount(0);
 });
 
@@ -246,10 +252,10 @@ test('langues : quiz, blocage et menu en anglais et en espagnol', async ({ page 
   await page.getByRole('button', { name: 'English' }).click();
   await expect(page.getByRole('heading', { name: 'Not yet!' })).toBeVisible();
   await page.getByRole('link', { name: 'Back to the menu' }).click();
-  await expect(page.getByTestId('collection-count')).toHaveText('My collection · 1 of 4 discovered');
+  await expect(page.getByTestId('collection-count')).toHaveText('My collection · 0 cards of 2');
   await expect(page.getByRole('link', { name: 'Tyrannosaurus' })).toBeVisible();
   await expect(page.getByRole('img', { name: 'Page 2: not discovered yet' })).toBeVisible();
   await page.getByRole('button', { name: 'Español' }).click();
-  await expect(page.getByTestId('collection-count')).toHaveText('Mi colección · 1 de 4 descubiertas');
+  await expect(page.getByTestId('collection-count')).toHaveText('Mi colección · 0 cartas de 2');
   await expect(page.getByRole('button', { name: 'Borrar mi colección' })).toBeVisible();
 });

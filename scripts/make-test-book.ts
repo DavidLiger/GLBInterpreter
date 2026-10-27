@@ -26,13 +26,18 @@
 //   (arc de 120° autour de la cible, en montant) et immobile ailleurs ; action « course » en boucle (clip de 1 s), deux
 //   événements par tour (`pas_g` 0,25 s, `pas_d` 0,75 s, même son) : événements redéclenchés à chaque tour.
 //   Les GLB de trex, raptor et ptero sont écrits par `makeGlb`, inchangé : mêmes octets qu'avant AC1 ;
+// - cartes de collection (CC1, spec-carte-collection.md §10) : `book.json.cardFields` (taille, poids, époque, régime) ;
+//   « trex » a la carte la plus chargée (sous-titre, illustration `images/trex-card.png` 900 × 600, les 4 caractéristiques,
+//   valeurs jusqu'à 16 caractères, paragraphe de 250 caractères en espagnol) ; « raptor » une carte sans illustration
+//   (image de chargement à la place), sans sous-titre, « régime » sans valeur (avertissement voulu, affiché « — ») ;
+//   « ptero » et « duo » sans carte ;
 // - un dossier `blender/` déjà posé dans le livre de test (raptor réel, point de clôture de ST1) est conservé : seul le reste
 //   du dossier est effacé et réécrit.
 import fs from 'node:fs';
 import path from 'node:path';
 import { Document, NodeIO, type Node as GNode, type TypedArray } from '@gltf-transform/core';
 import sharp from 'sharp';
-import { EDIT_LAYER_VERSION, LAYER3D_VERSION, RESERVED_SOURCE_DIR, type Book, type EditLayer, type Layer3d } from '../src/schema/glbi';
+import { EDIT_LAYER_VERSION, LAYER3D_VERSION, RESERVED_SOURCE_DIR, type Book, type CardField, type EditLayer, type Layer3d } from '../src/schema/glbi';
 
 const dir = path.resolve(process.cwd(), process.argv[2] ?? 'books/test-dino');
 
@@ -354,6 +359,71 @@ async function makeDuoGlb(file: string, layer: Layer3d): Promise<void> {
   await new NodeIO().write(file, doc);
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// Cartes de collection (CC1)
+// ---------------------------------------------------------------------------------------------------------
+
+/** Intitulés communs à toutes les cartes du livre (`book.json.cardFields`), dans l'ordre d'affichage. */
+const CARD_FIELDS: CardField[] = [
+  { id: 'taille', label: L('Taille', 'Length', 'Longitud') },
+  { id: 'poids', label: L('Poids', 'Weight', 'Peso') },
+  { id: 'epoque', label: L('Époque', 'Period', 'Época') },
+  { id: 'regime', label: L('Régime', 'Diet', 'Dieta') },
+];
+
+/** Carte de chaque scène (couche éditoriale, `modules.card`) ; « ptero » et « duo » n'en ont pas. */
+const CARDS: Record<string, NonNullable<NonNullable<EditLayer['modules']>['card']>> = {
+  // Carte la plus chargée (capture de 375 × 667 : rien ne doit déborder) : 250 caractères en espagnol.
+  trex: {
+    subtitle: L('T. rex · il y a 68 millions d’années', 'T. rex · 68 million years ago', 'T. rex · hace 68 millones de años'),
+    image: 'images/trex-card.png',
+    fields: {
+      taille: L('12 à 13 mètres', '12 to 13 metres', '12 a 13 metros'),
+      poids: L('8 à 9 tonnes', '8 to 9 tonnes', '8 a 9 toneladas'),
+      epoque: L('Fin du Crétacé', 'Late Cretaceous', 'Cretácico tardío'),
+      regime: L('Carnivore', 'Carnivore', 'Carnívoro'),
+    },
+    text: L(
+      'Le tyrannosaure vivait à la fin du Crétacé, en Amérique du Nord. Ses dents mesuraient jusqu’à 30 cm et sa morsure était l’une des plus puissantes du monde animal. Ses petits bras n’avaient que deux doigts, mais ils étaient vraiment très musclés.',
+      'The tyrannosaurus lived at the end of the Cretaceous, in North America. Its teeth were up to 30 cm long and its bite was one of the strongest in the whole animal world. Its short arms had only two fingers, but they were very, very strong.',
+      'El tiranosaurio vivió a finales del Cretácico, en América del Norte. Sus dientes medían hasta 30 cm y su mordida era una de las más potentes del mundo animal. Sus brazos cortos solo tenían dos dedos, pero eran muy musculosos y fuertes, ¡de veras, sí!',
+    ),
+  },
+  raptor: {
+    fields: {
+      taille: L('2 mètres', '2 metres', '2 metros'),
+      poids: L('15 kg', '15 kg', '15 kg'),
+      epoque: L('Crétacé', 'Cretaceous', 'Cretácico'),
+    },
+    text: L(
+      'Le vélociraptor était un petit chasseur rapide, couvert de plumes.',
+      'The velociraptor was a small, fast hunter covered in feathers.',
+      'El velocirraptor era un cazador pequeño y rápido, cubierto de plumas.',
+    ),
+  },
+};
+
+/** Illustration de la carte de « trex » : 900 × 600 (3:2), ciel, sol et silhouette, reconnaissable à l'écran. */
+async function cardImage(file: string): Promise<void> {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600">
+    <defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7dd3fc"/><stop offset="1" stop-color="#fde68a"/></linearGradient></defs>
+    <rect width="900" height="600" fill="url(#sky)"/><rect y="440" width="900" height="160" fill="#65a30d"/>
+    <circle cx="760" cy="120" r="60" fill="#fbbf24"/>
+    <ellipse cx="430" cy="380" rx="190" ry="80" fill="#166534"/><circle cx="620" cy="280" r="70" fill="#166534"/>
+    <rect x="330" y="420" width="40" height="110" fill="#166534"/><rect x="460" y="420" width="40" height="110" fill="#166534"/>
+    <polygon points="250,360 60,330 250,410" fill="#166534"/><circle cx="645" cy="260" r="10" fill="#fff"/>
+  </svg>`;
+  await sharp(Buffer.from(svg)).png().toFile(file);
+}
+
+/** Couche éditoriale avec la carte de la scène, rangée comme l'écrit l'atelier (après le quiz, avant les crédits). */
+function withCard(edit: EditLayer, id: string): EditLayer {
+  const card = CARDS[id];
+  if (!card || !edit.modules) return edit;
+  const { credits, ...rest } = edit.modules;
+  return { ...edit, modules: { ...rest, card, credits } };
+}
+
 /** Efface le dossier du livre de test sauf le dossier réservé `blender/` (point de clôture de ST1). */
 function clearTestBook(): boolean {
   if (!fs.existsSync(dir)) return false;
@@ -380,6 +450,7 @@ async function main(): Promise<void> {
     origin: 'https://dino.editions-liger.com',
     ogImage: 'images/og.png',
     legal: { year: 2026, text: L('© Éditions Liger', '© Éditions Liger', '© Éditions Liger') },
+    cardFields: CARD_FIELDS,
   };
   fs.writeFileSync(path.join(dir, 'book.json'), `${JSON.stringify(book, null, 2)}\n`);
 
@@ -396,7 +467,7 @@ async function main(): Promise<void> {
     if (sc.id === 'raptor') delete edit.modules!.camera;
     // « raptor » sans quiz (Î13) : scène débloquée à son ouverture ; « trex » et « ptero » ont un quiz complet en 3 langues.
     if (sc.id === 'raptor') delete edit.modules!.quiz;
-    fs.writeFileSync(path.join(dir, `scenes/${sc.id}.edit.json`), `${JSON.stringify(edit, null, 2)}\n`);
+    fs.writeFileSync(path.join(dir, `scenes/${sc.id}.edit.json`), `${JSON.stringify(withCard(edit, sc.id), null, 2)}\n`);
   }
   // « duo » en fin de livre (AC1).
   await makeDuoGlb(path.join(dir, 'scenes/duo.glb'), duoLayer3d());
@@ -414,6 +485,7 @@ async function main(): Promise<void> {
     noise[i] = seed & 0xff;
   }
   await sharp(noise, { raw: { width: side, height: side, channels: 3 } }).png({ compressionLevel: 9 }).toFile(path.join(dir, 'images/trex-preview.png'));
+  await cardImage(path.join(dir, 'images/trex-card.png'));
   // Icône du livre (Î9) : PNG carré ≥ 512 px, motif transparent (disque vert) pour vérifier les versions opaques.
   await sharp({ create: { width: 512, height: 512, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
     .composite([{ input: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><circle cx="256" cy="256" r="220" fill="#2e8b57"/></svg>') }])

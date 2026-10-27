@@ -6,8 +6,9 @@
 //   `{ unlockedScenes: string[], quizPassed: { [sceneId]: boolean }, collected: { [sceneId]: boolean } }`.
 // - Règles (Q1, 17/10) : ordre = `book.json.scenes` ; une scène est accessible si elle est débloquée, si elle est la
 //   première du livre ou si la précédente est débloquée ; débloquée = quiz réussi (ou ouverte, si elle n'a pas de quiz) ;
-//   une scène débloquée s'ouvre sans quiz. `collected` = au moins une action jouée dans la scène (écrit, non exploité :
-//   `unlockThreshold` reste sans effet).
+//   une scène débloquée s'ouvre sans quiz. `collected` = au moins une action jouée dans la scène ; lu depuis CC1 : carte de
+//   collection gagnée (`src/components/card/cardModel.ts`, clé et valeur inchangées) ; `unlockThreshold` reste sans effet
+//   (mini-jeu, MJ1).
 // - Valeur illisible : lue champ par champ, le reste vaut vide ; scènes inconnues du livre conservées (aucune perte si
 //   un livre reconstruit les retrouve) ; stockage absent, refusé ou plein : progression en mémoire pour la session (Q5).
 

@@ -11,12 +11,20 @@
 // vérification de forme minimale des champs lus, pour un message lisible si le dossier n'est pas un livre construit.
 import type { BuiltScene } from "@/schema/glbi";
 import type { ButtonsModeConfig, CreditEntry, DioramaConfig3D, DioramaCredits, POI } from "@/types/diorama";
+import { parseCardFields, readerCardOf, type CardFieldLabel, type ReaderCard } from "@/components/card/cardModel";
 
 /** Identifiant du POI de départ (V-04) : seul POI d'une scène v1, premier POI de la fixture. */
 export const START_POI_ID = "start";
 
 export type ReaderScene =
-  | { kind: "v1"; bookId: string; built: BuiltScene; config: DioramaConfig3D }
+  | {
+      kind: "v1";
+      bookId: string;
+      built: BuiltScene;
+      config: DioramaConfig3D;
+      /** Carte de collection de la scène (CC1, `modules.card`), chemins résolus ; absente si la scène n'en a pas. */
+      card?: ReaderCard;
+    }
   | { kind: "fixture"; bookId: string; config: DioramaConfig3D };
 
 /** Couche livre utile au lecteur (`book.json` construit, sans la liste `files`). */
@@ -29,6 +37,8 @@ export interface ReaderBook {
   legal?: { year: number; text: { fr: string; en: string; es: string } };
   /** Adresse imprimée dans les QR (`book.json.origin`) : le scanner interne n'accepte que les QR de ce livre (Î14). */
   origin?: string;
+  /** Intitulés des caractéristiques des cartes de collection (`book.json.cardFields`, CC1) ; vide si le livre n'en a pas. */
+  cardFields: CardFieldLabel[];
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -45,7 +55,13 @@ export function parseReaderBook(raw: unknown): ReaderBook {
     title: isObj(raw.title) ? (raw.title as ReaderBook["title"]) : undefined,
     legal: isObj(raw.legal) ? (raw.legal as ReaderBook["legal"]) : undefined,
     origin: typeof raw.origin === "string" ? raw.origin : undefined,
+    cardFields: parseCardFields(raw.cardFields),
   };
+}
+
+/** Carte de collection d'une scène v1 (CC1) : `base` préfixe les chemins comme pour le reste de la scène (D-8.1). */
+export function sceneCard(built: BuiltScene, base = ""): ReaderCard | undefined {
+  return readerCardOf((built.modules as Record<string, unknown>).card, built.scene.loaderImage, (p) => `${base}${p}`);
 }
 
 /** Vérification de forme de `scenes/<id>.json` (contrat complet : `builtSceneSchema`, appliqué au build). */

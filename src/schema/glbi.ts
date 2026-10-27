@@ -27,6 +27,15 @@ const translated = z
 export const localizedTextSchema = z.strictObject({ fr: translated, en: translated, es: translated });
 
 /**
+ * Texte traduit de longueur bornée (carte de collection, CC1, spec-carte-collection.md §3) : la carte est dessinée à taille
+ * fixe, chaque texte doit y tenir. Message `263 caractères (250 au plus)`, la langue est dans le chemin (`….text.es`).
+ */
+function boundedText(max: number) {
+  const one = translated.max(max, { error: (iss) => `${typeof iss.input === 'string' ? iss.input.length : '?'} caractères (${max} au plus)` });
+  return z.strictObject({ fr: one, en: one, es: one });
+}
+
+/**
  * Identifiant de scène : même règle que le routeur (`#/s/<scène>`, `src/components/book/sceneRoute.ts`).
  * Écrit sans drapeau `i` : `z.toJSONSchema` perd les drapeaux des regex (le schéma exporté pour l'addon serait plus strict).
  */
@@ -237,6 +246,40 @@ export const creditsModuleSchema = z.strictObject({
   assets: z.array(assetCreditSchema),
 });
 
+// ---------------------------------------------------------------------------------------------------------
+// Carte de collection (CC1, DP-10, DP-11, spec-carte-collection.md §3 à §5) : module éditorial, intitulés dans book.json
+// ---------------------------------------------------------------------------------------------------------
+
+/** Longueurs maximales des textes de la carte, par langue (spec-carte-collection.md §3). */
+export const CARD_LIMITS = { subtitle: 40, fieldLabel: 14, fieldValue: 16, text: 250 } as const;
+/** Nombre maximal de caractéristiques d'une carte (grille de 2 colonnes, §3). */
+export const CARD_FIELDS_MAX = 4;
+
+/** Identifiant d'un intitulé de caractéristique (`book.json.cardFields[].id`, clé de `modules.card.fields`). */
+export const cardFieldIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, 'identifiant d’intitulé : lettres, chiffres, _ et -');
+
+/** Intitulé commun à toutes les cartes du livre (couche livre, `book.json`, écrit par le studio). */
+export const cardFieldSchema = z.strictObject({
+  id: cardFieldIdSchema,
+  label: boundedText(CARD_LIMITS.fieldLabel),
+});
+
+/** Champs de la carte. Dans la couche éditoriale, tous facultatifs ; la fusion `strict` exige le paragraphe (`text`). */
+const cardShape = {
+  /** Sous-titre (nom scientifique, époque…). */
+  subtitle: boundedText(CARD_LIMITS.subtitle).optional(),
+  /** Illustration (3:2 conseillé) ; à défaut, `scene.loaderImage`, puis `icon.png` (lecteur). */
+  image: imagePathSchema.optional(),
+  /** Valeur de chaque caractéristique, indexée par l'`id` d'un intitulé de `book.json.cardFields` (contrôle du build). */
+  fields: z.record(cardFieldIdSchema, boundedText(CARD_LIMITS.fieldValue)).optional(),
+  /** Paragraphe. */
+  text: boundedText(CARD_LIMITS.text).optional(),
+};
+/** Carte de l'objet fusionné (`scenes/<id>.json`) : paragraphe obligatoire. */
+export const cardModuleSchema = z.strictObject({ ...cardShape, text: boundedText(CARD_LIMITS.text) });
+/** Carte de la couche éditoriale (`scenes/<id>.edit.json`), comme `scene.name` : champs facultatifs, la fusion exige `text`. */
+export const cardEditSchema = z.strictObject(cardShape);
+
 /** Modules réservés (spec §6) : clés connues, refusées tant que la console ne les active pas pour un livre. */
 export const RESERVED_MODULES = [
   'postProcessing', 'cameraPath', 'poiTree', 'effects', 'videos', 'spritesheets',
@@ -248,6 +291,7 @@ const activeModulesShape = {
   animations: animationsModuleSchema.optional(),
   audio: audioModuleSchema.optional(),
   quiz: quizModuleSchema.optional(),
+  card: cardModuleSchema.optional(),
   credits: creditsModuleSchema.optional(),
 };
 
@@ -279,6 +323,8 @@ export type AnimationAction = z.infer<typeof actionSchema>;
 export type AnimationsModule = z.infer<typeof animationsModuleSchema>;
 export type QuizModule = z.infer<typeof quizModuleSchema>;
 export type AssetCredit = z.infer<typeof assetCreditSchema>;
+export type CardModule = z.infer<typeof cardModuleSchema>;
+export type CardField = z.infer<typeof cardFieldSchema>;
 export type GlbiConfig = z.infer<typeof glbiConfigSchema>;
 
 // ---------------------------------------------------------------------------------------------------------
@@ -352,6 +398,7 @@ export const editLayerSchema = z.strictObject({
       animations: z.strictObject({ actions: z.record(actionIdSchema, actionEditSchema) }).optional(),
       audio: audioModuleSchema.optional(),
       quiz: quizModuleSchema.optional(),
+      card: cardEditSchema.optional(),
       credits: creditsModuleSchema.optional(),
     })
     .optional(),
@@ -381,12 +428,20 @@ export const bookSchema = z
       year: z.number().int().min(2000).max(2100),
       text: localizedTextSchema,
     }),
+    /** Intitulés des caractéristiques des cartes de collection (CC1), dans l'ordre d'affichage ; 1 à 4, `id` uniques. */
+    cardFields: z
+      .array(cardFieldSchema)
+      .min(1, 'au moins un intitulé (sinon, retirer cardFields)')
+      .max(CARD_FIELDS_MAX, `${CARD_FIELDS_MAX} intitulés au plus`)
+      .optional(),
     unlockThreshold: z.number().int().positive().optional(),
   })
   .superRefine((b, ctx) => {
     const dup = (arr: readonly string[]) => arr.filter((x, i) => arr.indexOf(x) !== i);
     for (const d of new Set(dup(b.scenes))) ctx.addIssue({ code: 'custom', path: ['scenes'], message: `scène en double « ${d} »` });
     for (const d of new Set(dup(b.languages))) ctx.addIssue({ code: 'custom', path: ['languages'], message: `langue en double « ${d} »` });
+    const fieldIds = (b.cardFields ?? []).map((f) => f.id);
+    for (const d of new Set(dup(fieldIds))) ctx.addIssue({ code: 'custom', path: ['cardFields'], message: `intitulé en double « ${d} »` });
     for (const l of LANGUAGES) {
       if (!b.languages.includes(l)) ctx.addIssue({ code: 'custom', path: ['languages'], message: `langue « ${l} » manquante (livre 1 : ${LANGUAGES.join(', ')})` });
     }

@@ -49,6 +49,12 @@ export interface EditForm {
   actions: [string, ActionForm][];
   ambientSound: string;
   quiz: QuizForm;
+  /**
+   * Carte de collection (`modules.card`, CC1) : pas d'onglet avant CC2, valeur du fichier gardée telle quelle à
+   * l'enregistrement (sans elle, l'atelier, qui reconstruit `edit.json` depuis le formulaire, l'effacerait, comme les
+   * `events` avant AC3). `undefined` : pas de carte.
+   */
+  card: unknown;
   credits: CreditForm[];
 }
 
@@ -100,6 +106,7 @@ export function formFromEdit(raw: unknown): EditForm {
     quiz: quiz
       ? { question: l3Of(quiz.question), choices, correct: correctIdx >= 0 && correctIdx < 3 ? correctIdx : null, explanation: l3Of(quiz.explanation) }
       : emptyQuiz(),
+    card: modules.card,
     credits: credits.filter(isObj).map((c) => ({
       asset: str(c.asset),
       title: str(c.title),
@@ -221,6 +228,7 @@ export function layerFromForm(form: EditForm): { layer: Obj; incomplete: Incompl
       animations: { actions },
       audio: { ambientSound: form.ambientSound || undefined },
       quiz,
+      card: form.card,
       credits: { assets: credits },
     },
   };
@@ -228,8 +236,8 @@ export function layerFromForm(form: EditForm): { layer: Obj; incomplete: Incompl
 }
 
 /**
- * Assets utilisés par le formulaire (dans l'ordre : image de chargement, icônes, sons des actions, sons des événements,
- * ambiance). Comme au build (objet fusionné) : actions du GLB seulement, et pour les sons d'événement (AC3, V-10),
+ * Assets utilisés par le formulaire (dans l'ordre : image de chargement, icônes, illustration de la carte, sons des
+ * actions, sons des événements, ambiance). Comme au build (objet fusionné) : actions du GLB seulement, et pour les sons d'événement (AC3, V-10),
  * événements du GLB seulement (`glbEvents` : événements de chaque action dans l'ordre du GLB).
  */
 export function usedAssets(form: EditForm, glbIds: readonly string[], glbEvents: Readonly<Record<string, readonly string[]>> = {}): { asset: string; kind: "image" | "son" }[] {
@@ -240,6 +248,8 @@ export function usedAssets(form: EditForm, glbIds: readonly string[], glbEvents:
   add(form.loaderImage, "image");
   const inGlb = form.actions.filter(([id]) => glbIds.includes(id));
   for (const [, a] of inGlb) add(a.icon, "image");
+  // Illustration de la carte de collection (CC1), comme au build : image utilisée, crédit facultatif.
+  if (isObj(form.card)) add(str(form.card.image), "image");
   for (const [, a] of inGlb) add(a.sound, "son");
   for (const [id, a] of inGlb) for (const ev of glbEvents[id] ?? []) add(a.events.find(([k]) => k === ev)?.[1].sound ?? "", "son");
   add(form.ambientSound, "son");

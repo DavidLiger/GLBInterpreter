@@ -37,7 +37,15 @@ export default function ServiceWorkerRegister({ inScene }: { inScene: boolean })
     };
   }, []);
 
-  if (!waiting || inScene) return null;
+  // CC1 (point de clôture d'AC1) : bandeau fixé en bas ; tant qu'il est affiché, le menu de collection garde de la place
+  // sous son dernier bouton (« Effacer ma collection », classe `glbi-sw-update` de globals.css).
+  const shown = !!waiting && !inScene;
+  useEffect(() => {
+    document.documentElement.classList.toggle("glbi-sw-update", shown);
+    return () => document.documentElement.classList.remove("glbi-sw-update");
+  }, [shown]);
+
+  if (!shown || !waiting) return null;
 
   const apply = () => {
     navigator.serviceWorker.addEventListener("controllerchange", () => window.location.reload(), { once: true });
@@ -45,7 +53,7 @@ export default function ServiceWorkerRegister({ inScene }: { inScene: boolean })
   };
 
   return (
-    <div className="fixed bottom-4 inset-x-4 z-[10000] mx-auto max-w-md flex items-center justify-between gap-3 rounded-2xl bg-white text-black px-4 py-3 shadow-lg">
+    <div data-testid="sw-update" className="fixed bottom-4 inset-x-4 z-[10000] mx-auto max-w-md flex items-center justify-between gap-3 rounded-2xl bg-white text-black px-4 py-3 shadow-lg">
       <span className="text-sm">{t.install.newVersion}</span>
       <button onClick={apply} className="min-h-11 px-4 rounded-full bg-black text-white text-sm font-bold">
         {t.install.reload}
