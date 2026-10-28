@@ -35,6 +35,7 @@ import {
   pickBlenderDir,
   readableBook,
   SCENE_PATTERN_SOURCE,
+  scenesUsingCardField,
   validateBook,
   visibleValue,
   withReceivedValues,
@@ -46,10 +47,14 @@ import {
   findLeftovers,
   hostAllowed,
   journalsToDelete,
+  MAX_CHECK_RECORDS,
   outputVerdict,
+  parseCheckRecords,
+  restoredCheck,
   samePath,
   splitLines,
   summarizeReport,
+  withCheckRecord,
   type OutputRecord,
   type ProcRow,
 } from './rules';
@@ -155,6 +160,20 @@ test('rapport de book:check : résumé par scène et lignes du livre', () => {
     ['warning', 'build', null, 'fichier(s) source non référencé(s)'],
   ]);
   assert.equal(summarizeReport(null), null);
+});
+
+test('CC2 : dernier book:check de chaque livre gardé, repris à l’ouverture (casse sous Windows) ; 10 livres au plus', () => {
+  const report = { ok: false, lines: [{ level: 'error', origin: 'edit', scene: 'trex', message: 'a' }] };
+  let list = withCheckRecord([], { dir: 'D:\\Livres\\dino', date: 1000, report }, true);
+  list = withCheckRecord(list, { dir: 'D:\\Livres\\autre', date: 2000, report: { ok: true, lines: [] } }, true);
+  list = withCheckRecord(list, { dir: 'd:/livres/dino/', date: 3000, report }, true);
+  assert.deepEqual(list.map((r) => r.date), [3000, 2000], 'ancien résultat du même livre remplacé');
+  const c = restoredCheck(parseCheckRecords(JSON.parse(JSON.stringify(list))), 'D:\\LIVRES\\Dino', true);
+  assert.ok(c && c.date === 3000 && c.errors === 1 && c.perScene.trex.errors === 1 && c.lines[0].message === 'a');
+  assert.equal(restoredCheck(list, 'D:\\Livres\\inconnu', true), null);
+  assert.deepEqual(parseCheckRecords({ x: 1 }), []);
+  for (let i = 0; i < 15; i++) list = withCheckRecord(list, { dir: `/l/${i}`, date: i, report }, false);
+  assert.equal(list.length, MAX_CHECK_RECORDS);
 });
 
 test('dossier source : blender/ ni listé ni compté dans le fichier le plus récent ; ouverture d’un livre', () => {
@@ -272,17 +291,38 @@ test('book.json : forme écrite identique à JSON.stringify(…, 2) dans l’ord
   assert.equal(formatBook(w.book), w.text);
 });
 
-test('CC1 : cardFields du disque repris tel quel (pas encore dans le formulaire), écrit dans l’ordre de bookSchema', () => {
+test('CC2 : section « Carte de collection » : cardFields lu dans le formulaire, réécrit à l’identique ; vide : omis ; refus', () => {
   const cardFields = [{ id: 'taille', label: { fr: 'Taille', en: 'Length', es: 'Longitud' } }, { id: 'poids', label: { fr: 'Poids', en: 'Weight', es: 'Peso' } }];
   const raw = { ...sampleBook, cardFields, unlockThreshold: 2 };
   const r = readableBook(raw, 2026);
-  assert.deepEqual(r.cardFields, cardFields);
-  const again = validateBook(composeBook(formFromBody(JSON.parse(JSON.stringify(r.form))), { unlockThreshold: r.unlockThreshold, cardFields: r.cardFields }));
+  assert.deepEqual(r.form.cardFields, cardFields);
+  const again = validateBook(composeBook(formFromBody(JSON.parse(JSON.stringify(r.form))), { unlockThreshold: r.unlockThreshold }));
   assert.ok(again.ok);
   assert.equal(again.text, `${JSON.stringify(raw, null, 2)}\n`, 'sans modification : octet pour octet, cardFields après legal');
-  // Valeur reprise même invalide (intitulé en double) : refusée par bookSchema, rien d'écrit.
-  const bad = validateBook(composeBook(r.form, { cardFields: [cardFields[0], cardFields[0]] }));
+  // Ajout puis ordre : écrits dans l'ordre du formulaire.
+  const added = { ...r.form, cardFields: [{ id: 'regime', label: { fr: 'Régime', en: 'Diet', es: 'Dieta' } }, ...r.form.cardFields] };
+  const w = validateBook(composeBook(added));
+  assert.ok(w.ok && JSON.parse(w.text).cardFields.map((f: { id: string }) => f.id).join() === 'regime,taille,poids');
+  // Aucun intitulé : cardFields omis (le contrat en exige au moins un s'il est présent).
+  const none = validateBook(composeBook({ ...r.form, cardFields: [] }));
+  assert.ok(none.ok && !('cardFields' in JSON.parse(none.text)));
+  // Refus de bookSchema : intitulé en double, trop long (14 au plus), 5 intitulés.
+  const bad = validateBook(composeBook({ ...r.form, cardFields: [cardFields[0], cardFields[0]] }));
   assert.ok(!bad.ok && bad.errors.some((e) => e === 'book.json : cardFields : intitulé en double « taille »'));
+  const long = validateBook(composeBook({ ...r.form, cardFields: [{ id: 'x', label: { fr: 'Longueur totale', en: 'L', es: 'L' } }] }));
+  assert.ok(!long.ok && long.errors.some((e) => e === 'book.json : cardFields.0.label.fr : 15 caractères (14 au plus)'), long.ok ? '' : long.errors.join('\n'));
+  const five = validateBook(composeBook({ ...r.form, cardFields: ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id, label: { fr: id, en: id, es: id } })) }));
+  assert.ok(!five.ok && five.errors.some((e) => e.startsWith('book.json : cardFields : ')));
+  // Scènes dont la carte utilise un intitulé (confirmation avant de le retirer).
+  const edits = {
+    trex: { modules: { card: { fields: { taille: {}, poids: {} }, text: {} } } },
+    raptor: { modules: { card: { fields: { taille: {} } } } },
+    ptero: { modules: {} },
+    duo: null,
+  };
+  assert.deepEqual(scenesUsingCardField(edits, 'taille'), ['trex', 'raptor']);
+  assert.deepEqual(scenesUsingCardField(edits, 'poids'), ['trex']);
+  assert.deepEqual(scenesUsingCardField(edits, 'regime'), []);
 });
 
 test('formulaire : lu, recomposé, réécrit à l’identique ; unlockThreshold conservé ; ogImage vide omis ; refus de bookSchema', () => {

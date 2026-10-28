@@ -175,14 +175,46 @@ async function post(action, extra = {}) {
   }
 }
 
+/**
+ * Messages passagers en mots simples (CC2, point de clôture de ST4) : les réponses du serveur restent techniques (elles sont
+ * aussi écrites dans les journaux) ; la page les reformule avant de les montrer. Un message non reconnu est montré tel quel.
+ */
+const TASK_NAMES = { 'book:check': 'Vérification du livre', 'dev:book': 'Mise à jour du lecteur du PC', 'Lecteur de développement': 'Lecteur du PC', 'Préparer le livre': 'Préparation du livre' };
+const taskName = (label) => TASK_NAMES[label] ?? label;
+const PLAIN = [
+  [/^book:check lancé$/, 'Vérification du livre lancée'],
+  [/^dev:book lancé$/, 'Mise à jour du lecteur du PC lancée'],
+  [/^atelier lancé sur le port \d+$/, 'Atelier en cours de démarrage'],
+  [/^lecteur de développement lancé sur le port \d+$/, 'Lecteur du PC en cours de démarrage'],
+  [/^serveur de test lancé sur le port \d+$/, 'Serveur de test en cours de démarrage (téléphone par le Wi-Fi)'],
+  [/^lancement : Préparer le livre$/, 'Préparation du livre lancée'],
+  [/^arrêt : (.+)$/, (m) => `${taskName(m[1])} : arrêt demandé`],
+  [/^book\.json identique au formulaire : rien écrit$/, 'Rien à enregistrer : book.json est déjà à jour'],
+  [/^book\.json non écrit : refusé par bookSchema/, 'Informations du livre non enregistrées : voir les messages sous le formulaire'],
+  [/serveur de test refusé|publication refusée/, () => `Pas maintenant : ${outPlain(S.outputs.out).why}`],
+  [/^une seule tâche à la fois parmi .* : (.+) en cours$/, (m) => `${taskName(m[1])} en cours : attendre sa fin`],
+  [/^livre déjà ouvert$/, 'Ce livre est déjà ouvert'],
+];
+function plainMsg(text) {
+  for (const [re, say] of PLAIN) {
+    const m = text.match(re);
+    if (m) return typeof say === 'function' ? say(m) : say;
+  }
+  return text
+    .replace(/ \(il écrit [^)]*\)/, '')
+    .replace(/ \(il supprime et réécrit out\/\)/, '')
+    .replace(/\(elle envoie out\/\)/, '(elle envoie le livre préparé)')
+    .replace(/^(book:check|dev:book|Lecteur de développement|Préparer le livre) (en cours|déjà en cours)/, (m, k, w) => `${taskName(k)} ${w}`);
+}
+
 async function act(action, extra = {}) {
   const r = await post(action, extra);
   if (r.confirm) {
     if (await confirmer(r.confirm, { ok: 'Continuer' })) return act(action, { ...extra, confirme: true });
     return r;
   }
-  if (r.error) toast(r.error, true);
-  else if (r.message) toast(r.message);
+  if (r.error) toast(plainMsg(r.error), true);
+  else if (r.message) toast(plainMsg(r.message));
   return r;
 }
 
@@ -245,7 +277,8 @@ const pendingTabs = {};
 
 function toolUrl(n, scene) {
   const m = byName(n);
-  if (n === 'atelier') return `http://127.0.0.1:${m.port}/atelier/`;
+  // Atelier : sur la scène demandée (#/s/<scène>, lu par l'atelier à son ouverture ; CC2).
+  if (n === 'atelier') return `http://127.0.0.1:${m.port}/atelier/${scene ? `#/s/${encodeURIComponent(scene)}` : ''}`;
   return `http://localhost:${m.port}/${scene ? `#/s/${encodeURIComponent(scene)}` : ''}`;
 }
 
@@ -349,16 +382,24 @@ const TOOLS = {
   studio: { titre: 'le studio ou le dossier du livre', ico: ICON.studio },
 };
 const Q = '« ([^»]+) »';
+const LANG_FR = { fr: 'français', en: 'anglais', es: 'espagnol' };
 const rx = (s) => new RegExp(s);
 // [motif, outil, correction, phrase] : le premier motif qui correspond l'emporte. `correction` : ce que propose le studio
 // (blender : ouvrir le .blend ; atelier : ouvrir l'atelier ; livre : « Modifier le livre » ; dossier : copier le chemin).
 // Motifs tirés des textes de scripts/book-check.ts, src/schema/merge.ts et src/schema/glbi.ts (base 5643449 ; événements,
-// coupe au noir et clés mal placées ajoutés en AC1 ; position de la caméra pendant une action, DP-19, en AC2).
+// coupe au noir et clés mal placées ajoutés en AC1 ; position de la caméra pendant une action, DP-19, en AC2 ; carte de
+// collection, intitulés de book.json et onglet Carte de l'atelier, en CC2, textes de CC1 à 030d95d).
 const EXPLAIN = [
   // Dossier du livre, book.json
   [/book\.json absent$/, 'studio', 'livre', 'book.json manque dans le dossier : créer le livre dans le studio (« Changer de livre »).'],
   [/^book\.json : JSON illisible/, 'studio', 'livre', 'book.json est illisible (fichier abîmé ?) : le corriger dans « Modifier le livre ».'],
   [/^book\.json : pas de ogImage/, 'studio', 'livre', 'Le livre n’a pas d’image de partage (l’aperçu montré quand on envoie son adresse) : la choisir dans « Modifier le livre ».'],
+  // Carte de collection (CC1, CC2) : intitulés des caractéristiques, section « Carte de collection » du livre
+  [rx(`^book\\.json : cardFields : intitulé en double ${Q}`), 'studio', 'livre', (m) => `Deux intitulés de la carte de collection ont l’identifiant « ${m[1]} » : en retirer un dans « Modifier le livre » (section Carte de collection).`],
+  [/^book\.json : cardFields : au moins un intitulé/, 'studio', 'livre', 'La liste des intitulés de la carte de collection est vide : ajouter un intitulé, ou la retirer, dans « Modifier le livre ».'],
+  [/^book\.json : cardFields : (\d+) intitulés au plus/, 'studio', 'livre', (m) => `La carte de collection a trop d’intitulés (${m[1]} au plus) : en retirer dans « Modifier le livre ».`],
+  [/^book\.json : cardFields\.(\d+)\.label\.(fr|en|es) : (\d+) caractères \((\d+) au plus\)/, 'studio', 'livre', (m) => `L’intitulé n° ${Number(m[1]) + 1} de la carte de collection est trop long en ${LANG_FR[m[2]]} (${m[3]} caractères, ${m[4]} au plus) : le raccourcir dans « Modifier le livre ».`],
+  [/^book\.json : cardFields\.(\d+)\./, 'studio', 'livre', (m) => `L’intitulé n° ${Number(m[1]) + 1} de la carte de collection est refusé (identifiant ou traduction) : le corriger dans « Modifier le livre ».`],
   [/^book\.json : (.+)$/, 'studio', 'livre', (m) => `Une information du livre est refusée (${m[1]}) : la corriger dans « Modifier le livre ».`],
   [/^icon\.png absent/, 'studio', 'dossier', 'L’icône du livre manque : déposer icon.png (image carrée de 512 px ou plus) dans le dossier du livre.'],
   [/^icon(-maskable)?\.png : .*carré/, 'studio', 'dossier', (m) => `L’icône${m[1] ? ' maskable' : ' du livre'} n’a pas la bonne taille : il faut une image carrée d’au moins 512 × 512 px.`],
@@ -407,6 +448,12 @@ const EXPLAIN = [
   [/aucun crédit de modèle/, 'blender', 'blender', 'Le modèle n’a pas de crédit (auteur, licence) : le renseigner dans Blender (propriétés src_* de l’addon).'],
   [/crédit de modèle incomplet/, 'blender', 'blender', 'Le crédit du modèle est incomplet : auteur et licence attendus (propriétés src_* de l’addon).'],
   // Réglages de la scène (atelier)
+  // Carte de collection (CC1, CC2) : onglet Carte de l'atelier
+  [rx(`modules\\.card\\.fields : intitulé ${Q} absent de book\\.json \\(cardFields : (.*)\\)`), 'atelier', 'atelier', (m) => `La carte de la scène donne une valeur à « ${m[1]} », un intitulé que le livre n’a pas (intitulés du livre : ${m[2]}) : retirer cette valeur dans l’atelier (onglet Carte), ou ajouter l’intitulé dans « Modifier le livre ».`],
+  [rx(`carte : caractéristique ${Q} sans valeur`), 'atelier', 'atelier', (m) => `La carte de la scène n’a pas de valeur pour « ${m[1]} » (la carte affichera « — ») : la saisir dans l’atelier (onglet Carte).`],
+  [/carte sans paragraphe \(modules\.card\.text\)/, 'atelier', 'atelier', 'La carte de la scène n’a pas de paragraphe : sans lui, la scène n’a pas de carte. L’écrire dans l’atelier (onglet Carte), en français, anglais et espagnol.'],
+  [/modules\.card\.(subtitle|text|fields\.([^.\s]+))\.(fr|en|es) : (\d+) caractères \((\d+) au plus\)/, 'atelier', 'atelier', (m) => `Un texte de la carte est trop long (${m[1] === 'subtitle' ? 'sous-titre' : m[1] === 'text' ? 'paragraphe' : `valeur « ${m[2]} »`}, en ${LANG_FR[m[3]]} : ${m[4]} caractères, ${m[5]} au plus) : le raccourcir dans l’atelier (onglet Carte).`],
+  [/modules\.card\.image : /, 'atelier', 'atelier', 'L’illustration de la carte est refusée (nom ou format du fichier) : en choisir une autre dans l’atelier (onglet Carte).'],
   [/edit\.json absent ; ouvrir la scène dans l'atelier/, 'atelier', 'atelier', 'Les réglages de la scène n’existent pas encore : ouvrir la scène dans l’atelier et les enregistrer.'],
   [rx(`action ${Q} absente du GLB \\(actions du GLB : (.*)\\)`), 'atelier', 'atelier', (m) => `La scène exportée et ses réglages ne correspondent plus : les réglages parlent d’une action « ${m[1]} » que le modèle n’a pas${m[2] ? ` (il a : ${m[2]})` : ''}. La retirer dans l’atelier, ou la remettre dans Blender.`],
   [/actions éditées mais le GLB n'a pas de module animations/, 'atelier', 'atelier', 'La scène exportée et ses réglages ne correspondent plus : les réglages ont des boutons, le modèle exporté n’a pas d’animation.'],
@@ -474,7 +521,7 @@ function stepLivre() {
   if (!b.icon) {
     return { state: 'todo', status: 'icône à ajouter',
       next: { title: 'Ajouter l’icône du livre', text: `Déposer une image carrée nommée <strong>icon.png</strong> (512 × 512 px au moins) dans le dossier du livre ; l’étape se coche toute seule.<br><span class="mono">${h(b.dir)}</span>`,
-        btn: { label: 'Copier le chemin du dossier', act: 'copier', data: { texte: b.dir } } } };
+        btn: { label: 'Ouvrir le dossier du livre', act: 'ouvrirDossier' } } };
   }
   return { state: 'done', status: 'book.json valide, icône présente', next: null };
 }
@@ -496,7 +543,7 @@ function sceneNext(s) {
       btn: { label: `Ouvrir ${s.id} dans Blender`, act: 'ouvrirBlender', data: { scene: s.id } } };
   }
   return { title: `Régler la scène ${s.id} dans l’atelier`, text: 'Dans l’atelier : nom de la scène, textes des boutons, sons, cadrage. Ses réglages sont enregistrés dans le livre.',
-    btn: { label: 'Ouvrir l’atelier', act: 'ouvrirOutil', data: { nom: 'atelier' } } };
+    btn: { label: `Ouvrir ${s.id} dans l’atelier`, act: 'ouvrirOutil', data: { nom: 'atelier', scene: s.id } } };
 }
 
 function stepScenes() {
@@ -523,9 +570,12 @@ function fixNext(groups) {
       return { title: l.scene ? `Corriger la scène ${l.scene} dans Blender` : 'Corriger dans Blender', text: `${text} Exporter ensuite avec l’addon, puis vérifier à nouveau.`,
         btn: can ? { label: `Ouvrir ${l.scene} dans Blender`, act: 'ouvrirBlender', data: { scene: l.scene } } : null };
     }
-    if (tool === 'atelier') return { title: l.scene ? `Corriger la scène ${l.scene} dans l’atelier` : 'Corriger dans l’atelier', text: `${text} Enregistrer, puis vérifier à nouveau.`, btn: { label: 'Ouvrir l’atelier', act: 'ouvrirOutil', data: { nom: 'atelier' } } };
+    if (tool === 'atelier') {
+      return { title: l.scene ? `Corriger la scène ${l.scene} dans l’atelier` : 'Corriger dans l’atelier', text: `${text} Enregistrer, puis vérifier à nouveau.`,
+        btn: { label: l.scene ? `Ouvrir ${l.scene} dans l’atelier` : 'Ouvrir l’atelier', act: 'ouvrirOutil', data: l.scene ? { nom: 'atelier', scene: l.scene } : { nom: 'atelier' } } };
+    }
     if (l.ex.fix === 'livre') return { title: 'Corriger les informations du livre', text, btn: { label: 'Modifier le livre…', act: 'feuille', data: { f: 'livre' } } };
-    return { title: 'Compléter le dossier du livre', text: `${text}<br><span class="mono">${h(S.book.dir)}</span>`, btn: { label: 'Copier le chemin du dossier', act: 'copier', data: { texte: S.book.dir } } };
+    return { title: 'Compléter le dossier du livre', text: `${text}<br><span class="mono">${h(S.book.dir)}</span>`, btn: { label: 'Ouvrir le dossier du livre', act: 'ouvrirDossier' } };
   }
   return null;
 }
@@ -754,15 +804,16 @@ function detailLivre() {
     ['Icône', b.icon ? '<span class="t-ok">icon.png présent</span>' : '<span class="t-warn">icon.png absent (image carrée de 512 px ou plus, à déposer dans le dossier)</span>'],
     ['Image de partage', f.ogImage ? `<span class="mono">${h(f.ogImage)}</span>` : '<span class="muted">aucune</span>'],
     ['Mention légale', h(legal.text?.fr ? `${legal.text.fr} (${legal.year ?? '?'})` : '—')],
+    ['Carte de collection', (f.cardFields ?? []).length ? `${h(f.cardFields.map((c) => c.label?.fr || c.id).join(' · '))} <span class="muted">· intitulés des caractéristiques</span>` : '<span class="muted">aucun intitulé de caractéristique</span>'],
     ['Dossier', `<span class="mono">${h(b.dir)}</span>${b.typed ? `<br><span class="muted">saisi « ${h(b.typed)} », ramené à la casse réelle</span>` : ''}`],
   ];
   const errs = b.errors.length ? `<div class="notice err"><strong>book.json refusé</strong><ul class="errors">${b.errors.map((e) => `<li>${h(e)}</li>`).join('')}</ul></div>` : '';
   return {
     title: 'Livre',
     sub: bookUsable() ? 'Informations de book.json, écrites par le studio.' : 'book.json à corriger.',
-    actions: `${button({ label: 'Copier le chemin', act: 'copier', data: { texte: b.dir } }, 'ghost')}${button({ label: 'Modifier le livre…', act: 'feuille', data: { f: 'livre' } })}`,
+    actions: `${button({ label: 'Ouvrir le dossier', act: 'ouvrirDossier' }, 'ghost')}${button({ label: 'Copier le chemin', act: 'copier', data: { texte: b.dir } }, 'ghost')}${button({ label: 'Modifier le livre…', act: 'feuille', data: { f: 'livre' } })}`,
     body: `${errs}<dl class="facts two">${facts.map(([k, v], i) => (i === facts.length - 1 ? `<dt class="first">${k}</dt><dd class="full">${v}</dd>` : `<dt>${k}</dt><dd>${v}</dd>`)).join('')}</dl>
-      <p class="hint">Plus tard ici : carte de collection, mini-jeu, annonces (sections de book.json des lots suivants).</p>${openPanel()}`,
+      <p class="hint">Plus tard ici : mini-jeu, annonces (sections de book.json des lots suivants).</p>${openPanel()}`,
   };
 }
 
@@ -781,7 +832,7 @@ function detailScenes() {
     const blend = s.blend.present
       ? button({ label: 'Ouvrir dans Blender', act: 'ouvrirBlender', data: { scene: s.id }, why: openWhy }, 'sm')
       : button({ label: 'Créer depuis le gabarit', act: 'creerDepuisGabarit', data: { scene: s.id }, why: !bl.gabarit ? 'aucun gabarit réglé (Réglages) : rien n’est créé' : !bl.gabaritOk ? 'gabarit introuvable (Réglages)' : '' }, 'sm');
-    const atelier = s.glb.present ? button({ label: 'Régler dans l’atelier', act: 'ouvrirOutil', data: { nom: 'atelier' } }, 'sm ghost') : '';
+    const atelier = s.glb.present ? button({ label: 'Régler dans l’atelier', act: 'ouvrirOutil', data: { nom: 'atelier', scene: s.id } }, 'sm ghost') : '';
     const chk = s.check ? (s.check.errors ? `<span class="t-err">${plural(s.check.errors, 'erreur', 'erreurs')}</span>` : s.check.warnings ? `<span class="t-warn">${plural(s.check.warnings, 'point', 'points')}</span>` : '<span class="t-ok">rien à signaler</span>') : '<span class="muted">—</span>';
     return `<tr><td class="id">${h(s.id)}</td><td>${box(s.blend, 'Blender')}</td><td>${box(s.glb, 'exporté')}</td><td>${box(s.edit, 'réglée')}</td><td class="small nowrap">${chk}</td>
       <td><div class="acts">${blend}${atelier}</div></td></tr>`;
@@ -818,12 +869,14 @@ function detailVerifier(st) {
     let toolBtn = '';
     if (k === 'atelier') toolBtn = button({ label: 'Ouvrir l’atelier', act: 'ouvrirOutil', data: { nom: 'atelier' } }, 'sm');
     if (k === 'studio' && g.studio.some((l) => l.ex.fix === 'livre')) toolBtn += button({ label: 'Modifier le livre…', act: 'feuille', data: { f: 'livre' } }, 'sm');
-    if (k === 'studio' && g.studio.some((l) => l.ex.fix === 'dossier')) toolBtn += button({ label: 'Copier le chemin du dossier', act: 'copier', data: { texte: b.dir } }, 'sm ghost');
+    if (k === 'studio' && g.studio.some((l) => l.ex.fix === 'dossier')) toolBtn += button({ label: 'Ouvrir le dossier', act: 'ouvrirDossier' }, 'sm ghost');
     const items = g[k].map((l, j) => {
       const s = l.scene ? b.scenes.find((x) => x.id === l.scene) : null;
       const blend = k === 'blender' && s?.blend.present ? button({ label: 'Ouvrir dans Blender', act: 'ouvrirBlender', data: { scene: s.id }, why: !S.blender.exeOk ? 'blender.exe non réglé (Réglages)' : '' }, 'sm ghost') : '';
+      // Atelier ouvert sur la scène à corriger (CC2, point de clôture de ST4).
+      const atel = k === 'atelier' && s ? button({ label: 'Ouvrir dans l’atelier', act: 'ouvrirOutil', data: { nom: 'atelier', scene: s.id } }, 'sm ghost') : '';
       return `<li class="issue${l.level === 'error' ? '' : ' warn'}"><span class="lvl" title="${l.level === 'error' ? 'erreur' : 'à regarder'}"></span>
-        <div>${l.scene ? `<span class="scene">${h(l.scene)}</span>` : ''}${h(l.ex.say)}</div>${blend || '<span></span>'}
+        <div>${l.scene ? `<span class="scene">${h(l.scene)}</span>` : ''}${h(l.ex.say)}</div>${blend || atel || '<span></span>'}
         <details data-k="orig-${k}-${j}-${h(l.message.slice(0, 40))}"><summary>Message d’origine</summary><code>${h(l.message)}</code></details></li>`;
     }).join('');
     return `<div class="tool"><div class="tool-head"><span class="tool-ico">${TOOLS[k].ico}</span><h3>${h(head)}</h3><span class="count">${count}</span><span class="grow"></span>${toolBtn}</div>
@@ -1138,11 +1191,13 @@ function loadForm() {
   F = {
     dir: b.dir,
     base: b.file.stamp,
-    values: clone(c.form),
-    loaded: JSON.stringify(c.form),
+    values: { ...clone(c.form), cardFields: clone(c.form.cardFields ?? []) },
+    loaded: JSON.stringify({ ...c.form, cardFields: c.form.cardFields ?? [] }),
     bookIdLocked: c.bookIdOnDisk !== null,
     unlock: c.unlockThreshold,
     hasUnlock: Object.prototype.hasOwnProperty.call(c, 'unlockThreshold'),
+    // Intitulés des cartes lus sur le disque (CC2) : identifiant non modifiable (clé des valeurs dans edit.json).
+    diskCardIds: (c.form.cardFields ?? []).map((f) => f.id),
     readable: b.file.readable,
     valid: b.file.valid,
     exists: !!b.file.stamp,
@@ -1192,6 +1247,10 @@ function renderForm() {
       ${fieldText('Mention légale en français', 'legal.text.fr')}${fieldText('en anglais', 'legal.text.en')}${fieldText('en espagnol', 'legal.text.es')}
     </div>
     ${F.hasUnlock ? `<p class="hint">unlockThreshold : <code>${h(JSON.stringify(F.unlock))}</code> (mini-jeu, hors formulaire) : conservé tel quel.</p>` : ''}
+    <h3 class="section-title">Carte de collection</h3>
+    <p class="hint">Intitulés des caractéristiques, communs à toutes les cartes du livre (${CARD_FIELDS_MAX} au plus, ${CARD_LABEL_MAX} caractères au plus par langue), dans l’ordre d’affichage sur la carte. Les valeurs de chaque scène se saisissent dans l’atelier (onglet Carte). Aucun intitulé : les cartes n’ont pas de caractéristiques.</p>
+    <ol class="scene-list card-fields" id="f-cards"></ol>
+    <div class="form-actions"><button type="button" class="btn sm" data-act="ajouterIntitule" id="f-card-add">Ajouter un intitulé</button></div>
     <h3 class="section-title">Scènes</h3>
     <p class="hint">L’ordre des scènes est l’<strong>ordre de déblocage</strong> dans le livre : glisser une ligne, ou ↑ ↓. Retirer une scène laisse ses fichiers sur le disque. Renommer une scène est refusé (identifiant écrit dans le modèle par l’addon, clé de progression, QR imprimés) : retirer puis ajouter crée une autre scène.</p>
     <ol class="scene-list" id="f-scenes"></ol>
@@ -1208,8 +1267,72 @@ function renderForm() {
       <span class="small" id="f-dirty"></span>
     </div>
   </form>`;
+  renderCardFields();
   renderSceneList();
   renderFormStatus();
+}
+
+// Carte de collection (CC2) : intitulés de book.json.cardFields, validés par bookSchema comme le reste du formulaire.
+const CARD_FIELDS_MAX = 4;
+const CARD_LABEL_MAX = 14;
+/** Identifiant proposé d'après l'intitulé français (« Époque » → « epoque »), tant qu'il n'est pas saisi à la main. */
+const slugOf = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+const autoIds = new WeakSet();
+const countHtml = (v) => {
+  const n = String(v ?? '').trim().length;
+  return `<span class="${n > CARD_LABEL_MAX ? 't-err' : 'muted'}">${n}/${CARD_LABEL_MAX}</span>`;
+};
+
+function renderCardFields() {
+  const list = F.values.cardFields;
+  $('f-cards').innerHTML = list.map((f, i) => {
+    const onDisk = F.diskCardIds.includes(f.id) && !autoIds.has(f);
+    const lab = (l, name) => `<label class="field">${name} <input type="text" data-f="cardFields.${i}.label.${l}" value="${h(f.label[l])}"> <span class="small" id="f-card-n-${i}-${l}">${countHtml(f.label[l])}</span></label>`;
+    return `<li data-ci="${i}">
+      <div class="card-field-row">
+        <label class="field">Identifiant <input type="text" data-f="cardFields.${i}.id" value="${h(f.id)}" spellcheck="false" ${onDisk ? 'readonly title="identifiant d’un intitulé enregistré : clé des valeurs dans les réglages des scènes, non modifiable (retirer puis ajouter)"' : 'placeholder="ex. poids"'}></label>
+        ${lab('fr', 'Français')}${lab('en', 'Anglais')}${lab('es', 'Espagnol')}
+      </div>
+      <button type="button" class="btn sm icon" data-act="monterIntitule" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="monter">↑</button>
+      <button type="button" class="btn sm icon" data-act="descendreIntitule" data-i="${i}" ${i === list.length - 1 ? 'disabled' : ''} aria-label="descendre">↓</button>
+      <button type="button" class="btn sm danger" data-act="retirerIntitule" data-i="${i}">Retirer</button></li>`;
+  }).join('') || '<li class="muted">aucun intitulé : cardFields absent de book.json</li>';
+  const add = $('f-card-add');
+  add.disabled = list.length >= CARD_FIELDS_MAX;
+  add.title = add.disabled ? `${CARD_FIELDS_MAX} intitulés au plus` : '';
+}
+
+function addCardField() {
+  if (F.values.cardFields.length >= CARD_FIELDS_MAX) return;
+  const f = { id: '', label: { fr: '', en: '', es: '' } };
+  autoIds.add(f);
+  F.values.cardFields.push(f);
+  renderCardFields();
+  formEdited();
+  document.querySelector(`[data-f="cardFields.${F.values.cardFields.length - 1}.label.fr"]`)?.focus();
+}
+
+function moveCardField(from, to) {
+  const l = F.values.cardFields;
+  if (to < 0 || to >= l.length) return;
+  const [x] = l.splice(from, 1);
+  l.splice(to, 0, x);
+  renderCardFields();
+  formEdited();
+}
+
+/** Retirer un intitulé : confirmation si des cartes lui donnent une valeur (elles deviendraient des erreurs de vérification). */
+async function removeCardField(i) {
+  const f = F.values.cardFields[i];
+  if (!f) return;
+  const used = f.id && F.diskCardIds.includes(f.id) ? ((await post('usageIntitule', { id: f.id })).scenes ?? []) : [];
+  if (used.length) {
+    const msg = `L’intitulé « ${f.label.fr || f.id} » a une valeur sur la carte ${used.length > 1 ? `des scènes ${used.join(', ')}` : `de la scène ${used[0]}`}. Une fois book.json enregistré, ces valeurs seront signalées en erreur par la vérification, jusqu’à leur retrait dans l’atelier (onglet Carte).`;
+    if (!(await confirmer(msg, { titre: 'Retirer l’intitulé', ok: 'Retirer', danger: true }))) return;
+  }
+  F.values.cardFields.splice(i, 1);
+  renderCardFields();
+  formEdited();
 }
 
 function renderSceneList() {
@@ -1346,6 +1469,19 @@ document.addEventListener('input', (ev) => {
   const t = ev.target;
   if (F && t.dataset?.f && t.closest('#livre-form')) {
     setPath(F.values, t.dataset.f, t.value);
+    const m = /^cardFields\.(\d+)\.(id|label\.(fr|en|es))$/.exec(t.dataset.f);
+    if (m) {
+      const f = F.values.cardFields[Number(m[1])];
+      if (m[2] === 'id') autoIds.delete(f);
+      else {
+        $(`f-card-n-${m[1]}-${m[3]}`).innerHTML = countHtml(t.value);
+        if (m[3] === 'fr' && autoIds.has(f)) {
+          f.id = slugOf(t.value);
+          const idInput = document.querySelector(`[data-f="cardFields.${m[1]}.id"]`);
+          if (idInput) idInput.value = f.id;
+        }
+      }
+    }
     formEdited();
   }
 });
@@ -1750,6 +1886,12 @@ document.addEventListener('click', async (ev) => {
     const i = Number(b.dataset.i);
     return moveScene(i, a === 'monterScene' ? i - 1 : i + 1);
   }
+  if (a === 'ajouterIntitule') return addCardField();
+  if (a === 'monterIntitule' || a === 'descendreIntitule') {
+    const i = Number(b.dataset.i);
+    return moveCardField(i, a === 'monterIntitule' ? i - 1 : i + 1);
+  }
+  if (a === 'retirerIntitule') return removeCardField(Number(b.dataset.i));
   if (a === 'retirerScene') {
     F.values.scenes.splice(Number(b.dataset.i), 1);
     renderSceneList();

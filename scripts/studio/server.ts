@@ -15,7 +15,7 @@
 // Protection : écoute sur 127.0.0.1 seulement ; `Host` et `Origin` contrôlés sur toute requête (403 sinon) ; toute action
 // passe par un `POST` JSON portant l'en-tête `x-glbi-studio: 1` (une autre origine devrait passer par un préflight, refusé).
 // Chemins : repo et livre ramenés à leur casse réelle (`fs.realpathSync.native`) ; toutes les commandes partent de là.
-// Fichiers du studio : .studio/ (etat.json, pids.json, reglages.json, journaux/, book-check.json), ignoré par Git.
+// Fichiers du studio : .studio/ (etat.json, pids.json, reglages.json, journaux/, book-check.json, verifications.json : dernier book:check de chaque livre, CC2), ignoré par Git.
 // Aucun fichier de src/ n'importe ce dossier ; le contrôle de fin de build cherche le marqueur `glbi-studio-st1` dans out/.
 //
 // ST2 (spec-app-bureau.md §4, §8) : le studio est le seul outil qui écrit `book.json` (formulaire validé par `bookSchema`,
@@ -42,6 +42,7 @@ import {
   formFromBody,
   NEW_BOOK_DIRS,
   SCENE_PATTERN_SOURCE,
+  scenesUsingCardField,
   validateBook,
   withReceivedValues,
 } from './bookjson';
@@ -101,6 +102,7 @@ import {
   launch,
   launchIndependent,
   npmExec,
+  openFolder,
   npmRun,
   openBrowser,
   PidFile,
@@ -119,9 +121,12 @@ import {
   frDate,
   hostAllowed,
   outputVerdict,
+  parseCheckRecords,
+  restoredCheck,
   samePath,
   STUDIO_MARKER,
   summarizeReport,
+  withCheckRecord,
   type Leftover,
   type OutputVerdict,
 } from './rules';
@@ -146,6 +151,8 @@ const ETAT_FILE = path.join(STUDIO_DIR, 'etat.json');
 const REGLAGES_FILE = path.join(STUDIO_DIR, 'reglages.json');
 const JOURNAUX = path.join(STUDIO_DIR, 'journaux');
 const CHECK_REPORT = path.join(STUDIO_DIR, 'book-check.json');
+/** Dernier book:check de chaque livre (CC2) : repris à l'ouverture du livre, après une relance du studio. */
+const CHECKS_FILE = path.join(STUDIO_DIR, 'verifications.json');
 const UI_DIR = path.join(ROOT, 'scripts', 'studio', 'ui');
 const OUT_BOOK = path.join(ROOT, 'out', 'book.json');
 const DEV_BOOK = path.join(ROOT, 'public', 'dev-book', 'book.json');
@@ -897,8 +904,33 @@ function readCheck(dir: string, startedAt: number | null): void {
   const s = summarizeReport(raw);
   const date = startedAt ?? Date.now();
   book.info.check = s ? { ...s, date } : { date, error: 'pas de rapport (arrêt ou échec inattendu) : voir le journal de book:check' };
+  if (s) {
+    try {
+      fs.mkdirSync(STUDIO_DIR, { recursive: true });
+      fs.writeFileSync(CHECKS_FILE, `${JSON.stringify(withCheckRecord(readCheckRecords(), { dir, date, report: raw }), null, 2)}\n`);
+    } catch (e) {
+      studioJournal.note(`dernier résultat de book:check non gardé (${CHECKS_FILE}) : ${(e as Error).message}`);
+    }
+  }
   book.refresh();
   changed();
+}
+
+function readCheckRecords() {
+  try {
+    return parseCheckRecords(JSON.parse(fs.readFileSync(CHECKS_FILE, 'utf8')));
+  } catch {
+    return [];
+  }
+}
+
+/** Livre ouvert : dernier book:check gardé pour ce livre (CC2), sinon rien (« pas encore vérifié »). */
+function restoreCheck(): void {
+  if (!book) return;
+  const c = restoredCheck(readCheckRecords(), book.info.dir);
+  if (!c) return;
+  book.info.check = c;
+  book.refresh();
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -930,6 +962,7 @@ async function openBookAction(input: string, confirmed: boolean): Promise<Result
   }
   for (const n of live) await stopEntry(entries[n]);
   book = new OpenBook(r.dir, r.typed);
+  restoreCheck();
   remember(r.dir);
   relance = live.length ? live : null;
   studioJournal.note(`livre ouvert : ${r.dir}${r.typed ? ` (saisi « ${r.typed} », ramené à la casse réelle)` : ''}`);
@@ -981,10 +1014,10 @@ const isStamp = (v: unknown): v is { size: number; mtime: number } =>
 const BOOKID_REFUSED = (id: string) =>
   `changer le bookId d’un livre existant est refusé (« ${id} » : clé de progression et nom du cache, figés après publication) : créer un autre livre`;
 
-/** Objet composé du formulaire pour le livre ouvert : `unlockThreshold` et `cardFields` (CC1) du disque repris tels quels. */
+/** Objet composé du formulaire pour le livre ouvert : `unlockThreshold` du disque repris tel quel (`cardFields` : formulaire, CC2). */
 function composeForOpenBook(form: ReturnType<typeof formFromBody>) {
   const c = book!.info.file.content;
-  return composeBook(form, { unlockThreshold: c.unlockThreshold, cardFields: c.cardFields });
+  return composeBook(form, { unlockThreshold: c.unlockThreshold });
 }
 
 /** Validation en direct du formulaire (aucune écriture) : messages de `bookSchema` et refus du studio. */
@@ -1168,6 +1201,33 @@ async function openInBlender(body: Record<string, unknown>): Promise<Result> {
   }
   studioJournal.note(`Blender ouvert sur ${sc.blend}${r.pid ? ` (PID ${r.pid})` : ''} : processus indépendant, ni suivi ni arrêté par le studio`);
   return { ok: true, message: `Blender ouvert sur ${rel}` };
+}
+
+/** « Ouvrir le dossier » (CC2) : dossier du livre ouvert dans l'Explorateur de Windows (ou l'explorateur du système). */
+async function openBookFolder(): Promise<Result> {
+  if (!book) return fail('aucun livre ouvert');
+  const r = await openFolder(book.info.dir);
+  if ('error' in r) return fail(`dossier du livre non ouvert : ${r.error}`);
+  studioJournal.note(`dossier du livre ouvert dans l’explorateur : ${book.info.dir}`);
+  return { ok: true, message: 'Dossier du livre ouvert dans l’Explorateur' };
+}
+
+/**
+ * Scènes dont la carte donne une valeur à l'intitulé `body.id` (lecture seule de leur `edit.json`) : la page demande
+ * confirmation avant de retirer cet intitulé (spec-carte-collection.md §9).
+ */
+function cardFieldUsage(body: Record<string, unknown>): Result & { scenes?: string[] } {
+  if (!book) return fail('aucun livre ouvert');
+  const id = typeof body.id === 'string' ? body.id : '';
+  const edits: Record<string, unknown> = {};
+  for (const s of book.info.scenes) {
+    try {
+      edits[s.id] = JSON.parse(fs.readFileSync(path.join(book.info.dir, 'scenes', `${s.id}.edit.json`), 'utf8'));
+    } catch {
+      // absent ou illisible : sans carte
+    }
+  }
+  return { ok: true, scenes: scenesUsingCardField(edits, id) };
 }
 
 /** « Créer depuis le gabarit » : copie en `blender/<id>.blend` seulement si le fichier n'existe pas ; sans gabarit, rien. */
@@ -1436,6 +1496,10 @@ async function action(body: Record<string, unknown>): Promise<Result> {
       return createFromTemplate(body);
     case 'reglerEssai':
       return setTrialProject(body);
+    case 'ouvrirDossier':
+      return openBookFolder();
+    case 'usageIntitule':
+      return cardFieldUsage(body);
     case 'oublierRecent':
       reglages.recents = reglages.recents.filter((r) => !samePath(r, String(body.chemin ?? '')));
       writeReglages(REGLAGES_FILE, reglages);
@@ -1669,7 +1733,10 @@ async function main(): Promise<void> {
   const last = reglages.recents[0];
   if (last) {
     const r = resolveBookDir(last, ROOT);
-    if (!('error' in r)) book = new OpenBook(r.dir, null);
+    if (!('error' in r)) {
+      book = new OpenBook(r.dir, null);
+      restoreCheck();
+    }
   }
 
   server = http.createServer(handle);

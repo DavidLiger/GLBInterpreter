@@ -198,6 +198,38 @@ export function summarizeReport(raw: unknown): CheckSummary | null {
   return s;
 }
 
+/**
+ * Dernier `book:check` de chaque livre (CC2, point de clôture de ST4), gardé dans `.studio/verifications.json` : après une
+ * relance du studio, l'étape « Vérifier » reprend le dernier résultat du livre ouvert (date = début de la vérification,
+ * comme en ST4 ; un fichier modifié depuis la rend « à refaire »). Les 10 derniers livres sont gardés.
+ */
+export interface CheckRecord {
+  dir: string;
+  date: number;
+  report: unknown;
+}
+export const MAX_CHECK_RECORDS = 10;
+
+/** Liste lue (valeur illisible : vide). */
+export function parseCheckRecords(raw: unknown): CheckRecord[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (r): r is CheckRecord => !!r && typeof r === 'object' && typeof (r as CheckRecord).dir === 'string' && typeof (r as CheckRecord).date === 'number',
+  );
+}
+
+/** Liste après la vérification de `dir` : son ancien résultat remplacé, le nouveau en tête. */
+export function withCheckRecord(list: readonly CheckRecord[], rec: CheckRecord, win = process.platform === 'win32'): CheckRecord[] {
+  return [rec, ...list.filter((r) => !samePath(r.dir, rec.dir, win))].slice(0, MAX_CHECK_RECORDS);
+}
+
+/** Dernier résultat gardé pour `dir`, résumé comme à la fin d'une vérification ; `null` si aucun ou illisible. */
+export function restoredCheck(list: readonly CheckRecord[], dir: string, win = process.platform === 'win32'): (CheckSummary & { date: number }) | null {
+  const r = list.find((x) => samePath(x.dir, dir, win));
+  const s = r ? summarizeReport(r.report) : null;
+  return r && s ? { ...s, date: r.date } : null;
+}
+
 // ---------------------------------------------------------------------------------------------------------
 // Restes d'un studio tué (correctif ST1) : descendants vivants des PID notés dans .studio/pids.json
 // ---------------------------------------------------------------------------------------------------------

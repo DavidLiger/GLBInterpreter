@@ -317,6 +317,10 @@ dialog.sheet.wide[open] { width: min(1240px, 96vw); height: 88vh; }
 .scene-list li.drag-over { background: var(--parchment); outline: 2px solid var(--accent-focus); outline-offset: -2px; }
 .scene-list .grip { cursor: grab; color: var(--ink-48); user-select: none; }
 .scene-list .sid { flex: 1; font-weight: 600; }
+/* Intitulés des cartes de collection (CC2) : identifiant et trois langues sur une ligne, compteur sous chaque intitulé. */
+.card-fields li { align-items: flex-start; padding-top: var(--s-sm); padding-bottom: var(--s-sm); }
+.card-field-row { flex: 1; min-width: 0; display: grid; grid-template-columns: 120px repeat(3, minmax(0, 1fr)); gap: var(--s-sm); }
+.card-field-row .small { font-weight: 400; }
 .notice { padding: var(--s-md) var(--s-base); border-radius: var(--r-md); background: var(--parchment); display: flex; flex-direction: column; gap: var(--s-sm); }
 .notice.warn { color: var(--ink); border-left: 3px solid var(--warning); }
 .notice.err { color: var(--ink); border-left: 3px solid var(--danger); }

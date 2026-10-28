@@ -17,7 +17,7 @@ export function readerBookOf(book: BookResponse): ReaderBook {
       title && typeof title.fr === "string" && typeof title.en === "string" && typeof title.es === "string"
         ? { fr: title.fr, en: title.en, es: title.es }
         : undefined,
-    // Carte de collection (CC1) : intitulés lus pour l'aperçu de CC2 ; l'atelier ne montre pas encore la carte.
+    // Carte de collection : intitulés lus pour l'onglet Carte (aperçu, CC2) ; le lecteur de l'atelier ne montre pas la carte.
     cardFields: parseCardFields(b?.cardFields),
   };
 }

@@ -2,7 +2,8 @@
 // Décision du 15/10 (option B) : seuls les champs complets sont enregistrés et envoyés à l'aperçu ; un champ commencé mais
 // incomplet (traduction manquante, quiz ou crédit inachevé) reste dans la page, est signalé en tête du Rapport et laisse
 // l'indicateur « modifié, non enregistré » allumé. Le fichier écrit est donc toujours valide pour `editLayerSchema`.
-import { EDIT_LAYER_VERSION, LANGUAGES, type QuizModule } from "@/schema/glbi";
+import { CARD_LIMITS, cardFieldIdSchema, EDIT_LAYER_VERSION, imagePathSchema, LANGUAGES, type QuizModule } from "@/schema/glbi";
+import type { ReaderCard } from "@/components/card/cardModel";
 import { cameraFormFromRaw, cameraLayerOf, type CameraForm } from "./cameraForm";
 
 export type Lang = (typeof LANGUAGES)[number];
@@ -40,6 +41,24 @@ export interface QuizForm {
   explanation: L3;
 }
 
+/**
+ * Carte de collection (`modules.card`, onglet Carte, CC2, spec-carte-collection.md §8). Règle d'A3 : seul un champ complet
+ * (3 langues) et valide (longueur bornée, `CARD_LIMITS`) est écrit ; un champ incomplet ou trop long reste dans la page et
+ * figure dans « Saisie incomplète », sans bloquer le reste de la scène.
+ */
+export interface CardForm {
+  subtitle: L3;
+  /** Illustration (`images/…`) ; vide : image de chargement, sinon icône du livre. */
+  image: string;
+  /**
+   * Valeur de chaque caractéristique, par `id` d'intitulé, dans l'ordre du fichier ; une valeur saisie pour un intitulé
+   * absent du fichier est ajoutée à la fin. Les valeurs d'un intitulé absent de `book.json.cardFields` (orphelines) sont
+   * gardées telles quelles (erreur du build, à retirer dans l'onglet).
+   */
+  fields: [string, L3][];
+  text: L3;
+}
+
 export interface EditForm {
   name: L3;
   loaderImage: string;
@@ -49,17 +68,13 @@ export interface EditForm {
   actions: [string, ActionForm][];
   ambientSound: string;
   quiz: QuizForm;
-  /**
-   * Carte de collection (`modules.card`, CC1) : pas d'onglet avant CC2, valeur du fichier gardée telle quelle à
-   * l'enregistrement (sans elle, l'atelier, qui reconstruit `edit.json` depuis le formulaire, l'effacerait, comme les
-   * `events` avant AC3). `undefined` : pas de carte.
-   */
-  card: unknown;
+  /** Carte de collection (onglet Carte, CC2 ; avant CC2, valeur du fichier recopiée telle quelle). */
+  card: CardForm;
   credits: CreditForm[];
 }
 
 /** Onglets d'édition (et Rapport, Diagnostic). */
-export type TabId = "scene" | "camera" | "actions" | "ambiance" | "quiz" | "credits" | "rapport" | "diagnostic";
+export type TabId = "scene" | "camera" | "actions" | "ambiance" | "quiz" | "card" | "credits" | "rapport" | "diagnostic";
 
 /** Champ du formulaire : onglet et identifiant (`data-field`) pour les liens du Rapport. */
 export interface FieldRef {
@@ -81,6 +96,17 @@ export const emptyAction = (): ActionForm => ({ label: emptyL3(), icon: "", soun
 /** Entrées d'événements lues dans `actions.<id>.events` (objet indexé par identifiant). */
 const eventsOf = (v: unknown): [string, EventForm][] =>
   isObj(v) ? Object.entries(v).map(([id, e]) => [id, { sound: isObj(e) ? str(e.sound) : "" }]) : [];
+export const emptyCard = (): CardForm => ({ subtitle: emptyL3(), image: "", fields: [], text: emptyL3() });
+/** Carte lue dans `modules.card` (lecture tolérante). */
+function cardOf(v: unknown): CardForm {
+  if (!isObj(v)) return emptyCard();
+  return {
+    subtitle: l3Of(v.subtitle),
+    image: str(v.image),
+    fields: isObj(v.fields) ? Object.entries(v.fields).map(([id, x]) => [id, l3Of(x)]) : [],
+    text: l3Of(v.text),
+  };
+}
 export const emptyQuiz = (): QuizForm => ({ question: emptyL3(), choices: [emptyL3(), emptyL3(), emptyL3()], correct: null, explanation: emptyL3() });
 
 /** Formulaire depuis le fichier lu (lecture tolérante : un fichier refusé par son schéma est repris champ par champ). */
@@ -106,7 +132,7 @@ export function formFromEdit(raw: unknown): EditForm {
     quiz: quiz
       ? { question: l3Of(quiz.question), choices, correct: correctIdx >= 0 && correctIdx < 3 ? correctIdx : null, explanation: l3Of(quiz.explanation) }
       : emptyQuiz(),
-    card: modules.card,
+    card: cardOf(modules.card),
     credits: credits.filter(isObj).map((c) => ({
       asset: str(c.asset),
       title: str(c.title),
@@ -126,6 +152,17 @@ function l3State(t: L3): { state: "complete" | "empty" | "partial"; missing: str
   return { state: missing.length === LANGUAGES.length ? "empty" : "partial", missing: missing.map((l) => LANG_NAMES[l]) };
 }
 const trimmed = (t: L3): L3 => ({ fr: t.fr.trim(), en: t.en.trim(), es: t.es.trim() });
+
+/** Longueur comptée comme le contrat (`boundedText` : texte rogné, caractères UTF-16). */
+export const textLength = (s: string) => s.trim().length;
+/** Langues dont le texte dépasse `max` caractères, avec leur longueur (« ES 263 »). */
+export function tooLong(t: L3, max: number): string[] {
+  return LANGUAGES.filter((l) => textLength(t[l]) > max).map((l) => `${LANG_NAMES[l]} ${textLength(t[l])}`);
+}
+/** Une L3 a été commencée (au moins une langue remplie). */
+export const l3Started = (t: L3) => LANGUAGES.some((l) => t[l].trim());
+/** Carte commencée : un texte ou l'illustration renseigné. */
+export const cardStarted = (c: CardForm) => !!c.image || l3Started(c.subtitle) || l3Started(c.text) || c.fields.some(([, v]) => l3Started(v));
 
 /**
  * Aperçu du quiz (A5, décision de David du 17/10, option A) : le quiz est montré dès qu'il est complet dans la langue
@@ -214,6 +251,38 @@ export function layerFromForm(form: EditForm): { layer: Obj; incomplete: Incompl
     credits.push({ asset: c.asset, title: c.title.trim(), author: c.author.trim(), license: c.license.trim(), source: c.source.trim() || undefined });
   }
 
+  // Carte de collection (CC2) : chaque texte n'est écrit que complet et assez court ; illustration et identifiants
+  // d'intitulés refusés par le contrat ne sont pas écrits (saisie à la main) : le reste de la scène s'enregistre.
+  const c = form.card;
+  const bounded = (t: L3, max: number, ref: FieldRef, what: string): L3 | undefined => {
+    const long = tooLong(t, max);
+    const v = text(t, ref, what);
+    if (long.length) {
+      incomplete.push({ ...ref, message: `${what} trop long, non enregistré : ${long.join(", ")} caractères (${max} au plus)` });
+      return undefined;
+    }
+    return v;
+  };
+  const cardFields: Obj = {};
+  for (const [id, v] of c.fields) {
+    if (!cardFieldIdSchema.safeParse(id).success) {
+      if (l3Started(v)) incomplete.push({ tab: "card", field: `card.field.${id}`, message: `carte : identifiant d'intitulé « ${id} » refusé (lettres, chiffres, _ et -), non enregistré` });
+      continue;
+    }
+    cardFields[id] = bounded(v, CARD_LIMITS.fieldValue, { tab: "card", field: `card.field.${id}` }, `carte : valeur « ${id} »`);
+  }
+  let cardImage: string | undefined = c.image || undefined;
+  if (cardImage && !imagePathSchema.safeParse(cardImage).success) {
+    incomplete.push({ tab: "card", field: "card.image", message: `carte : illustration « ${cardImage} » refusée par le contrat, non enregistrée` });
+    cardImage = undefined;
+  }
+  const card = {
+    subtitle: bounded(c.subtitle, CARD_LIMITS.subtitle, { tab: "card", field: "card.subtitle" }, "carte : sous-titre"),
+    image: cardImage,
+    fields: cardFields,
+    text: bounded(c.text, CARD_LIMITS.text, { tab: "card", field: "card.text" }, "carte : paragraphe"),
+  };
+
   const cam = cameraLayerOf(form.camera);
   for (const i of cam.issues) incomplete.push({ tab: "camera", field: `camera.${i.field}`, message: i.message });
 
@@ -228,7 +297,7 @@ export function layerFromForm(form: EditForm): { layer: Obj; incomplete: Incompl
       animations: { actions },
       audio: { ambientSound: form.ambientSound || undefined },
       quiz,
-      card: form.card,
+      card,
       credits: { assets: credits },
     },
   };
@@ -249,9 +318,34 @@ export function usedAssets(form: EditForm, glbIds: readonly string[], glbEvents:
   const inGlb = form.actions.filter(([id]) => glbIds.includes(id));
   for (const [, a] of inGlb) add(a.icon, "image");
   // Illustration de la carte de collection (CC1), comme au build : image utilisée, crédit facultatif.
-  if (isObj(form.card)) add(str(form.card.image), "image");
+  add(form.card.image, "image");
   for (const [, a] of inGlb) add(a.sound, "son");
   for (const [id, a] of inGlb) for (const ev of glbEvents[id] ?? []) add(a.events.find(([k]) => k === ev)?.[1].sound ?? "", "son");
   add(form.ambientSound, "son");
   return out;
+}
+
+/**
+ * Aperçu de la carte (CC2, règle d'A5) : montrée dès que le paragraphe est rempli dans la langue d'aperçu ; sous-titre et
+ * valeurs remplis dans cette langue y figurent (« — » pour une valeur vide, comme dans le livre). `otherLangs` : langues
+ * où un texte commencé manque (non enregistré tant qu'il n'est pas traduit) ; `card` : `null` sans paragraphe ici.
+ * `image` : illustration résolue (carte, sinon image de chargement, sinon icône du livre), comme le lecteur.
+ */
+export function cardPreviewOf(c: CardForm, lang: Lang, loaderImage: string): { card: ReaderCard | null; started: boolean; otherLangs: string[] } {
+  const started = cardStarted(c);
+  const texts = [c.subtitle, c.text, ...c.fields.map(([, v]) => v)].filter(l3Started);
+  const otherLangs = LANGUAGES.filter((l) => l !== lang && texts.some((t) => !t[l].trim())).map((l) => LANG_NAMES[l]);
+  if (!started || !c.text[lang].trim()) return { card: null, started, otherLangs };
+  const fields: ReaderCard["fields"] = {};
+  for (const [id, v] of c.fields) if (v[lang].trim()) fields[id] = trimmed(v);
+  return {
+    card: {
+      ...(c.subtitle[lang].trim() ? { subtitle: trimmed(c.subtitle) } : {}),
+      image: c.image || loaderImage || "icon.png",
+      fields,
+      text: trimmed(c.text),
+    },
+    started,
+    otherLangs,
+  };
 }

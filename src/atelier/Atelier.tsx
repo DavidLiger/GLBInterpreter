@@ -16,11 +16,12 @@ import DiagnosticTab from "./DiagnosticTab";
 import CameraTab from "./CameraTab";
 import { applyFramingInPlace, framingOf, type CameraForm } from "./cameraForm";
 import { ActionsTab, AmbianceTab, assetOptions, CreditsTab, QuizTab, SceneTab } from "./EditTabs";
+import { CardTab, CardTitleNotice, type BookCardInfo } from "./CardTab";
 import { formatEditLayer, glbActionIds, glbActionsOf, glbEventIds } from "./editLayerFile";
-import { formFromEdit, layerFromForm, usedAssets, type EditForm, type FieldRef, type Lang, type TabId } from "./editModel";
+import { cardStarted, formFromEdit, layerFromForm, usedAssets, type EditForm, type FieldRef, type Lang, type TabId } from "./editModel";
 import ReportTab from "./ReportTab";
 import { fieldOfMessage } from "./reportLinks";
-import { readerSceneOf, sceneFiles } from "./readerFromScene";
+import { readerBookOf, readerSceneOf, sceneFiles } from "./readerFromScene";
 
 const LANGS: Lang[] = ["fr", "en", "es"];
 /** Clé de langue du lecteur (TranslationContext) : langue d'aperçu gardée d'une session à l'autre. */
@@ -34,6 +35,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: "actions", label: "Actions" },
   { id: "ambiance", label: "Ambiance" },
   { id: "quiz", label: "Quiz" },
+  { id: "card", label: "Carte" },
   { id: "credits", label: "Crédits" },
   { id: "rapport", label: "Rapport" },
   { id: "diagnostic", label: "Diagnostic" },
@@ -375,6 +377,13 @@ export default function Atelier() {
   const assets = useMemo(() => assetOptions(book?.assets ?? {}), [book?.assets]);
   const used = useMemo(() => (form ? usedAssets(form, glbIds, glbEvents) : []), [form, glbIds, glbEvents]);
   const lastChange = book?.lastChange;
+  // Carte de collection (CC2) : intitulés du livre, rang de la scène dans book.json, titre du livre (pied de la carte).
+  const cardInfo = useMemo<BookCardInfo>(() => {
+    const rb = book ? readerBookOf(book) : null;
+    const ids = (book?.scenes ?? []).filter((s) => s.inBook).map((s) => s.id);
+    const i = sceneId ? ids.indexOf(sceneId) : -1;
+    return { fields: rb?.cardFields ?? [], number: i + 1, total: ids.length, bookTitle: rb?.title };
+  }, [book, sceneId]);
   const modelCredits = useMemo(() => {
     const seen = new Map<string, ModelCredit>();
     for (const { credit: c } of scene?.diagnostic.srcCredits ?? []) {
@@ -534,7 +543,18 @@ export default function Atelier() {
             </div>
           )}
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
-            {tab === "scene" && editTab(form && <SceneTab form={form} setForm={setForm} assets={assets} onShowLoader={() => setReload((r) => r + 1)} />)}
+            {tab === "scene" &&
+              editTab(
+                form && (
+                  <SceneTab
+                    form={form}
+                    setForm={setForm}
+                    assets={assets}
+                    onShowLoader={() => setReload((r) => r + 1)}
+                    nameNotice={(cardStarted(form.card) || cardInfo.fields.length > 0) && <CardTitleNotice name={form.name} number={cardInfo.number} total={cardInfo.total} />}
+                  />
+                ),
+              )}
             {tab === "camera" &&
               editTab(
                 form && (
@@ -555,6 +575,7 @@ export default function Atelier() {
             {tab === "actions" && editTab(form && <ActionsTab form={form} setForm={setForm} glbActions={glbActions} assets={assets} />)}
             {tab === "ambiance" && editTab(form && <AmbianceTab form={form} setForm={setForm} assets={assets} />)}
             {tab === "quiz" && editTab(form && <QuizTab form={form} setForm={setForm} lang={lang} sceneId={scene?.id ?? ""} />)}
+            {tab === "card" && editTab(form && <CardTab form={form} setForm={setForm} assets={assets} lang={lang} sceneId={scene?.id ?? ""} info={cardInfo} />)}
             {tab === "credits" && editTab(form && <CreditsTab form={form} setForm={setForm} used={used} modelCredits={modelCredits} />)}
             {book && tab === "rapport" && (
               <ReportTab report={report} summary={summary} scene={shown} incomplete={editable ? incomplete : []} previewing={!!activePreview} linkOf={linkOf} onGoto={goto} />

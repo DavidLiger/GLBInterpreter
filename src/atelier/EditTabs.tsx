@@ -50,10 +50,10 @@ export function assetOptions(assets: Record<string, string[]>): AssetOptions {
 // Briques
 // ---------------------------------------------------------------------------------------------------------
 
-const input = "w-full rounded bg-neutral-800 px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-sky-600";
-const small = "rounded bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700 disabled:opacity-40";
+export const input = "w-full rounded bg-neutral-800 px-2 py-1 text-sm outline-none focus:ring-1 focus:ring-sky-600";
+export const small = "rounded bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700 disabled:opacity-40";
 
-function Section({ title, children, hint }: { title: string; hint?: string; children: React.ReactNode }) {
+export function Section({ title, children, hint }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
     <section className="flex flex-col gap-2">
       <h3 className="font-semibold">{title}</h3>
@@ -63,28 +63,55 @@ function Section({ title, children, hint }: { title: string; hint?: string; chil
   );
 }
 
-/** Texte en trois langues ; état « incomplet » visible quand une langue seulement manque. */
-function L3Input({ field, label, value, onChange, multiline }: { field: string; label?: string; value: L3; onChange: (v: L3) => void; multiline?: boolean }) {
+/**
+ * Texte en trois langues ; état « incomplet » visible quand une langue seulement manque. `max` (carte de collection, CC2) :
+ * compteur de caractères par langue (texte rogné, comme le contrat), au rouge au-delà, « trop long, non enregistré ».
+ */
+export function L3Input({
+  field,
+  label,
+  value,
+  onChange,
+  multiline,
+  max,
+}: {
+  field: string;
+  label?: string;
+  value: L3;
+  onChange: (v: L3) => void;
+  multiline?: boolean;
+  max?: number;
+}) {
   const filled = LANGUAGES.filter((l) => value[l].trim()).length;
   const partial = filled > 0 && filled < LANGUAGES.length;
+  const over = max !== undefined && LANGUAGES.some((l) => value[l].trim().length > max);
   return (
-    <div data-field={field} className={`flex flex-col gap-1 rounded p-1 ${partial ? "ring-1 ring-amber-600" : ""}`}>
-      {label && (
+    <div data-field={field} className={`flex flex-col gap-1 rounded p-1 ${over ? "ring-1 ring-red-600" : partial ? "ring-1 ring-amber-600" : ""}`}>
+      {(label || partial || over) && (
         <span className="text-xs text-neutral-400">
           {label}
           {partial && <span className="ml-2 text-amber-400">incomplet, non enregistré</span>}
+          {over && <span className="ml-2 text-red-400">trop long, non enregistré</span>}
         </span>
       )}
-      {LANGUAGES.map((l) => (
-        <label key={l} className="flex items-start gap-2">
-          <span className="w-6 pt-1 text-xs uppercase text-neutral-500">{l}</span>
-          {multiline ? (
-            <textarea className={`${input} min-h-[3rem]`} value={value[l]} onChange={(e) => onChange({ ...value, [l]: e.target.value })} />
-          ) : (
-            <input className={input} value={value[l]} onChange={(e) => onChange({ ...value, [l]: e.target.value })} />
-          )}
-        </label>
-      ))}
+      {LANGUAGES.map((l) => {
+        const n = value[l].trim().length;
+        return (
+          <label key={l} className="flex items-start gap-2">
+            <span className="w-6 pt-1 text-xs uppercase text-neutral-500">{l}</span>
+            {multiline ? (
+              <textarea className={`${input} min-h-[3rem]`} value={value[l]} onChange={(e) => onChange({ ...value, [l]: e.target.value })} />
+            ) : (
+              <input className={input} value={value[l]} onChange={(e) => onChange({ ...value, [l]: e.target.value })} />
+            )}
+            {max !== undefined && (
+              <span className={`w-14 shrink-0 pt-1 text-right text-xs tabular-nums ${n > max ? "font-semibold text-red-400" : "text-neutral-500"}`} data-count={l}>
+                {n}/{max}
+              </span>
+            )}
+          </label>
+        );
+      })}
     </div>
   );
 }
@@ -119,7 +146,7 @@ function ListenButton({ src }: { src: string }) {
   );
 }
 
-function AssetSelect({
+export function AssetSelect({
   field,
   value,
   options,
@@ -163,11 +190,25 @@ function AssetSelect({
 // Onglets
 // ---------------------------------------------------------------------------------------------------------
 
-export function SceneTab({ form, setForm, assets, onShowLoader }: { form: EditForm; setForm: SetForm; assets: AssetOptions; onShowLoader: () => void }) {
+export function SceneTab({
+  form,
+  setForm,
+  assets,
+  onShowLoader,
+  nameNotice,
+}: {
+  form: EditForm;
+  setForm: SetForm;
+  assets: AssetOptions;
+  onShowLoader: () => void;
+  /** Avertissement sous le nom (CC2 : nom coupé sur la carte de collection). */
+  nameNotice?: React.ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-5 text-sm">
-      <Section title="Nom de la scène" hint="Affiché sur l'écran de chargement (3 langues obligatoires).">
+      <Section title="Nom de la scène" hint="Affiché sur l'écran de chargement et en titre de la carte de collection (3 langues obligatoires).">
         <L3Input field="scene.name" value={form.name} onChange={(name) => setForm((f) => ({ ...f, name }))} />
+        {nameNotice}
       </Section>
       <Section title="Image de chargement" hint="Images présentes dans le dossier du livre.">
         <AssetSelect field="scene.loaderImage" kind="image" value={form.loaderImage} options={assets.images} onChange={(loaderImage) => setForm((f) => ({ ...f, loaderImage }))} />
@@ -464,7 +505,7 @@ export function CreditsTab({
 }: {
   form: EditForm;
   setForm: SetForm;
-  /** Assets utilisés par la scène (image de chargement, icônes, sons). */
+  /** Assets utilisés par la scène (image de chargement, icônes, illustration de la carte, sons). */
   used: { asset: string; kind: "image" | "son" }[];
   /** Crédits `src_*` du GLB, dédoublonnés (lecture seule). */
   modelCredits: ModelCredit[];

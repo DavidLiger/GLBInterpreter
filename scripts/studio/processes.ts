@@ -451,6 +451,28 @@ export function openBrowser(url: string): void {
   }
 }
 
+/**
+ * Dossier ouvert dans l'explorateur du système (CC2, point de clôture de ST4) : Windows `explorer.exe <dossier>` (il confie
+ * la fenêtre à l'explorateur déjà lancé et se termine : rien n'est suivi par le studio), macOS `open`, ailleurs `xdg-open`.
+ * Argument passé en tableau, sans shell (chemins avec espaces). `explorer.exe` sort avec le code 1 même quand il réussit :
+ * seul l'échec du lancement compte.
+ */
+export function openFolder(dir: string): Promise<{ ok: true } | { error: string }> {
+  const [cmd, args] = IS_WIN ? ['explorer.exe', [dir]] : process.platform === 'darwin' ? ['open', [dir]] : ['xdg-open', [dir]];
+  return new Promise((resolve) => {
+    try {
+      const p = spawn(cmd, args as string[], { stdio: 'ignore', detached: true, windowsHide: false });
+      p.once('error', (e) => resolve({ error: e.message }));
+      p.once('spawn', () => {
+        p.unref();
+        resolve({ ok: true });
+      });
+    } catch (e) {
+      resolve({ error: (e as Error).message });
+    }
+  });
+}
+
 // ---------------------------------------------------------------------------------------------------------
 // Blender (ST2, §8) : processus indépendant
 // ---------------------------------------------------------------------------------------------------------

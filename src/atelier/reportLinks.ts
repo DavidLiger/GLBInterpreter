@@ -1,7 +1,8 @@
 // Rapport → champ (A3, spec-atelier-glbi.md §10.7) : chaque ligne du rapport qui concerne la couche éditoriale de la scène
 // affichée mène au champ du formulaire concerné. Reconnaissance par les textes de `book:check` (scripts/book-check.ts,
 // src/schema/merge.ts), qui sont le contrat d'affichage ; une ligne non reconnue reste sans lien. AC3 : événements (sans
-// son, orphelin, instant hors du clip, chemins `…actions.<id>.events.<événement>…`) et position de caméra (DP-19).
+// son, orphelin, instant hors du clip, chemins `…actions.<id>.events.<événement>…`) et position de caméra (DP-19). CC2 : carte
+// de collection (intitulé absent de book.json, caractéristique sans valeur, carte sans paragraphe, chemins `modules.card…`).
 import { CAMERA_NUM_KEYS } from "./cameraForm";
 import type { EditForm, FieldRef } from "./editModel";
 
@@ -31,6 +32,12 @@ function fieldOfEditPath(p: string[], form: EditForm, glbEvents: GlbEvents = {})
     case "quiz":
       if (p[2] === "choices") return { tab: "quiz", field: p[3] !== undefined ? `quiz.choice.${p[3]}` : "quiz.correct" };
       return { tab: "quiz", field: p[2] === "explanation" ? "quiz.explanation" : "quiz.question" };
+    case "card": {
+      // Carte de collection (CC2) : `modules.card.<subtitle|image|text>…`, `modules.card.fields.<id>.<langue>`.
+      if (p[2] === "fields") return { tab: "card", field: p[3] ? `card.field.${p[3]}` : "card.fields" };
+      if (p[2] === "subtitle" || p[2] === "image" || p[2] === "text") return { tab: "card", field: `card.${p[2]}` };
+      return { tab: "card", field: "card.text" };
+    }
     case "credits": {
       const c = p[3] !== undefined ? form.credits[Number(p[3])] : undefined;
       return { tab: "credits", field: c ? `credit.${c.asset}` : "credits" };
@@ -47,7 +54,7 @@ function fieldOfEditPath(p: string[], form: EditForm, glbEvents: GlbEvents = {})
   }
 }
 
-/** Champ qui utilise un asset (image de chargement, icône, son d'action, ambiance), sinon son crédit. */
+/** Champ qui utilise un asset (image de chargement, icône, son d'action, ambiance, illustration de la carte), sinon son crédit. */
 function fieldOfAsset(asset: string, form: EditForm): FieldRef {
   if (form.loaderImage === asset) return { tab: "scene", field: "scene.loaderImage" };
   for (const [id, a] of form.actions) {
@@ -57,6 +64,7 @@ function fieldOfAsset(asset: string, form: EditForm): FieldRef {
     if (ev) return { tab: "actions", field: `event.${id}.${ev[0]}` };
   }
   if (form.ambientSound === asset) return { tab: "ambiance", field: "audio.ambientSound" };
+  if (form.card.image === asset) return { tab: "card", field: "card.image" };
   return { tab: "credits", field: `credit.${asset}` };
 }
 
@@ -72,6 +80,10 @@ export function fieldOfMessage(message: string, sceneId: string, form: EditForm,
   if ((m = /événement « (.+?) » de l'action « (.+?) » sans son/.exec(message))) return eventField(m[2], m[1], glbEvents);
   if ((m = /action « (.+?) » : événement « (.+?) » (?:absent du GLB|à [\d,.]+ s, clip de)/.exec(message))) return eventField(m[1], m[2], glbEvents);
   if ((m = /action « (.+?) » : (?:position de caméra|cameraPosition) « /.exec(message))) return { tab: "actions", field: `action.${m[1]}.cameraPosition` };
+  // Carte de collection (CC1, CC2) : avant le motif des chemins de edit.json (l'intitulé absent y figure après le chemin).
+  if ((m = /modules\.card\.fields : intitulé « (.+?) » absent de book\.json/.exec(message))) return { tab: "card", field: `card.field.${m[1]}` };
+  if ((m = /carte : caractéristique « (.+?) » sans valeur/.exec(message))) return { tab: "card", field: `card.field.${m[1]}` };
+  if (/carte sans paragraphe \(modules\.card\.text\)/.test(message)) return { tab: "card", field: "card.text" };
   if ((m = /action « (.+?) » sans libellé/.exec(message))) return { tab: "actions", field: `action.${m[1]}.label` };
   if (/nom de la scène \(scene\.name\) absent/.test(message)) return { tab: "scene", field: "scene.name" };
   if ((m = /son « (.+?) » sans entrée dans modules\.credits\.assets/.exec(message))) return { tab: "credits", field: `credit.${m[1]}` };

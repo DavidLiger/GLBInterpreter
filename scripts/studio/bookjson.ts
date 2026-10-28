@@ -6,8 +6,8 @@
 // - Forme écrite : clés dans l'ordre de `bookSchema` (objets imbriqués compris), indentation 2, UTF-8 sans échappement des
 //   accents (`JSON.stringify`), retour à la ligne final, champs facultatifs vides omis.
 // - Formulaire : valeurs saisies (textes), composées en objet puis validées par `bookSchema` ; `unlockThreshold` (sujet 5)
-//   et `cardFields` (intitulés des cartes de collection, CC1 ; section du formulaire en CC2) ne sont pas dans le
-//   formulaire : leur valeur sur le disque est reprise telle quelle.
+//   n'est pas dans le formulaire : sa valeur sur le disque est reprise telle quelle. `cardFields` (intitulés des cartes de
+//   collection) : section « Carte de collection » du formulaire depuis CC2 (CC1 le reprenait tel quel).
 // - Lecture d'un `book.json` illisible ou invalide : ce qui est lisible préremplit le formulaire.
 import { z } from 'zod';
 import { bookSchema, formatIssues, LANGUAGES, SCENE_ID_PATTERN, type Book } from '../../src/schema/glbi';
@@ -47,6 +47,12 @@ export interface Texts {
   es: string;
 }
 
+/** Intitulé d'une caractéristique des cartes de collection (`book.json.cardFields[]`, CC2). */
+export interface CardFieldForm {
+  id: string;
+  label: Texts;
+}
+
 /** Valeurs du formulaire (textes tels que saisis ; l'année aussi, convertie à la composition). */
 export interface BookForm {
   bookId: string;
@@ -56,6 +62,8 @@ export interface BookForm {
   /** `""` : pas d'image de partage (champ omis). */
   ogImage: string;
   legal: { year: string; text: Texts };
+  /** Intitulés des cartes de collection, dans l'ordre d'affichage ; `[]` : `cardFields` omis (livre sans cartes). */
+  cardFields: CardFieldForm[];
 }
 
 /** Champs lisibles d'un `book.json` (pour préremplir le formulaire) et champ hors formulaire conservé. */
@@ -63,8 +71,6 @@ export interface ReadableBook {
   form: BookForm;
   /** `unlockThreshold` lu sur le disque (valeur brute, même invalide), repris tel quel à l'écriture. */
   unlockThreshold?: unknown;
-  /** `cardFields` lu sur le disque (CC1, valeur brute), repris tel quel à l'écriture jusqu'à la section du studio (CC2). */
-  cardFields?: unknown;
   /** `bookId` lisible sur le disque : celui d'un livre existant, non modifiable. */
   bookIdOnDisk: string | null;
 }
@@ -80,6 +86,7 @@ export function emptyForm(year: number): BookForm {
     origin: '',
     ogImage: '',
     legal: { year: String(year), text: { fr: text, en: text, es: text } },
+    cardFields: [],
   };
 }
 
@@ -88,6 +95,9 @@ const texts = (v: unknown): Texts => {
   const o = isObj(v) ? v : {};
   return { fr: str(o.fr), en: str(o.en), es: str(o.es) };
 };
+/** Intitulés lus (lecture tolérante : entrée non objet ignorée, champ mal typé vide ; refus éventuels par `bookSchema`). */
+const cardFieldsOf = (v: unknown): CardFieldForm[] =>
+  Array.isArray(v) ? v.filter(isObj).map((f) => ({ id: str(f.id), label: texts(f.label) })) : [];
 
 /**
  * Ce qui est lisible d'un `book.json` (`raw` : contenu analysé, `undefined` si illisible). `legal` absent ou illisible :
@@ -105,9 +115,9 @@ export function readableBook(raw: unknown, year: number): ReadableBook {
     const y = raw.legal.year;
     f.legal = { year: typeof y === 'number' || typeof y === 'string' ? String(y) : '', text: texts(raw.legal.text) };
   }
+  f.cardFields = cardFieldsOf(raw.cardFields);
   const r: ReadableBook = { form: f, bookIdOnDisk: typeof raw.bookId === 'string' && raw.bookId !== '' ? raw.bookId : null };
   if ('unlockThreshold' in raw) r.unlockThreshold = raw.unlockThreshold;
-  if ('cardFields' in raw) r.cardFields = raw.cardFields;
   return r;
 }
 
@@ -122,11 +132,12 @@ export function formFromBody(v: unknown): BookForm {
     origin: str(o.origin),
     ogImage: str(o.ogImage),
     legal: { year: typeof legal.year === 'number' ? String(legal.year) : str(legal.year), text: texts(legal.text) },
+    cardFields: cardFieldsOf(o.cardFields),
   };
 }
 
 /** Objet `book.json` composé du formulaire, avant validation. `languages` : celles du Zod (affichées, non modifiables). */
-export function composeBook(form: BookForm, keep: { unlockThreshold?: unknown; cardFields?: unknown } = {}): Obj {
+export function composeBook(form: BookForm, keep: { unlockThreshold?: unknown } = {}): Obj {
   const y = form.legal.year.trim();
   const book: Obj = {
     bookId: form.bookId.trim(),
@@ -137,7 +148,8 @@ export function composeBook(form: BookForm, keep: { unlockThreshold?: unknown; c
     legal: { year: /^-?\d+$/.test(y) ? Number(y) : y, text: { ...form.legal.text } },
   };
   if (form.ogImage.trim()) book.ogImage = form.ogImage.trim();
-  if (keep.cardFields !== undefined) book.cardFields = keep.cardFields;
+  // Intitulés des cartes (CC2) : aucun intitulé = `cardFields` omis (le contrat en exige au moins un s'il est présent).
+  if (form.cardFields.length) book.cardFields = form.cardFields.map((f) => ({ id: f.id.trim(), label: { ...f.label } }));
   if (keep.unlockThreshold !== undefined) book.unlockThreshold = keep.unlockThreshold;
   return book;
 }
@@ -169,6 +181,20 @@ export function withReceivedValues(errors: string[], obj: unknown): string[] {
     for (const k of m[1].split('.')) v = isObj(v) || Array.isArray(v) ? (v as Record<string, unknown>)[k] : undefined;
     return v === undefined ? e : `${e} (valeur reçue : ${visibleValue(v)})`;
   });
+}
+
+/**
+ * Scènes dont la carte donne une valeur à l'intitulé `id` (`modules.card.fields.<id>` de leur `edit.json`, lu tel quel ;
+ * fichier illisible ignoré) : retirer cet intitulé de `book.json` en fait des erreurs de `book:check` (§6), le studio
+ * demande confirmation (spec-carte-collection.md §9).
+ */
+export function scenesUsingCardField(edits: Record<string, unknown>, id: string): string[] {
+  return Object.entries(edits)
+    .filter(([, e]) => {
+      const card = isObj(e) && isObj(e.modules) && isObj(e.modules.card) ? e.modules.card : null;
+      return !!card && isObj(card.fields) && id in card.fields;
+    })
+    .map(([scene]) => scene);
 }
 
 // ---------------------------------------------------------------------------------------------------------

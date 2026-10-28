@@ -7,7 +7,7 @@
 // (`src/components/book/progress.ts`, Î13 : règles de déblocage, valeur illisible, stockage indisponible), lecture d'un
 // QR par le scanner interne (`src/components/book/scanTarget.ts`, Î14 : adresse du livre, miroir, autre livre), carte de
 // collection (`src/components/card/cardModel.ts`, CC1 : bandeau une seule fois, compte, cartes gagnées, lecture tolérante ;
-// atelier : `modules.card` gardé tel quel à l'enregistrement).
+// atelier : onglet Carte, CC2 : aller-retour sans perte, règle d'A3, aperçu, liens du Rapport).
 // Les mixers tournent sur une scène three minimale (un os animé), le temps est avancé à la main.
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -21,7 +21,7 @@ import { addFallbackLightsIfNone, FALLBACK_LIGHTS_NAME } from '../src/components
 import { ClipPreview } from '../src/components/diorama/lib/clipPreview';
 import { applyFramingInPlace, cameraFormFromRaw, cameraLayerOf, framingOf, takeFromView, viewOf, withFields } from '../src/atelier/cameraForm';
 import { editLayerSchema } from '../src/schema/glbi';
-import { formFromEdit, layerFromForm, usedAssets } from '../src/atelier/editModel';
+import { cardPreviewOf, formFromEdit, layerFromForm, usedAssets } from '../src/atelier/editModel';
 import { formatEditLayer, glbActionIds, glbActionsOf, glbEventIds } from '../src/atelier/editLayerFile';
 import { fieldOfMessage } from '../src/atelier/reportLinks';
 import {
@@ -1315,7 +1315,7 @@ test('échelle de la carte : 1 sur l’iPhone SE en portrait (375 × 667), born�
   assert.equal(cardScale(100, 100, 44), 0.6);
 });
 
-test('atelier : modules.card gardé tel quel à l’enregistrement (pas encore d’onglet Carte) ; illustration comptée dans les assets', () => {
+test('atelier (CC2) : carte lue dans le formulaire puis réécrite à l’identique ; illustration comptée dans les assets', () => {
   const raw = {
     version: 1,
     scene: { name: T('Tyrannosaure', 'Tyrannosaurus', 'Tiranosaurio') },
@@ -1328,13 +1328,66 @@ test('atelier : modules.card gardé tel quel à l’enregistrement (pas encore d
   };
   const text = `${JSON.stringify(raw, null, 2)}\n`;
   const form = formFromEdit(JSON.parse(text));
+  assert.deepEqual(form.card.fields.map(([id]) => id), ['poids', 'taille'], 'valeurs dans l’ordre du fichier');
   const { layer, incomplete } = layerFromForm(form);
   assert.deepEqual(incomplete, []);
   assert.equal(formatEditLayer(layer, ['walk']), text, 'relu puis enregistré sans modification : identique octet pour octet');
   assert.ok(editLayerSchema.safeParse(layer).success);
   assert.deepEqual(usedAssets(form, ['walk']).map((a) => a.asset), ['images/trex-card.png']);
+  // Valeur saisie pour un intitulé absent du fichier : ajoutée à la fin.
+  const more = { ...form, card: { ...form.card, fields: [...form.card.fields, ['regime', T('Carnivore', 'Carnivore', 'Carnívoro')]] as typeof form.card.fields } };
+  assert.deepEqual(Object.keys((layerFromForm(more).layer.modules as { card: { fields: object } }).card.fields), ['poids', 'taille', 'regime']);
   // Fichier sans carte : rien n'est ajouté.
-  assert.ok(!('card' in (layerFromForm(formFromEdit({ version: 1 })).layer.modules as object)) || (layerFromForm(formFromEdit({ version: 1 })).layer.modules as Record<string, unknown>).card === undefined);
+  assert.equal(formatEditLayer(layerFromForm(formFromEdit({ version: 1 })).layer, []), '{\n  "version": 1\n}\n');
+});
+
+test('atelier (CC2) : règle d’A3 : texte trop long ou incomplet non écrit, le reste de la scène enregistré', () => {
+  const long = 'x'.repeat(263);
+  const form = formFromEdit({
+    version: 1,
+    scene: { name: T('Raptor') },
+    modules: {
+      animations: { actions: { walk: { label: T('Courir', 'Run', 'Correr') } } },
+      card: { subtitle: T('Velociraptor'), fields: { taille: T('2 m'), poids: { fr: '15 kg', en: '', es: '' } }, text: { fr: 'Court.', en: 'Short.', es: long } },
+    },
+  });
+  form.actions[0][1].label = T('Bondir', 'Leap', 'Saltar');
+  const { layer, incomplete } = layerFromForm(form);
+  const card = JSON.parse(formatEditLayer(layer, ['walk'])).modules.card as Record<string, unknown>;
+  assert.equal(card.text, undefined, 'paragraphe trop long en espagnol : non écrit');
+  assert.deepEqual(Object.keys(card.fields as object), ['taille'], 'valeur traduite en partie : non écrite');
+  assert.ok(editLayerSchema.safeParse(JSON.parse(formatEditLayer(layer, ['walk']))).success, 'la couche écrite reste valide : la scène s’enregistre');
+  assert.deepEqual(((layer.modules as { animations: { actions: Record<string, { label: unknown }> } }).animations.actions.walk.label), T('Bondir', 'Leap', 'Saltar'));
+  const msgs = incomplete.map((i) => `${i.tab}|${i.field}|${i.message}`);
+  assert.ok(msgs.includes('card|card.text|carte : paragraphe trop long, non enregistré : ES 263 caractères (250 au plus)'), msgs.join('\n'));
+  assert.ok(msgs.includes('card|card.field.poids|carte : valeur « poids » : traduction(s) manquante(s) : EN, ES'), msgs.join('\n'));
+  // Illustration refusée par le contrat (saisie à la main) et identifiant d'intitulé invalide : non écrits.
+  const odd = formFromEdit({ version: 1, modules: { card: { image: 'Images/ma carte.png', fields: { 'é': T('1') }, text: T('Texte.') } } });
+  const r = layerFromForm(odd);
+  assert.ok(editLayerSchema.safeParse(JSON.parse(formatEditLayer(r.layer, []))).success);
+  assert.deepEqual(r.incomplete.map((i) => i.field), ['card.field.é', 'card.image']);
+});
+
+test('atelier (CC2) : aperçu de la carte (règle d’A5) et liens du Rapport', () => {
+  const card = { subtitle: T('', 'Sub', ''), image: '', fields: [['taille', T('2 m')], ['poids', { fr: '15 kg', en: '', es: '' }]] as [string, ReturnType<typeof T>][], text: { fr: 'Un paragraphe.', en: '', es: '' } };
+  const fr = cardPreviewOf(card, 'fr', 'images/raptor.webp');
+  assert.ok(fr.card && fr.card.text.fr === 'Un paragraphe.' && !fr.card.subtitle, 'sous-titre absent en FR : non montré');
+  assert.equal(fr.card?.image, 'images/raptor.webp', 'illustration : image de chargement à défaut');
+  assert.deepEqual(Object.keys(fr.card?.fields ?? {}), ['taille', 'poids']);
+  assert.deepEqual(fr.otherLangs, ['EN', 'ES']);
+  const en = cardPreviewOf(card, 'en', '');
+  assert.equal(en.card, null, 'pas de paragraphe en EN : pas d’aperçu');
+  assert.ok(en.started);
+  assert.equal(cardPreviewOf({ subtitle: T(''), image: '', fields: [], text: T('') }, 'fr', '').started, false);
+  // Liens du Rapport vers l'onglet Carte.
+  const form = formFromEdit({ version: 1, modules: { card: { image: 'images/x.png', fields: { poid: T('1') }, text: T('a') } } });
+  const at = (m: string) => fieldOfMessage(m, 'trex', form, [], {})?.field ?? null;
+  assert.equal(at('scenes/trex.edit.json : modules.card.fields : intitulé « poid » absent de book.json (cardFields : taille, poids)'), 'card.field.poid');
+  assert.equal(at('scène « trex » : carte : caractéristique « regime » sans valeur (affichée « — »)'), 'card.field.regime');
+  assert.equal(at('scène « trex » : carte sans paragraphe (modules.card.text) ; à renseigner dans l\'atelier'), 'card.text');
+  assert.equal(at('scenes/trex.edit.json : modules.card.text.es : 263 caractères (250 au plus)'), 'card.text');
+  assert.equal(at('scenes/trex.edit.json : modules.card.fields.taille.fr : 17 caractères (16 au plus)'), 'card.field.taille');
+  assert.equal(at('asset « images/x.png » introuvable dans le dossier source (V-03)'), 'card.image');
 });
 
 if (failed) {
