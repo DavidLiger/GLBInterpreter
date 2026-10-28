@@ -295,16 +295,44 @@ function writeTab(w, title, text) {
   }
 }
 
+/**
+ * Onglet de l'atelier réutilisé (correctif CC2, remarque du test 6) : toujours le même onglet, nommé, au lieu d'un nouvel
+ * onglet à chaque clic. `window.open('', nom)` rend l'onglet existant sans le recharger, ou ouvre un onglet vide
+ * (`about:blank`, lisible car de la même origine ; un onglet de l'atelier, d'une autre origine, ne l'est pas). Limite :
+ * seul un onglet ouvert par cette page du studio est retrouvé (un atelier ouvert à la main reste à part).
+ */
+const ATELIER_TAB = 'glbi-atelier';
+function namedTab(name) {
+  const w = window.open('', name);
+  if (!w) return null;
+  let blank = false;
+  try {
+    blank = w.location.href === 'about:blank';
+  } catch {
+    // onglet de l'atelier (autre origine) : déjà ouvert
+  }
+  return { w, blank };
+}
+
 async function openTool(n, scene) {
   const m = byName(n);
   const label = n === 'atelier' ? 'Atelier' : 'Lecteur du livre';
   if (m.state === 'prêt' && m.port) {
-    window.open(toolUrl(n, scene), '_blank');
+    if (n !== 'atelier') {
+      window.open(toolUrl(n, scene), '_blank');
+      return;
+    }
+    const t = namedTab(ATELIER_TAB);
+    if (!t) return toast('Le navigateur a bloqué l’ouverture d’un onglet : autoriser les fenêtres surgissantes pour le studio.', true);
+    // Onglet neuf : adresse complète. Onglet de l'atelier déjà ouvert : seule la scène change (#/s/<scène>, sans
+    // rechargement, l'atelier suit et demande confirmation si une saisie n'est pas enregistrée) ; sans scène : mis au premier plan.
+    if (t.blank || scene) t.w.location.href = toolUrl(n, scene);
+    t.w.focus();
     return;
   }
   const why = isRunning(m) ? '' : blockReason(n);
   if (why) return toast(why, true);
-  const w = window.open('', '_blank');
+  const w = n === 'atelier' ? namedTab(ATELIER_TAB)?.w : window.open('', '_blank');
   if (w) {
     writeTab(w, `${label} : démarrage…`, 'Cette page s’ouvrira toute seule dès que le studio aura démarré le serveur (une minute au plus la première fois).');
     pendingTabs[n] = { w, scene, since: Date.now() };

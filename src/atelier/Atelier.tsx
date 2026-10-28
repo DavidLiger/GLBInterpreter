@@ -280,6 +280,22 @@ export default function Atelier() {
     setSceneId(id);
   };
 
+  // Scène demandée par l'adresse (#/s/<scène>) pendant que la page est ouverte (correctif CC2) : le studio réutilise cet
+  // onglet et n'en change que la scène. Saisie non enregistrée : confirmation, comme le sélecteur ; refus : adresse remise.
+  useEffect(() => {
+    const onHash = () => {
+      const wanted = hashScene();
+      const current = sceneIdRef.current;
+      if (!wanted || wanted === current) return;
+      const known = book?.scenes.some((s) => s.id === wanted);
+      const ok = known && (!dirtyRef.current || window.confirm(`Modifications non enregistrées sur « ${current} » : les abandonner pour ouvrir « ${wanted} » ?`));
+      if (ok) setSceneId(wanted);
+      else if (current) history.replaceState(null, "", `#/s/${encodeURIComponent(current)}`);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [book]);
+
   // --- Rapport → champ ---
   const goto = useCallback((ref: FieldRef) => {
     setTab(ref.tab);
