@@ -250,13 +250,22 @@ export const creditsModuleSchema = z.strictObject({
 // Carte de collection (CC1, DP-10, DP-11, spec-carte-collection.md §3 à §5) : module éditorial, intitulés dans book.json
 // ---------------------------------------------------------------------------------------------------------
 
-/** Longueurs maximales des textes de la carte, par langue (spec-carte-collection.md §3). */
-export const CARD_LIMITS = { subtitle: 40, fieldLabel: 14, fieldValue: 16, text: 250 } as const;
-/** Nombre maximal de caractéristiques d'une carte (grille de 2 colonnes, §3). */
-export const CARD_FIELDS_MAX = 4;
+/** Longueurs maximales des textes de la carte, par langue (spec-carte-collection.md §3 ; nom de type : §15.1, CC3). */
+export const CARD_LIMITS = { subtitle: 40, fieldLabel: 14, fieldValue: 16, text: 250, typeName: 14 } as const;
+/**
+ * Nombre maximal de caractéristiques d'une carte, donc d'intitulés d'un type (grille de 2 colonnes ; 4 en CC1, 8 depuis CC3,
+ * DP-20 : de 5 à 8, mise en page compacte).
+ */
+export const CARD_FIELDS_MAX = 8;
+/** Nombre d'intitulés du type à partir duquel la carte prend la mise en page compacte (CC3, spec-carte-collection.md §15.4). */
+export const CARD_COMPACT_FROM = 5;
+/** Identifiant du type implicite d'un livre à `cardFields` (un seul type, sans nom ; DP-20). */
+export const DEFAULT_CARD_TYPE_ID = 'personnage';
 
 /** Identifiant d'un intitulé de caractéristique (`book.json.cardFields[].id`, clé de `modules.card.fields`). */
 export const cardFieldIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, 'identifiant d’intitulé : lettres, chiffres, _ et -');
+/** Identifiant d'un type de carte (`book.json.cardTypes[].id`, `modules.card.type`, CC3) : même motif que les intitulés. */
+export const cardTypeIdSchema = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, 'identifiant de type : lettres, chiffres, _ et -');
 
 /** Intitulé commun à toutes les cartes du livre (couche livre, `book.json`, écrit par le studio). */
 export const cardFieldSchema = z.strictObject({
@@ -264,8 +273,26 @@ export const cardFieldSchema = z.strictObject({
   label: boundedText(CARD_LIMITS.fieldLabel),
 });
 
+/**
+ * Type de carte (couche livre, `book.json.cardTypes`, CC3, DP-20) : nom traduit du livre et ses intitulés (1 à 8), dont les
+ * identifiants sont propres au type.
+ */
+export const cardTypeSchema = z.strictObject({
+  id: cardTypeIdSchema,
+  name: boundedText(CARD_LIMITS.typeName),
+  fields: z
+    .array(cardFieldSchema)
+    .min(1, 'au moins un intitulé par type')
+    .max(CARD_FIELDS_MAX, `${CARD_FIELDS_MAX} intitulés au plus`),
+});
+
 /** Champs de la carte. Dans la couche éditoriale, tous facultatifs ; la fusion `strict` exige le paragraphe (`text`). */
 const cardShape = {
+  /**
+   * Type de la carte (CC3) : identifiant d'un type de `book.json.cardTypes` (ou `personnage` avec `cardFields`) ; absent :
+   * premier type du livre. Premier champ écrit de la carte. Contrôlé par le build (`checkCards`).
+   */
+  type: cardTypeIdSchema.optional(),
   /** Sous-titre (nom scientifique, époque…). */
   subtitle: boundedText(CARD_LIMITS.subtitle).optional(),
   /** Illustration (3:2 conseillé) ; à défaut, `scene.loaderImage`, puis `icon.png` (lecteur). */
@@ -325,6 +352,7 @@ export type QuizModule = z.infer<typeof quizModuleSchema>;
 export type AssetCredit = z.infer<typeof assetCreditSchema>;
 export type CardModule = z.infer<typeof cardModuleSchema>;
 export type CardField = z.infer<typeof cardFieldSchema>;
+export type CardType = z.infer<typeof cardTypeSchema>;
 export type GlbiConfig = z.infer<typeof glbiConfigSchema>;
 
 // ---------------------------------------------------------------------------------------------------------
@@ -428,12 +456,17 @@ export const bookSchema = z
       year: z.number().int().min(2000).max(2100),
       text: localizedTextSchema,
     }),
-    /** Intitulés des caractéristiques des cartes de collection (CC1), dans l'ordre d'affichage ; 1 à 4, `id` uniques. */
+    /**
+     * Intitulés des caractéristiques des cartes de collection (CC1), dans l'ordre d'affichage ; 1 à 8 (CC3), `id` uniques.
+     * Un seul type de carte, implicite (`personnage`, sans nom, DP-20).
+     */
     cardFields: z
       .array(cardFieldSchema)
       .min(1, 'au moins un intitulé (sinon, retirer cardFields)')
       .max(CARD_FIELDS_MAX, `${CARD_FIELDS_MAX} intitulés au plus`)
       .optional(),
+    /** Types de cartes (CC3, DP-20) : au moins 2, sans maximum ; le premier est le type par défaut. Exclut `cardFields`. */
+    cardTypes: z.array(cardTypeSchema).min(2, 'au moins 2 types (un seul type : cardFields)').optional(),
     unlockThreshold: z.number().int().positive().optional(),
   })
   .superRefine((b, ctx) => {
@@ -442,6 +475,13 @@ export const bookSchema = z
     for (const d of new Set(dup(b.languages))) ctx.addIssue({ code: 'custom', path: ['languages'], message: `langue en double « ${d} »` });
     const fieldIds = (b.cardFields ?? []).map((f) => f.id);
     for (const d of new Set(dup(fieldIds))) ctx.addIssue({ code: 'custom', path: ['cardFields'], message: `intitulé en double « ${d} »` });
+    if (b.cardTypes) {
+      if (b.cardFields) ctx.addIssue({ code: 'custom', path: ['cardTypes'], message: 'cardFields et cardTypes ensemble : en garder un (cardTypes pour plusieurs types)' });
+      for (const d of new Set(dup(b.cardTypes.map((t) => t.id)))) ctx.addIssue({ code: 'custom', path: ['cardTypes'], message: `type en double « ${d} »` });
+      b.cardTypes.forEach((t, i) => {
+        for (const d of new Set(dup(t.fields.map((f) => f.id)))) ctx.addIssue({ code: 'custom', path: ['cardTypes', i, 'fields'], message: `intitulé en double « ${d} »` });
+      });
+    }
     for (const l of LANGUAGES) {
       if (!b.languages.includes(l)) ctx.addIssue({ code: 'custom', path: ['languages'], message: `langue « ${l} » manquante (livre 1 : ${LANGUAGES.join(', ')})` });
     }

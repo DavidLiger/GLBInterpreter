@@ -416,7 +416,7 @@ const rx = (s) => new RegExp(s);
 // (blender : ouvrir le .blend ; atelier : ouvrir l'atelier ; livre : « Modifier le livre » ; dossier : copier le chemin).
 // Motifs tirés des textes de scripts/book-check.ts, src/schema/merge.ts et src/schema/glbi.ts (base 5643449 ; événements,
 // coupe au noir et clés mal placées ajoutés en AC1 ; position de la caméra pendant une action, DP-19, en AC2 ; carte de
-// collection, intitulés de book.json et onglet Carte de l'atelier, en CC2, textes de CC1 à 030d95d).
+// collection, intitulés de book.json et onglet Carte de l'atelier, en CC2, textes de CC1 à 030d95d ; types de cartes en CC3).
 const EXPLAIN = [
   // Dossier du livre, book.json
   [/book\.json absent$/, 'studio', 'livre', 'book.json manque dans le dossier : créer le livre dans le studio (« Changer de livre »).'],
@@ -428,6 +428,17 @@ const EXPLAIN = [
   [/^book\.json : cardFields : (\d+) intitulés au plus/, 'studio', 'livre', (m) => `La carte de collection a trop d’intitulés (${m[1]} au plus) : en retirer dans « Modifier le livre ».`],
   [/^book\.json : cardFields\.(\d+)\.label\.(fr|en|es) : (\d+) caractères \((\d+) au plus\)/, 'studio', 'livre', (m) => `L’intitulé n° ${Number(m[1]) + 1} de la carte de collection est trop long en ${LANG_FR[m[2]]} (${m[3]} caractères, ${m[4]} au plus) : le raccourcir dans « Modifier le livre ».`],
   [/^book\.json : cardFields\.(\d+)\./, 'studio', 'livre', (m) => `L’intitulé n° ${Number(m[1]) + 1} de la carte de collection est refusé (identifiant ou traduction) : le corriger dans « Modifier le livre ».`],
+  // Types de cartes (CC3, DP-20) : section « Types de cartes » du livre ; textes de src/schema/glbi.ts (bookSchema)
+  [/^book\.json : cardTypes : cardFields et cardTypes ensemble/, 'studio', 'livre', 'Le livre déclare à la fois une seule liste d’intitulés (cardFields) et des types de cartes (cardTypes) : n’en garder qu’une, dans « Modifier le livre » (section Carte de collection ou Types de cartes ; plusieurs types : cardTypes).'],
+  [/^book\.json : cardTypes : au moins 2 types/, 'studio', 'livre', 'Le livre n’a qu’un type de carte dans cardTypes : avec un seul type, il faut une simple liste d’intitulés (cardFields). L’enregistrer à nouveau dans « Modifier le livre », qui écrit la bonne forme.'],
+  [rx(`^book\\.json : cardTypes : type en double ${Q}`), 'studio', 'livre', (m) => `Deux types de cartes ont l’identifiant « ${m[1]} » : en retirer un dans « Modifier le livre » (section Types de cartes).`],
+  [rx(`^book\\.json : cardTypes\\.(\\d+)\\.fields : intitulé en double ${Q}`), 'studio', 'livre', (m) => `Le type de carte n° ${Number(m[1]) + 1} a deux intitulés d’identifiant « ${m[2]} » : en retirer un dans « Modifier le livre » (section Types de cartes).`],
+  [/^book\.json : cardTypes\.(\d+)\.fields : au moins un intitulé/, 'studio', 'livre', (m) => `Le type de carte n° ${Number(m[1]) + 1} n’a pas d’intitulé : en ajouter un, ou retirer le type, dans « Modifier le livre ».`],
+  [/^book\.json : cardTypes\.(\d+)\.fields : (\d+) intitulés au plus/, 'studio', 'livre', (m) => `Le type de carte n° ${Number(m[1]) + 1} a trop d’intitulés (${m[2]} au plus) : en retirer dans « Modifier le livre ».`],
+  [/^book\.json : cardTypes\.(\d+)\.name\.(fr|en|es) : (\d+) caractères \((\d+) au plus\)/, 'studio', 'livre', (m) => `Le nom du type de carte n° ${Number(m[1]) + 1} est trop long en ${LANG_FR[m[2]]} (${m[3]} caractères, ${m[4]} au plus) : le raccourcir dans « Modifier le livre ».`],
+  [/^book\.json : cardTypes\.(\d+)\.fields\.(\d+)\.label\.(fr|en|es) : (\d+) caractères \((\d+) au plus\)/, 'studio', 'livre', (m) => `L’intitulé n° ${Number(m[2]) + 1} du type de carte n° ${Number(m[1]) + 1} est trop long en ${LANG_FR[m[3]]} (${m[4]} caractères, ${m[5]} au plus) : le raccourcir dans « Modifier le livre ».`],
+  [/^book\.json : cardTypes\.(\d+)\.(name|id)\b/, 'studio', 'livre', (m) => `Le type de carte n° ${Number(m[1]) + 1} est refusé (${m[2] === 'id' ? 'identifiant' : 'nom, à traduire en français, anglais et espagnol'}) : le corriger dans « Modifier le livre ».`],
+  [/^book\.json : cardTypes\.(\d+)\.fields\.(\d+)\./, 'studio', 'livre', (m) => `L’intitulé n° ${Number(m[2]) + 1} du type de carte n° ${Number(m[1]) + 1} est refusé (identifiant ou traduction) : le corriger dans « Modifier le livre ».`],
   [/^book\.json : (.+)$/, 'studio', 'livre', (m) => `Une information du livre est refusée (${m[1]}) : la corriger dans « Modifier le livre ».`],
   [/^icon\.png absent/, 'studio', 'dossier', 'L’icône du livre manque : déposer icon.png (image carrée de 512 px ou plus) dans le dossier du livre.'],
   [/^icon(-maskable)?\.png : .*carré/, 'studio', 'dossier', (m) => `L’icône${m[1] ? ' maskable' : ' du livre'} n’a pas la bonne taille : il faut une image carrée d’au moins 512 × 512 px.`],
@@ -476,7 +487,11 @@ const EXPLAIN = [
   [/aucun crédit de modèle/, 'blender', 'blender', 'Le modèle n’a pas de crédit (auteur, licence) : le renseigner dans Blender (propriétés src_* de l’addon).'],
   [/crédit de modèle incomplet/, 'blender', 'blender', 'Le crédit du modèle est incomplet : auteur et licence attendus (propriétés src_* de l’addon).'],
   // Réglages de la scène (atelier)
-  // Carte de collection (CC1, CC2) : onglet Carte de l'atelier
+  // Carte de collection (CC1, CC2) : onglet Carte de l'atelier ; types de cartes (CC3) : menu Type de l'onglet Carte
+  [rx(`modules\\.card\\.type : type ${Q} absent de book\\.json \\(cardTypes : (.*)\\)`), 'atelier', 'atelier', (m) => `La carte de la scène a le type « ${m[1]} », que le livre n’a pas (types du livre : ${m[2]}) : choisir un autre type dans l’atelier (onglet Carte, menu Type), ou ajouter ce type dans « Modifier le livre ».`],
+  [rx(`modules\\.card\\.type : type ${Q} absent de book\\.json \\(book\\.json n'a qu'un type`), 'atelier', 'atelier', (m) => `La carte de la scène a le type « ${m[1]} », mais le livre n’a qu’un type de carte (personnage) : retirer ce type dans l’atelier (onglet Carte, « Retirer ce type »), ou déclarer des types de cartes dans « Modifier le livre ».`],
+  [rx(`modules\\.card\\.fields : intitulé ${Q} absent du type ${Q} \\(intitulés : (.*)\\)`), 'atelier', 'atelier', (m) => `La carte de la scène donne une valeur à « ${m[1]} », un intitulé que son type « ${m[2]} » n’a pas (intitulés du type : ${m[3]}) : retirer cette valeur dans l’atelier (onglet Carte), changer le type de la carte, ou ajouter l’intitulé au type dans « Modifier le livre ».`],
+  [/modules\.card\.type : /, 'atelier', 'atelier', 'Le type de la carte est refusé (identifiant : lettres, chiffres, _ et -) : choisir un type dans l’atelier (onglet Carte, menu Type).'],
   [rx(`modules\\.card\\.fields : intitulé ${Q} absent de book\\.json \\(cardFields : (.*)\\)`), 'atelier', 'atelier', (m) => `La carte de la scène donne une valeur à « ${m[1]} », un intitulé que le livre n’a pas (intitulés du livre : ${m[2]}) : retirer cette valeur dans l’atelier (onglet Carte), ou ajouter l’intitulé dans « Modifier le livre ».`],
   [rx(`carte : caractéristique ${Q} sans valeur`), 'atelier', 'atelier', (m) => `La carte de la scène n’a pas de valeur pour « ${m[1]} » (la carte affichera « — ») : la saisir dans l’atelier (onglet Carte).`],
   [/carte sans paragraphe \(modules\.card\.text\)/, 'atelier', 'atelier', 'La carte de la scène n’a pas de paragraphe : sans lui, la scène n’a pas de carte. L’écrire dans l’atelier (onglet Carte), en français, anglais et espagnol.'],
@@ -832,7 +847,7 @@ function detailLivre() {
     ['Icône', b.icon ? '<span class="t-ok">icon.png présent</span>' : '<span class="t-warn">icon.png absent (image carrée de 512 px ou plus, à déposer dans le dossier)</span>'],
     ['Image de partage', f.ogImage ? `<span class="mono">${h(f.ogImage)}</span>` : '<span class="muted">aucune</span>'],
     ['Mention légale', h(legal.text?.fr ? `${legal.text.fr} (${legal.year ?? '?'})` : '—')],
-    ['Carte de collection', (f.cardFields ?? []).length ? `${h(f.cardFields.map((c) => c.label?.fr || c.id).join(' · '))} <span class="muted">· intitulés des caractéristiques</span>` : '<span class="muted">aucun intitulé de caractéristique</span>'],
+    ['Carte de collection', cardFacts(f.cardTypes ?? [])],
     ['Dossier', `<span class="mono">${h(b.dir)}</span>${b.typed ? `<br><span class="muted">saisi « ${h(b.typed)} », ramené à la casse réelle</span>` : ''}`],
   ];
   const errs = b.errors.length ? `<div class="notice err"><strong>book.json refusé</strong><ul class="errors">${b.errors.map((e) => `<li>${h(e)}</li>`).join('')}</ul></div>` : '';
@@ -1219,13 +1234,14 @@ function loadForm() {
   F = {
     dir: b.dir,
     base: b.file.stamp,
-    values: { ...clone(c.form), cardFields: clone(c.form.cardFields ?? []) },
-    loaded: JSON.stringify({ ...c.form, cardFields: c.form.cardFields ?? [] }),
+    values: { ...clone(c.form), cardTypes: clone(c.form.cardTypes ?? []) },
+    loaded: JSON.stringify({ ...c.form, cardTypes: c.form.cardTypes ?? [] }),
     bookIdLocked: c.bookIdOnDisk !== null,
     unlock: c.unlockThreshold,
     hasUnlock: Object.prototype.hasOwnProperty.call(c, 'unlockThreshold'),
-    // Intitulés des cartes lus sur le disque (CC2) : identifiant non modifiable (clé des valeurs dans edit.json).
-    diskCardIds: (c.form.cardFields ?? []).map((f) => f.id),
+    // Types et intitulés des cartes lus sur le disque (CC2, CC3) : identifiants non modifiables (clés dans edit.json).
+    diskTypeIds: (c.form.cardTypes ?? []).map((t) => t.id),
+    diskFieldIds: Object.fromEntries((c.form.cardTypes ?? []).map((t) => [t.id, t.fields.map((f) => f.id)])),
     readable: b.file.readable,
     valid: b.file.valid,
     exists: !!b.file.stamp,
@@ -1275,10 +1291,8 @@ function renderForm() {
       ${fieldText('Mention légale en français', 'legal.text.fr')}${fieldText('en anglais', 'legal.text.en')}${fieldText('en espagnol', 'legal.text.es')}
     </div>
     ${F.hasUnlock ? `<p class="hint">unlockThreshold : <code>${h(JSON.stringify(F.unlock))}</code> (mini-jeu, hors formulaire) : conservé tel quel.</p>` : ''}
-    <h3 class="section-title">Carte de collection</h3>
-    <p class="hint">Intitulés des caractéristiques, communs à toutes les cartes du livre (${CARD_FIELDS_MAX} au plus, ${CARD_LABEL_MAX} caractères au plus par langue), dans l’ordre d’affichage sur la carte. Les valeurs de chaque scène se saisissent dans l’atelier (onglet Carte). Aucun intitulé : les cartes n’ont pas de caractéristiques.</p>
-    <ol class="scene-list card-fields" id="f-cards"></ol>
-    <div class="form-actions"><button type="button" class="btn sm" data-act="ajouterIntitule" id="f-card-add">Ajouter un intitulé</button></div>
+    <h3 class="section-title" id="f-cards-title">Carte de collection</h3>
+    <div id="f-cards"></div>
     <h3 class="section-title">Scènes</h3>
     <p class="hint">L’ordre des scènes est l’<strong>ordre de déblocage</strong> dans le livre : glisser une ligne, ou ↑ ↓. Retirer une scène laisse ses fichiers sur le disque. Renommer une scène est refusé (identifiant écrit dans le modèle par l’addon, clé de progression, QR imprimés) : retirer puis ajouter crée une autre scène.</p>
     <ol class="scene-list" id="f-scenes"></ol>
@@ -1295,71 +1309,205 @@ function renderForm() {
       <span class="small" id="f-dirty"></span>
     </div>
   </form>`;
-  renderCardFields();
+  renderCardTypes();
   renderSceneList();
   renderFormStatus();
 }
 
-// Carte de collection (CC2) : intitulés de book.json.cardFields, validés par bookSchema comme le reste du formulaire.
-const CARD_FIELDS_MAX = 4;
+// Carte de collection (CC2) et types de cartes (CC3, DP-20, spec-carte-collection.md §15.11) : `F.values.cardTypes`,
+// validés par bookSchema comme le reste du formulaire. Un seul type (livre à cardFields) : section « Carte de collection »
+// de CC2 ; deux ou plus : section « Types de cartes ». Forme la plus courte écrite par le serveur (bookjson.ts) : un type →
+// cardFields (nom perdu), deux ou plus → cardTypes.
+const CARD_FIELDS_MAX = 8;
 const CARD_LABEL_MAX = 14;
-/** Identifiant proposé d'après l'intitulé français (« Époque » → « epoque »), tant qu'il n'est pas saisi à la main. */
-const slugOf = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+const CARD_TYPE_NAME_MAX = 14;
+const DEFAULT_TYPE_ID = 'personnage';
+const DEFAULT_TYPE_NAME = { fr: 'Personnage', en: 'Character', es: 'Personaje' };
+/** Identifiant proposé d'après le texte français (« Époque » → « epoque »), tant qu'il n'est pas saisi à la main. */
+const slugOf = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+// Intitulés et types dont l'identifiant suit le texte français ; types à identifiant fixe (`personnage` mis en tête).
 const autoIds = new WeakSet();
-const countHtml = (v) => {
+const fixedTypes = new WeakSet();
+const countHtml = (v, max = CARD_LABEL_MAX) => {
   const n = String(v ?? '').trim().length;
-  return `<span class="${n > CARD_LABEL_MAX ? 't-err' : 'muted'}">${n}/${CARD_LABEL_MAX}</span>`;
+  return `<span class="${n > max ? 't-err' : 'muted'}">${n}/${max}</span>`;
 };
+const typeName = (t) => t.name?.fr?.trim() || t.id || 'type sans nom';
+const scenesText = (list) => (list.length > 1 ? `des scènes ${list.join(', ')}` : `de la scène ${list[0]}`);
+/** « La carte de la scène duo » / « Les cartes des scènes duo, vallee » ; `one` et `many` : suite accordée. */
+const cardsOf = (list, one, many) => (list.length > 1 ? `Les cartes ${scenesText(list)} ${many}` : `La carte ${scenesText(list)} ${one}`);
 
-function renderCardFields() {
-  const list = F.values.cardFields;
-  $('f-cards').innerHTML = list.map((f, i) => {
-    const onDisk = F.diskCardIds.includes(f.id) && !autoIds.has(f);
-    const lab = (l, name) => `<label class="field">${name} <input type="text" data-f="cardFields.${i}.label.${l}" value="${h(f.label[l])}"> <span class="small" id="f-card-n-${i}-${l}">${countHtml(f.label[l])}</span></label>`;
+/** Détail de l'étape Livre : intitulés (un type) ou noms des types. */
+function cardFacts(types) {
+  if (types.length >= 2) return `${h(types.map((t) => t.name?.fr || t.id).join(' · '))} <span class="muted">· types de cartes</span>`;
+  const fields = types[0]?.fields ?? [];
+  return fields.length ? `${h(fields.map((c) => c.label?.fr || c.id).join(' · '))} <span class="muted">· intitulés des caractéristiques</span>` : '<span class="muted">aucun intitulé de caractéristique</span>';
+}
+
+function fieldRows(t, ti) {
+  const onDiskIds = F.diskTypeIds.includes(t.id) ? (F.diskFieldIds[t.id] ?? []) : [];
+  const list = t.fields;
+  return list.map((f, i) => {
+    const onDisk = onDiskIds.includes(f.id) && !autoIds.has(f);
+    const p = `cardTypes.${ti}.fields.${i}`;
+    const lab = (l, name) => `<label class="field">${name} <input type="text" data-f="${p}.label.${l}" value="${h(f.label[l])}"> <span class="small" id="f-card-n-${ti}-${i}-${l}">${countHtml(f.label[l])}</span></label>`;
     return `<li data-ci="${i}">
       <div class="card-field-row">
-        <label class="field">Identifiant <input type="text" data-f="cardFields.${i}.id" value="${h(f.id)}" spellcheck="false" ${onDisk ? 'readonly title="identifiant d’un intitulé enregistré : clé des valeurs dans les réglages des scènes, non modifiable (retirer puis ajouter)"' : 'placeholder="ex. poids"'}></label>
+        <label class="field">Identifiant <input type="text" data-f="${p}.id" value="${h(f.id)}" spellcheck="false" ${onDisk ? 'readonly title="identifiant d’un intitulé enregistré : clé des valeurs dans les réglages des scènes, non modifiable (retirer puis ajouter)"' : 'placeholder="ex. poids"'}></label>
         ${lab('fr', 'Français')}${lab('en', 'Anglais')}${lab('es', 'Espagnol')}
       </div>
-      <button type="button" class="btn sm icon" data-act="monterIntitule" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="monter">↑</button>
-      <button type="button" class="btn sm icon" data-act="descendreIntitule" data-i="${i}" ${i === list.length - 1 ? 'disabled' : ''} aria-label="descendre">↓</button>
-      <button type="button" class="btn sm danger" data-act="retirerIntitule" data-i="${i}">Retirer</button></li>`;
-  }).join('') || '<li class="muted">aucun intitulé : cardFields absent de book.json</li>';
-  const add = $('f-card-add');
-  add.disabled = list.length >= CARD_FIELDS_MAX;
-  add.title = add.disabled ? `${CARD_FIELDS_MAX} intitulés au plus` : '';
+      <button type="button" class="btn sm icon" data-act="monterIntitule" data-t="${ti}" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="monter">↑</button>
+      <button type="button" class="btn sm icon" data-act="descendreIntitule" data-t="${ti}" data-i="${i}" ${i === list.length - 1 ? 'disabled' : ''} aria-label="descendre">↓</button>
+      <button type="button" class="btn sm danger" data-act="retirerIntitule" data-t="${ti}" data-i="${i}">Retirer</button></li>`;
+  }).join('');
 }
 
-function addCardField() {
-  if (F.values.cardFields.length >= CARD_FIELDS_MAX) return;
+const addFieldButton = (t, ti) => {
+  const full = (t?.fields.length ?? 0) >= CARD_FIELDS_MAX;
+  return `<button type="button" class="btn sm" data-act="ajouterIntitule" data-t="${ti}" ${full ? `disabled title="${CARD_FIELDS_MAX} intitulés au plus"` : ''}>Ajouter un intitulé</button>`;
+};
+
+function renderCardTypes() {
+  const types = F.values.cardTypes;
+  $('f-cards-title').textContent = types.length >= 2 ? 'Types de cartes' : 'Carte de collection';
+  if (types.length < 2) {
+    const t = types[0];
+    $('f-cards').innerHTML = `<p class="hint">Intitulés des caractéristiques, communs à toutes les cartes du livre (${CARD_FIELDS_MAX} au plus, ${CARD_LABEL_MAX} caractères au plus par langue ; de 5 à 8, la carte prend une mise en page compacte), dans l’ordre d’affichage sur la carte. Les valeurs de chaque scène se saisissent dans l’atelier (onglet Carte). Aucun intitulé : les cartes n’ont pas de caractéristiques. « Ajouter un type » : plusieurs types de cartes (personnage, lieu, arme…), chacun avec ses intitulés.</p>
+      <ol class="scene-list card-fields">${(t ? fieldRows(t, 0) : '') || '<li class="muted">aucun intitulé : cardFields absent de book.json</li>'}</ol>
+      <div class="form-actions">${addFieldButton(t, 0)}<button type="button" class="btn sm" data-act="ajouterType">Ajouter un type</button></div>`;
+    return;
+  }
+  $('f-cards').innerHTML = `<p class="hint">Types de cartes du livre, dans l’ordre : le premier est le type par défaut (carte sans type choisi). Chaque type a son nom (affiché sur la carte, ${CARD_TYPE_NAME_MAX} caractères au plus) et ses intitulés (1 à ${CARD_FIELDS_MAX}). Le type de chaque carte se choisit dans l’atelier (onglet Carte). Un identifiant enregistré ne change plus (clé dans les réglages des scènes).</p>
+    ${types.map((t, ti) => {
+      const locked = fixedTypes.has(t) || (F.diskTypeIds.includes(t.id) && !autoIds.has(t));
+      const nm = (l, name) => `<label class="field">${name} <input type="text" data-f="cardTypes.${ti}.name.${l}" value="${h(t.name[l])}"> <span class="small" id="f-type-n-${ti}-${l}">${countHtml(t.name[l], CARD_TYPE_NAME_MAX)}</span></label>`;
+      return `<section class="card-type" data-ti="${ti}">
+        <div class="card-field-row">
+          <label class="field">Identifiant du type <input type="text" data-f="cardTypes.${ti}.id" value="${h(t.id)}" spellcheck="false" ${locked ? 'readonly title="identifiant d’un type enregistré : clé dans les réglages des scènes, non modifiable"' : 'placeholder="ex. lieu"'}></label>
+          ${nm('fr', 'Nom en français')}${nm('en', 'en anglais')}${nm('es', 'en espagnol')}
+        </div>
+        <div class="field-row wrap">
+          ${ti === 0 ? '<span class="badge">type par défaut</span>' : ''}
+          <button type="button" class="btn sm icon" data-act="monterType" data-t="${ti}" ${ti === 0 ? 'disabled' : ''} aria-label="monter le type">↑</button>
+          <button type="button" class="btn sm icon" data-act="descendreType" data-t="${ti}" ${ti === types.length - 1 ? 'disabled' : ''} aria-label="descendre le type">↓</button>
+          <button type="button" class="btn sm danger" data-act="retirerType" data-t="${ti}">Retirer le type</button>
+        </div>
+        <ol class="scene-list card-fields">${fieldRows(t, ti) || '<li class="muted">aucun intitulé (au moins un par type)</li>'}</ol>
+        <div class="form-actions">${addFieldButton(t, ti)}</div>
+      </section>`;
+    }).join('')}
+    <div class="form-actions"><button type="button" class="btn sm" data-act="ajouterType">Ajouter un type</button></div>`;
+}
+
+/** Type implicite d'un livre sans intitulés (créé au premier intitulé ou au premier type ajouté). */
+function ensureFirstType() {
+  if (!F.values.cardTypes.length) F.values.cardTypes.push({ id: DEFAULT_TYPE_ID, name: { fr: '', en: '', es: '' }, fields: [] });
+  return F.values.cardTypes[0];
+}
+
+function addCardField(ti) {
+  const t = ti === 0 ? ensureFirstType() : F.values.cardTypes[ti];
+  if (!t || t.fields.length >= CARD_FIELDS_MAX) return;
   const f = { id: '', label: { fr: '', en: '', es: '' } };
   autoIds.add(f);
-  F.values.cardFields.push(f);
-  renderCardFields();
+  t.fields.push(f);
+  renderCardTypes();
   formEdited();
-  document.querySelector(`[data-f="cardFields.${F.values.cardFields.length - 1}.label.fr"]`)?.focus();
+  document.querySelector(`[data-f="cardTypes.${ti}.fields.${t.fields.length - 1}.label.fr"]`)?.focus();
 }
 
-function moveCardField(from, to) {
-  const l = F.values.cardFields;
-  if (to < 0 || to >= l.length) return;
+function moveCardField(ti, from, to) {
+  const l = F.values.cardTypes[ti]?.fields;
+  if (!l || to < 0 || to >= l.length) return;
   const [x] = l.splice(from, 1);
   l.splice(to, 0, x);
-  renderCardFields();
+  renderCardTypes();
   formEdited();
 }
 
-/** Retirer un intitulé : confirmation si des cartes lui donnent une valeur (elles deviendraient des erreurs de vérification). */
-async function removeCardField(i) {
-  const f = F.values.cardFields[i];
+/** Retirer un intitulé : confirmation si des cartes de ce type lui donnent une valeur (elles deviendraient des erreurs). */
+async function removeCardField(ti, i) {
+  const t = F.values.cardTypes[ti];
+  const f = t?.fields[i];
   if (!f) return;
-  const used = f.id && F.diskCardIds.includes(f.id) ? ((await post('usageIntitule', { id: f.id })).scenes ?? []) : [];
+  const onDisk = F.diskTypeIds.includes(t.id) && (F.diskFieldIds[t.id] ?? []).includes(f.id);
+  const used = f.id && onDisk ? ((await post('usageIntitule', { id: f.id, type: { id: t.id, tete: ti === 0 } })).scenes ?? []) : [];
   if (used.length) {
-    const msg = `L’intitulé « ${f.label.fr || f.id} » a une valeur sur la carte ${used.length > 1 ? `des scènes ${used.join(', ')}` : `de la scène ${used[0]}`}. Une fois book.json enregistré, ces valeurs seront signalées en erreur par la vérification, jusqu’à leur retrait dans l’atelier (onglet Carte).`;
+    const msg = `L’intitulé « ${f.label.fr || f.id} » a une valeur sur la carte ${scenesText(used)}. Une fois book.json enregistré, ces valeurs seront signalées en erreur par la vérification, jusqu’à leur retrait dans l’atelier (onglet Carte).`;
     if (!(await confirmer(msg, { titre: 'Retirer l’intitulé', ok: 'Retirer', danger: true }))) return;
   }
-  F.values.cardFields.splice(i, 1);
-  renderCardFields();
+  t.fields.splice(i, 1);
+  renderCardTypes();
+  formEdited();
+}
+
+/** Usage d'un type par les cartes (lecture seule des réglages des scènes) ; type neuf sans identifiant : aucun. */
+async function typeUsage(t, tete) {
+  if (!t.id) return { scenes: [], explicit: [], implicit: [], cards: {} };
+  const r = await post('usageType', { id: t.id, tete });
+  return r.ok ? r : { scenes: [], explicit: [], implicit: [], cards: {} };
+}
+
+/** « Ajouter un type » : au premier ajout, le type actuel devient `personnage` (identifiant fixe, en tête, nom proposé). */
+function addCardType() {
+  const types = F.values.cardTypes;
+  if (types.length < 2) {
+    const first = ensureFirstType();
+    if (!first.id) first.id = DEFAULT_TYPE_ID;
+    if (!first.name.fr && !first.name.en && !first.name.es) first.name = { ...DEFAULT_TYPE_NAME };
+    if (first.id === DEFAULT_TYPE_ID) fixedTypes.add(first);
+  }
+  const t = { id: '', name: { fr: '', en: '', es: '' }, fields: [] };
+  autoIds.add(t);
+  types.push(t);
+  renderCardTypes();
+  formEdited();
+  document.querySelector(`[data-f="cardTypes.${types.length - 1}.name.fr"]`)?.focus();
+}
+
+/** Filet du type de tête (DP-20) : les cartes sans type prendront le nouveau type de tête ; confirmation qui les nomme. */
+async function headChangeOk(oldHead, newHead) {
+  if (!oldHead || !newHead || oldHead === newHead) return true;
+  const u = await typeUsage(oldHead, true);
+  if (!u.implicit.length) return true;
+  const many = u.implicit.length > 1;
+  return confirmer(`${cardsOf(u.implicit, 'n’a pas de type choisi : elle a le type par défaut, le premier de la liste.', 'n’ont pas de type choisi : elles ont le type par défaut, le premier de la liste.')} ${many ? 'Leur' : 'Son'} type deviendra « ${typeName(newHead)} » (au lieu de « ${typeName(oldHead)} »). Pour ${many ? 'qu’elles gardent leur' : 'qu’elle garde son'} type, le choisir dans l’atelier (onglet Carte) avant de changer l’ordre.`, { titre: 'Type par défaut', ok: 'Changer l’ordre', danger: true });
+}
+
+async function moveCardType(from, to) {
+  const l = F.values.cardTypes;
+  if (to < 0 || to >= l.length || from === to) return;
+  const next = [...l];
+  const [x] = next.splice(from, 1);
+  next.splice(to, 0, x);
+  if (!(await headChangeOk(l[0], next[0]))) return;
+  F.values.cardTypes = next;
+  renderCardTypes();
+  formEdited();
+}
+
+/**
+ * « Retirer le type » : confirmation qui nomme les cartes de ce type (type choisi, ou sans type s'il est en tête) ; filet
+ * du type de tête ; retour à un seul type (book.json reçoit cardFields, le nom du type n'est pas gardé, les cartes d'un
+ * type autre que « personnage » seront refusées).
+ */
+async function removeCardType(ti) {
+  const l = F.values.cardTypes;
+  const t = l[ti];
+  if (!t) return;
+  const u = await typeUsage(t, ti === 0);
+  const rest = l.filter((_, k) => k !== ti);
+  const msgs = [];
+  // Retour à un seul type : le message des cartes refusées couvre aussi celles du type retiré (pas de redite).
+  if (u.explicit.length && rest.length !== 1) msgs.push(`${cardsOf(u.explicit, `a le type « ${typeName(t)} » : une fois book.json enregistré, elle sera signalée en erreur (type absent du livre)`, `ont le type « ${typeName(t)} » : une fois book.json enregistré, elles seront signalées en erreur (type absent du livre)`)}, jusqu’au choix d’un autre type dans l’atelier (onglet Carte).`);
+  if (ti === 0 && u.implicit.length && rest.length) msgs.push(`${cardsOf(u.implicit, 'n’a pas de type choisi : son', 'n’ont pas de type choisi : leur')} type deviendra « ${typeName(rest[0])} ».`);
+  if (rest.length === 1) {
+    const refused = Object.entries(u.cards).filter(([, ty]) => ty !== null && ty !== DEFAULT_TYPE_ID).map(([sc]) => sc);
+    msgs.push(`Il ne restera qu’un type : book.json gardera seulement ses intitulés (cardFields) ; son nom (« ${typeName(rest[0])} ») ne sera pas gardé, et les cartes n’afficheront plus de type.${refused.length ? ` ${cardsOf(refused, `a un type choisi autre que « ${DEFAULT_TYPE_ID} » : elle sera refusée`, `ont un type choisi autre que « ${DEFAULT_TYPE_ID} » : elles seront refusées`)} par la vérification, jusqu’au retrait de ce type dans l’atelier (onglet Carte, « Retirer ce type »).` : ''}`);
+  }
+  if (msgs.length && !(await confirmer(msgs.join(' '), { titre: 'Retirer le type', ok: 'Retirer', danger: true }))) return;
+  F.values.cardTypes = rest;
+  renderCardTypes();
   formEdited();
 }
 
@@ -1497,16 +1645,27 @@ document.addEventListener('input', (ev) => {
   const t = ev.target;
   if (F && t.dataset?.f && t.closest('#livre-form')) {
     setPath(F.values, t.dataset.f, t.value);
-    const m = /^cardFields\.(\d+)\.(id|label\.(fr|en|es))$/.exec(t.dataset.f);
+    // Types et intitulés des cartes (CC2, CC3) : compteurs, identifiant proposé d'après le texte français.
+    const m = /^cardTypes\.(\d+)\.(?:(id)|name\.(fr|en|es)|fields\.(\d+)\.(?:(id)|label\.(fr|en|es)))$/.exec(t.dataset.f);
     if (m) {
-      const f = F.values.cardFields[Number(m[1])];
-      if (m[2] === 'id') autoIds.delete(f);
-      else {
-        $(`f-card-n-${m[1]}-${m[3]}`).innerHTML = countHtml(t.value);
-        if (m[3] === 'fr' && autoIds.has(f)) {
-          f.id = slugOf(t.value);
-          const idInput = document.querySelector(`[data-f="cardFields.${m[1]}.id"]`);
-          if (idInput) idInput.value = f.id;
+      const [, ti, typeId, nameLang, fi, fieldId, labelLang] = m;
+      const ty = F.values.cardTypes[Number(ti)];
+      const follow = (o, path, text) => {
+        if (!autoIds.has(o)) return;
+        o.id = slugOf(text);
+        const idInput = document.querySelector(`[data-f="${path}"]`);
+        if (idInput) idInput.value = o.id;
+      };
+      if (typeId) autoIds.delete(ty);
+      else if (nameLang) {
+        $(`f-type-n-${ti}-${nameLang}`).innerHTML = countHtml(t.value, CARD_TYPE_NAME_MAX);
+        if (nameLang === 'fr') follow(ty, `cardTypes.${ti}.id`, t.value);
+      } else {
+        const f = ty.fields[Number(fi)];
+        if (fieldId) autoIds.delete(f);
+        else {
+          $(`f-card-n-${ti}-${fi}-${labelLang}`).innerHTML = countHtml(t.value);
+          if (labelLang === 'fr') follow(f, `cardTypes.${ti}.fields.${fi}.id`, t.value);
         }
       }
     }
@@ -1914,12 +2073,18 @@ document.addEventListener('click', async (ev) => {
     const i = Number(b.dataset.i);
     return moveScene(i, a === 'monterScene' ? i - 1 : i + 1);
   }
-  if (a === 'ajouterIntitule') return addCardField();
+  if (a === 'ajouterIntitule') return addCardField(Number(b.dataset.t ?? 0));
   if (a === 'monterIntitule' || a === 'descendreIntitule') {
     const i = Number(b.dataset.i);
-    return moveCardField(i, a === 'monterIntitule' ? i - 1 : i + 1);
+    return moveCardField(Number(b.dataset.t ?? 0), i, a === 'monterIntitule' ? i - 1 : i + 1);
   }
-  if (a === 'retirerIntitule') return removeCardField(Number(b.dataset.i));
+  if (a === 'retirerIntitule') return removeCardField(Number(b.dataset.t ?? 0), Number(b.dataset.i));
+  if (a === 'ajouterType') return addCardType();
+  if (a === 'monterType' || a === 'descendreType') {
+    const ti = Number(b.dataset.t);
+    return moveCardType(ti, a === 'monterType' ? ti - 1 : ti + 1);
+  }
+  if (a === 'retirerType') return removeCardType(Number(b.dataset.t));
   if (a === 'retirerScene') {
     F.values.scenes.splice(Number(b.dataset.i), 1);
     renderSceneList();

@@ -42,6 +42,7 @@ import {
   formFromBody,
   NEW_BOOK_DIRS,
   SCENE_PATTERN_SOURCE,
+  cardTypeUsage,
   scenesUsingCardField,
   validateBook,
   withReceivedValues,
@@ -1212,22 +1213,45 @@ async function openBookFolder(): Promise<Result> {
   return { ok: true, message: 'Dossier du livre ouvert dans l’Explorateur' };
 }
 
-/**
- * Scènes dont la carte donne une valeur à l'intitulé `body.id` (lecture seule de leur `edit.json`) : la page demande
- * confirmation avant de retirer cet intitulé (spec-carte-collection.md §9).
- */
-function cardFieldUsage(body: Record<string, unknown>): Result & { scenes?: string[] } {
-  if (!book) return fail('aucun livre ouvert');
-  const id = typeof body.id === 'string' ? body.id : '';
+/** `edit.json` des scènes du livre ouvert, lus tels quels (absent ou illisible : ignoré, scène sans carte). */
+function readSceneEdits(): Record<string, unknown> {
   const edits: Record<string, unknown> = {};
-  for (const s of book.info.scenes) {
+  for (const s of book!.info.scenes) {
     try {
-      edits[s.id] = JSON.parse(fs.readFileSync(path.join(book.info.dir, 'scenes', `${s.id}.edit.json`), 'utf8'));
+      edits[s.id] = JSON.parse(fs.readFileSync(path.join(book!.info.dir, 'scenes', `${s.id}.edit.json`), 'utf8'));
     } catch {
       // absent ou illisible : sans carte
     }
   }
-  return { ok: true, scenes: scenesUsingCardField(edits, id) };
+  return edits;
+}
+
+/** Type de carte reçu de la page (`body.type` : `{ id, tete }`, CC3) ; `undefined` si absent. */
+function typeOfBody(v: unknown): { id: string; tete: boolean } | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const o = v as Record<string, unknown>;
+  return { id: typeof o.id === 'string' ? o.id : '', tete: o.tete === true };
+}
+
+/**
+ * Scènes dont la carte donne une valeur à l'intitulé `body.id` (lecture seule de leur `edit.json`) : la page demande
+ * confirmation avant de retirer cet intitulé (spec-carte-collection.md §9). CC3 : `body.type` (`{ id, tete }`) limite aux
+ * cartes de ce type (type explicite, ou sans type si le type est en tête).
+ */
+function cardFieldUsage(body: Record<string, unknown>): Result & { scenes?: string[] } {
+  if (!book) return fail('aucun livre ouvert');
+  const id = typeof body.id === 'string' ? body.id : '';
+  return { ok: true, scenes: scenesUsingCardField(readSceneEdits(), id, typeOfBody(body.type)) };
+}
+
+/**
+ * Usage d'un type de carte (CC3, action `usageType`, lecture seule) : scènes dont la carte est de ce type (`{ id, tete }`),
+ * et type explicite de chaque carte, pour les confirmations de la page (retrait d'un type, type de tête, retour à un type).
+ */
+function cardTypeUsageOf(body: Record<string, unknown>): Result & ReturnType<typeof cardTypeUsage> {
+  if (!book) return fail('aucun livre ouvert') as Result & ReturnType<typeof cardTypeUsage>;
+  const type = { id: typeof body.id === 'string' ? body.id : '', tete: body.tete === true };
+  return { ok: true, ...cardTypeUsage(readSceneEdits(), type) };
 }
 
 /** « Créer depuis le gabarit » : copie en `blender/<id>.blend` seulement si le fichier n'existe pas ; sans gabarit, rien. */
@@ -1500,6 +1524,8 @@ async function action(body: Record<string, unknown>): Promise<Result> {
       return openBookFolder();
     case 'usageIntitule':
       return cardFieldUsage(body);
+    case 'usageType':
+      return cardTypeUsageOf(body);
     case 'oublierRecent':
       reglages.recents = reglages.recents.filter((r) => !samePath(r, String(body.chemin ?? '')));
       writeReglages(REGLAGES_FILE, reglages);

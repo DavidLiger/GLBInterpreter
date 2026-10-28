@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import type { Document, Node as GNode } from '@gltf-transform/core';
 import sharp from 'sharp';
 import { readGlbFile, referencedNodeNames } from './glb-pipeline';
-import { bookSchema, EVENT_TIME_TOLERANCE_S, formatIssues, GLBI_ROOT_NAME, isReservedSourcePath, type Book, type GlbiConfig, type ModelCredit } from '../src/schema/glbi';
+import { bookSchema, DEFAULT_CARD_TYPE_ID, EVENT_TIME_TOLERANCE_S, formatIssues, GLBI_ROOT_NAME, isReservedSourcePath, type Book, type GlbiConfig, type ModelCredit } from '../src/schema/glbi';
 import { mergeLayers } from '../src/schema/merge';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -389,20 +389,40 @@ export async function readScene(
 // ---------------------------------------------------------------------------------------------------------
 
 /**
- * Cartes de collection (CC1, spec-carte-collection.md §6) : chaque valeur de `modules.card.fields` doit porter l'`id` d'un
- * intitulé de `book.json.cardFields` (erreur, couche éditoriale) ; un intitulé sans valeur sur une carte est affiché « — »
- * (avertissement). Le paragraphe manquant et les longueurs sont contrôlés par la fusion et le schéma.
+ * Cartes de collection (CC1, spec-carte-collection.md §6 ; types de cartes, CC3, §15.8) : chaque valeur de
+ * `modules.card.fields` doit porter l'`id` d'un intitulé du type de la carte (erreur, couche éditoriale) ; un intitulé du type
+ * sans valeur sur une carte est affiché « — » (avertissement). Type de la carte : `modules.card.type`, sinon le premier du
+ * livre ; avec `cardFields`, un seul type, `personnage`. Une carte de type inconnu ne reçoit que cette erreur. Avec
+ * `cardFields`, les messages de CC1 restent mot pour mot. Le paragraphe manquant et les longueurs sont contrôlés par la fusion
+ * et le schéma.
  */
 export function checkCards(book: Book, scenes: readonly SceneResult[], report: Report): void {
-  const ids = (book.cardFields ?? []).map((f) => f.id);
+  const types = book.cardTypes;
   for (const s of scenes) {
     const card = s.config.modules.card;
     if (!card) continue;
+    const at = `scenes/${s.id}.edit.json : modules.card`;
+    let ids: string[];
+    let unknownField: (k: string) => string;
+    if (types) {
+      const type = card.type === undefined ? types[0] : types.find((t) => t.id === card.type);
+      if (!type) {
+        report.error(`${at}.type : type « ${card.type} » absent de book.json (cardTypes : ${types.map((t) => t.id).join(', ')})`, 'edit', s.id);
+        continue;
+      }
+      ids = type.fields.map((f) => f.id);
+      unknownField = (k) => `${at}.fields : intitulé « ${k} » absent du type « ${type.id} » (intitulés : ${ids.join(', ')})`;
+    } else {
+      if (card.type !== undefined && card.type !== DEFAULT_CARD_TYPE_ID) {
+        report.error(`${at}.type : type « ${card.type} » absent de book.json (book.json n'a qu'un type, « ${DEFAULT_CARD_TYPE_ID} » : cardFields)`, 'edit', s.id);
+        continue;
+      }
+      ids = (book.cardFields ?? []).map((f) => f.id);
+      unknownField = (k) => `${at}.fields : intitulé « ${k} » absent de book.json (cardFields : ${ids.join(', ') || 'aucun'})`;
+    }
     const values = card.fields ?? {};
     for (const k of Object.keys(values)) {
-      if (!ids.includes(k)) {
-        report.error(`scenes/${s.id}.edit.json : modules.card.fields : intitulé « ${k} » absent de book.json (cardFields : ${ids.join(', ') || 'aucun'})`, 'edit', s.id);
-      }
+      if (!ids.includes(k)) report.error(unknownField(k), 'edit', s.id);
     }
     for (const id of ids) {
       if (!(id in values)) report.warning(`scène « ${s.id} » : carte : caractéristique « ${id} » sans valeur (affichée « — »)`, 'fusion', s.id);
@@ -449,7 +469,7 @@ export async function checkBookSource(sourceDir: string, report: Report, readSce
     if (r) scenes.push(r);
   }
 
-  // --- Cartes de collection (CC1, spec-carte-collection.md §6) : valeurs de modules.card.fields contre book.json.cardFields ---
+  // --- Cartes de collection (CC1, §6 ; CC3, §15.8) : type et valeurs de modules.card contre book.json (cardFields ou cardTypes) ---
   checkCards(book, scenes, report);
 
   // --- V-03 : existence des assets ; contrôle de taille des sources ---

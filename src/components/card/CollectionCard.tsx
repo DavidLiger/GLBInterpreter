@@ -4,18 +4,21 @@
 // taille fixe (`CARD_WIDTH` × `CARD_HEIGHT` px logiques) et mise à l'échelle d'un bloc par `scale` (fenêtre de la carte).
 // De haut en bas : titre et numéro, sous-titre, illustration 3:2, caractéristiques (2 colonnes, 4 au plus, « — » sans
 // valeur), paragraphe, titre du livre. Ne lit ni n'écrit la progression : montable tel quel dans l'atelier (aperçu, CC2).
+// Types de cartes (CC3, spec-carte-collection.md §15.4) : intitulés du type de la carte ; de 5 à 8 intitulés, mise en page
+// compacte (`glbi-card--compact` : illustration 2:1, 4 rangées de caractéristiques) ; pastille du type sur le coin haut gauche
+// de l'illustration seulement si le livre déclare des types nommés (`cardTypes`).
 // Style commun à tous les livres (classes `glbi-card*`, globals.css), sans élément graphique propre à une marque.
 import { useState } from "react";
 import type { Lang } from "@/i18n/messages";
 import { useTranslation } from "@/contexts/TranslationContext";
-import { BOOK_ICON, CARD_HEIGHT, CARD_WIDTH, type CardFieldLabel, type CardText, type ReaderCard } from "./cardModel";
+import { BOOK_ICON, CARD_HEIGHT, CARD_WIDTH, isCompactType, resolveCardType, showCardType, type CardText, type CardType, type ReaderCard } from "./cardModel";
 
 export interface CollectionCardProps {
   card: ReaderCard;
   /** Titre de la carte : nom de la scène (`scene.name`). */
   title: CardText;
-  /** Intitulés du livre (`book.json.cardFields`), dans l'ordre d'affichage. */
-  fields: readonly CardFieldLabel[];
+  /** Types de cartes du livre (`parseCardTypes` : `cardTypes`, ou type implicite tiré de `cardFields`). */
+  types: readonly CardType[];
   /** Rang de la scène dans `book.json.scenes` (à partir de 1) et nombre de scènes du livre. */
   number: number;
   total: number;
@@ -29,16 +32,20 @@ export interface CollectionCardProps {
 
 const fill = (s: string, vars: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
 
-export default function CollectionCard({ card, title, fields, number, total, bookTitle, lang, scale = 1, titleId }: CollectionCardProps) {
+export default function CollectionCard({ card, title, types, number, total, bookTitle, lang, scale = 1, titleId }: CollectionCardProps) {
   const { t } = useTranslation();
   // Illustration introuvable : icône du livre, puis cadre vide.
   const [src, setSrc] = useState(card.image);
   const [noImage, setNoImage] = useState(false);
+  const type = resolveCardType(types, card.type);
+  const fields = type.fields;
+  const typeName = showCardType(types) ? type.name : undefined;
   return (
     <div className="glbi-card-box" style={{ width: CARD_WIDTH * scale, height: CARD_HEIGHT * scale }} data-testid="collection-card">
       <article
-        className="glbi-card"
+        className={isCompactType(type) ? "glbi-card glbi-card--compact" : "glbi-card"}
         lang={lang}
+        data-card-type={type.id}
         style={{ width: CARD_WIDTH, height: CARD_HEIGHT, transform: scale === 1 ? undefined : `scale(${scale})` }}
       >
         <div className="glbi-card-inner">
@@ -56,6 +63,11 @@ export default function CollectionCard({ card, title, fields, number, total, boo
             </p>
           )}
           <div className="glbi-card-image">
+            {typeName && (
+              <span className="glbi-card-type" data-testid="card-type">
+                {typeName[lang]}
+              </span>
+            )}
             {!noImage && (
               // eslint-disable-next-line @next/next/no-img-element -- export statique, images du livre servies telles quelles (D-7.5)
               <img

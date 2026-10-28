@@ -27,6 +27,7 @@ import {
 } from './essai';
 import {
   addedScenes,
+  cardTypeUsage,
   composeBook,
   emptyForm,
   folderNameError,
@@ -291,28 +292,32 @@ test('book.json : forme écrite identique à JSON.stringify(…, 2) dans l’ord
   assert.equal(formatBook(w.book), w.text);
 });
 
-test('CC2 : section « Carte de collection » : cardFields lu dans le formulaire, réécrit à l’identique ; vide : omis ; refus', () => {
+test('CC2, CC3 : un seul type : cardFields lu dans le formulaire (type implicite personnage), réécrit à l’identique ; vide : omis ; refus', () => {
   const cardFields = [{ id: 'taille', label: { fr: 'Taille', en: 'Length', es: 'Longitud' } }, { id: 'poids', label: { fr: 'Poids', en: 'Weight', es: 'Peso' } }];
   const raw = { ...sampleBook, cardFields, unlockThreshold: 2 };
   const r = readableBook(raw, 2026);
-  assert.deepEqual(r.form.cardFields, cardFields);
+  assert.deepEqual(r.form.cardTypes, [{ id: 'personnage', name: { fr: '', en: '', es: '' }, fields: cardFields }]);
   const again = validateBook(composeBook(formFromBody(JSON.parse(JSON.stringify(r.form))), { unlockThreshold: r.unlockThreshold }));
   assert.ok(again.ok);
-  assert.equal(again.text, `${JSON.stringify(raw, null, 2)}\n`, 'sans modification : octet pour octet, cardFields après legal');
+  assert.equal(again.text, `${JSON.stringify(raw, null, 2)}\n`, 'sans modification : octet pour octet, cardFields après legal (livre 1)');
   // Ajout puis ordre : écrits dans l'ordre du formulaire.
-  const added = { ...r.form, cardFields: [{ id: 'regime', label: { fr: 'Régime', en: 'Diet', es: 'Dieta' } }, ...r.form.cardFields] };
-  const w = validateBook(composeBook(added));
+  const one = (fields: typeof cardFields) => ({ ...r.form, cardTypes: [{ ...r.form.cardTypes[0], fields }] });
+  const w = validateBook(composeBook(one([{ id: 'regime', label: { fr: 'Régime', en: 'Diet', es: 'Dieta' } }, ...cardFields])));
   assert.ok(w.ok && JSON.parse(w.text).cardFields.map((f: { id: string }) => f.id).join() === 'regime,taille,poids');
-  // Aucun intitulé : cardFields omis (le contrat en exige au moins un s'il est présent).
-  const none = validateBook(composeBook({ ...r.form, cardFields: [] }));
-  assert.ok(none.ok && !('cardFields' in JSON.parse(none.text)));
-  // Refus de bookSchema : intitulé en double, trop long (14 au plus), 5 intitulés.
-  const bad = validateBook(composeBook({ ...r.form, cardFields: [cardFields[0], cardFields[0]] }));
+  // Aucun intitulé (ou aucun type) : cardFields omis (le contrat en exige au moins un s'il est présent).
+  for (const form of [one([]), { ...r.form, cardTypes: [] }]) {
+    const none = validateBook(composeBook(form));
+    assert.ok(none.ok && !('cardFields' in JSON.parse(none.text)) && !('cardTypes' in JSON.parse(none.text)));
+  }
+  // Refus de bookSchema : intitulé en double, trop long (14 au plus), 9 intitulés (8 au plus depuis CC3).
+  const bad = validateBook(composeBook(one([cardFields[0], cardFields[0]])));
   assert.ok(!bad.ok && bad.errors.some((e) => e === 'book.json : cardFields : intitulé en double « taille »'));
-  const long = validateBook(composeBook({ ...r.form, cardFields: [{ id: 'x', label: { fr: 'Longueur totale', en: 'L', es: 'L' } }] }));
+  const long = validateBook(composeBook(one([{ id: 'x', label: { fr: 'Longueur totale', en: 'L', es: 'L' } }])));
   assert.ok(!long.ok && long.errors.some((e) => e === 'book.json : cardFields.0.label.fr : 15 caractères (14 au plus)'), long.ok ? '' : long.errors.join('\n'));
-  const five = validateBook(composeBook({ ...r.form, cardFields: ['a', 'b', 'c', 'd', 'e'].map((id) => ({ id, label: { fr: id, en: id, es: id } })) }));
-  assert.ok(!five.ok && five.errors.some((e) => e.startsWith('book.json : cardFields : ')));
+  const ids = (n: number) => Array.from({ length: n }, (_, k) => ({ id: `f${k}`, label: { fr: `F${k}`, en: `F${k}`, es: `F${k}` } }));
+  assert.ok(validateBook(composeBook(one(ids(8)))).ok, '8 intitulés admis');
+  const nine = validateBook(composeBook(one(ids(9))));
+  assert.ok(!nine.ok && nine.errors.includes('book.json : cardFields : 8 intitulés au plus'));
   // Scènes dont la carte utilise un intitulé (confirmation avant de le retirer).
   const edits = {
     trex: { modules: { card: { fields: { taille: {}, poids: {} }, text: {} } } },
@@ -323,6 +328,62 @@ test('CC2 : section « Carte de collection » : cardFields lu dans le formulaire
   assert.deepEqual(scenesUsingCardField(edits, 'taille'), ['trex', 'raptor']);
   assert.deepEqual(scenesUsingCardField(edits, 'poids'), ['trex']);
   assert.deepEqual(scenesUsingCardField(edits, 'regime'), []);
+});
+
+const T3 = (fr: string, en = fr, es = fr) => ({ fr, en, es });
+const TYPES = [
+  { id: 'personnage', name: T3('Personnage', 'Character', 'Personaje'), fields: [{ id: 'taille', label: T3('Taille') }] },
+  { id: 'lieu', name: T3('Lieu', 'Place', 'Lugar'), fields: [{ id: 'region', label: T3('Région') }, { id: 'taille', label: T3('Superficie') }] },
+];
+
+test('CC3 : forme la plus courte : deux types → cardTypes (ordre du contrat), relu puis réécrit à l’identique ; retour à un type → cardFields, nom perdu', () => {
+  const raw = { ...sampleBook, cardTypes: TYPES };
+  const v = validateBook(raw);
+  assert.ok(v.ok);
+  assert.equal(v.text, `${JSON.stringify(raw, null, 2)}\n`, 'livre à cardTypes (livre de test) réécrit octet pour octet');
+  const r = readableBook(raw, 2026);
+  assert.deepEqual(r.form.cardTypes, TYPES);
+  const again = validateBook(composeBook(formFromBody(JSON.parse(JSON.stringify(r.form)))));
+  assert.ok(again.ok && again.text === v.text);
+  // Passage à deux types depuis cardFields : « personnage » en tête, cardTypes écrit (pas cardFields).
+  const fromOne = readableBook({ ...sampleBook, cardFields: TYPES[0].fields }, 2026).form;
+  const two = { ...fromOne, cardTypes: [{ ...fromOne.cardTypes[0], name: T3('Personnage', 'Character', 'Personaje') }, TYPES[1]] };
+  const w = validateBook(composeBook(two));
+  assert.ok(w.ok);
+  const out = JSON.parse(w.text);
+  assert.ok(!('cardFields' in out));
+  assert.deepEqual(out.cardTypes.map((t: { id: string }) => t.id), ['personnage', 'lieu']);
+  assert.deepEqual(Object.keys(out), ['bookId', 'title', 'languages', 'scenes', 'origin', 'ogImage', 'legal', 'cardTypes']);
+  assert.deepEqual(Object.keys(out.cardTypes[0]), ['id', 'name', 'fields']);
+  // Retour à un seul type (le type « lieu » reste) : cardFields avec ses intitulés, nom perdu.
+  const back = validateBook(composeBook({ ...two, cardTypes: [TYPES[1]] }));
+  assert.ok(back.ok);
+  assert.deepEqual(JSON.parse(back.text).cardFields.map((f: { id: string }) => f.id), ['region', 'taille']);
+  assert.ok(!back.text.includes('Lieu'), 'nom du type non écrit');
+  // Deux types, un sans intitulé : refus de bookSchema (message de book:check).
+  const empty = validateBook(composeBook({ ...two, cardTypes: [two.cardTypes[0], { ...TYPES[1], fields: [] }] }));
+  assert.ok(!empty.ok && empty.errors.includes('book.json : cardTypes.1.fields : au moins un intitulé par type'), empty.ok ? '' : empty.errors.join('\n'));
+});
+
+test('CC3 : usageType (type explicite, implicite de tête) ; usageIntitule tient compte du type', () => {
+  const edits = {
+    trex: { modules: { card: { fields: { taille: {} }, text: {} } } },
+    raptor: { modules: { card: { type: 'personnage', fields: { taille: {} }, text: {} } } },
+    ptero: { modules: {} },
+    vallee: { modules: { card: { type: 'lieu', fields: { region: {}, taille: {} }, text: {} } } },
+    duo: { modules: { card: { type: 'rencontre', text: {} } } },
+  };
+  const head = cardTypeUsage(edits, { id: 'personnage', tete: true });
+  assert.deepEqual(head.scenes, ['trex', 'raptor'], 'type de tête : cartes de ce type et cartes sans type');
+  assert.deepEqual(head.explicit, ['raptor']);
+  assert.deepEqual(head.implicit, ['trex']);
+  assert.deepEqual(head.cards, { trex: null, raptor: 'personnage', vallee: 'lieu', duo: 'rencontre' });
+  const lieu = cardTypeUsage(edits, { id: 'lieu', tete: false });
+  assert.deepEqual(lieu.scenes, ['vallee'], 'type qui n’est pas en tête : cartes de ce type seulement');
+  assert.deepEqual(cardTypeUsage(edits, { id: 'lieu', tete: true }).scenes, ['trex', 'vallee'], 'mis en tête : les cartes sans type en plus');
+  // Intitulé « taille » de deux types : chaque type ne voit que ses cartes.
+  assert.deepEqual(scenesUsingCardField(edits, 'taille', { id: 'personnage', tete: true }), ['trex', 'raptor']);
+  assert.deepEqual(scenesUsingCardField(edits, 'taille', { id: 'lieu', tete: false }), ['vallee']);
 });
 
 test('formulaire : lu, recomposé, réécrit à l’identique ; unlockThreshold conservé ; ogImage vide omis ; refus de bookSchema', () => {

@@ -11,7 +11,7 @@
 // vérification de forme minimale des champs lus, pour un message lisible si le dossier n'est pas un livre construit.
 import type { BuiltScene } from "@/schema/glbi";
 import type { ButtonsModeConfig, CreditEntry, DioramaConfig3D, DioramaCredits, POI } from "@/types/diorama";
-import { parseCardFields, readerCardOf, type CardFieldLabel, type ReaderCard } from "@/components/card/cardModel";
+import { parseCardTypes, readerCardOf, type CardType, type ReaderCard } from "@/components/card/cardModel";
 
 /** Identifiant du POI de départ (V-04) : seul POI d'une scène v1, premier POI de la fixture. */
 export const START_POI_ID = "start";
@@ -37,8 +37,11 @@ export interface ReaderBook {
   legal?: { year: number; text: { fr: string; en: string; es: string } };
   /** Adresse imprimée dans les QR (`book.json.origin`) : le scanner interne n'accepte que les QR de ce livre (Î14). */
   origin?: string;
-  /** Intitulés des caractéristiques des cartes de collection (`book.json.cardFields`, CC1) ; vide si le livre n'en a pas. */
-  cardFields: CardFieldLabel[];
+  /**
+   * Types de cartes de collection (CC3) : `book.json.cardTypes`, sinon un type implicite `personnage` tiré de `cardFields`
+   * (CC1 ; sans intitulé si le livre n'en a pas). Jamais vide.
+   */
+  cardTypes: CardType[];
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -55,7 +58,7 @@ export function parseReaderBook(raw: unknown): ReaderBook {
     title: isObj(raw.title) ? (raw.title as ReaderBook["title"]) : undefined,
     legal: isObj(raw.legal) ? (raw.legal as ReaderBook["legal"]) : undefined,
     origin: typeof raw.origin === "string" ? raw.origin : undefined,
-    cardFields: parseCardFields(raw.cardFields),
+    cardTypes: parseCardTypes(raw.cardFields, raw.cardTypes),
   };
 }
 

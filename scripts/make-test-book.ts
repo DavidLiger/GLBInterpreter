@@ -31,13 +31,19 @@
 //   valeurs jusqu'à 16 caractères, paragraphe de 250 caractères en espagnol) ; « raptor » une carte sans illustration
 //   (image de chargement à la place), sans sous-titre, « régime » sans valeur (avertissement voulu, affiché « — ») ;
 //   « ptero » et « duo » sans carte ;
+// - types de cartes (CC3, spec-carte-collection.md §15.12) : `book.json.cardTypes` (au lieu de `cardFields`) : `personnage`
+//   (taille, poids, époque, régime) en tête, `rencontre` (4 intitulés : lien, pouvoir, coût, durée), `lieu` (8 intitulés) ;
+//   « trex » : carte sans `type` (type par défaut, inchangée) ; « raptor » : `type: "personnage"` écrit (comme l'atelier) ;
+//   « duo » : carte `rencontre` (mise en page normale, pastille) ; 5ᵉ scène « vallee » en fin (décor synthétique, une action
+//   « vent », sans quiz) : carte `lieu`, la plus chargée en mise en page compacte (8 valeurs, jusqu'à 16 caractères,
+//   paragraphe de 250 caractères en espagnol, illustration 3:2 recadrée en 2:1). GLB de trex, raptor, ptero et duo inchangés ;
 // - un dossier `blender/` déjà posé dans le livre de test (raptor réel, point de clôture de ST1) est conservé : seul le reste
 //   du dossier est effacé et réécrit.
 import fs from 'node:fs';
 import path from 'node:path';
 import { Document, NodeIO, type Node as GNode, type TypedArray } from '@gltf-transform/core';
 import sharp from 'sharp';
-import { EDIT_LAYER_VERSION, LAYER3D_VERSION, RESERVED_SOURCE_DIR, type Book, type CardField, type EditLayer, type Layer3d } from '../src/schema/glbi';
+import { EDIT_LAYER_VERSION, LAYER3D_VERSION, RESERVED_SOURCE_DIR, type Book, type CardField, type CardType, type EditLayer, type Layer3d } from '../src/schema/glbi';
 
 const dir = path.resolve(process.cwd(), process.argv[2] ?? 'books/test-dino');
 
@@ -371,7 +377,39 @@ const CARD_FIELDS: CardField[] = [
   { id: 'regime', label: L('Régime', 'Diet', 'Dieta') },
 ];
 
-/** Carte de chaque scène (couche éditoriale, `modules.card`) ; « ptero » et « duo » n'en ont pas. */
+/**
+ * Types de cartes du livre de test (CC3, `book.json.cardTypes`) : `personnage` en tête (type par défaut), `rencontre`,
+ * `lieu` (8 intitulés : mise en page compacte). Exemples pour les livres dont vous êtes le héros : le livre 1 n'a qu'un type.
+ */
+const CARD_TYPES: CardType[] = [
+  { id: 'personnage', name: L('Personnage', 'Character', 'Personaje'), fields: CARD_FIELDS },
+  {
+    id: 'rencontre',
+    name: L('Rencontre', 'Encounter', 'Encuentro'),
+    fields: [
+      { id: 'lien', label: L('Lien', 'Bond', 'Vínculo') },
+      { id: 'pouvoir', label: L('Pouvoir', 'Power', 'Poder') },
+      { id: 'cout', label: L('Coût', 'Cost', 'Coste') },
+      { id: 'duree', label: L('Durée', 'Duration', 'Duración') },
+    ],
+  },
+  {
+    id: 'lieu',
+    name: L('Lieu', 'Place', 'Lugar'),
+    fields: [
+      { id: 'region', label: L('Région', 'Region', 'Región') },
+      { id: 'epoque', label: L('Époque', 'Period', 'Época') },
+      { id: 'climat', label: L('Climat', 'Climate', 'Clima') },
+      { id: 'relief', label: L('Relief', 'Terrain', 'Relieve') },
+      { id: 'vegetation', label: L('Végétation', 'Vegetation', 'Vegetación') },
+      { id: 'faune', label: L('Faune', 'Wildlife', 'Fauna') },
+      { id: 'danger', label: L('Danger', 'Danger', 'Peligro') },
+      { id: 'acces', label: L('Accès', 'Access', 'Acceso') },
+    ],
+  },
+];
+
+/** Carte de chaque scène (couche éditoriale, `modules.card`) ; « ptero » n'en a pas. */
 const CARDS: Record<string, NonNullable<NonNullable<EditLayer['modules']>['card']>> = {
   // Carte la plus chargée (capture de 375 × 667 : rien ne doit déborder) : 250 caractères en espagnol.
   trex: {
@@ -389,7 +427,9 @@ const CARDS: Record<string, NonNullable<NonNullable<EditLayer['modules']>['card'
       'El tiranosaurio vivió a finales del Cretácico, en América del Norte. Sus dientes medían hasta 30 cm y su mordida era una de las más potentes del mundo animal. Sus brazos cortos solo tenían dos dedos, pero eran muy musculosos y fuertes, ¡de veras, sí!',
     ),
   },
+  // CC3 : type explicite égal au premier type du livre (comme l'atelier l'écrit) ; « trex » n'en a pas (type par défaut).
   raptor: {
+    type: 'personnage',
     fields: {
       taille: L('2 mètres', '2 metres', '2 metros'),
       poids: L('15 kg', '15 kg', '15 kg'),
@@ -401,7 +441,84 @@ const CARDS: Record<string, NonNullable<NonNullable<EditLayer['modules']>['card'
       'El velocirraptor era un cazador pequeño y rápido, cubierto de plumas.',
     ),
   },
+  // CC3 : type autre que le premier, 4 intitulés (mise en page normale, pastille « Rencontre »).
+  duo: {
+    type: 'rencontre',
+    subtitle: L('Chasseur et proie', 'Hunter and prey', 'Cazador y presa'),
+    fields: {
+      lien: L('Rivaux', 'Rivals', 'Rivales'),
+      pouvoir: L('Course rapide', 'Fast run', 'Carrera rápida'),
+      cout: L('2 pommes', '2 apples', '2 manzanas'),
+      duree: L('3 tours', '3 turns', '3 turnos'),
+    },
+    text: L(
+      'Une rencontre se gagne en jouant la scène : le chasseur et sa proie deviennent des alliés pour le jeu.',
+      'An encounter is won by playing the scene: the hunter and its prey become allies for the game.',
+      'Un encuentro se gana jugando la escena: el cazador y su presa se vuelven aliados para el juego.',
+    ),
+  },
+  // CC3 : carte la plus chargée en mise en page compacte (8 caractéristiques, valeurs jusqu'à 16 caractères, 250 en espagnol).
+  vallee: {
+    type: 'lieu',
+    subtitle: L('Hell Creek · il y a 66 millions d’années', 'Hell Creek · 66 million years ago', 'Hell Creek · hace 66 millones de años'),
+    image: 'images/vallee-card.png',
+    fields: {
+      region: L('Ouest américain', 'Western America', 'Oeste de América'),
+      epoque: L('Fin du Crétacé', 'Late Cretaceous', 'Cretácico tardío'),
+      climat: L('Chaud et humide', 'Warm and humid', 'Cálido y húmedo'),
+      relief: L('Plaine fluviale', 'River floodplain', 'Llanura fluvial'),
+      vegetation: L('Fougères, cycas', 'Ferns and cycads', 'Helechos y cicas'),
+      faune: L('Tricératops, rex', 'Triceratops, rex', 'Tricerátops, rex'),
+      danger: L('Crues soudaines', 'Sudden floods', 'Crecidas súbitas'),
+      acces: L('Par la rivière', 'By the river', 'Por el río'),
+    },
+    text: L(
+      'La vallée de Hell Creek était une plaine chaude et humide, traversée de rivières lentes. Les tricératops y broutaient fougères et cycas, et le tyrannosaure guettait sur la berge. Les crues couvraient les os de boue et les gardaient intacts.',
+      'The Hell Creek valley was a warm, wet plain crossed by slow rivers. Triceratops grazed there among ferns and cycads, while the tyrannosaurus lurked on the bank. Sudden floods buried bones in mud and kept them safe for millions of years.',
+      'El valle de Hell Creek era una llanura cálida y húmeda, cruzada por ríos lentos. Allí pastaban los tricerátops entre helechos y cicas, mientras el tiranosaurio acechaba en la orilla. Las crecidas súbitas cubrían los huesos de barro y los conservaban.',
+    ),
+  },
 };
+
+/** Illustration de la carte de « vallee » : 900 × 600 (3:2), recadrée en 2:1 par la mise en page compacte (bande centrale). */
+async function valleyImage(file: string): Promise<void> {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600">
+    <rect width="900" height="600" fill="#93c5fd"/><rect y="0" width="900" height="75" fill="#dc2626"/><rect y="525" width="900" height="75" fill="#dc2626"/>
+    <polygon points="0,420 180,200 360,420" fill="#78716c"/><polygon points="260,420 520,150 780,420" fill="#57534e"/><polygon points="620,420 780,240 900,380 900,420" fill="#78716c"/>
+    <rect y="400" width="900" height="125" fill="#4d7c0f"/><path d="M0,470 C200,430 400,510 600,460 S900,450 900,450 L900,490 C700,500 500,540 300,500 S0,510 0,510 Z" fill="#0ea5e9"/>
+  </svg>`;
+  await sharp(Buffer.from(svg)).png().toFile(file);
+}
+
+/** Scène « vallee » (CC3) : décor synthétique (GLB de `makeGlb`), une action « vent », sans quiz. */
+function valleyLayer3d(): Layer3d {
+  return {
+    version: LAYER3D_VERSION,
+    scene: { id: 'vallee' },
+    modules: {
+      camera: { target: 'start' },
+      animations: {
+        mode: 'buttons',
+        idle: { object: 'Armature_Vallee', clip: 'idle', loop: true },
+        actions: [{ id: 'vent', object: 'Armature_Vallee', type: 'armature', clip: 'vent', trigger: 'button', loop: false }],
+      },
+    },
+  };
+}
+
+function valleyEditLayer(): EditLayer {
+  return {
+    version: EDIT_LAYER_VERSION,
+    scene: { name: L('La vallée', 'The valley', 'El valle'), loaderImage: 'images/vallee-preview.png' },
+    modules: {
+      // Sans `enableZoom` (vrai par défaut) : forme écrite par l'atelier, l'aller-retour de « vallee » reste identique.
+      camera: { zoom: 0.5, minDistance: 1, maxDistance: 20 } as NonNullable<NonNullable<EditLayer['modules']>['camera']>,
+      animations: { actions: { vent: { label: L('Vent', 'Wind', 'Viento'), icon: 'icons/roar.png', sound: 'sounds/vallee_vent.wav' } } },
+      card: CARDS.vallee,
+      credits: { assets: [{ asset: 'sounds/vallee_vent.wav', title: 'Vent (test)', author: 'GLBInterpreter', license: 'CC0' }] },
+    },
+  };
+}
 
 /** Illustration de la carte de « trex » : 900 × 600 (3:2), ciel, sol et silhouette, reconnaissable à l'écran. */
 async function cardImage(file: string): Promise<void> {
@@ -446,11 +563,11 @@ async function main(): Promise<void> {
     bookId: 'test-dino',
     title: L('Dinos de test', 'Test dinos', 'Dinos de prueba'),
     languages: ['fr', 'en', 'es'],
-    scenes: ['trex', 'raptor', 'ptero', 'duo'],
+    scenes: ['trex', 'raptor', 'ptero', 'duo', 'vallee'],
     origin: 'https://dino.editions-liger.com',
     ogImage: 'images/og.png',
     legal: { year: 2026, text: L('© Éditions Liger', '© Éditions Liger', '© Éditions Liger') },
-    cardFields: CARD_FIELDS,
+    cardTypes: CARD_TYPES,
   };
   fs.writeFileSync(path.join(dir, 'book.json'), `${JSON.stringify(book, null, 2)}\n`);
 
@@ -471,9 +588,12 @@ async function main(): Promise<void> {
   }
   // « duo » en fin de livre (AC1).
   await makeDuoGlb(path.join(dir, 'scenes/duo.glb'), duoLayer3d());
-  fs.writeFileSync(path.join(dir, 'scenes/duo.edit.json'), `${JSON.stringify(duoEditLayer(), null, 2)}\n`);
+  fs.writeFileSync(path.join(dir, 'scenes/duo.edit.json'), `${JSON.stringify(withCard(duoEditLayer(), 'duo'), null, 2)}\n`);
+  // « vallee » en fin de livre (CC3).
+  await makeGlb(path.join(dir, 'scenes/vallee.glb'), 'Armature_Vallee', ['idle', 'vent'], valleyLayer3d());
+  fs.writeFileSync(path.join(dir, 'scenes/vallee.edit.json'), `${JSON.stringify(valleyEditLayer(), null, 2)}\n`);
 
-  for (const f of ['images/og.png', 'images/raptor-preview.png', 'images/ptero-preview.png', 'images/duo-preview.png', 'icons/walk.png', 'icons/roar.png', 'icons/eat.png']) {
+  for (const f of ['images/og.png', 'images/raptor-preview.png', 'images/ptero-preview.png', 'images/duo-preview.png', 'images/vallee-preview.png', 'icons/walk.png', 'icons/roar.png', 'icons/eat.png']) {
     fs.writeFileSync(path.join(dir, f), PNG_1X1);
   }
   // Bruit pseudo-aléatoire (graine fixe : même fichier à chaque génération) : un PNG incompressible de ≈ 3 MiB.
@@ -486,6 +606,7 @@ async function main(): Promise<void> {
   }
   await sharp(noise, { raw: { width: side, height: side, channels: 3 } }).png({ compressionLevel: 9 }).toFile(path.join(dir, 'images/trex-preview.png'));
   await cardImage(path.join(dir, 'images/trex-card.png'));
+  await valleyImage(path.join(dir, 'images/vallee-card.png'));
   // Icône du livre (Î9) : PNG carré ≥ 512 px, motif transparent (disque vert) pour vérifier les versions opaques.
   await sharp({ create: { width: 512, height: 512, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
     .composite([{ input: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512"><circle cx="256" cy="256" r="220" fill="#2e8b57"/></svg>') }])
@@ -507,6 +628,7 @@ async function main(): Promise<void> {
   fs.writeFileSync(path.join(dir, 'sounds/duo_fuite.wav'), blip(880));
   fs.writeFileSync(path.join(dir, 'sounds/duo_impact.wav'), blip(220));
   fs.writeFileSync(path.join(dir, 'sounds/duo_pas.wav'), blip(550));
+  fs.writeFileSync(path.join(dir, 'sounds/vallee_vent.wav'), actionWav(294));
   console.log(`make-test-book : livre de test écrit dans ${dir}${keptBlender ? ` (dossier ${RESERVED_SOURCE_DIR}/ conservé)` : ''}`);
 }
 

@@ -1,6 +1,9 @@
 // Cartes de collection (CC1, spec-carte-collection.md §2, §3, §11) sur le livre de test installé : `out/` construit depuis
 // `books/test-dino` ; « trex » (carte la plus chargée : sous-titre, illustration, 4 caractéristiques, 250 caractères en
-// espagnol) et « raptor » (sans illustration ni sous-titre, « régime » sans valeur) ont une carte ; « ptero » et « duo » non.
+// espagnol) et « raptor » (sans illustration ni sous-titre, « régime » sans valeur) ont une carte ; « ptero » non.
+// Types de cartes (CC3, spec-carte-collection.md §15) : le livre de test a `cardTypes` (personnage, rencontre, lieu) ;
+// « trex » sans type (personnage par défaut), « raptor » personnage, « duo » rencontre, « vallee » lieu (8 caractéristiques :
+// mise en page compacte, la plus chargée) ; pastille du type sur chaque carte, ligne de compte par type dans le menu.
 // Règles pures (bandeau une seule fois, compte, cartes gagnées) : aussi dans `npm run test:engine`.
 // Captures de la carte (voir ui.spec.ts) : `UI_SHOTS=<dossier> npx playwright test tests/card.spec.ts`.
 import { expect, test, type Page } from '@playwright/test';
@@ -99,17 +102,19 @@ test('scène à carte : bandeau à la première action, puis bouton « Carte » 
 test('menu : compte, mention de la carte à gagner, « Voir la carte », précédente et suivante parmi les cartes gagnées', async ({ page }) => {
   await startWith(page, { raptor: true, ptero: true });
   await install(page, '#/');
-  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 1 carte sur 2', { timeout: 20_000 });
+  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 1 carte sur 4', { timeout: 20_000 });
+  // CC3 : ligne de compte par type, types dans l'ordre de déclaration (trex sans type compte comme personnage)
+  await expect(page.getByTestId('collection-count-types')).toHaveText(/^Personnage 1\/2\s·\sRencontre 0\/1\s·\sLieu 0\/1$/);
   const rows = page.getByTestId('collection').getByRole('listitem');
-  // trex (carte à gagner) : mention ; raptor (gagnée) : bouton ; ptero et duo (sans carte) : ni l'un ni l'autre
-  await expect(rows.nth(0).getByTestId('card-to-earn')).toHaveText('Fais bouger la scène pour gagner sa carte !');
-  await expect(rows.nth(0).getByTestId('card-view')).toHaveCount(0);
+  // trex, duo, vallee (cartes à gagner) : mention ; raptor (gagnée) : bouton ; ptero (sans carte) : ni l'un ni l'autre
+  for (const i of [0, 3, 4]) {
+    await expect(rows.nth(i).getByTestId('card-to-earn')).toHaveText('Fais bouger la scène pour gagner sa carte !');
+    await expect(rows.nth(i).getByTestId('card-view')).toHaveCount(0);
+  }
   await expect(rows.nth(1).getByTestId('card-view')).toHaveText('Voir la carte');
   await expect(rows.nth(1).getByTestId('card-to-earn')).toHaveCount(0);
-  for (const i of [2, 3]) {
-    await expect(rows.nth(i).getByTestId('card-view')).toHaveCount(0);
-    await expect(rows.nth(i).getByTestId('card-to-earn')).toHaveCount(0);
-  }
+  await expect(rows.nth(2).getByTestId('card-view')).toHaveCount(0);
+  await expect(rows.nth(2).getByTestId('card-to-earn')).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Tyrannosaure' })).toBeVisible();
   const v = (await rows.nth(1).getByTestId('card-view').boundingBox())!;
   expect(v.height).toBeGreaterThanOrEqual(44);
@@ -118,7 +123,8 @@ test('menu : compte, mention de la carte à gagner, « Voir la carte », précé
   await page.getByRole('button', { name: 'Voir la carte : Vélociraptor' }).click();
   let dialog = page.getByTestId('card-dialog');
   await expect(dialog.getByTestId('card-title')).toHaveText('Vélociraptor');
-  await expect(dialog.getByTestId('card-number')).toHaveText('n° 2 / 4');
+  await expect(dialog.getByTestId('card-number')).toHaveText('n° 2 / 5');
+  await expect(dialog.getByTestId('card-type')).toHaveText('Personnage');
   await expect(dialog.getByTestId('card-previous')).toHaveCount(0);
   // « régime » sans valeur : « — » ; pas de sous-titre ; illustration = image de chargement
   await expect(dialog.getByTestId('card-fields').locator('dd')).toHaveText(['2 mètres', '15 kg', 'Crétacé', '—']);
@@ -134,8 +140,8 @@ test('menu : compte, mention de la carte à gagner, « Voir la carte », précé
     localStorage.setItem(k, JSON.stringify(v));
   }, PROGRESS_KEY);
   await page.reload();
-  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 2 cartes sur 2', { timeout: 20_000 });
-  await expect(page.getByTestId('card-to-earn')).toHaveCount(0);
+  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 2 cartes sur 4', { timeout: 20_000 });
+  await expect(page.getByTestId('card-to-earn')).toHaveCount(2);
   await page.getByRole('button', { name: 'Voir la carte : Tyrannosaure' }).click();
   dialog = page.getByTestId('card-dialog');
   await expect(dialog.getByTestId('card-title')).toHaveText('Tyrannosaure');
@@ -158,11 +164,11 @@ test('carte dans les trois langues ; la plus chargée sur un écran de 375 × 66
   await page.setViewportSize({ width: 375, height: 667 });
   await startWith(page, { trex: true });
   await install(page, '#/');
-  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 1 carte sur 2', { timeout: 20_000 });
+  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 1 carte sur 4', { timeout: 20_000 });
   const expected = {
-    Français: { open: 'Voir la carte : Tyrannosaure', name: 'Carte : Tyrannosaure', number: 'n° 1 / 4', subtitle: 'T. rex · il y a 68 millions d’années', labels: ['Taille', 'Poids', 'Époque', 'Régime'], values: ['12 à 13 mètres', '8 à 9 tonnes', 'Fin du Crétacé', 'Carnivore'], text: /^Le tyrannosaure vivait/, foot: 'Dinos de test', close: 'Fermer' },
-    English: { open: 'See the card: Tyrannosaurus', name: 'Card: Tyrannosaurus', number: 'No. 1 / 4', subtitle: 'T. rex · 68 million years ago', labels: ['Length', 'Weight', 'Period', 'Diet'], values: ['12 to 13 metres', '8 to 9 tonnes', 'Late Cretaceous', 'Carnivore'], text: /^The tyrannosaurus lived/, foot: 'Test dinos', close: 'Close' },
-    Español: { open: 'Ver la carta: Tiranosaurio', name: 'Carta: Tiranosaurio', number: 'N.º 1 / 4', subtitle: 'T. rex · hace 68 millones de años', labels: ['Longitud', 'Peso', 'Época', 'Dieta'], values: ['12 a 13 metros', '8 a 9 toneladas', 'Cretácico tardío', 'Carnívoro'], text: /^El tiranosaurio vivió/, foot: 'Dinos de prueba', close: 'Cerrar' },
+    Français: { open: 'Voir la carte : Tyrannosaure', name: 'Carte : Tyrannosaure', number: 'n° 1 / 5', type: 'Personnage', subtitle: 'T. rex · il y a 68 millions d’années', labels: ['Taille', 'Poids', 'Époque', 'Régime'], values: ['12 à 13 mètres', '8 à 9 tonnes', 'Fin du Crétacé', 'Carnivore'], text: /^Le tyrannosaure vivait/, foot: 'Dinos de test', close: 'Fermer' },
+    English: { open: 'See the card: Tyrannosaurus', name: 'Card: Tyrannosaurus', number: 'No. 1 / 5', type: 'Character', subtitle: 'T. rex · 68 million years ago', labels: ['Length', 'Weight', 'Period', 'Diet'], values: ['12 to 13 metres', '8 to 9 tonnes', 'Late Cretaceous', 'Carnivore'], text: /^The tyrannosaurus lived/, foot: 'Test dinos', close: 'Close' },
+    Español: { open: 'Ver la carta: Tiranosaurio', name: 'Carta: Tiranosaurio', number: 'N.º 1 / 5', type: 'Personaje', subtitle: 'T. rex · hace 68 millones de años', labels: ['Longitud', 'Peso', 'Época', 'Dieta'], values: ['12 a 13 metros', '8 a 9 toneladas', 'Cretácico tardío', 'Carnívoro'], text: /^El tiranosaurio vivió/, foot: 'Dinos de prueba', close: 'Cerrar' },
   } as const;
   for (const [lang, e] of Object.entries(expected)) {
     await page.getByRole('button', { name: lang, exact: true }).click();
@@ -172,6 +178,9 @@ test('carte dans les trois langues ; la plus chargée sur un écran de 375 × 66
     const card = dialog.getByTestId('collection-card');
     await expect(card.getByTestId('card-title')).toHaveText(e.name.split(/\s?:\s/)[1]);
     await expect(card.getByTestId('card-number')).toHaveText(e.number);
+    // CC3 : pastille du type (carte sans type : premier type du livre), mise en page normale (4 caractéristiques)
+    await expect(card.getByTestId('card-type')).toHaveText(e.type);
+    await expect(card.locator('.glbi-card--compact')).toHaveCount(0);
     await expect(card.getByTestId('card-subtitle')).toHaveText(e.subtitle);
     await expect(card.locator('dt')).toHaveText([...e.labels]);
     await expect(card.locator('dd')).toHaveText([...e.values]);
@@ -202,4 +211,71 @@ test('carte dans les trois langues ; la plus chargée sur un écran de 375 × 66
     await dialog.getByRole('button', { name: e.close }).click();
     await expect(dialog).toBeHidden();
   }
+});
+
+test('types de cartes (CC3) : pastilles, carte compacte de « vallee » sur 375 × 667 sans débordement, précédente et suivante entre types', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await startWith(page, { trex: true, duo: true, vallee: true });
+  await install(page, '#/');
+  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 3 cartes sur 4', { timeout: 20_000 });
+  await expect(page.getByTestId('collection-count-types')).toHaveText(/^Personnage 1\/2\s·\sRencontre 1\/1\s·\sLieu 1\/1$/);
+  // Pastille de « vallee » dans les trois langues ; mise en page compacte : 8 caractéristiques, rien ne déborde
+  const expected = {
+    Français: { open: 'Voir la carte : La vallée', type: 'Lieu', first: 'Région', text: /^La vallée de Hell Creek/ },
+    English: { open: 'See the card: The valley', type: 'Place', first: 'Region', text: /^The Hell Creek valley/ },
+    Español: { open: 'Ver la carta: El valle', type: 'Lugar', first: 'Región', text: /^El valle de Hell Creek/ },
+  } as const;
+  for (const [lang, e] of Object.entries(expected)) {
+    await page.getByRole('button', { name: lang, exact: true }).click();
+    await page.getByRole('button', { name: e.open }).click();
+    const dialog = page.getByTestId('card-dialog');
+    const card = dialog.getByTestId('collection-card');
+    await expect(card.getByTestId('card-type')).toHaveText(e.type);
+    await expect(card.locator('article.glbi-card--compact')).toHaveCount(1);
+    await expect(card.locator('dt')).toHaveCount(8);
+    await expect(card.locator('dt').first()).toHaveText(e.first);
+    await expect(card.getByTestId('card-text')).toHaveText(e.text);
+    await expect.poll(() => card.getByTestId('card-image').evaluate((i: HTMLImageElement) => i.complete && i.naturalWidth)).toBe(900);
+    // Illustration 2:1 (294 × 147 à l'échelle de la carte)
+    const img = (await card.locator('.glbi-card-image').boundingBox())!;
+    expect(img.width / img.height).toBeCloseTo(2, 1);
+    const box = (await card.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(375);
+    expect(box.y + box.height).toBeLessThanOrEqual(667);
+    const overflow = await card.evaluate((c) =>
+      [...c.querySelectorAll('h2, .glbi-card-number, .glbi-card-subtitle, .glbi-card-type, dt, dd, .glbi-card-text, footer')]
+        .filter((el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1)
+        .map((el) => `${el.className || el.tagName} : ${el.textContent}`),
+    );
+    expect(overflow, 'textes qui débordent').toEqual([]);
+    // Pastille dans le cadre de l'illustration (aucune hauteur prise)
+    const pill = (await card.getByTestId('card-type').boundingBox())!;
+    expect(pill.y).toBeGreaterThanOrEqual(img.y);
+    expect(pill.y + pill.height).toBeLessThanOrEqual(img.y + img.height);
+    if (shots) {
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: `${shots}/${test.info().project.name}-carte-compacte-375x667-${lang}.png` });
+    }
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+  }
+  // Précédente et suivante parmi des cartes de types différents, dans l'ordre du livre (trex, duo, vallee)
+  await page.getByRole('button', { name: 'Français', exact: true }).click();
+  await page.getByRole('button', { name: 'Voir la carte : Tyrannosaure' }).click();
+  const dialog = page.getByTestId('card-dialog');
+  const seen: string[] = [];
+  for (let k = 0; k < 3; k++) {
+    seen.push(`${await dialog.getByTestId('card-title').textContent()} · ${await dialog.getByTestId('card-type').textContent()}`);
+    await dialog.getByRole('button', { name: 'Suivante' }).click();
+  }
+  expect(seen).toEqual(['Tyrannosaure · Personnage', 'La poursuite · Rencontre', 'La vallée · Lieu']);
+  await expect(dialog.getByTestId('card-title')).toHaveText('Tyrannosaure');
+  await dialog.getByRole('button', { name: 'Précédente' }).click();
+  await expect(dialog.getByTestId('card-title')).toHaveText('La vallée');
+  await expect(dialog.locator('article.glbi-card--compact')).toHaveCount(1);
+  await dialog.getByRole('button', { name: 'Précédente' }).click();
+  await expect(dialog.getByTestId('card-title')).toHaveText('La poursuite');
+  await expect(dialog.locator('article.glbi-card--compact')).toHaveCount(0);
 });

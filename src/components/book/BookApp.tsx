@@ -15,7 +15,7 @@ import ServiceWorkerRegister from "./ServiceWorkerRegister";
 import { DEV_BOOK_DIR, fixtureSceneIds, loadFixtureScene, loadReaderBook, loadReaderScene } from "./bookSource";
 import type { ReaderBook, ReaderScene } from "./readerScene";
 import type { QuizModule } from "@/schema/glbi";
-import { cardCount, earnedCards, hasEarnedCard, isNewCard, type ReaderCard } from "@/components/card/cardModel";
+import { cardCount, cardTypeCounts, earnedCards, hasEarnedCard, isNewCard, type ReaderCard } from "@/components/card/cardModel";
 import type { CardEntry } from "@/components/card/CardDialog";
 import type { Lang, Messages } from "@/i18n/messages";
 import { goToScene, parseDevSceneHash, parseSceneHash, sceneHref, useLocationHash } from "./sceneRoute";
@@ -218,7 +218,7 @@ function OpenScene({ reader, sceneId, progress, needsQuiz }: { reader: ReaderBoo
           entries={[{ sceneId, card, title: state.value.config.name, number: reader.scenes.indexOf(sceneId) + 1 }]}
           index={0}
           onClose={() => setCardOpen(false)}
-          fields={reader.cardFields}
+          types={reader.cardTypes}
           total={reader.scenes.length}
           bookTitle={reader.title}
         />
@@ -413,6 +413,8 @@ function CollectionMenu({ book, progress }: { book: ReaderBook | null; progress:
   const withCard = (id: string) => !!cards?.[id]?.card;
   const cardTally = p && book && cards ? cardCount(p, book.scenes, withCard) : null;
   const earned = p && book ? earnedCards(p, book.scenes, withCard) : [];
+  // Types de cartes (CC3, §15.5) : ligne « Personnage 3/5 · Lieu 1/4 » sous le compte, seulement avec book.json.cardTypes.
+  const typeTally = p && book && cards ? cardTypeCounts(p, book.scenes, book.cardTypes, withCard, (id) => cards[id]?.card?.type) : [];
   const [openCard, setOpenCard] = useState<string | null>(null);
   const cardEntries: CardEntry[] = book
     ? earned.map((id) => ({ sceneId: id, card: cards![id]!.card!, title: cards![id]!.name ?? { fr: id, en: id, es: id }, number: book.scenes.indexOf(id) + 1 }))
@@ -429,6 +431,16 @@ function CollectionMenu({ book, progress }: { book: ReaderBook | null; progress:
             {t.collection.title} ·{" "}
             {cardTally ? cardCountText(t, lang, cardTally.n, cardTally.total) : fill(t.collection.progress, { n: count, total: book.scenes.length })}
           </p>
+          {typeTally.length > 0 && (
+            <p className="max-w-md text-sm text-white/65" data-testid="collection-count-types">
+              {typeTally.map((c, i) => (
+                <span key={c.type.id} className="inline-block whitespace-nowrap">
+                  {i > 0 && <span aria-hidden="true">{"\u00a0·\u00a0"}</span>}
+                  {fill(t.card.typeCount, { name: c.type.name?.[lang] ?? c.type.id, n: c.n, total: c.total })}
+                </span>
+              ))}
+            </p>
+          )}
           {/* Rien de débloqué (app ouverte par son icône sans QR scanné) : consigne de commencer par la première page. */}
           {count < book.scenes.length && (
             <p className="max-w-md text-white/80" data-testid="collection-hint">
@@ -499,7 +511,7 @@ function CollectionMenu({ book, progress }: { book: ReaderBook | null; progress:
               index={openIndex}
               onIndex={(i) => setOpenCard(cardEntries[i].sceneId)}
               onClose={() => setOpenCard(null)}
-              fields={book.cardFields}
+              types={book.cardTypes}
               total={book.scenes.length}
               bookTitle={book.title}
             />

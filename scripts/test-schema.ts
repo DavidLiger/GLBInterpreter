@@ -2,7 +2,8 @@
 // Sans navigateur : cas nominal, chaque cas d'erreur du §5 (message exact), mode `draft`, fraîcheur du JSON Schema ;
 // actions combinées (AC1, spec-actions-combinees.md §7, §8) : événements, coupe au noir, instants hors durée (sur un GLB
 // écrit dans un dossier temporaire, lu par `readScene` comme au build) ; empty de position de la caméra (AC2, DP-19, §16) ;
-// carte de collection (CC1, spec-carte-collection.md §5, §6 : intitulés, paragraphe, longueurs, livres existants valides).
+// carte de collection (CC1, spec-carte-collection.md §5, §6 : intitulés, paragraphe, longueurs, livres existants valides) ;
+// types de cartes (CC3, §15.7, §15.8).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -82,7 +83,7 @@ function hasError(r: { errors: string[] }, msg: string): void {
   assert.ok(r.errors.includes(msg), `message attendu :\n    ${msg}\nobtenus :\n    ${r.errors.join('\n    ')}`);
 }
 
-console.log('test:schema — fusion des couches (A1), actions combinées (AC1), position de caméra (AC2) et carte de collection (CC1)');
+console.log('test:schema — fusion des couches (A1), actions combinées (AC1), position de caméra (AC2), carte de collection (CC1) et types de cartes (CC3)');
 
 await test('exemple complet : objet fusionné valide, ordre du GLB, version 1', () => {
   const r = mergeLayers(clone(LAYER3D), clone(EDIT), OPTS);
@@ -504,7 +505,7 @@ await test('CC1 : livre et edit.json sans carte toujours valides ; aucune versio
   assert.ok(!layer3dSchemaText().includes('card'), 'aucun champ de la carte dans la couche 3D');
 });
 
-await test('CC1 : carte valide recopiée dans l’objet fusionné (après le quiz) ; cardFields de 1 à 4, id uniques', () => {
+await test('CC1 : carte valide recopiée dans l’objet fusionné (après le quiz) ; cardFields de 1 à 8 (CC3), id uniques', () => {
   const r = mergeLayers(clone(LAYER3D), editWithCard(clone(CARD)), OPTS);
   assert.deepEqual(r.errors, []);
   assert.deepEqual(r.config!.modules.card, CARD);
@@ -517,7 +518,10 @@ await test('CC1 : carte valide recopiée dans l’objet fusionné (après le qui
     return p.error.issues.map((i) => `${i.path.join('.')} : ${i.message}`);
   };
   assert.deepEqual(fail([]), ['cardFields : au moins un intitulé (sinon, retirer cardFields)']);
-  assert.deepEqual(fail([...CARD_FIELDS, { id: 'cri', label: L('Cri', 'Call', 'Grito') }]), ['cardFields : 4 intitulés au plus']);
+  // CC3 : 8 intitulés au plus (4 en CC1).
+  const many = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `f${i}`, label: L(`F${i}`, `F${i}`, `F${i}`) }));
+  assert.ok(bookSchema.safeParse({ ...BOOK, cardFields: many(8) }).success, 'cardFields à 8 intitulés : valide');
+  assert.deepEqual(fail(many(9)), ['cardFields : 8 intitulés au plus']);
   assert.deepEqual(fail([CARD_FIELDS[0], CARD_FIELDS[0]]), ['cardFields : intitulé en double « taille »']);
   assert.deepEqual(fail([{ id: 'taille', label: L('Taille au garrot', 'Length', 'Longitud') }]), ['cardFields.0.label.fr : 16 caractères (14 au plus)']);
 });
@@ -599,6 +603,77 @@ await test('CC1 : illustration copiée comme les autres assets (build) ; crédit
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Types de cartes (CC3, DP-20, spec-carte-collection.md §15.7, §15.8)
+// ---------------------------------------------------------------------------------------------------------
+
+const CARD_TYPES = [
+  { id: 'personnage', name: L('Personnage', 'Character', 'Personaje'), fields: CARD_FIELDS },
+  { id: 'lieu', name: L('Lieu', 'Place', 'Lugar'), fields: [{ id: 'region', label: L('Région', 'Region', 'Región') }, { id: 'nom', label: L('Nom', 'Name', 'Nombre') }] },
+];
+const bookIssues = (extra: Record<string, unknown>) => {
+  const p = bookSchema.safeParse({ ...BOOK, ...extra });
+  return p.success ? [] : p.error.issues.map((i) => `${i.path.join('.')} : ${i.message}`);
+};
+
+await test('CC3 : cardTypes valide ; un seul type, les deux formes ensemble, doublons, nom trop long refusés ; aucune version, JSON Schema inchangé', () => {
+  assert.deepEqual(bookIssues({ cardTypes: CARD_TYPES }), []);
+  assert.deepEqual(bookIssues({ cardTypes: [CARD_TYPES[0]] }), ['cardTypes : au moins 2 types (un seul type : cardFields)']);
+  assert.deepEqual(bookIssues({ cardTypes: CARD_TYPES, cardFields: CARD_FIELDS }), ['cardTypes : cardFields et cardTypes ensemble : en garder un (cardTypes pour plusieurs types)']);
+  assert.deepEqual(bookIssues({ cardTypes: [...CARD_TYPES, CARD_TYPES[1]] }), ['cardTypes : type en double « lieu »']);
+  const dupField = clone(CARD_TYPES);
+  dupField[1].fields.push(clone(dupField[1].fields[1]));
+  assert.deepEqual(bookIssues({ cardTypes: dupField }), ['cardTypes.1.fields : intitulé en double « nom »']);
+  const longName = clone(CARD_TYPES);
+  longName[1].name.fr = 'Lieu-dit du sud';
+  assert.deepEqual(bookIssues({ cardTypes: longName }), ['cardTypes.1.name.fr : 15 caractères (14 au plus)']);
+  const empty = clone(CARD_TYPES);
+  empty[1].fields = [];
+  assert.deepEqual(bookIssues({ cardTypes: empty }), ['cardTypes.1.fields : au moins un intitulé par type']);
+  // Formes de message de book:check (formatIssues, préfixe « book.json : »).
+  // Livre 1 (cardFields) toujours valide ; JSON Schema de la couche 3D sans champ de carte.
+  assert.deepEqual(bookIssues({ cardFields: CARD_FIELDS }), []);
+  assert.ok(!layer3dSchemaText().includes('card'));
+});
+
+await test('CC3 : modules.card.type dans edit.json valide, recopié en tête de la carte ; refusé dans la couche 3D', () => {
+  const card = { type: 'lieu', ...clone(CARD) };
+  const r = mergeLayers(clone(LAYER3D), editWithCard(card), OPTS);
+  assert.deepEqual(r.errors, []);
+  assert.equal(Object.keys(r.config!.modules.card!)[0], 'type');
+  assert.equal(r.config!.modules.card!.type, 'lieu');
+  hasError(mergeLayers(clone(LAYER3D), editWithCard({ ...clone(CARD), type: 'é' }), OPTS), 'scenes/trex.edit.json : modules.card.type : identifiant de type : lettres, chiffres, _ et -');
+  const g = clone(LAYER3D) as unknown as { modules: Record<string, unknown> };
+  g.modules.card = { type: 'lieu', text: L('a', 'b', 'c') };
+  hasError(mergeLayers(g, clone(EDIT), OPTS), 'scenes/trex.glb (couche 3D) : modules : clé « card » non admise, elle appartient à scenes/trex.edit.json');
+});
+
+await test('CC3 : checkCards : type inconnu (deux formes, une seule erreur) ; personnage admis avec cardFields ; intitulé absent du type ; messages de cardFields inchangés', () => {
+  const sceneOf = (card: Record<string, unknown>) => sceneWith(mergeLayers(clone(LAYER3D), editWithCard(card), OPTS).config!);
+  const lines = (book: Book, card: Record<string, unknown>) => {
+    const report = new Report();
+    checkCards(book, [sceneOf(card)], report);
+    return report.lines.map((l) => [l.level, l.origin, l.message]);
+  };
+  const typed = { ...BOOK, cardTypes: CARD_TYPES } as Book;
+  assert.deepEqual(lines(typed, { ...clone(CARD), type: 'arme' }), [
+    ['error', 'edit', 'scenes/trex.edit.json : modules.card.type : type « arme » absent de book.json (cardTypes : personnage, lieu)'],
+  ], 'type inconnu : cette seule erreur, sans les messages d’intitulés');
+  assert.deepEqual(lines({ ...BOOK, cardFields: CARD_FIELDS }, { ...clone(CARD), type: 'arme' }), [
+    ['error', 'edit', "scenes/trex.edit.json : modules.card.type : type « arme » absent de book.json (book.json n'a qu'un type, « personnage » : cardFields)"],
+  ]);
+  assert.deepEqual(lines({ ...BOOK, cardFields: CARD_FIELDS }, { ...clone(CARD), type: 'personnage' }), [], 'type « personnage » admis avec cardFields');
+  assert.deepEqual(lines(typed, clone(CARD)), [], 'carte sans type : premier type (personnage)');
+  assert.deepEqual(lines(typed, { ...clone(CARD), type: 'lieu', fields: { region: L('Ouest', 'West', 'Oeste'), poid: L('1', '1', '1') } }), [
+    ['error', 'edit', 'scenes/trex.edit.json : modules.card.fields : intitulé « poid » absent du type « lieu » (intitulés : region, nom)'],
+    ['warning', 'fusion', 'scène « trex » : carte : caractéristique « nom » sans valeur (affichée « — »)'],
+  ]);
+  // Avec cardFields, messages de CC1 mot pour mot (test CC1 ci-dessus) : intitulé absent et caractéristique sans valeur.
+  assert.deepEqual(lines({ ...BOOK, cardFields: CARD_FIELDS }, { ...clone(CARD), fields: { poid: L('8 t', '8 t', '8 t') } })[0], [
+    'error', 'edit', 'scenes/trex.edit.json : modules.card.fields : intitulé « poid » absent de book.json (cardFields : taille, poids, epoque, regime)',
+  ]);
 });
 
 await test('JSON Schema de la couche 3D commité à jour', () => {

@@ -81,8 +81,8 @@ export function orderEditLayer(edit: unknown, actionOrder: readonly string[], ev
         choices: map(obj(["text", "correct"], { text })),
         explanation: text,
       }),
-      // Carte de collection (CC1) : valeurs des caractéristiques dans l'ordre du fichier.
-      card: obj(["subtitle", "image", "fields", "text"], {
+      // Carte de collection (CC1) : valeurs des caractéristiques dans l'ordre du fichier ; type en tête (CC3).
+      card: obj(["type", "subtitle", "image", "fields", "text"], {
         subtitle: text,
         fields: (v: unknown) => (isObj(v) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, text(x)])) : v),
         text,

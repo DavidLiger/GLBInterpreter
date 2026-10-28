@@ -2,7 +2,8 @@
 // affichée mène au champ du formulaire concerné. Reconnaissance par les textes de `book:check` (scripts/book-check.ts,
 // src/schema/merge.ts), qui sont le contrat d'affichage ; une ligne non reconnue reste sans lien. AC3 : événements (sans
 // son, orphelin, instant hors du clip, chemins `…actions.<id>.events.<événement>…`) et position de caméra (DP-19). CC2 : carte
-// de collection (intitulé absent de book.json, caractéristique sans valeur, carte sans paragraphe, chemins `modules.card…`).
+// de collection (intitulé absent de book.json, caractéristique sans valeur, carte sans paragraphe, chemins `modules.card…` ;
+// CC3 : type absent de book.json, intitulé absent du type).
 import { CAMERA_NUM_KEYS } from "./cameraForm";
 import type { EditForm, FieldRef } from "./editModel";
 
@@ -35,6 +36,7 @@ function fieldOfEditPath(p: string[], form: EditForm, glbEvents: GlbEvents = {})
     case "card": {
       // Carte de collection (CC2) : `modules.card.<subtitle|image|text>…`, `modules.card.fields.<id>.<langue>`.
       if (p[2] === "fields") return { tab: "card", field: p[3] ? `card.field.${p[3]}` : "card.fields" };
+      if (p[2] === "type") return { tab: "card", field: "card.type" };
       if (p[2] === "subtitle" || p[2] === "image" || p[2] === "text") return { tab: "card", field: `card.${p[2]}` };
       return { tab: "card", field: "card.text" };
     }
@@ -82,6 +84,9 @@ export function fieldOfMessage(message: string, sceneId: string, form: EditForm,
   if ((m = /action « (.+?) » : (?:position de caméra|cameraPosition) « /.exec(message))) return { tab: "actions", field: `action.${m[1]}.cameraPosition` };
   // Carte de collection (CC1, CC2) : avant le motif des chemins de edit.json (l'intitulé absent y figure après le chemin).
   if ((m = /modules\.card\.fields : intitulé « (.+?) » absent de book\.json/.exec(message))) return { tab: "card", field: `card.field.${m[1]}` };
+  // Types de cartes (CC3) : type inconnu → menu Type ; valeur d'un intitulé absent du type → valeur orpheline.
+  if (/modules\.card\.type : type « .+? » absent de book\.json/.test(message)) return { tab: "card", field: "card.type" };
+  if ((m = /modules\.card\.fields : intitulé « (.+?) » absent du type « /.exec(message))) return { tab: "card", field: `card.field.${m[1]}` };
   if ((m = /carte : caractéristique « (.+?) » sans valeur/.exec(message))) return { tab: "card", field: `card.field.${m[1]}` };
   if (/carte sans paragraphe \(modules\.card\.text\)/.test(message)) return { tab: "card", field: "card.text" };
   if ((m = /action « (.+?) » sans libellé/.exec(message))) return { tab: "actions", field: `action.${m[1]}.label` };

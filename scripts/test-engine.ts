@@ -21,7 +21,7 @@ import { addFallbackLightsIfNone, FALLBACK_LIGHTS_NAME } from '../src/components
 import { ClipPreview } from '../src/components/diorama/lib/clipPreview';
 import { applyFramingInPlace, cameraFormFromRaw, cameraLayerOf, framingOf, takeFromView, viewOf, withFields } from '../src/atelier/cameraForm';
 import { editLayerSchema } from '../src/schema/glbi';
-import { cardPreviewOf, formFromEdit, layerFromForm, usedAssets } from '../src/atelier/editModel';
+import { cardPreviewOf, formFromEdit, layerFromForm, usedAssets, withCardType } from '../src/atelier/editModel';
 import { formatEditLayer, glbActionIds, glbActionsOf, glbEventIds } from '../src/atelier/editLayerFile';
 import { fieldOfMessage } from '../src/atelier/reportLinks';
 import {
@@ -31,7 +31,7 @@ import {
   ProgressStore, emptyProgress, parseProgress, progressKey, sceneAccess, withCollected, withQuizPassed, withUnlocked, type StorageLike,
 } from '../src/components/book/progress';
 import { sceneFromScan } from '../src/components/book/scanTarget';
-import { BOOK_ICON, cardCount, cardScale, earnedCards, isNewCard, parseCardFields, readerCardOf } from '../src/components/card/cardModel';
+import { BOOK_ICON, cardCount, cardScale, cardTypeCounts, earnedCards, isCompactType, isNewCard, parseCardFields, parseCardTypes, readerCardOf, resolveCardType, showCardType } from '../src/components/card/cardModel';
 
 let failed = 0;
 function test(name: string, fn: () => void) {
@@ -1369,7 +1369,7 @@ test('atelier (CC2) : règle d’A3 : texte trop long ou incomplet non écrit, l
 });
 
 test('atelier (CC2) : aperçu de la carte (règle d’A5) et liens du Rapport', () => {
-  const card = { subtitle: T('', 'Sub', ''), image: '', fields: [['taille', T('2 m')], ['poids', { fr: '15 kg', en: '', es: '' }]] as [string, ReturnType<typeof T>][], text: { fr: 'Un paragraphe.', en: '', es: '' } };
+  const card = { type: '', subtitle: T('', 'Sub', ''), image: '', fields: [['taille', T('2 m')], ['poids', { fr: '15 kg', en: '', es: '' }]] as [string, ReturnType<typeof T>][], text: { fr: 'Un paragraphe.', en: '', es: '' } };
   const fr = cardPreviewOf(card, 'fr', 'images/raptor.webp');
   assert.ok(fr.card && fr.card.text.fr === 'Un paragraphe.' && !fr.card.subtitle, 'sous-titre absent en FR : non montré');
   assert.equal(fr.card?.image, 'images/raptor.webp', 'illustration : image de chargement à défaut');
@@ -1378,7 +1378,7 @@ test('atelier (CC2) : aperçu de la carte (règle d’A5) et liens du Rapport', 
   const en = cardPreviewOf(card, 'en', '');
   assert.equal(en.card, null, 'pas de paragraphe en EN : pas d’aperçu');
   assert.ok(en.started);
-  assert.equal(cardPreviewOf({ subtitle: T(''), image: '', fields: [], text: T('') }, 'fr', '').started, false);
+  assert.equal(cardPreviewOf({ type: '', subtitle: T(''), image: '', fields: [], text: T('') }, 'fr', '').started, false);
   // Liens du Rapport vers l'onglet Carte.
   const form = formFromEdit({ version: 1, modules: { card: { image: 'images/x.png', fields: { poid: T('1') }, text: T('a') } } });
   const at = (m: string) => fieldOfMessage(m, 'trex', form, [], {})?.field ?? null;
@@ -1388,6 +1388,116 @@ test('atelier (CC2) : aperçu de la carte (règle d’A5) et liens du Rapport', 
   assert.equal(at('scenes/trex.edit.json : modules.card.text.es : 263 caractères (250 au plus)'), 'card.text');
   assert.equal(at('scenes/trex.edit.json : modules.card.fields.taille.fr : 17 caractères (16 au plus)'), 'card.field.taille');
   assert.equal(at('asset « images/x.png » introuvable dans le dossier source (V-03)'), 'card.image');
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// Types de cartes (CC3, DP-20, spec-carte-collection.md §15)
+// ---------------------------------------------------------------------------------------------------------
+
+const F = (...ids: string[]) => ids.map((id) => ({ id, label: T(id) }));
+
+test('types (CC3) : cardFields → type implicite « personnage » sans nom ; cardTypes lisible d’abord ; illisible ignoré ; 8 intitulés au plus', () => {
+  const single = parseCardTypes(F('taille', 'poids'), undefined);
+  assert.deepEqual(single.map((t) => [t.id, t.name, t.fields.map((f) => f.id)]), [['personnage', undefined, ['taille', 'poids']]]);
+  assert.equal(showCardType(single), false, 'un seul type : aucune pastille (livre 1)');
+  assert.deepEqual(parseCardTypes(undefined, undefined).map((t) => [t.id, t.fields.length]), [['personnage', 0]], 'livre sans intitulés : un type vide');
+  const types = parseCardTypes(undefined, [
+    { id: 'personnage', name: T('Personnage', 'Character', 'Personaje'), fields: F('taille') },
+    { id: 'lieu', name: T('Lieu', 'Place', 'Lugar'), fields: F('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i') },
+    { id: 'lieu', name: T('Doublon'), fields: [] },
+    { id: 'sans-nom', fields: [] },
+    'x',
+  ]);
+  assert.deepEqual(types.map((t) => t.id), ['personnage', 'lieu'], 'doublon, type sans nom, entrée illisible ignorés');
+  assert.equal(types[1].fields.length, 8, '8 intitulés au plus (au lieu de 4)');
+  assert.equal(showCardType(types), true);
+  assert.equal(parseCardFields(F('a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i')).length, 8, 'cardFields : 8 intitulés au plus');
+  // cardTypes illisible (un seul type lisible) : repli sur cardFields.
+  assert.deepEqual(parseCardTypes(F('x'), [{ id: 'lieu', name: T('Lieu'), fields: F('a') }]).map((t) => t.id), ['personnage']);
+});
+
+test('types (CC3) : type de la carte (absent ou inconnu → premier) ; mise en page compacte de 5 à 8 intitulés du type ; ligne de compte par type', () => {
+  const types = parseCardTypes(undefined, [
+    { id: 'personnage', name: T('Personnage'), fields: F('a', 'b', 'c', 'd') },
+    { id: 'rencontre', name: T('Rencontre'), fields: F('lien') },
+    { id: 'lieu', name: T('Lieu'), fields: F('a', 'b', 'c', 'd', 'e') },
+    { id: 'arme', name: T('Arme'), fields: F('a') },
+  ]);
+  assert.equal(resolveCardType(types, undefined).id, 'personnage');
+  assert.equal(resolveCardType(types, 'lieu').id, 'lieu');
+  assert.equal(resolveCardType(types, 'inconnu').id, 'personnage', 'type inconnu : premier (le build signale l’erreur)');
+  assert.equal(isCompactType(types[0]), false, '4 intitulés : mise en page normale');
+  assert.equal(isCompactType(types[2]), true, '5 intitulés : mise en page compacte');
+  // Carte lue avec son type.
+  assert.equal(readerCardOf({ type: 'lieu', text: T('x') }, undefined, (p) => p)?.type, 'lieu');
+  assert.equal(readerCardOf({ text: T('x') }, undefined, (p) => p)?.type, undefined);
+  // Ligne de compte par type : ordre de déclaration, types sans carte omis (« arme »), carte sans type = premier type.
+  const scenes = ['trex', 'raptor', 'ptero', 'duo', 'vallee'];
+  const typeOf: Record<string, string | undefined> = { trex: undefined, raptor: 'personnage', duo: 'rencontre', vallee: 'lieu' };
+  const withCard = (id: string) => id in typeOf;
+  const p = { unlockedScenes: [], quizPassed: {}, collected: { trex: true, vallee: true } };
+  const line = cardTypeCounts(p, scenes, types, withCard, (id) => typeOf[id]).map((c) => `${c.type.id} ${c.n}/${c.total}`);
+  assert.deepEqual(line, ['personnage 1/2', 'rencontre 0/1', 'lieu 1/1']);
+  assert.deepEqual(cardTypeCounts(p, scenes, parseCardTypes(F('a'), undefined), withCard, (id) => typeOf[id]), [], 'livre à cardFields : pas de ligne');
+  assert.deepEqual(cardCount(p, scenes, withCard), { n: 2, total: 4 }, 'compte total inchangé');
+});
+
+const EDIT_TYPED = (type?: string) => ({
+  version: 1,
+  scene: { name: T('Vallée', 'Valley', 'Valle') },
+  modules: { card: { ...(type ? { type } : {}), fields: { region: T('Ouest') }, text: T('Texte.', 'Text.', 'Texto.') } },
+});
+
+test('atelier (CC3) : aller-retour avec et sans type identique ; type écrit en tête ; un type seul ne crée pas de carte', () => {
+  for (const type of [undefined, 'lieu', 'arme']) {
+    const text = formatEditLayer(EDIT_TYPED(type), []);
+    const form = formFromEdit(JSON.parse(text));
+    assert.equal(form.card.type, type ?? '');
+    const { layer } = layerFromForm(form);
+    assert.equal(formatEditLayer(layer, []), text, `type ${type ?? 'absent'} : relu puis enregistré sans modification, identique octet pour octet`);
+  }
+  assert.ok(formatEditLayer(EDIT_TYPED('lieu'), []).includes('"card": {\n      "type": "lieu",\n      "fields"'), 'type premier champ de la carte');
+  // Type seul : pas de carte.
+  const only = formFromEdit({ version: 1 });
+  only.card.type = 'lieu';
+  assert.equal(formatEditLayer(layerFromForm(only).layer, []), '{\n  "version": 1\n}\n');
+  // Champ incomplet seulement : rien de la carte n'est écrit, pas même le type.
+  only.card.text = { fr: 'Texte', en: '', es: '' };
+  assert.equal(formatEditLayer(layerFromForm(only).layer, []), '{\n  "version": 1\n}\n');
+});
+
+test('atelier (CC3, décision du 28/10, option 1) : type ajouté à l’enregistrement avec cardTypes seulement, jamais à la seule ouverture', () => {
+  const form = formFromEdit(JSON.parse(formatEditLayer(EDIT_TYPED(), [])));
+  const { layer } = layerFromForm(form);
+  // Ouverture : la couche comparée au fichier n'a pas de type (indicateur « enregistré »).
+  assert.equal(formatEditLayer(layer, []), formatEditLayer(EDIT_TYPED(), []));
+  // Avec cardFields (pas de type par défaut) : rien n'est ajouté.
+  assert.equal(withCardType(layer, undefined).type, null);
+  // Avec cardTypes : premier type écrit en tête de la carte.
+  const typed = withCardType(layer, 'personnage');
+  assert.equal(typed.type, 'personnage');
+  assert.equal(formatEditLayer(typed.layer, []), formatEditLayer(EDIT_TYPED('personnage'), []));
+  assert.ok(editLayerSchema.safeParse(typed.layer).success);
+  // Type déjà choisi : gardé ; scène sans carte : rien.
+  assert.equal(withCardType(layerFromForm(formFromEdit(EDIT_TYPED('lieu'))).layer, 'personnage').type, null);
+  assert.equal(withCardType(layerFromForm(formFromEdit({ version: 1 })).layer, 'personnage').type, null);
+});
+
+test('atelier (CC3) : changement de type : valeurs gardées (orphelines écrites) ; retour au type d’avant sans perte ; liens du Rapport', () => {
+  const form = formFromEdit({ version: 1, modules: { card: { type: 'personnage', fields: { taille: T('2 m'), epoque: T('Crétacé') }, text: T('a') } } });
+  // « Garder » : type changé, valeurs d'un autre type gardées et écrites (signalées par la vérification).
+  const kept = { ...form, card: { ...form.card, type: 'lieu' } };
+  const card = JSON.parse(formatEditLayer(layerFromForm(kept).layer, [])).modules.card;
+  assert.equal(card.type, 'lieu');
+  assert.deepEqual(Object.keys(card.fields), ['taille', 'epoque']);
+  // Retour au type d'avant : aucune perte.
+  const back = { ...kept, card: { ...kept.card, type: 'personnage' } };
+  assert.equal(formatEditLayer(layerFromForm(back).layer, []), formatEditLayer(layerFromForm(form).layer, []));
+  // Liens du Rapport.
+  const at = (m: string) => fieldOfMessage(m, 'duo', form, [], {})?.field ?? null;
+  assert.equal(at('scenes/duo.edit.json : modules.card.type : type « arme » absent de book.json (cardTypes : personnage, lieu)'), 'card.type');
+  assert.equal(at("scenes/duo.edit.json : modules.card.type : type « arme » absent de book.json (book.json n'a qu'un type, « personnage » : cardFields)"), 'card.type');
+  assert.equal(at('scenes/duo.edit.json : modules.card.fields : intitulé « taille » absent du type « lieu » (intitulés : region, epoque)'), 'card.field.taille');
 });
 
 if (failed) {

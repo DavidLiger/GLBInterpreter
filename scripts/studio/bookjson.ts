@@ -8,9 +8,12 @@
 // - Formulaire : valeurs saisies (textes), composées en objet puis validées par `bookSchema` ; `unlockThreshold` (sujet 5)
 //   n'est pas dans le formulaire : sa valeur sur le disque est reprise telle quelle. `cardFields` (intitulés des cartes de
 //   collection) : section « Carte de collection » du formulaire depuis CC2 (CC1 le reprenait tel quel).
+// - Types de cartes (CC3, DP-20) : le formulaire tient une liste de types (`cardTypes`) ; un livre à `cardFields` y est un
+//   seul type implicite `personnage`, sans nom. Forme la plus courte écrite : un type → `cardFields` (nom perdu), deux ou
+//   plus → `cardTypes`.
 // - Lecture d'un `book.json` illisible ou invalide : ce qui est lisible préremplit le formulaire.
 import { z } from 'zod';
-import { bookSchema, formatIssues, LANGUAGES, SCENE_ID_PATTERN, type Book } from '../../src/schema/glbi';
+import { bookSchema, DEFAULT_CARD_TYPE_ID, formatIssues, LANGUAGES, SCENE_ID_PATTERN, type Book } from '../../src/schema/glbi';
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -53,6 +56,16 @@ export interface CardFieldForm {
   label: Texts;
 }
 
+/**
+ * Type de carte du formulaire (CC3) : `book.json.cardTypes[]`, ou le type implicite d'un livre à `cardFields`
+ * (`personnage`, nom vide).
+ */
+export interface CardTypeForm {
+  id: string;
+  name: Texts;
+  fields: CardFieldForm[];
+}
+
 /** Valeurs du formulaire (textes tels que saisis ; l'année aussi, convertie à la composition). */
 export interface BookForm {
   bookId: string;
@@ -62,8 +75,11 @@ export interface BookForm {
   /** `""` : pas d'image de partage (champ omis). */
   ogImage: string;
   legal: { year: string; text: Texts };
-  /** Intitulés des cartes de collection, dans l'ordre d'affichage ; `[]` : `cardFields` omis (livre sans cartes). */
-  cardFields: CardFieldForm[];
+  /**
+   * Types de cartes, dans l'ordre (le premier est le type par défaut) ; `[]` ou un seul type sans intitulé : ni `cardFields`
+   * ni `cardTypes` (livre sans caractéristiques) ; un seul type : `cardFields` ; deux ou plus : `cardTypes`.
+   */
+  cardTypes: CardTypeForm[];
 }
 
 /** Champs lisibles d'un `book.json` (pour préremplir le formulaire) et champ hors formulaire conservé. */
@@ -86,7 +102,7 @@ export function emptyForm(year: number): BookForm {
     origin: '',
     ogImage: '',
     legal: { year: String(year), text: { fr: text, en: text, es: text } },
-    cardFields: [],
+    cardTypes: [],
   };
 }
 
@@ -98,6 +114,15 @@ const texts = (v: unknown): Texts => {
 /** Intitulés lus (lecture tolérante : entrée non objet ignorée, champ mal typé vide ; refus éventuels par `bookSchema`). */
 const cardFieldsOf = (v: unknown): CardFieldForm[] =>
   Array.isArray(v) ? v.filter(isObj).map((f) => ({ id: str(f.id), label: texts(f.label) })) : [];
+/**
+ * Types lus (CC3) : `cardTypes` s'il est une liste, sinon `cardFields` en un seul type `personnage` sans nom, sinon aucun
+ * (lecture tolérante ; un `book.json` qui a les deux est refusé par `bookSchema`, le formulaire reprend `cardTypes`).
+ */
+const cardTypesOf = (rawTypes: unknown, rawFields: unknown): CardTypeForm[] => {
+  if (Array.isArray(rawTypes)) return rawTypes.filter(isObj).map((t) => ({ id: str(t.id), name: texts(t.name), fields: cardFieldsOf(t.fields) }));
+  if (Array.isArray(rawFields)) return [{ id: DEFAULT_CARD_TYPE_ID, name: { fr: '', en: '', es: '' }, fields: cardFieldsOf(rawFields) }];
+  return [];
+};
 
 /**
  * Ce qui est lisible d'un `book.json` (`raw` : contenu analysé, `undefined` si illisible). `legal` absent ou illisible :
@@ -115,7 +140,7 @@ export function readableBook(raw: unknown, year: number): ReadableBook {
     const y = raw.legal.year;
     f.legal = { year: typeof y === 'number' || typeof y === 'string' ? String(y) : '', text: texts(raw.legal.text) };
   }
-  f.cardFields = cardFieldsOf(raw.cardFields);
+  f.cardTypes = cardTypesOf(raw.cardTypes, raw.cardFields);
   const r: ReadableBook = { form: f, bookIdOnDisk: typeof raw.bookId === 'string' && raw.bookId !== '' ? raw.bookId : null };
   if ('unlockThreshold' in raw) r.unlockThreshold = raw.unlockThreshold;
   return r;
@@ -132,7 +157,7 @@ export function formFromBody(v: unknown): BookForm {
     origin: str(o.origin),
     ogImage: str(o.ogImage),
     legal: { year: typeof legal.year === 'number' ? String(legal.year) : str(legal.year), text: texts(legal.text) },
-    cardFields: cardFieldsOf(o.cardFields),
+    cardTypes: cardTypesOf(o.cardTypes, o.cardFields),
   };
 }
 
@@ -148,8 +173,11 @@ export function composeBook(form: BookForm, keep: { unlockThreshold?: unknown } 
     legal: { year: /^-?\d+$/.test(y) ? Number(y) : y, text: { ...form.legal.text } },
   };
   if (form.ogImage.trim()) book.ogImage = form.ogImage.trim();
-  // Intitulés des cartes (CC2) : aucun intitulé = `cardFields` omis (le contrat en exige au moins un s'il est présent).
-  if (form.cardFields.length) book.cardFields = form.cardFields.map((f) => ({ id: f.id.trim(), label: { ...f.label } }));
+  // Cartes (CC2, CC3) : forme la plus courte. Un type : `cardFields` (aucun intitulé = omis, le contrat en exige au moins
+  // un s'il est présent) ; deux types ou plus : `cardTypes` (le nom du type unique n'est pas écrit).
+  const fieldsOf = (t: CardTypeForm) => t.fields.map((f) => ({ id: f.id.trim(), label: { ...f.label } }));
+  if (form.cardTypes.length === 1 && form.cardTypes[0].fields.length) book.cardFields = fieldsOf(form.cardTypes[0]);
+  if (form.cardTypes.length >= 2) book.cardTypes = form.cardTypes.map((t) => ({ id: t.id.trim(), name: { ...t.name }, fields: fieldsOf(t) }));
   if (keep.unlockThreshold !== undefined) book.unlockThreshold = keep.unlockThreshold;
   return book;
 }
@@ -188,13 +216,38 @@ export function withReceivedValues(errors: string[], obj: unknown): string[] {
  * fichier illisible ignoré) : retirer cet intitulé de `book.json` en fait des erreurs de `book:check` (§6), le studio
  * demande confirmation (spec-carte-collection.md §9).
  */
-export function scenesUsingCardField(edits: Record<string, unknown>, id: string): string[] {
+export function scenesUsingCardField(edits: Record<string, unknown>, id: string, type?: { id: string; tete: boolean }): string[] {
   return Object.entries(edits)
     .filter(([, e]) => {
-      const card = isObj(e) && isObj(e.modules) && isObj(e.modules.card) ? e.modules.card : null;
-      return !!card && isObj(card.fields) && id in card.fields;
+      const card = cardOfEdit(e);
+      return !!card && (!type || ofType(card, type)) && isObj(card.fields) && id in card.fields;
     })
     .map(([scene]) => scene);
+}
+
+const cardOfEdit = (e: unknown): Obj | null => (isObj(e) && isObj(e.modules) && isObj(e.modules.card) ? e.modules.card : null);
+/** Carte du type `type.id` : type explicite égal, ou sans `type` si ce type est en tête (type par défaut). */
+const ofType = (card: Obj, type: { id: string; tete: boolean }) =>
+  typeof card.type === 'string' && card.type ? card.type === type.id : type.tete;
+
+/**
+ * Usage d'un type de carte (action `usageType`, CC3, lecture seule des `edit.json`) : `explicit` : scènes dont la carte porte
+ * `type: <id>` ; `implicit` : scènes dont la carte n'a pas de `type` (du type de tête) ; `scenes` : celles du type (explicites,
+ * et implicites si `tete`) ; `cards` : type explicite de chaque scène qui a une carte (`null` : aucun), pour les autres
+ * confirmations de la page (changement du type de tête, retour à un seul type).
+ */
+export function cardTypeUsage(
+  edits: Record<string, unknown>,
+  type: { id: string; tete: boolean },
+): { scenes: string[]; explicit: string[]; implicit: string[]; cards: Record<string, string | null> } {
+  const cards: Record<string, string | null> = {};
+  for (const [scene, e] of Object.entries(edits)) {
+    const card = cardOfEdit(e);
+    if (card) cards[scene] = typeof card.type === 'string' && card.type ? card.type : null;
+  }
+  const explicit = Object.keys(cards).filter((s) => cards[s] === type.id);
+  const implicit = Object.keys(cards).filter((s) => cards[s] === null);
+  return { scenes: Object.keys(cards).filter((s) => cards[s] === type.id || (type.tete && cards[s] === null)), explicit, implicit, cards };
 }
 
 // ---------------------------------------------------------------------------------------------------------

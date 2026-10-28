@@ -20,9 +20,9 @@ async function installToMenu(page: Page) {
   await expect(page.getByRole('heading', { name: /Installer le livre/ })).toBeVisible({ timeout: 20_000 });
   await page.getByRole('button', { name: /^Installer$/ }).click();
   await expect(page.getByRole('heading', { name: /Installer le livre/ })).toBeHidden({ timeout: 120_000 });
-  // CC1 : compte des cartes (trex et raptor en ont une), les quatre scènes débloquées (`unlockAllScenes`)
-  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 0 carte sur 2', { timeout: 20_000 });
-  await expect(page.getByTestId('collection-scene')).toHaveCount(4);
+  // CC1 : compte des cartes (CC3 : trex, raptor, duo et vallee en ont une), les cinq scènes débloquées (`unlockAllScenes`)
+  await expect(page.getByTestId('collection-count')).toHaveText('Ma collection · 0 carte sur 4', { timeout: 20_000 });
+  await expect(page.getByTestId('collection-scene')).toHaveCount(5);
   const webgl = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl2'));
   test.skip(!webgl, 'navigateur de test sans WebGL 2 : lecteur non monté');
 }

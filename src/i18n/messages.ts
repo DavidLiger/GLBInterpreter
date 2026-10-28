@@ -234,6 +234,8 @@ const fr = {
     number: "n° {i} / {total}",
     numberSpoken: "carte {i} sur {total}",
     dialogName: "Carte : {title}",
+    /** Ligne de compte par type sous le compte du menu (CC3) : nom du type du livre, cartes gagnées, cartes du type. */
+    typeCount: "{name} {n}/{total}",
   },
 };
 
@@ -435,6 +437,7 @@ const en: Messages = {
     number: "No. {i} / {total}",
     numberSpoken: "card {i} of {total}",
     dialogName: "Card: {title}",
+    typeCount: "{name} {n}/{total}",
   },
 };
 
@@ -634,6 +637,7 @@ const es: Messages = {
     number: "N.º {i} / {total}",
     numberSpoken: "carta {i} de {total}",
     dialogName: "Carta: {title}",
+    typeCount: "{name} {n}/{total}",
   },
 };
 

@@ -47,6 +47,14 @@ export interface QuizForm {
  * figure dans « Saisie incomplète », sans bloquer le reste de la scène.
  */
 export interface CardForm {
+  /**
+   * Type de la carte (`modules.card.type`, CC3) tel que lu dans le fichier ou choisi dans le menu Type ; `""` : pas de
+   * `type` dans le fichier (premier type du livre). Gardé tel quel, même inconnu du livre, jusqu'à un choix dans le menu.
+   * Décision de David du 28/10 (point 7 de CC3, option 1) : avec `book.json.cardTypes`, le premier type est écrit
+   * explicitement à l'enregistrement (`withCardType`), jamais à la seule ouverture (l'indicateur « modifié » n'en tient pas
+   * compte) ; avec `cardFields`, jamais ajouté.
+   */
+  type: string;
   subtitle: L3;
   /** Illustration (`images/…`) ; vide : image de chargement, sinon icône du livre. */
   image: string;
@@ -96,11 +104,12 @@ export const emptyAction = (): ActionForm => ({ label: emptyL3(), icon: "", soun
 /** Entrées d'événements lues dans `actions.<id>.events` (objet indexé par identifiant). */
 const eventsOf = (v: unknown): [string, EventForm][] =>
   isObj(v) ? Object.entries(v).map(([id, e]) => [id, { sound: isObj(e) ? str(e.sound) : "" }]) : [];
-export const emptyCard = (): CardForm => ({ subtitle: emptyL3(), image: "", fields: [], text: emptyL3() });
+export const emptyCard = (): CardForm => ({ type: "", subtitle: emptyL3(), image: "", fields: [], text: emptyL3() });
 /** Carte lue dans `modules.card` (lecture tolérante). */
 function cardOf(v: unknown): CardForm {
   if (!isObj(v)) return emptyCard();
   return {
+    type: str(v.type),
     subtitle: l3Of(v.subtitle),
     image: str(v.image),
     fields: isObj(v.fields) ? Object.entries(v.fields).map(([id, x]) => [id, l3Of(x)]) : [],
@@ -161,7 +170,7 @@ export function tooLong(t: L3, max: number): string[] {
 }
 /** Une L3 a été commencée (au moins une langue remplie). */
 export const l3Started = (t: L3) => LANGUAGES.some((l) => t[l].trim());
-/** Carte commencée : un texte ou l'illustration renseigné. */
+/** Carte commencée : un texte ou l'illustration renseigné (le type seul ne crée pas de carte, CC3). */
 export const cardStarted = (c: CardForm) => !!c.image || l3Started(c.subtitle) || l3Started(c.text) || c.fields.some(([, v]) => l3Started(v));
 
 /**
@@ -276,12 +285,15 @@ export function layerFromForm(form: EditForm): { layer: Obj; incomplete: Incompl
     incomplete.push({ tab: "card", field: "card.image", message: `carte : illustration « ${cardImage} » refusée par le contrat, non enregistrée` });
     cardImage = undefined;
   }
-  const card = {
+  const cardBody = {
     subtitle: bounded(c.subtitle, CARD_LIMITS.subtitle, { tab: "card", field: "card.subtitle" }, "carte : sous-titre"),
     image: cardImage,
     fields: cardFields,
     text: bounded(c.text, CARD_LIMITS.text, { tab: "card", field: "card.text" }, "carte : paragraphe"),
   };
+  // Type (CC3) : en tête, tel quel (même inconnu du livre), seulement si quelque chose de la carte est écrit (un type seul
+  // ne crée pas de carte).
+  const card = { type: c.type && cardLayerStarted(cardBody) ? c.type : undefined, ...cardBody };
 
   const cam = cameraLayerOf(form.camera);
   for (const i of cam.issues) incomplete.push({ tab: "camera", field: `camera.${i.field}`, message: i.message });
@@ -302,6 +314,25 @@ export function layerFromForm(form: EditForm): { layer: Obj; incomplete: Incompl
     },
   };
   return { layer, incomplete };
+}
+
+/** Carte de la couche à écrire : un champ autre que `type` y est écrit (texte complet, illustration, valeur). */
+function cardLayerStarted(card: Obj): boolean {
+  return Object.entries(card).some(([k, v]) => k !== "type" && v !== undefined && !(isObj(v) && !Object.values(v).some((x) => x !== undefined)));
+}
+
+/**
+ * Couche à écrire à l'enregistrement (CC3, décision de David du 28/10, option 1) : avec `book.json.cardTypes`
+ * (`defaultType` = premier type du livre), une carte commencée sans `type` reçoit ce type en tête, explicitement ; avec
+ * `cardFields` (`defaultType` absent), rien n'est ajouté. L'indicateur « modifié » compare la couche sans cet ajout : une
+ * scène ouverte puis laissée telle quelle n'est jamais réécrite. `type` : type ajouté (à reporter dans le formulaire).
+ */
+export function withCardType(layer: Obj, defaultType: string | undefined): { layer: Obj; type: string | null } {
+  const modules = isObj(layer.modules) ? layer.modules : null;
+  const card = modules && isObj(modules.card) ? modules.card : null;
+  if (!defaultType || !card || card.type) return { layer, type: null };
+  if (!cardLayerStarted(card)) return { layer, type: null };
+  return { layer: { ...layer, modules: { ...modules, card: { ...card, type: defaultType } } }, type: defaultType };
 }
 
 /**
@@ -340,6 +371,7 @@ export function cardPreviewOf(c: CardForm, lang: Lang, loaderImage: string): { c
   for (const [id, v] of c.fields) if (v[lang].trim()) fields[id] = trimmed(v);
   return {
     card: {
+      ...(c.type ? { type: c.type } : {}),
       ...(c.subtitle[lang].trim() ? { subtitle: trimmed(c.subtitle) } : {}),
       image: c.image || loaderImage || "icon.png",
       fields,

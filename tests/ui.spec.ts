@@ -226,7 +226,7 @@ test('langues FR, EN, ES de bout en bout : installation, scène, boutons, crédi
   await page.goto(`${SERVER}/#/`);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Dinos de prueba' })).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId('collection-count')).toHaveText('Mi colección · 0 cartas de 2');
+  await expect(page.getByTestId('collection-count')).toHaveText('Mi colección · 0 cartas de 4');
   await expect(page.getByRole('link', { name: 'Tiranosaurio' })).toBeVisible();
   await page.goto(`${SERVER}/#/s/inconnue`);
   await expect(page.getByRole('heading', { name: 'Escena no encontrada' })).toBeVisible();

@@ -11,7 +11,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import Dialog from "@/components/ui/Dialog";
 import { useTranslation } from "@/contexts/TranslationContext";
 import CollectionCard from "./CollectionCard";
-import { cardScale, type CardFieldLabel, type CardText, type ReaderCard } from "./cardModel";
+import { cardScale, type CardText, type CardType, type ReaderCard } from "./cardModel";
 
 /** Une carte de la fenêtre : scène, carte, titre, rang dans le livre. */
 export interface CardEntry {
@@ -28,7 +28,8 @@ export interface CardDialogProps {
   index: number;
   onIndex?: (i: number) => void;
   onClose: () => void;
-  fields: readonly CardFieldLabel[];
+  /** Types de cartes du livre (CC3 ; `parseCardTypes`). */
+  types: readonly CardType[];
   /** Nombre de scènes du livre (numéro « n° i / N »). */
   total: number;
   bookTitle?: CardText;
@@ -36,7 +37,7 @@ export interface CardDialogProps {
 
 const fill = (s: string, vars: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
 
-export default function CardDialog({ entries, index, onIndex, onClose, fields, total, bookTitle }: CardDialogProps) {
+export default function CardDialog({ entries, index, onIndex, onClose, types, total, bookTitle }: CardDialogProps) {
   const { t, lang } = useTranslation();
   const titleId = useId();
   const nameId = useId();
@@ -86,7 +87,7 @@ export default function CardDialog({ entries, index, onIndex, onClose, fields, t
           key={entry.sceneId}
           card={entry.card}
           title={entry.title}
-          fields={fields}
+          types={types}
           number={entry.number}
           total={total}
           bookTitle={bookTitle}

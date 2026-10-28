@@ -8,18 +8,22 @@
 // saisie (règle d'A5 : dès que le paragraphe est écrit dans cette langue).
 // Titre de la carte = nom de la scène (onglet Scène), sans limite de longueur dans le contrat : `CardTitleNotice` mesure le
 // titre dans une carte invisible et signale une langue où il serait coupé (« … »).
+// Types de cartes (CC3, spec-carte-collection.md §15.10) : menu « Type » en tête, seulement avec `book.json.cardTypes` ;
+// intitulés du type choisi ; changement de type : valeurs d'identifiant commun gardées, les autres retirées ou gardées
+// (orphelines, signalées) après confirmation ; type inconnu lu dans le fichier : gardé jusqu'à un choix.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import CollectionCard from "@/components/card/CollectionCard";
-import { CARD_WIDTH, type CardFieldLabel, type CardText } from "@/components/card/cardModel";
+import { CARD_WIDTH, resolveCardType, showCardType, type CardText, type CardType } from "@/components/card/cardModel";
 import { TranslationProvider } from "@/contexts/TranslationContext";
 import { MESSAGES } from "@/i18n/messages";
 import { CARD_FIELDS_MAX, CARD_LIMITS, LANGUAGES } from "@/schema/glbi";
 import { AssetSelect, input, L3Input, Section, small, type AssetOptions, type SetForm } from "./EditTabs";
 import { cardPreviewOf, emptyCard, emptyL3, l3Started, type CardForm, type EditForm, type L3, type Lang } from "./editModel";
 
-/** Ce que l'atelier sait du livre pour la carte : intitulés, rang de la scène, titre du livre (pied de la carte). */
+/** Ce que l'atelier sait du livre pour la carte : types (et leurs intitulés), rang de la scène, titre du livre (pied). */
 export interface BookCardInfo {
-  fields: CardFieldLabel[];
+  /** Types de cartes du livre (`parseCardTypes` : `cardTypes`, ou type implicite `personnage` tiré de `cardFields`). */
+  types: CardType[];
   /** Rang de la scène dans `book.json.scenes` (à partir de 1) et nombre de scènes. */
   number: number;
   total: number;
@@ -125,6 +129,15 @@ function FieldValue({ id, label, value, same, onSame, onChange }: { id: string; 
 
 const allSame = (v: L3) => !!v.fr.trim() && v.fr === v.en && v.fr === v.es;
 
+/** Nom d'un type pour l'atelier (français) : nom du livre, sinon l'identifiant. */
+const typeLabel = (t: CardType) => t.name?.fr || t.id;
+
+/** Changement de type en attente : valeurs qui ne font pas partie du nouveau type (confirmation « Retirer / Garder »). */
+interface PendingType {
+  type: string;
+  outside: string[];
+}
+
 export function CardTab({
   form,
   setForm,
@@ -166,12 +179,40 @@ export function CardTab({
     setSame((s) => ({ ...s, [id]: on }));
   };
 
-  const ids = info.fields.map((f) => f.id);
+  // Types (CC3) : `book.json.cardTypes` ⇒ menu ; type de la carte = celui du fichier ou du menu, sinon le premier.
+  const withTypes = showCardType(info.types);
+  const known = !c.type || info.types.some((t) => t.id === c.type);
+  const type = resolveCardType(info.types, c.type || undefined);
+  const fields = known ? type.fields : [];
+  const ids = fields.map((f) => f.id);
   const orphans = c.fields.filter(([id, v]) => !ids.includes(id) && l3Started(v));
+  const outsideWhy = !known
+    ? `type « ${c.type} » absent du livre : ${withTypes ? "choisir un type" : "retirer ce type"}`
+    : withTypes
+      ? `intitulé absent du type « ${typeLabel(type)} » : erreur de vérification`
+      : "intitulé absent de book.json : erreur de vérification";
   const removeOrphan = (id: string) => {
-    if (!window.confirm(`Retirer la valeur « ${id} » de la carte (intitulé absent de book.json) ?`)) return;
+    if (!window.confirm(`Retirer la valeur « ${id} » de la carte (${withTypes ? `absente du type « ${typeLabel(type)} »` : "intitulé absent de book.json"}) ?`)) return;
     set({ ...c, fields: c.fields.filter(([k]) => k !== id) });
   };
+  const [pending, setPending] = useState<PendingType | null>(null);
+  useEffect(() => setPending(null), [sceneId]);
+  const chooseType = (id: string) => {
+    const next = info.types.find((t) => t.id === id);
+    if (!next) return;
+    const outside = c.fields.filter(([k, v]) => l3Started(v) && !next.fields.some((f) => f.id === k)).map(([k]) => k);
+    if (outside.length) setPending({ type: id, outside });
+    else {
+      setPending(null);
+      set({ ...c, type: id });
+    }
+  };
+  const applyPending = (remove: boolean) => {
+    if (!pending) return;
+    set({ ...c, type: pending.type, fields: remove ? c.fields.filter(([k]) => !pending.outside.includes(k)) : c.fields });
+    setPending(null);
+  };
+  const pendingType = pending ? info.types.find((t) => t.id === pending.type) : undefined;
 
   return (
     <div className="flex flex-col gap-5 text-sm">
@@ -179,6 +220,67 @@ export function CardTab({
         Carte gagnée à la première action jouée dans la scène. Le paragraphe est obligatoire, le reste facultatif. Seuls les
         textes complets (3 langues) et assez courts sont enregistrés ; les autres restent dans la page (« Saisie incomplète »).
       </p>
+      <Section
+        title="Type"
+        hint={withTypes ? "Types de cartes du livre (book.json, réglés dans le studio : « Informations du livre ») ; le type choisi est écrit dans la carte à l'enregistrement." : undefined}
+      >
+        {withTypes ? (
+          <div data-field="card.type" className="flex flex-col gap-2">
+            <select
+              className={input}
+              value={known ? type.id : c.type}
+              onChange={(e) => chooseType(e.target.value)}
+              aria-label="Type de la carte"
+              data-testid="card-type-select"
+            >
+              {!known && <option value={c.type}>« {c.type} » (absent du livre)</option>}
+              {info.types.map((t, i) => (
+                <option key={t.id} value={t.id}>
+                  {typeLabel(t)}
+                  {i === 0 && !c.type ? " (par défaut)" : ""}
+                </option>
+              ))}
+            </select>
+            {!known && (
+              <p className="rounded bg-amber-950 px-3 py-2 text-xs text-amber-200" data-testid="card-type-unknown">
+                Type « {c.type} » absent du livre : il est gardé tel quel jusqu&apos;à ce qu&apos;un type soit choisi (erreur de vérification).
+              </p>
+            )}
+            {pending && pendingType && (
+              <div className="flex flex-col gap-2 rounded border border-amber-800 bg-amber-950/40 p-2 text-xs" role="alertdialog" aria-label="Changement de type" data-testid="card-type-confirm">
+                <p>
+                  {pending.outside.length > 1 ? "Les valeurs " : "La valeur "}
+                  {pending.outside.map((k) => `« ${k} »`).join(", ")} {pending.outside.length > 1 ? "ne font" : "ne fait"} pas partie du type « {typeLabel(pendingType)} » :{" "}
+                  {pending.outside.length > 1 ? "les" : "la"} retirer ? Gardées, elles restent dans la carte, signalées par la vérification, et reviennent si l&apos;on repasse au type d&apos;avant.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className={small} onClick={() => applyPending(true)} data-testid="card-type-remove">
+                    Retirer
+                  </button>
+                  <button type="button" className={small} onClick={() => applyPending(false)} data-testid="card-type-keep">
+                    Garder
+                  </button>
+                  <button type="button" className={`${small} text-neutral-400`} onClick={() => setPending(null)} data-testid="card-type-cancel">
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="rounded bg-neutral-900 px-3 py-2 text-xs text-neutral-400" data-field="card.type" data-testid="card-type-single">
+            Un seul type (personnage) ; ajouter des types dans le studio, « Informations du livre ».
+            {!known && (
+              <span className="mt-2 flex flex-wrap items-center gap-2 text-amber-300" data-testid="card-type-unknown">
+                Type « {c.type} » lu dans le fichier : absent du livre (erreur de vérification).
+                <button type="button" className={small} onClick={() => set({ ...c, type: "" })} data-testid="card-type-clear">
+                  Retirer ce type
+                </button>
+              </span>
+            )}
+          </p>
+        )}
+      </Section>
       <Section title="Titre" hint="Nom de la scène (onglet Scène) ; numéro et titre du livre viennent de book.json.">
         <p className="rounded bg-neutral-900 px-3 py-2 text-xs">
           {form.name[lang].trim() || <span className="text-neutral-500">(pas de nom en {LANG_UP(lang)} : « {sceneId} » affiché)</span>}
@@ -196,15 +298,15 @@ export function CardTab({
       </Section>
       <Section
         title="Caractéristiques"
-        hint={`Intitulés communs à toutes les cartes du livre (book.json, réglés dans le studio : « Informations du livre »), ${CARD_FIELDS_MAX} au plus ; valeur de ${CARD_LIMITS.fieldValue} caractères au plus ; sans valeur : « — ».`}
+        hint={`${withTypes ? `Intitulés du type « ${typeLabel(type)} »` : "Intitulés communs à toutes les cartes du livre"} (book.json, réglés dans le studio : « Informations du livre »), ${CARD_FIELDS_MAX} au plus ; valeur de ${CARD_LIMITS.fieldValue} caractères au plus ; sans valeur : « — ».`}
       >
         <div data-field="card.fields" className="flex flex-col gap-2">
-          {info.fields.length === 0 && (
+          {known && fields.length === 0 && (
             <p className="rounded bg-neutral-900 px-3 py-2 text-xs text-neutral-400">
               Le livre n&apos;a pas d&apos;intitulés (book.json.cardFields) : les ajouter dans le studio, « Informations du livre », section Carte de collection.
             </p>
           )}
-          {info.fields.map((f) => (
+          {fields.map((f) => (
             <FieldValue
               key={f.id}
               id={f.id}
@@ -221,7 +323,7 @@ export function CardTab({
                 <span className="font-mono font-semibold">{id}</span>
                 <span className="ml-2 text-neutral-400">{LANGUAGES.map((l) => v[l]).filter(Boolean).join(" / ")}</span>
               </span>
-              <span className="text-xs text-amber-300">intitulé absent de book.json : erreur de vérification</span>
+              <span className="text-xs text-amber-300">{outsideWhy}</span>
               <button type="button" className={small} onClick={() => removeOrphan(id)} data-testid={`card-remove-${id}`}>
                 Retirer
               </button>
@@ -235,7 +337,7 @@ export function CardTab({
       <button
         type="button"
         className={`${small} self-start`}
-        onClick={() => window.confirm("Vider la carte (sous-titre, illustration, valeurs, paragraphe) ?") && set(emptyCard())}
+        onClick={() => window.confirm("Vider la carte (sous-titre, illustration, valeurs, paragraphe) ?") && set({ ...emptyCard(), type: c.type })}
       >
         Vider la carte
       </button>
@@ -295,7 +397,7 @@ function CardPreview({ form, lang, sceneId, info }: { form: EditForm; lang: Lang
                   key={p.card.image}
                   card={p.card}
                   title={title}
-                  fields={info.fields}
+                  types={info.types}
                   number={info.number}
                   total={info.total}
                   bookTitle={info.bookTitle}

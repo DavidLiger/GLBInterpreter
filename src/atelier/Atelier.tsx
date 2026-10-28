@@ -18,10 +18,11 @@ import { applyFramingInPlace, framingOf, type CameraForm } from "./cameraForm";
 import { ActionsTab, AmbianceTab, assetOptions, CreditsTab, QuizTab, SceneTab } from "./EditTabs";
 import { CardTab, CardTitleNotice, type BookCardInfo } from "./CardTab";
 import { formatEditLayer, glbActionIds, glbActionsOf, glbEventIds } from "./editLayerFile";
-import { cardStarted, formFromEdit, layerFromForm, usedAssets, type EditForm, type FieldRef, type Lang, type TabId } from "./editModel";
+import { cardStarted, formFromEdit, layerFromForm, usedAssets, withCardType, type EditForm, type FieldRef, type Lang, type TabId } from "./editModel";
 import ReportTab from "./ReportTab";
 import { fieldOfMessage } from "./reportLinks";
 import { readerBookOf, readerSceneOf, sceneFiles } from "./readerFromScene";
+import { parseCardTypes, showCardType } from "@/components/card/cardModel";
 
 const LANGS: Lang[] = ["fr", "en", "es"];
 /** Clé de langue du lecteur (TranslationContext) : langue d'aperçu gardée d'une session à l'autre. */
@@ -202,6 +203,11 @@ export default function Atelier() {
   // Événements de chaque action dans l'ordre du GLB (AC3) : forme écrite, crédits, liens du Rapport.
   const glbEvents = useMemo(() => glbEventIds(scene?.layer3d), [scene?.layer3d]);
   const editable = !!scene?.inBook;
+  // Types de cartes (CC3) : premier type du livre, écrit à l'enregistrement d'une carte sans type ; seulement avec cardTypes.
+  const cardDefaultType = useMemo(() => {
+    const types = parseCardTypes(book?.book?.cardFields, book?.book?.cardTypes);
+    return showCardType(types) ? types[0].id : undefined;
+  }, [book?.book]);
   const { layer, incomplete } = useMemo(() => (form ? layerFromForm(form) : { layer: null, incomplete: [] }), [form]);
   const layerText = layer ? formatEditLayer(layer, glbIds, glbEvents) : "";
   const fileText = scene ? formatEditLayer(scene.edit ?? { version: 1 }, glbIds, glbEvents) : "";
@@ -239,10 +245,18 @@ export default function Atelier() {
     if (diskChanged && !window.confirm(`${scene.id}.edit.json a été modifié hors de l'atelier : l'écraser avec la saisie ?`)) return;
     setSaving(true);
     try {
-      const r = await sendJson<SaveResponse>("PUT", `__api/scene/${encodeURIComponent(scene.id)}/edit`, layer);
+      // Types de cartes (CC3, décision de David du 28/10, option 1) : avec book.json.cardTypes, la carte commencée reçoit son
+      // type explicitement à l'enregistrement (premier type si la saisie n'en a pas) ; reporté dans le formulaire, pour que
+      // la saisie et le fichier écrit restent égaux (« enregistré »).
+      const typed = withCardType(layer, cardDefaultType);
+      const r = await sendJson<SaveResponse>("PUT", `__api/scene/${encodeURIComponent(scene.id)}/edit`, typed.layer);
       if (r.body.ok) {
         setSaveError(null);
         setDiskChanged(false);
+        if (typed.type) {
+          const t = typed.type;
+          setFormState((f) => (f && !f.card.type ? { ...f, card: { ...f.card, type: t } } : f));
+        }
         await loadScene(scene.id);
       } else {
         setSaveError({ error: r.body.error, messages: r.body.messages });
@@ -252,7 +266,7 @@ export default function Atelier() {
     } finally {
       setSaving(false);
     }
-  }, [canSave, layer, scene, diskChanged, loadScene]);
+  }, [canSave, layer, scene, diskChanged, loadScene, cardDefaultType]);
   const saveRef = useRef(save);
   saveRef.current = save;
   useEffect(() => {
@@ -398,7 +412,7 @@ export default function Atelier() {
     const rb = book ? readerBookOf(book) : null;
     const ids = (book?.scenes ?? []).filter((s) => s.inBook).map((s) => s.id);
     const i = sceneId ? ids.indexOf(sceneId) : -1;
-    return { fields: rb?.cardFields ?? [], number: i + 1, total: ids.length, bookTitle: rb?.title };
+    return { types: rb?.cardTypes ?? parseCardTypes(undefined, undefined), number: i + 1, total: ids.length, bookTitle: rb?.title };
   }, [book, sceneId]);
   const modelCredits = useMemo(() => {
     const seen = new Map<string, ModelCredit>();
@@ -567,7 +581,7 @@ export default function Atelier() {
                     setForm={setForm}
                     assets={assets}
                     onShowLoader={() => setReload((r) => r + 1)}
-                    nameNotice={(cardStarted(form.card) || cardInfo.fields.length > 0) && <CardTitleNotice name={form.name} number={cardInfo.number} total={cardInfo.total} />}
+                    nameNotice={(cardStarted(form.card) || cardInfo.types.some((t) => t.fields.length > 0)) && <CardTitleNotice name={form.name} number={cardInfo.number} total={cardInfo.total} />}
                   />
                 ),
               )}

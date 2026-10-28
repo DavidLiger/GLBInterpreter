@@ -30,7 +30,7 @@ export interface BookResponse {
   /** Dossier source (chemin absolu, pour l'affichage). */
   source: string;
   /** `book.json` lu (même invalide), `null` s'il est absent ou illisible. */
-  book: { bookId?: string; title?: { fr?: string; en?: string; es?: string }; scenes?: string[]; legal?: unknown; cardFields?: unknown } | null;
+  book: { bookId?: string; title?: { fr?: string; en?: string; es?: string }; scenes?: string[]; legal?: unknown; cardFields?: unknown; cardTypes?: unknown } | null;
   /** Scènes de `book.json` dans leur ordre, puis GLB de `scenes/` absents de `book.json`. */
   scenes: AtelierScene[];
   /** Fichiers du dossier source par dossier de premier niveau (`images`, `icons`, `sounds`, …). */

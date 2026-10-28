@@ -321,6 +321,7 @@ dialog.sheet.wide[open] { width: min(1240px, 96vw); height: 88vh; }
 .card-fields li { align-items: flex-start; padding-top: var(--s-sm); padding-bottom: var(--s-sm); }
 .card-field-row { flex: 1; min-width: 0; display: grid; grid-template-columns: 120px repeat(3, minmax(0, 1fr)); gap: var(--s-sm); }
 .card-field-row .small { font-weight: 400; }
+.card-type { display: flex; flex-direction: column; gap: var(--s-sm); padding: var(--s-sm) 0; border-top: 1px solid var(--hairline); }
 .notice { padding: var(--s-md) var(--s-base); border-radius: var(--r-md); background: var(--parchment); display: flex; flex-direction: column; gap: var(--s-sm); }
 .notice.warn { color: var(--ink); border-left: 3px solid var(--warning); }
 .notice.err { color: var(--ink); border-left: 3px solid var(--danger); }
