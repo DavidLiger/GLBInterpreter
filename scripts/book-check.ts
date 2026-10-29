@@ -10,9 +10,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Document, Node as GNode } from '@gltf-transform/core';
 import sharp from 'sharp';
-import { readGlbFile, referencedNodeNames } from './glb-pipeline';
-import { bookSchema, DEFAULT_CARD_TYPE_ID, EVENT_TIME_TOLERANCE_S, formatIssues, GLBI_ROOT_NAME, isReservedSourcePath, type Book, type GlbiConfig, type ModelCredit } from '../src/schema/glbi';
-import { mergeLayers } from '../src/schema/merge';
+import { optimizeGlbBytes, readGlbFile, referencedNodeNames, type BytesResult, type TextureMode } from './glb-pipeline';
+import {
+  bookSchema, DEFAULT_CARD_TYPE_ID, EVENT_TIME_TOLERANCE_S, formatIssues, GAME_ARENA_ID, GAME_COLLIDER_NODE, GAME_DIR, GAME_EDIT_FILE,
+  GAME_FLOOR_NODE, GAME_NODE_PREFIXES, GLBI_ROOT_NAME, isReservedSourcePath, SCENE_ID_PATTERN,
+  type Book, type GameConfig, type GlbiConfig, type ModelCredit,
+} from '../src/schema/glbi';
+import { mergeGame, mergeLayers, type GameCardRef, type GameLayerInput } from '../src/schema/merge';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const ICON_MIN_PX = 512;
@@ -385,6 +389,290 @@ export async function readScene(
 }
 
 // ---------------------------------------------------------------------------------------------------------
+// Mini-jeu (MJ1, spec-mini-jeu.md §8) : GLB de `game/`, couche éditoriale `game/game.edit.json`, fusion, contrôles croisés,
+// optimisation en mémoire (pipeline d'Î7) et budgets du gabarit « poursuite » (avertissements, décision de David du 28/10).
+// ---------------------------------------------------------------------------------------------------------
+
+/**
+ * Budgets du gabarit « poursuite » (spec-mini-jeu.md §8) : mémoire d'une partie qui charge tout à l'entrée, sur l'iPhone SE ;
+ * ce ne sont pas des limites du jeu ni du livre : avertissements au-delà, jamais d'erreur. Tailles en Mo (10⁶ octets), sur
+ * les GLB optimisés (octets publiés). Chaque gabarit futur fixera les siens.
+ */
+export const POURSUITE_BUDGETS = {
+  arenaBytes: 6e6,
+  playerBytes: 2e6,
+  preyBytes: 1.5e6,
+  gameBytes: 15e6,
+  texturePx: 1024,
+  colliderTriangles: 5000,
+  capsuleRadius: 1.2,
+} as const;
+
+/** GLB du jeu optimisé : octets publiés, contrôlés (survie) et mesurés (budgets). */
+export interface GameGlb {
+  /** `game/<id>.glb`. */
+  rel: string;
+  id: string;
+  bytes: Uint8Array;
+}
+
+export interface GameResult {
+  config: GameConfig;
+  /** Arène d'abord, puis les entités dans l'ordre des fichiers. */
+  glbs: GameGlb[];
+  /** Assets du jeu (sons), chemins relatifs à la racine du livre. */
+  assets: Set<string>;
+  modelCredits: ModelCredit[];
+}
+
+/** Mo à la française (`6,12 Mo`). */
+const mo = (b: number) => `${(b / 1e6).toFixed(2).replace('.', ',')} Mo`;
+const metres = (m: number) => `${String(m).replace('.', ',')} m`;
+
+/** Triangles d'un maillage (primitives en triangles, bandes ou éventails). */
+function triangles(mesh: { listPrimitives(): { getMode(): number; getIndices(): { getCount(): number } | null; getAttribute(n: string): { getCount(): number } | null }[] }): number {
+  let n = 0;
+  for (const p of mesh.listPrimitives()) {
+    const count = p.getIndices()?.getCount() ?? p.getAttribute('POSITION')?.getCount() ?? 0;
+    const mode = p.getMode();
+    if (mode === 4) n += Math.floor(count / 3);
+    else if (mode === 5 || mode === 6) n += Math.max(0, count - 2);
+  }
+  return n;
+}
+
+/**
+ * Optimisations déjà faites dans ce processus (atelier : les contrôles sont rejoués à chaque modification du dossier, sans
+ * réoptimiser un GLB du jeu inchangé). Clé : fichier, taille, date, textures, nœuds protégés.
+ */
+const gameOptimizeCache = new Map<string, Promise<BytesResult>>();
+
+function optimizeGameGlb(file: string, protect: string[], textures: TextureMode): Promise<BytesResult> {
+  const st = fs.statSync(file);
+  const key = JSON.stringify([file, st.size, st.mtimeMs, textures, protect]);
+  let p = gameOptimizeCache.get(key);
+  if (!p) {
+    p = optimizeGlbBytes(file, { protect, textures });
+    gameOptimizeCache.set(key, p);
+    p.catch(() => gameOptimizeCache.delete(key));
+  }
+  return p;
+}
+
+/** Origine d'un message de `mergeGame` (onglet Rapport, rangement du studio) : fichier nommé en tête du message. */
+function gameOrigin(message: string): ReportOrigin {
+  if (/^game\/[^ ]+\.glb/.test(message)) return 'glb';
+  if (message.startsWith(GAME_EDIT_FILE)) return 'edit';
+  if (message.startsWith('book.json')) return 'build';
+  return 'fusion';
+}
+
+/**
+ * Lit et contrôle le jeu du livre (`book.json.game`), d'après les fichiers de `game/` du dossier source. Renvoie `null` si le
+ * livre n'a pas de jeu ou si le jeu n'est pas utilisable (erreurs dans `report`, scène `null`). Les GLB sont optimisés en
+ * mémoire : le build écrit les octets contrôlés ici, `book:check` les mesure sans rien écrire.
+ */
+export async function readGame(
+  sourceDir: string,
+  book: Book,
+  scenes: readonly SceneResult[],
+  report: Report,
+  opts: { textures?: TextureMode } = {},
+): Promise<GameResult | null> {
+  const gameDir = path.join(sourceDir, GAME_DIR);
+  const files = fs.existsSync(gameDir) && fs.statSync(gameDir).isDirectory() ? fs.readdirSync(gameDir).filter((f) => fs.statSync(path.join(gameDir, f)).isFile()).sort() : [];
+  if (!book.game) {
+    if (files.some((f) => /\.glb$/i.test(f) || f === 'game.edit.json')) {
+      report.warning(`${GAME_DIR}/ : fichiers du jeu présents mais book.json n'a pas de game : jeu ignoré, non publié`);
+    }
+    return null;
+  }
+  const err = (m: string, origin: ReportOrigin = 'glb') => report.error(m, origin, null);
+  const warn = (m: string, origin: ReportOrigin = 'glb') => report.warning(m, origin, null);
+
+  // --- GLB de game/ : couche 3D du jeu (GLBI_ROOT : glbi_game_version, glbi_game_config) ---
+  const docs = new Map<string, Document>();
+  let arena: GameLayerInput | null = null;
+  const entities: GameLayerInput[] = [];
+  let unreadable = false;
+  for (const f of files.filter((x) => /\.glb$/i.test(x))) {
+    const id = f.replace(/\.glb$/i, '');
+    const rel = `${GAME_DIR}/${f}`;
+    if (!SCENE_ID_PATTERN.test(id) || !f.endsWith('.glb')) {
+      err(`${rel} : nom de fichier refusé (identifiant de l'entité : lettres, chiffres, _ et -, extension .glb)`);
+      unreadable = true;
+      continue;
+    }
+    let doc: Document;
+    try {
+      doc = await readGlbFile(path.join(gameDir, f));
+    } catch (e) {
+      err(`${rel} illisible (${(e as Error).message})`);
+      unreadable = true;
+      continue;
+    }
+    const roots = doc.getRoot().listNodes().filter((n) => n.getName() === GLBI_ROOT_NAME);
+    if (roots.length !== 1) {
+      err(roots.length ? `${rel} : ${roots.length} nœuds ${GLBI_ROOT_NAME} (un seul attendu)` : `${rel} : pas de nœud ${GLBI_ROOT_NAME} ; exporter avec l'addon GLBGenerator (mode « ${id === GAME_ARENA_ID ? 'Arène' : 'Entité de jeu'} »)`);
+      unreadable = true;
+      continue;
+    }
+    const ex = roots[0].getExtras() ?? {};
+    if (ex.glbi_game_config === undefined && ex.glbi_config !== undefined) {
+      err(`${rel} : GLB de scène (glbi_config) dans ${GAME_DIR}/ : exporter en mode « ${id === GAME_ARENA_ID ? 'Arène' : 'Entité de jeu'} » de l'addon (glbi_game_config)`);
+      unreadable = true;
+      continue;
+    }
+    const raw = parseConfigString(ex.glbi_game_config, `${rel} (couche 3D du jeu)`, (m) => err(m));
+    if (raw === undefined) {
+      unreadable = true;
+      continue;
+    }
+    docs.set(id, doc);
+    const layer = { id, raw, version: ex.glbi_game_version };
+    if (id === GAME_ARENA_ID) arena = layer;
+    else entities.push(layer);
+  }
+  let rawEdit: unknown;
+  const editFile = path.join(sourceDir, GAME_EDIT_FILE);
+  if (fs.existsSync(editFile)) {
+    rawEdit = readJson(editFile, GAME_EDIT_FILE, (m) => err(m, 'edit'));
+    if (rawEdit === undefined) return null;
+  }
+  if (unreadable) return null;
+
+  // --- Fusion (cartes des scènes reçues par leurs identifiants seulement, DP-21) ---
+  const firstType = book.cardTypes?.[0]?.id ?? DEFAULT_CARD_TYPE_ID;
+  const cards: GameCardRef[] = scenes.filter((s) => s.config.modules.card).map((s) => ({ card: s.id, type: s.config.modules.card!.type ?? firstType }));
+  const merged = mergeGame({ book, cards, arena, entities, edit: rawEdit }, { mode: 'strict' });
+  merged.warnings.forEach((m) => warn(m, gameOrigin(m)));
+  merged.errors.forEach((m) => err(m, gameOrigin(m)));
+  if (!merged.config) return null;
+  const config = merged.config;
+  const preyCount = config.rules.preys.reduce((s, p) => s + p.count, 0);
+
+  // --- Contrôles croisés sur les GLB (V-08, clips, nœuds de l'arène) ---
+  const errorsBefore = report.errors.length;
+  const names = (doc: Document) => doc.getRoot().listNodes().map((n) => n.getName());
+  const protects = new Map<string, string[]>();
+  const B = POURSUITE_BUDGETS;
+  {
+    const rel = `${GAME_DIR}/${GAME_ARENA_ID}.glb`;
+    const doc = docs.get(GAME_ARENA_ID)!;
+    const nodes = doc.getRoot().listNodes();
+    const named = (re: RegExp) => nodes.filter((n) => re.test(n.getName()));
+    const P = GAME_NODE_PREFIXES;
+    const spawnPlayer = named(new RegExp(`^${P.spawnPlayer}$`));
+    const spawnPrey = named(new RegExp(`^${P.spawnPrey}`));
+    const colliders = named(new RegExp(`^${P.collider}`));
+    const floor = colliders.filter((n) => n.getName() === GAME_FLOOR_NODE);
+    if (!spawnPlayer.length) err(`${rel} : pas de point d'apparition du joueur (empty « ${P.spawnPlayer} »)`);
+    if (spawnPlayer.length > 1) warn(`${rel} : ${spawnPlayer.length} nœuds « ${P.spawnPlayer} » : un seul sera utilisé`);
+    if (!spawnPrey.length) err(`${rel} : pas de point d'apparition des proies (empties « ${P.spawnPrey}1 », « ${P.spawnPrey}2 »…)`);
+    else if (spawnPrey.length < preyCount) warn(`${rel} : ${spawnPrey.length} point(s) d'apparition des proies pour ${preyCount} proies en même temps : plusieurs apparaîtront au même endroit`);
+    if (!floor.length) err(`${rel} : pas de sol (maillage « ${GAME_FLOOR_NODE} »)`);
+    for (const n of colliders) if (!n.getMesh()) err(`${rel} : collisionneur « ${n.getName()} » sans maillage`);
+    for (const n of named(new RegExp(`^${P.fade}`))) if (!n.getMesh()) warn(`${rel} : décor « ${n.getName()} » (${P.fade}) sans maillage : rien à rendre transparent`);
+    const tri = colliders.reduce((s, n) => s + (n.getMesh() ? triangles(n.getMesh()!) : 0), 0);
+    if (tri > B.colliderTriangles) warn(`${rel} : collisionneurs COL_* de ${tri} triangles (${B.colliderTriangles} au plus, budget du gabarit « poursuite ») : simplifier les maillages COL_* dans Blender`);
+    protects.set(GAME_ARENA_ID, names(doc).filter((n) => n.startsWith(P.spawnPlayer) || n.startsWith(P.spawnPrey) || n.startsWith(P.collider) || n.startsWith(P.fade)));
+  }
+  for (const e of config.entities) {
+    const rel = `${GAME_DIR}/${e.id}.glb`;
+    const doc = docs.get(e.id)!;
+    const root = doc.getRoot();
+    const byName = root.listNodes().filter((n) => n.getName() === e.object);
+    if (!byName.length) err(`${rel} : object « ${e.object} » introuvable dans le GLB (V-08)`);
+    else {
+      const joints = new Set(root.listSkins().flatMap((s) => s.listJoints()));
+      if (![...descendants(byName[0])].some((n) => joints.has(n))) warn(`${rel} : « ${e.object} » n'a aucun os de skin (une armature est attendue)`);
+    }
+    const clipNames = root.listAnimations().map((a) => a.getName());
+    for (const [role, clip] of Object.entries(e.clips)) {
+      if (clip && !clipNames.includes(clip)) err(`${rel} : clips.${role} : clip « ${clip} » absent du GLB`);
+    }
+    const declared = new Set(Object.values(e.clips));
+    const extra = clipNames.filter((c) => !declared.has(c));
+    if (extra.length) warn(`${rel} : clip(s) du GLB non déclaré(s) : ${extra.join(', ')}`);
+    if (e.collider && !root.listNodes().some((n) => n.getName() === GAME_COLLIDER_NODE)) err(`${rel} : collider « ${GAME_COLLIDER_NODE} » introuvable dans le GLB (V-08)`);
+    if (e.capsule.radius > B.capsuleRadius) {
+      warn(`${rel} : capsule de ${metres(e.capsule.radius)} de rayon (${metres(B.capsuleRadius)} au plus, cas mesuré au spike MJ0) : coût du pas physique non mesuré au-delà ; réduire la capsule ou l'échelle de l'entité dans Blender`);
+    }
+    protects.set(e.id, [e.object, ...(e.collider ? [GAME_COLLIDER_NODE] : [])]);
+  }
+  for (const [id, doc] of docs) {
+    for (const t of doc.getRoot().listTextures()) {
+      const size = t.getSize();
+      if (size && Math.max(size[0], size[1]) > B.texturePx) {
+        warn(`${GAME_DIR}/${id}.glb : texture « ${t.getName() || t.getURI() || '?'} » de ${size[0]} × ${size[1]} px (${B.texturePx} px au plus, budget du gabarit « poursuite »)`);
+      }
+    }
+  }
+  if (report.errors.length > errorsBefore) return null;
+
+  // --- Optimisation (pipeline d'Î7, nœuds cités protégés, contrôle de survie) et budgets de taille ---
+  const ids = [GAME_ARENA_ID, ...config.entities.map((e) => e.id)];
+  const glbs: GameGlb[] = [];
+  let ok = true;
+  for (const id of ids) {
+    const rel = `${GAME_DIR}/${id}.glb`;
+    try {
+      const r = await optimizeGameGlb(path.join(gameDir, `${id}.glb`), protects.get(id) ?? [], opts.textures ?? 'auto');
+      for (const s of r.survival) err(`${rel} : optimisation : ${s}`);
+      if (r.survival.length) ok = false;
+      glbs.push({ rel, id, bytes: r.bytes });
+    } catch (e) {
+      err(`${rel} : optimisation impossible (${(e as Error).message})`);
+      ok = false;
+    }
+  }
+  if (!ok) return null;
+  const sizeOf = (id: string) => glbs.find((g) => g.id === id)!.bytes.byteLength;
+  const over = (rel: string, size: number, max: number, what: string) =>
+    size > max && warn(`${rel} : ${what} de ${mo(size)} une fois optimisé (${mo(max)} au plus, budget du gabarit « poursuite »)`);
+  over(`${GAME_DIR}/${GAME_ARENA_ID}.glb`, sizeOf(GAME_ARENA_ID), B.arenaBytes, 'arène');
+  for (const e of config.entities) {
+    over(`${GAME_DIR}/${e.id}.glb`, sizeOf(e.id), e.role === 'player' ? B.playerBytes : B.preyBytes, e.role === 'player' ? 'joueur' : 'proie');
+  }
+
+  // --- Crédits des modèles (src_* des nœuds, D-8.5) ; sons (V-10) ---
+  const credits = new Map<string, ModelCredit>();
+  for (const doc of docs.values()) {
+    for (const n of doc.getRoot().listNodes()) {
+      const exn = n.getExtras() ?? {};
+      const c: ModelCredit = {};
+      for (const [k, field] of Object.entries(SRC_KEYS)) {
+        const v = exn[k];
+        if (typeof v === 'string' && v.trim()) c[field] = v.trim();
+      }
+      if (!Object.keys(c).length) continue;
+      const key = JSON.stringify([c.name, c.author, c.license, c.url]);
+      if (!credits.has(key)) credits.set(key, c);
+    }
+  }
+  const modelCredits = [...credits.values()];
+  if (!modelCredits.length) warn(`jeu : aucun crédit de modèle (propriétés src_*) dans les GLB de ${GAME_DIR}/`);
+  for (const c of modelCredits) {
+    if (!c.author || !c.license) warn(`jeu : crédit de modèle incomplet ${JSON.stringify(c)} (src_author et src_license attendus)`);
+  }
+  const assets = new Set<string>();
+  const sounds = new Set(Object.values(config.sounds ?? {}).filter((x): x is string => !!x));
+  for (const s of sounds) assets.add(s);
+  const creditList = config.credits?.assets ?? [];
+  for (const c of creditList) assets.add(c.asset);
+  const credited = new Set(creditList.map((c) => c.asset));
+  for (const s of sounds) if (!credited.has(s)) err(`jeu : son « ${s} » sans entrée dans credits.assets de ${GAME_EDIT_FILE} (V-10)`, 'fusion');
+  for (const c of creditList) if (!sounds.has(c.asset)) warn(`jeu : crédit pour « ${c.asset} », asset non utilisé par le jeu`, 'fusion');
+  let total = glbs.reduce((s, g) => s + g.bytes.byteLength, 0);
+  for (const s of sounds) {
+    const f = path.join(sourceDir, s);
+    if (fs.existsSync(f)) total += fs.statSync(f).size;
+  }
+  if (total > B.gameBytes) warn(`jeu : ${mo(total)} au total (GLB optimisés et sons ; ${mo(B.gameBytes)} au plus, budget du gabarit « poursuite »)`);
+  return { config, glbs, assets, modelCredits };
+}
+
+// ---------------------------------------------------------------------------------------------------------
 // Contrôles du livre
 // ---------------------------------------------------------------------------------------------------------
 
@@ -433,8 +721,10 @@ export function checkCards(book: Book, scenes: readonly SceneResult[], report: R
 export interface BookCheck {
   book: Book;
   scenes: SceneResult[];
-  /** Assets référencés par les scènes et `book.json` (V-03 contrôlé). */
+  /** Assets référencés par les scènes, le jeu et `book.json` (V-03 contrôlé). */
   assets: Set<string>;
+  /** Jeu du livre (MJ1), `null` si `book.json` n'a pas de `game`. */
+  game: GameResult | null;
 }
 
 /** Lecture d'une scène par `checkBookSource` : `readScene` par défaut ; l'atelier (A3) rejoue ses résultats en cache. */
@@ -444,7 +734,12 @@ export type ReadSceneFn = (sourceDir: string, id: string, report: Report) => Pro
  * Contrôles d'un dossier source de livre, dans l'ordre de `build-book` : book.json, scènes, V-03, icônes, fichiers non
  * référencés. Renvoie `null` si book.json est absent, illisible ou invalide (contrôles arrêtés, comme `build-book`).
  */
-export async function checkBookSource(sourceDir: string, report: Report, readSceneFn: ReadSceneFn = readScene): Promise<BookCheck | null> {
+export async function checkBookSource(
+  sourceDir: string,
+  report: Report,
+  readSceneFn: ReadSceneFn = readScene,
+  opts: { textures?: TextureMode } = {},
+): Promise<BookCheck | null> {
   const err = (m: string) => report.error(m);
   const warn = (m: string) => report.warning(m);
   if (!fs.existsSync(path.join(sourceDir, 'book.json'))) {
@@ -472,8 +767,11 @@ export async function checkBookSource(sourceDir: string, report: Report, readSce
   // --- Cartes de collection (CC1, §6 ; CC3, §15.8) : type et valeurs de modules.card contre book.json (cardFields ou cardTypes) ---
   checkCards(book, scenes, report);
 
+  // --- Mini-jeu (MJ1, spec-mini-jeu.md §8) : GLB de game/, game/game.edit.json, fusion, contrôles, budgets ---
+  const game = await readGame(sourceDir, book, scenes, report, opts);
+
   // --- V-03 : existence des assets ; contrôle de taille des sources ---
-  const assets = new Set<string>(scenes.flatMap((s) => [...s.assets]));
+  const assets = new Set<string>([...scenes.flatMap((s) => [...s.assets]), ...(game ? [...game.assets] : [])]);
   if (book.ogImage) assets.add(book.ogImage);
   else warn('book.json : pas de ogImage (aperçu de partage)');
   for (const a of [...assets].sort()) {
@@ -487,9 +785,13 @@ export async function checkBookSource(sourceDir: string, report: Report, readSce
   else await iconSourceOk(path.join(sourceDir, 'icon.png'), err);
   if (fs.existsSync(path.join(sourceDir, 'icon-maskable.png'))) await iconSourceOk(path.join(sourceDir, 'icon-maskable.png'), err);
   for (const id of book.scenes) known.add(`scenes/${id}.glb`).add(`scenes/${id}.edit.json`);
+  if (book.game) {
+    known.add(GAME_EDIT_FILE);
+    for (const f of listSourceFiles(sourceDir)) if (/^game\/[^/]+\.glb$/i.test(f)) known.add(f);
+  }
   // `blender/` (dossier réservé, ST1) : ni listé ni copié.
   const unused = listSourceFiles(sourceDir).filter((f) => !known.has(f));
   if (unused.length && !report.errors.length) warn(`fichier(s) source non référencé(s), non copié(s) : ${unused.join(', ')}`);
 
-  return { book, scenes, assets };
+  return { book, scenes, assets, game };
 }

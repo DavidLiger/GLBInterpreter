@@ -3,16 +3,18 @@
 // actions combinées (AC1, spec-actions-combinees.md §7, §8) : événements, coupe au noir, instants hors durée (sur un GLB
 // écrit dans un dossier temporaire, lu par `readScene` comme au build) ; empty de position de la caméra (AC2, DP-19, §16) ;
 // carte de collection (CC1, spec-carte-collection.md §5, §6 : intitulés, paragraphe, longueurs, livres existants valides) ;
-// types de cartes (CC3, §15.7, §15.8).
+// types de cartes (CC3, §15.7, §15.8) ; mini-jeu (MJ1, spec-mini-jeu.md §5 à §8, §13 : couches du jeu, fusion, rôles de clip,
+// bornes, clé `rewards` réservée, JSON Schema du jeu, book:check du jeu sur le livre de test et sur des cas faux).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Document, NodeIO } from '@gltf-transform/core';
-import { bookSchema, builtSceneSchema, editLayerSchema, glbiConfigSchema, isReservedSourcePath, type Book, type EditLayer, type Layer3d } from '../src/schema/glbi';
-import { mergeLayers, type MergeOptions } from '../src/schema/merge';
-import { checkSchemaFresh, layer3dSchemaText } from './export-schema';
-import { checkCards, readScene, Report, type SceneResult } from './book-check';
+import { spawnSync } from 'node:child_process';
+import { bookSchema, builtSceneSchema, editLayerSchema, game3dArenaSchema, game3dEntitySchema, gameConfigSchema, gameEditSchema, glbiConfigSchema, isReservedSourcePath, type Book, type EditLayer, type Layer3d } from '../src/schema/glbi';
+import { mergeGame, mergeLayers, type MergeOptions } from '../src/schema/merge';
+import { checkSchemaFresh, game3dSchemaText, layer3dSchemaText } from './export-schema';
+import { checkBookSource, checkCards, readScene, Report, ROOT, type SceneResult } from './book-check';
 import { referencedNodeNames } from './glb-pipeline';
 
 const L = (fr: string, en: string, es: string) => ({ fr, en, es });
@@ -83,7 +85,7 @@ function hasError(r: { errors: string[] }, msg: string): void {
   assert.ok(r.errors.includes(msg), `message attendu :\n    ${msg}\nobtenus :\n    ${r.errors.join('\n    ')}`);
 }
 
-console.log('test:schema — fusion des couches (A1), actions combinées (AC1), position de caméra (AC2), carte de collection (CC1) et types de cartes (CC3)');
+console.log('test:schema — fusion des couches (A1), actions combinées (AC1), position de caméra (AC2), carte de collection (CC1), types de cartes (CC3) et mini-jeu (MJ1)');
 
 await test('exemple complet : objet fusionné valide, ordre du GLB, version 1', () => {
   const r = mergeLayers(clone(LAYER3D), clone(EDIT), OPTS);
@@ -676,7 +678,253 @@ await test('CC3 : checkCards : type inconnu (deux formes, une seule erreur) ; pe
   ]);
 });
 
-await test('JSON Schema de la couche 3D commité à jour', () => {
+// ---------------------------------------------------------------------------------------------------------
+// Mini-jeu (MJ1, spec-mini-jeu.md §5 à §8, §13 ; DP-21)
+// ---------------------------------------------------------------------------------------------------------
+
+const ARENA3D = { version: 1, kind: 'arena', id: 'arena' };
+const PLAYER3D = {
+  version: 1, kind: 'entity', id: 'dino', role: 'player', object: 'Armature_Dino',
+  clips: { idle: 'dino_idle', walk: 'dino_walk', run: 'dino_run', attack: 'dino_attack' }, capsule: { radius: 0.5, height: 1.8 },
+};
+const PREY3D = {
+  version: 1, kind: 'entity', id: 'compso', role: 'prey', object: 'Armature_Compso',
+  clips: { idle: 'c_idle', walk: 'c_walk', flee: 'c_flee', caught: 'c_caught' }, capsule: { radius: 0.3, height: 0.8 },
+};
+const GAME_EDIT = {
+  version: 1,
+  rules: { duration: 300, preys: [{ entity: 'compso', count: 8 }] },
+  texts: { title: L('La chasse', 'The hunt', 'La caza'), instructions: L('Attrape-les !', 'Catch them!', '¡Atrápalos!') },
+  sounds: { capture: 'sounds/hop.mp3' },
+  credits: { assets: [{ asset: 'sounds/hop.mp3', title: 'Hop', author: 'X', license: 'CC0' }] },
+};
+const GAME_BOOK: Book = { ...BOOK, game: { template: 'poursuite' } };
+type GameIn = { arena?: unknown; entities?: unknown[]; edit?: unknown; book?: Book; versions?: Record<string, unknown> };
+const layerIn = (raw: unknown, versions: Record<string, unknown> = {}) => {
+  const id = (raw as { id: string }).id;
+  return { id, raw: clone(raw), version: id in versions ? versions[id] : 1 };
+};
+const game = (g: GameIn = {}, mode: 'strict' | 'draft' = 'strict') =>
+  mergeGame(
+    {
+      book: g.book ?? GAME_BOOK,
+      cards: [{ card: 'trex', type: 'personnage' }],
+      arena: g.arena === null ? null : layerIn(g.arena ?? ARENA3D, g.versions),
+      entities: (g.entities ?? [PLAYER3D, PREY3D]).map((e) => layerIn(e, g.versions)),
+      edit: 'edit' in g ? g.edit : clone(GAME_EDIT),
+    },
+    { mode },
+  );
+
+await test('MJ1 : jeu nominal : objet fusionné valide, gabarit de book.json, valeurs par défaut du §6, aucune copie des cartes', () => {
+  const r = game();
+  assert.deepEqual(r.errors, []);
+  assert.deepEqual(r.warnings, []);
+  assert.ok(r.config && gameConfigSchema.safeParse(r.config).success);
+  assert.equal(r.config.version, 1);
+  assert.equal(r.config.template, 'poursuite');
+  assert.deepEqual(r.config.entities.map((e) => e.id), ['dino', 'compso']);
+  assert.ok(!('kind' in r.config.entities[0]) && !('version' in r.config.entities[0]), 'entités sans version ni kind');
+  assert.deepEqual(r.config.rules, { duration: 300, preys: [{ entity: 'compso', count: 8 }], playerSpeed: 6, preySpeed: 5, detectionRadius: 6, points: 1, respawn: true });
+  assert.deepEqual(r.config.camera, { distance: 14 });
+  assert.ok(!JSON.stringify(r.config).includes('trex'), 'cartes reçues, rien de copié (DP-21)');
+  // Une seule sorte de proie, règles absentes : 8 proies par défaut (décision du 28/10).
+  const bare = game({ edit: { version: 1, texts: GAME_EDIT.texts } });
+  assert.deepEqual(bare.errors, []);
+  assert.deepEqual(bare.config!.rules.preys, [{ entity: 'compso', count: 8 }]);
+  assert.equal(bare.config!.rules.duration, 300);
+  // Builds existants : un livre sans `game` reste valide, `game` n'admet que « poursuite ».
+  assert.ok(bookSchema.safeParse(BOOK).success);
+  assert.ok(bookSchema.safeParse(GAME_BOOK).success);
+  assert.equal(bookSchema.safeParse({ ...BOOK, game: { template: 'baston' } }).success, false);
+  assert.equal(bookSchema.safeParse({ ...BOOK, game: { template: 'poursuite', seuil: 2 } }).success, false);
+});
+
+await test('MJ1 : couche 3D du jeu : version, kind, id, rôles de clip obligatoires, capsule, joueur unique (messages exacts)', () => {
+  hasError(game({ versions: { arena: 2 } }), "game/arena.glb : glbi_game_version doit être l'entier 1 (trouvé : 2)");
+  hasError(game({ entities: [{ ...PLAYER3D, version: 2 }, PREY3D] }), 'game/dino.glb (couche 3D du jeu) : version vaut 2, glbi_game_version vaut 1 (doivent être égaux)');
+  hasError(game({ arena: { ...ARENA3D, kind: 'entity' } }), "game/arena.glb (couche 3D du jeu) : kind vaut « entity », attendu « arena » (exporter en mode « Arène » de l'addon)");
+  hasError(game({ entities: [{ ...PLAYER3D, kind: 'arena' }, PREY3D] }), "game/dino.glb (couche 3D du jeu) : kind vaut « arena », attendu « entity » (exporter en mode « Entité de jeu » de l'addon)");
+  hasError(game({ arena: null }), "game/arena.glb absent du dossier source : exporter l'arène avec l'addon (mode « Arène »)");
+  const noAttack = { ...PLAYER3D, clips: { idle: 'a', walk: 'b', run: 'c' } };
+  hasError(game({ entities: [noAttack, PREY3D] }), 'game/dino.glb (couche 3D du jeu) : clips.attack : rôle de clip « attack » obligatoire pour le joueur');
+  const noFlee = { ...PREY3D, clips: { idle: 'a', walk: 'b', caught: 'c' } };
+  hasError(game({ entities: [PLAYER3D, noFlee] }), 'game/compso.glb (couche 3D du jeu) : clips : rôle de clip « run » ou « flee » obligatoire pour une proie (fuite)');
+  const noCaught = { ...PREY3D, clips: { idle: 'a', walk: 'b', run: 'c' } };
+  hasError(game({ entities: [PLAYER3D, noCaught] }), 'game/compso.glb (couche 3D du jeu) : clips.caught : rôle de clip « caught » obligatoire pour une proie');
+  hasError(game({ entities: [{ ...PLAYER3D, capsule: { radius: 1, height: 1.5 } }, PREY3D] }), 'game/dino.glb (couche 3D du jeu) : capsule.height : hauteur de la capsule (1.5 m) inférieure à son diamètre (2 m)');
+  hasError(game({ entities: [{ ...PLAYER3D, id: 'arena' }, PREY3D] }), "game/arena.glb (couche 3D du jeu) : id : « arena » est réservé à l'arène (game/arena.glb)");
+  const renamed = mergeGame({ book: GAME_BOOK, cards: [], arena: layerIn(ARENA3D), entities: [{ id: 'rex', raw: clone(PLAYER3D), version: 1 }, layerIn(PREY3D)], edit: clone(GAME_EDIT) }, { mode: 'strict' });
+  hasError(renamed, 'game/rex.glb (couche 3D du jeu) : id vaut « dino », attendu « rex » (nom du fichier)');
+  hasError(game({ entities: [{ ...PLAYER3D, rules: {} }, PREY3D] }), 'game/dino.glb (couche 3D du jeu) : (racine) : clé « rules » non admise, elle appartient à game/game.edit.json');
+  hasError(game({ entities: [PLAYER3D, { ...PLAYER3D, id: 'rex2' }, PREY3D] }), 'jeu : 2 entités joueur (dino, rex2) : une seule attendue');
+  hasError(game({ entities: [PREY3D] }), 'jeu : aucune entité joueur (role « player ») dans game/');
+  hasError(game({ entities: [PLAYER3D] }), 'jeu : aucune entité proie (role « prey ») dans game/');
+  hasError(game({ entities: [] }), "jeu : aucune entité dans game/ (game/<entité>.glb, addon en mode « Entité de jeu »)");
+});
+
+await test('MJ1 : couche éditoriale du jeu : bornes du §6, 12 proies au plus, proie inconnue ou joueur, textes, clés mal placées', () => {
+  const withRules = (rules: Record<string, unknown>) => game({ edit: { ...clone(GAME_EDIT), rules: { ...GAME_EDIT.rules, ...rules } } });
+  hasError(withRules({ duration: 200 }), 'game/game.edit.json : rules.duration : durée (s) : 300 au moins');
+  hasError(withRules({ duration: 700 }), 'game/game.edit.json : rules.duration : durée (s) : 600 au plus');
+  hasError(withRules({ preys: [{ entity: 'compso', count: 13 }] }), 'game/game.edit.json : rules.preys.0.count : nombre de proies : 12 au plus');
+  const two = { ...PREY3D, id: 'ptero' };
+  const many = game({ entities: [PLAYER3D, PREY3D, two], edit: { ...clone(GAME_EDIT), rules: { preys: [{ entity: 'compso', count: 8 }, { entity: 'ptero', count: 5 }] } } });
+  hasError(many, 'game/game.edit.json : rules.preys : 13 proies en même temps (12 au plus)');
+  assert.deepEqual(game({ entities: [PLAYER3D, PREY3D, two], edit: { ...clone(GAME_EDIT), rules: { preys: [{ entity: 'compso', count: 8 }, { entity: 'ptero', count: 4 }] } } }).errors, [], '12 au total admis');
+  hasError(withRules({ playerSpeed: 25 }), 'game/game.edit.json : rules.playerSpeed : vitesse du joueur (m/s) : 20 au plus');
+  hasError(withRules({ detectionRadius: 0.5 }), 'game/game.edit.json : rules.detectionRadius : rayon de détection (m) : 1 au moins');
+  hasError(withRules({ points: 11 }), 'game/game.edit.json : rules.points : points par capture : 10 au plus');
+  hasError(game({ edit: { ...clone(GAME_EDIT), camera: { distance: 3 } } }), 'game/game.edit.json : camera.distance : distance de la caméra (m) : 4 au moins');
+  hasError(withRules({ preys: [{ entity: 'tricera', count: 2 }] }), 'game/game.edit.json : rules.preys.0.entity : entité « tricera » absente de game/ (proies : compso)');
+  hasError(withRules({ preys: [{ entity: 'dino', count: 2 }] }), 'game/game.edit.json : rules.preys.0.entity : « dino » est le joueur, pas une proie (proies : compso)');
+  const several = game({ entities: [PLAYER3D, PREY3D, two], edit: { version: 1, texts: GAME_EDIT.texts } });
+  hasError(several, "jeu : rules.preys absent de game/game.edit.json : plusieurs sortes de proies (compso, ptero), à choisir dans l'atelier");
+  const unused = game({ entities: [PLAYER3D, PREY3D, two] });
+  assert.deepEqual(unused.errors, []);
+  assert.deepEqual(unused.warnings, ['jeu : proie « ptero » non citée par rules.preys (game/game.edit.json) : jamais en jeu']);
+  hasError(game({ edit: { version: 1, rules: GAME_EDIT.rules } }), "jeu : titre du jeu (texts.title) absent de game/game.edit.json ; à renseigner dans l'atelier");
+  hasError(game({ edit: { version: 1, rules: GAME_EDIT.rules } }), "jeu : consigne du jeu (texts.instructions) absente de game/game.edit.json ; à renseigner dans l'atelier");
+  hasError(game({ edit: undefined }), "jeu : game/game.edit.json absent ; à renseigner dans l'atelier (entrée « Jeu ») ou à la main");
+  hasError(game({ edit: { ...clone(GAME_EDIT), capsule: { radius: 1 } } }), 'game/game.edit.json : (racine) : clé « capsule » non admise, elle appartient aux GLB du jeu (addon)');
+  hasError(game({ edit: { ...clone(GAME_EDIT), version: 2 } }), 'game/game.edit.json : version : Entrée invalide : 1 attendu');
+  // Mode `draft` (atelier, MJ3) : objet affichable malgré un titre absent.
+  const d = game({ edit: { version: 1 } }, 'draft');
+  assert.equal(d.config, null);
+  assert.ok(d.draft && d.draft.texts.title.fr === 'Mini-jeu' && d.draft.rules.preys[0].entity === 'compso');
+});
+
+await test('MJ1 (DP-21) : clé « rewards » réservée, refusée dans game.edit.json et l’objet fusionné avec le message réservé', () => {
+  hasError(game({ edit: { ...clone(GAME_EDIT), rewards: [] } }), 'game/game.edit.json : (racine) : clé « rewards » réservée (éléments du jeu apportés par les cartes), non activable en v1');
+  const r = gameConfigSchema.safeParse({ ...game().config, rewards: {} });
+  assert.equal(r.success, false);
+  assert.deepEqual(r.success ? [] : r.error.issues.map((i) => i.message), ['clé « rewards » réservée (éléments du jeu apportés par les cartes), non activable en v1']);
+  const e = gameEditSchema.safeParse({ ...clone(GAME_EDIT), rewards: [], extra: 1 });
+  assert.equal(e.success, false);
+  assert.ok(!e.success && e.error.issues[0].message.includes('clé « extra » inconnue'));
+  // Signature : book.json et cartes des scènes reçus, sans contrôle en v1 (une carte inexistante ne gêne pas).
+  const withCards = mergeGame({ book: GAME_BOOK, cards: [{ card: 'inconnue', type: 'arme' }], arena: layerIn(ARENA3D), entities: [layerIn(PLAYER3D), layerIn(PREY3D)], edit: clone(GAME_EDIT) }, { mode: 'strict' });
+  assert.deepEqual(withCards.errors, []);
+});
+
+await test('MJ1 : JSON Schema de la couche 3D du jeu : entité et arène sous $defs, mots-clés de schema_check.py, à jour', () => {
+  const doc = JSON.parse(game3dSchemaText());
+  assert.equal(doc.$id, 'urn:glbinterpreter:schema:game3d/1');
+  assert.deepEqual(Object.keys(doc.$defs), ['entity', 'arena']);
+  const allowed = new Set(['type', 'properties', 'required', 'additionalProperties', 'pattern', 'enum', 'const', 'minimum', 'maximum', 'minItems', 'items', 'default']);
+  const used = new Set<string>();
+  const walk = (s: unknown, inProps = false) => {
+    if (!s || typeof s !== 'object') return;
+    for (const [k, v] of Object.entries(s)) {
+      if (!inProps) used.add(k);
+      if (k === 'properties') for (const sub of Object.values(v as object)) walk(sub);
+      else if (k === 'items' || (k === 'additionalProperties' && typeof v === 'object')) walk(v);
+    }
+  };
+  walk(doc.$defs.entity);
+  walk(doc.$defs.arena);
+  assert.deepEqual([...used].filter((k) => !allowed.has(k)), [], 'mots-clés hors du sous-ensemble de schema_check.py');
+  assert.deepEqual(doc.$defs.entity.properties.role.enum, ['player', 'prey']);
+  assert.equal(doc.$defs.arena.properties.kind.const, 'arena');
+  assert.ok(game3dArenaSchema.safeParse(ARENA3D).success && game3dEntitySchema.safeParse(PLAYER3D).success);
+  assert.equal(checkSchemaFresh(), null);
+});
+
+/** Dossier source avec un jeu écrit par make-test-book (MJ1), options passées au script. */
+function testBookWithGame(...opts: string[]): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'glbi-mj1-'));
+  const r = spawnSync(process.execPath, [...process.execArgv, path.join(ROOT, 'scripts/make-test-book.ts'), dir, ...opts], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  return dir;
+}
+
+/** Arène écrite dans `dir` avec seulement les nœuds `names` (maillage plaque pour COL_ et FADE_, empty sinon). */
+async function writeArena(dir: string, names: string[], triangles = 2): Promise<void> {
+  const doc = new Document();
+  const buffer = doc.createBuffer();
+  const scene = doc.createScene('Scene');
+  for (const name of names) {
+    const node = doc.createNode(name);
+    if (/^(COL_|FADE_)/.test(name) && !name.endsWith('_vide')) {
+      const pos = new Float32Array(triangles * 9).map((_, i) => (i % 9) / 9 + Math.floor(i / 9));
+      node.setMesh(doc.createMesh(`${name}_mesh`).addPrimitive(doc.createPrimitive().setAttribute('POSITION', doc.createAccessor().setType('VEC3').setBuffer(buffer).setArray(pos))));
+    }
+    scene.addChild(node);
+  }
+  scene.addChild(doc.createNode('GLBI_ROOT').setExtras({ glbi_game_version: 1, glbi_game_config: JSON.stringify(ARENA3D) }));
+  await new NodeIO().write(path.join(dir, 'game/arena.glb'), doc);
+}
+
+const gameLines = (r: Report) => r.lines.filter((l) => l.scene === null && !l.message.startsWith('book.json') && !l.message.startsWith('fichier(s)')).map((l) => [l.level, l.origin, l.message]);
+
+await test('MJ1 : book:check du jeu (livre de test) : sans erreur ; capsule de plus de 1,2 m : avertissement ; livre sans game : jeu ignoré', async () => {
+  const dir = testBookWithGame();
+  const ok = new Report();
+  const checked = await checkBookSource(dir, ok, undefined, { textures: 'keep' });
+  assert.deepEqual(ok.errors, []);
+  assert.ok(checked?.game);
+  assert.deepEqual(checked.game.glbs.map((g) => g.rel), ['game/arena.glb', 'game/compso.glb', 'game/dino.glb']);
+  assert.ok(checked.assets.has('sounds/jeu_capture.wav') && checked.assets.has('sounds/jeu_musique.wav'), 'sons du jeu copiés');
+  assert.deepEqual(gameLines(ok), []);
+  const big = testBookWithGame('--capsule', '1.5');
+  const w = new Report();
+  await checkBookSource(big, w, undefined, { textures: 'keep' });
+  assert.deepEqual(w.errors, []);
+  assert.deepEqual(gameLines(w), [
+    ['warning', 'glb', "game/dino.glb : capsule de 1,5 m de rayon (1,2 m au plus, cas mesuré au spike MJ0) : coût du pas physique non mesuré au-delà ; réduire la capsule ou l'échelle de l'entité dans Blender"],
+  ]);
+  // Jeu présent dans game/ mais book.json sans game : ignoré (avertissement), aucun GLB du jeu lu.
+  const book = JSON.parse(fs.readFileSync(path.join(dir, 'book.json'), 'utf8'));
+  delete book.game;
+  fs.writeFileSync(path.join(dir, 'book.json'), JSON.stringify(book));
+  const none = new Report();
+  const c2 = await checkBookSource(dir, none, undefined, { textures: 'keep' });
+  assert.equal(c2?.game, null);
+  assert.ok(none.warnings.includes("game/ : fichiers du jeu présents mais book.json n'a pas de game : jeu ignoré, non publié"));
+});
+
+await test('MJ1 : contrôles croisés des GLB du jeu : points d’apparition, sol, collisionneurs, triangles, clips, objet, COLLIDER', async () => {
+  const dir = testBookWithGame();
+  const lines = async () => {
+    const r = new Report();
+    await checkBookSource(dir, r, undefined, { textures: 'keep' });
+    return gameLines(r);
+  };
+  await writeArena(dir, ['COL_mur', 'FADE_vide']);
+  assert.deepEqual(await lines(), [
+    ['error', 'glb', "game/arena.glb : pas de point d'apparition du joueur (empty « SPAWN_player »)"],
+    ['error', 'glb', "game/arena.glb : pas de point d'apparition des proies (empties « SPAWN_prey_1 », « SPAWN_prey_2 »…)"],
+    ['error', 'glb', 'game/arena.glb : pas de sol (maillage « COL_sol »)'],
+    ['warning', 'glb', 'game/arena.glb : décor « FADE_vide » (FADE_) sans maillage : rien à rendre transparent'],
+  ]);
+  await writeArena(dir, ['SPAWN_player', 'SPAWN_player', 'SPAWN_prey_1', 'COL_sol', 'COL_vide'], 2600);
+  assert.deepEqual(await lines(), [
+    ['warning', 'glb', 'game/arena.glb : 2 nœuds « SPAWN_player » : un seul sera utilisé'],
+    ['warning', 'glb', "game/arena.glb : 1 point(s) d'apparition des proies pour 4 proies en même temps : plusieurs apparaîtront au même endroit"],
+    ['error', 'glb', 'game/arena.glb : collisionneur « COL_vide » sans maillage'],
+  ]);
+  await writeArena(dir, ['SPAWN_player', 'SPAWN_prey_1', 'SPAWN_prey_2', 'SPAWN_prey_3', 'SPAWN_prey_4', 'COL_sol', 'COL_mur'], 2600);
+  assert.deepEqual(await lines(), [
+    ['warning', 'glb', 'game/arena.glb : collisionneurs COL_* de 5200 triangles (5000 au plus, budget du gabarit « poursuite ») : simplifier les maillages COL_* dans Blender'],
+  ]);
+  // Entité : clip et objet absents du GLB, COLLIDER déclaré absent (couche 3D réécrite dans le GLB du joueur).
+  const file = path.join(dir, 'game/dino.glb');
+  const io = new NodeIO();
+  const doc = await io.read(file);
+  const root = doc.getRoot().listNodes().find((n) => n.getName() === 'GLBI_ROOT')!;
+  const cfg = JSON.parse(root.getExtras().glbi_game_config as string);
+  root.setExtras({ glbi_game_version: 1, glbi_game_config: JSON.stringify({ ...cfg, object: 'Armature_Rex', clips: { ...cfg.clips, attack: 'dino_bond' }, collider: 'COLLIDER' }) });
+  await io.write(file, doc);
+  await writeArena(dir, ['SPAWN_player', 'SPAWN_prey_1', 'SPAWN_prey_2', 'SPAWN_prey_3', 'SPAWN_prey_4', 'COL_sol']);
+  assert.deepEqual(await lines(), [
+    ['error', 'glb', 'game/dino.glb : object « Armature_Rex » introuvable dans le GLB (V-08)'],
+    ['error', 'glb', 'game/dino.glb : clips.attack : clip « dino_bond » absent du GLB'],
+    ['warning', 'glb', 'game/dino.glb : clip(s) du GLB non déclaré(s) : dino_attack'],
+    ['error', 'glb', 'game/dino.glb : collider « COLLIDER » introuvable dans le GLB (V-08)'],
+  ]);
+});
+
+await test('JSON Schema de la couche 3D (et de la couche 3D du jeu) commité à jour', () => {
   assert.equal(checkSchemaFresh(), null);
 });
 

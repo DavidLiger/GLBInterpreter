@@ -5,9 +5,11 @@
 // dossier), suivie de `/s/<scène>`, et que la scène figure dans `book.json.scenes`. L'hôte qui sert l'app n'a pas besoin
 // d'être celui du QR : un livre servi depuis le miroir GitHub Pages, domaine mort, lit toujours ses QR imprimés. Un QR
 // d'un autre livre de la maison (autre `origin`, même forme `/s/<id>`) est refusé, même si l'`id` existe ici.
+// MJ1 : le QR du mini-jeu (`<adresse>/jeu`, `dist/qr/<bookId>/jeu.svg`) suit la même règle d'adresse, seulement si le livre
+// a un jeu (`book.json.game`) ; ailleurs il est refusé comme un QR étranger.
 import { sceneIdFromPath } from "./sceneRoute";
 
-export type ScanResult = { kind: "scene"; sceneId: string } | { kind: "foreign" };
+export type ScanResult = { kind: "scene"; sceneId: string } | { kind: "game" } | { kind: "foreign" };
 
 export interface ScanBook {
   /** Adresse imprimée (`book.json.origin`, `https://hôte[/chemin]`) ; absente : seule la racine de la page compte. */
@@ -15,6 +17,8 @@ export interface ScanBook {
   /** Racine du dossier du livre telle que la page la voit (`new URL("./", location.href)`). */
   pageRoot: string;
   scenes: readonly string[];
+  /** Le livre a un mini-jeu (`book.json.game`, MJ1) : le QR `/jeu` est accepté, même règle d'adresse que les scènes. */
+  game?: boolean;
 }
 
 const FOREIGN: ScanResult = { kind: "foreign" };
@@ -45,6 +49,8 @@ export function sceneFromScan(text: string, book: ScanBook): ScanResult {
   for (const p of [prefixOf(book.origin), prefixOf(book.pageRoot)]) {
     if (!p || u.origin !== p.origin || !u.pathname.startsWith(p.path)) continue;
     const rest = u.pathname.slice(p.path.length);
+    // Chemin du QR du jeu après le préfixe : `/jeu`, `/jeu/` ou `/jeu/index.html` (stub du build).
+    if (book.game && /^\/jeu\/?(?:index\.html)?$/.test(rest)) return { kind: "game" };
     if (!rest.startsWith("/s/")) continue;
     const id = sceneIdFromPath(rest);
     if (id && book.scenes.includes(id)) return { kind: "scene", sceneId: id };

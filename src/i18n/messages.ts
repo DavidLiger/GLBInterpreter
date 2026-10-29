@@ -237,6 +237,18 @@ const fr = {
     /** Ligne de compte par type sous le compte du menu (CC3) : nom du type du livre, cartes gagnées, cartes du type. */
     typeCount: "{name} {n}/{total}",
   },
+  // Mini-jeu de fin de collection (MJ1, spec-mini-jeu.md §2) : case du menu, écran de blocage, écran d'attente du moteur
+  // (MJ2). Les textes du jeu lui-même (titre, consigne, fin) viennent de `game/game.json` (couche éditoriale du jeu).
+  jeu: {
+    menuTitle: "Mini-jeu",
+    lockedOne: "Encore {n} carte à gagner pour débloquer le jeu !",
+    lockedMany: "Encore {n} cartes à gagner pour débloquer le jeu !",
+    blockedOne: "Encore {n} carte à gagner !",
+    blockedMany: "Encore {n} cartes à gagner !",
+    /** Écran provisoire de `#/jeu` débloqué jusqu'au moteur (MJ2), jamais imprimé. */
+    placeholder: "Le jeu arrive dans une prochaine version du livre.",
+    best: "Ton meilleur score : {n}",
+  },
 };
 
 export type Messages = typeof fr;
@@ -439,6 +451,15 @@ const en: Messages = {
     dialogName: "Card: {title}",
     typeCount: "{name} {n}/{total}",
   },
+  jeu: {
+    menuTitle: "Mini-game",
+    lockedOne: "{n} more card to win to unlock the game!",
+    lockedMany: "{n} more cards to win to unlock the game!",
+    blockedOne: "{n} more card to win!",
+    blockedMany: "{n} more cards to win!",
+    placeholder: "The game is coming in a future version of the book.",
+    best: "Your best score: {n}",
+  },
 };
 
 const es: Messages = {
@@ -638,6 +659,15 @@ const es: Messages = {
     numberSpoken: "carta {i} de {total}",
     dialogName: "Carta: {title}",
     typeCount: "{name} {n}/{total}",
+  },
+  jeu: {
+    menuTitle: "Minijuego",
+    lockedOne: "¡Te queda {n} carta por ganar para desbloquear el juego!",
+    lockedMany: "¡Te quedan {n} cartas por ganar para desbloquear el juego!",
+    blockedOne: "¡Te queda {n} carta por ganar!",
+    blockedMany: "¡Te quedan {n} cartas por ganar!",
+    placeholder: "El juego llegará en una próxima versión del libro.",
+    best: "Tu mejor puntuación: {n}",
   },
 };
 

@@ -10,6 +10,7 @@
 //   fermeture, au démontage et avant une nouvelle tentative.
 // - QR valide de ce livre (`sceneFromScan`, décision du 17/10, option c) : vibration courte (Android), puis `onScene`,
 //   qui navigue par `goToScene` (règle `sceneAccess` : scène, quiz ou écran de blocage). Pas d'écran intermédiaire.
+//   MJ1 : QR du mini-jeu (`<adresse>/jeu`, livre à `book.json.game`) → `onGame` (`#/jeu` : jeu ou écran de blocage).
 // - QR d'un autre livre ou d'un autre site : message, le scan continue. QR illisible : rien, le scan continue.
 // - Contexte non sécurisé (pas de `getUserMedia` hors HTTPS), permission refusée, pas de caméra, caméra occupée : message
 //   traduit, « Réessayer » (sauf contexte non sécurisé) et « Fermer ». Caméra coupée par le système pendant le scan :
@@ -32,6 +33,9 @@ interface QrScannerDialogProps {
   onClose: () => void;
   /** Scène de ce livre lue dans un QR. */
   onScene: (sceneId: string) => void;
+  /** Le livre a un mini-jeu (MJ1) : QR `/jeu` accepté, `onGame` appelé. */
+  game?: boolean;
+  onGame?: () => void;
 }
 
 /** Délai d'affichage du message « pas une page de ce livre » après la dernière lecture d'un tel QR. */
@@ -50,7 +54,7 @@ function statusOf(e: unknown): Status {
   return "error";
 }
 
-export default function QrScannerDialog({ origin, scenes, onClose, onScene }: QrScannerDialogProps) {
+export default function QrScannerDialog({ origin, scenes, game, onClose, onScene, onGame }: QrScannerDialogProps) {
   const { t } = useTranslation();
   const titleId = useId();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -59,8 +63,10 @@ export default function QrScannerDialog({ origin, scenes, onClose, onScene }: Qr
   /** Nouvelle tentative (« Réessayer ») : relance l'effet de la caméra. */
   const [attempt, setAttempt] = useState(0);
   const onSceneRef = useRef(onScene);
+  const onGameRef = useRef(onGame);
   useEffect(() => {
     onSceneRef.current = onScene;
+    onGameRef.current = onGame;
   });
 
   useEffect(() => {
@@ -115,8 +121,8 @@ export default function QrScannerDialog({ origin, scenes, onClose, onScene }: Qr
         controls = await reader.decodeFromStream(stream, video, (result, _error, ctrl) => {
           // Sans résultat : image sans QR lisible, on continue à scanner.
           if (!result || cancelled || done) return;
-          const r = sceneFromScan(result.getText(), { origin, pageRoot, scenes });
-          if (r.kind === "scene") {
+          const r = sceneFromScan(result.getText(), { origin, pageRoot, scenes, game });
+          if (r.kind === "scene" || r.kind === "game") {
             done = true;
             ctrl.stop();
             release();
@@ -125,7 +131,8 @@ export default function QrScannerDialog({ origin, scenes, onClose, onScene }: Qr
             } catch {
               /* vibration non permise : sans importance */
             }
-            onSceneRef.current(r.sceneId);
+            if (r.kind === "scene") onSceneRef.current(r.sceneId);
+            else onGameRef.current?.();
             return;
           }
           setForeign(true);
@@ -149,7 +156,7 @@ export default function QrScannerDialog({ origin, scenes, onClose, onScene }: Qr
       cancelled = true;
       release();
     };
-  }, [attempt, origin, scenes]);
+  }, [attempt, origin, scenes, game]);
 
   const failed = status !== "starting" && status !== "scanning";
   const failedMessage = status === "denied" && detectPlatform().ios ? t.scanner.deniedIos : failed ? t.scanner[status] : "";

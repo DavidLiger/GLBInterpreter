@@ -37,15 +37,32 @@
 //   « duo » : carte `rencontre` (mise en page normale, pastille) ; 5ᵉ scène « vallee » en fin (décor synthétique, une action
 //   « vent », sans quiz) : carte `lieu`, la plus chargée en mise en page compacte (8 valeurs, jusqu'à 16 caractères,
 //   paragraphe de 250 caractères en espagnol, illustration 3:2 recadrée en 2:1). GLB de trex, raptor, ptero et duo inchangés ;
+// - mini-jeu (MJ1, spec-mini-jeu.md §10) : `book.json.game` (gabarit « poursuite ») et `unlockThreshold` 3 ; jeu synthétique
+//   dans `game/` : arène `arena.glb` (sol `COL_sol`, mur `COL_mur`, décor `FADE_arbre`, empties `SPAWN_player` et
+//   `SPAWN_prey_1` à `_4`), joueur `dino.glb` et une sorte de proie `compso.glb` (armature, maillage skinné, clips par rôle,
+//   capsule), couche 3D « jeu » (`glbi_game_version` 1, `glbi_game_config`) écrite par ce script comme l'écrira l'addon
+//   v0.4 ; `game/game.edit.json` (règles, caméra, textes, sons crédités). Les GLB des cinq scènes ne changent pas.
+//   Options : `--sans-jeu` (livre sans `book.json.game` ni `game/` : exclusion des chunks du jeu) ; `--capsule <r>` (rayon
+//   de la capsule du joueur, en m : avertissement du build au-delà de 1,2 m) ;
 // - un dossier `blender/` déjà posé dans le livre de test (raptor réel, point de clôture de ST1) est conservé : seul le reste
 //   du dossier est effacé et réécrit.
 import fs from 'node:fs';
 import path from 'node:path';
 import { Document, NodeIO, type Node as GNode, type TypedArray } from '@gltf-transform/core';
 import sharp from 'sharp';
-import { EDIT_LAYER_VERSION, LAYER3D_VERSION, RESERVED_SOURCE_DIR, type Book, type CardField, type CardType, type EditLayer, type Layer3d } from '../src/schema/glbi';
+import {
+  EDIT_LAYER_VERSION, GAME3D_VERSION, GAME_EDIT_VERSION, LAYER3D_VERSION, RESERVED_SOURCE_DIR,
+  type Book, type CardField, type CardType, type EditLayer, type Game3dArena, type Game3dEntity, type GameEdit, type Layer3d,
+} from '../src/schema/glbi';
 
-const dir = path.resolve(process.cwd(), process.argv[2] ?? 'books/test-dino');
+const args = process.argv.slice(2);
+/** `--sans-jeu` : livre sans mini-jeu (MJ1) ; `--capsule <r>` : rayon de la capsule du joueur (m). */
+const withoutGame = args.includes('--sans-jeu');
+const capsuleArg = args.indexOf('--capsule');
+const playerRadius = capsuleArg >= 0 ? Number(args[capsuleArg + 1]) : 0.5;
+if (!(playerRadius > 0)) throw new Error('--capsule : rayon en mètres attendu');
+const positional = args.filter((a, i) => !a.startsWith('--') && !(capsuleArg >= 0 && i === capsuleArg + 1));
+const dir = path.resolve(process.cwd(), positional[0] ?? 'books/test-dino');
 
 const PNG_1X1 = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
@@ -541,6 +558,123 @@ function withCard(edit: EditLayer, id: string): EditLayer {
   return { ...edit, modules: { ...rest, card, credits } };
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// Mini-jeu (MJ1) : arène, joueur, une sorte de proie ; couche 3D « jeu » écrite comme l'écrira l'addon v0.4
+// ---------------------------------------------------------------------------------------------------------
+
+/** GLBI_ROOT d'un GLB du jeu : `glbi_game_version` et `glbi_game_config` (chaîne JSON), distincts de ceux des scènes. */
+const gameRoot = (doc: Document, config: Game3dEntity | Game3dArena) =>
+  doc.createNode('GLBI_ROOT').setExtras({ glbi_game_version: GAME3D_VERSION, glbi_game_config: JSON.stringify(config) });
+
+/**
+ * Entité de jeu : armature `Armature_<Nom>` (2 os), maillage skinné crédité (`src_*`), un clip par rôle (rotation de l'os de
+ * queue, durée propre au rôle). Pieds à l'origine, capsule donnée par la couche 3D.
+ */
+async function makeEntityGlb(file: string, entity: Game3dEntity): Promise<void> {
+  const doc = new Document();
+  const buffer = doc.createBuffer();
+  const scene = doc.createScene('Scene');
+  const arm = doc.createNode(entity.object);
+  const boneRoot = doc.createNode('Os_racine');
+  const boneTail = doc.createNode('Os_queue').setTranslation([0, 1, 0]);
+  boneRoot.addChild(boneTail);
+  arm.addChild(boneRoot);
+  const acc = (type: 'VEC3' | 'VEC4' | 'MAT4' | 'SCALAR', a: TypedArray) => doc.createAccessor().setType(type).setBuffer(buffer).setArray(a);
+  const prim = doc.createPrimitive()
+    .setAttribute('POSITION', acc('VEC3', new Float32Array([-0.3, 0, 0, 0.3, 0, 0, 0, 1.6, 0])))
+    .setAttribute('JOINTS_0', acc('VEC4', new Uint16Array([0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0])))
+    .setAttribute('WEIGHTS_0', acc('VEC4', new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0])));
+  const ibm = acc('MAT4', new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, -1, 0, 1]));
+  const skin = doc.createSkin(`${entity.object}_skin`).addJoint(boneRoot).addJoint(boneTail).setInverseBindMatrices(ibm).setSkeleton(boneRoot);
+  arm.addChild(doc.createNode(`${entity.object}_body`).setMesh(doc.createMesh(`${entity.object}_mesh`).addPrimitive(prim)).setSkin(skin).setExtras({
+    src_name: `Entité de jeu de test (${entity.id})`, src_author: 'GLBInterpreter', src_license: 'CC0', src_url: 'https://example.org/jeu-test',
+  }));
+  scene.addChild(arm);
+  for (const [i, clip] of Object.values(entity.clips).filter((c): c is string => !!c).entries()) {
+    const d = 0.5 + 0.25 * i;
+    const sampler = doc.createAnimationSampler()
+      .setInput(acc('SCALAR', new Float32Array([0, d / 2, d])))
+      .setOutput(acc('VEC4', new Float32Array([0, 0, 0, 1, 0, 0, Math.sin(0.2), Math.cos(0.2), 0, 0, 0, 1])))
+      .setInterpolation('LINEAR');
+    doc.createAnimation(clip).addSampler(sampler).addChannel(doc.createAnimationChannel().setTargetNode(boneTail).setTargetPath('rotation').setSampler(sampler));
+  }
+  scene.addChild(gameRoot(doc, entity));
+  await new NodeIO().write(file, doc);
+}
+
+/** Boîte centrée en `c`, de demi-côtés `h` (12 triangles), en maillage indexé. */
+function boxMesh(doc: Document, name: string, h: [number, number, number]) {
+  const buffer = doc.getRoot().listBuffers()[0];
+  const [x, y, z] = h;
+  const pos = new Float32Array([-x, -y, -z, x, -y, -z, x, y, -z, -x, y, -z, -x, -y, z, x, -y, z, x, y, z, -x, y, z]);
+  const idx = new Uint16Array([0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7, 3, 1, 2, 6, 1, 6, 5]);
+  const prim = doc.createPrimitive()
+    .setAttribute('POSITION', doc.createAccessor().setType('VEC3').setBuffer(buffer).setArray(pos))
+    .setIndices(doc.createAccessor().setType('SCALAR').setBuffer(buffer).setArray(idx));
+  return doc.createMesh(name).addPrimitive(prim);
+}
+
+/**
+ * Arène : sol visible `Sol`, collisionneur du sol `COL_sol` (plaque de 2 triangles), mur `COL_mur`, arbre `FADE_arbre` (décor
+ * rendu transparent entre la caméra et le joueur), points d'apparition `SPAWN_player` et `SPAWN_prey_1` à `_4`.
+ */
+async function makeArenaGlb(file: string): Promise<void> {
+  const doc = new Document();
+  const buffer = doc.createBuffer();
+  const scene = doc.createScene('Scene');
+  const plate = (name: string, half: number) => {
+    const pos = new Float32Array([-half, 0, -half, half, 0, -half, half, 0, half, -half, 0, half]);
+    const prim = doc.createPrimitive()
+      .setAttribute('POSITION', doc.createAccessor().setType('VEC3').setBuffer(buffer).setArray(pos))
+      .setIndices(doc.createAccessor().setType('SCALAR').setBuffer(buffer).setArray(new Uint16Array([0, 2, 1, 0, 3, 2])));
+    return doc.createMesh(name).addPrimitive(prim);
+  };
+  scene.addChild(doc.createNode('Sol').setMesh(plate('Sol_mesh', 15)).setExtras({ src_name: 'Arène de test', src_author: 'GLBInterpreter', src_license: 'CC0', src_url: 'https://example.org/jeu-test' }));
+  scene.addChild(doc.createNode('COL_sol').setMesh(plate('COL_sol_mesh', 15)));
+  scene.addChild(doc.createNode('COL_mur').setMesh(boxMesh(doc, 'COL_mur_mesh', [5, 1, 0.25])).setTranslation([0, 1, -8]));
+  scene.addChild(doc.createNode('FADE_arbre').setMesh(boxMesh(doc, 'FADE_arbre_mesh', [0.5, 2, 0.5])).setTranslation([4, 2, 4]));
+  scene.addChild(doc.createNode('SPAWN_player').setTranslation([0, 0, 0]));
+  for (const [i, p] of ([[10, 0, 10], [-10, 0, 10], [10, 0, -10], [-10, 0, -10]] as [number, number, number][]).entries()) {
+    scene.addChild(doc.createNode(`SPAWN_prey_${i + 1}`).setTranslation(p));
+  }
+  scene.addChild(gameRoot(doc, { version: GAME3D_VERSION, kind: 'arena', id: 'arena' }));
+  await new NodeIO().write(file, doc);
+}
+
+const GAME_ENTITIES: Game3dEntity[] = [
+  {
+    version: GAME3D_VERSION, kind: 'entity', id: 'dino', role: 'player', object: 'Armature_Dino',
+    clips: { idle: 'dino_idle', walk: 'dino_walk', run: 'dino_run', attack: 'dino_attack' },
+    capsule: { radius: playerRadius, height: Math.max(1.8, 2 * playerRadius) },
+  },
+  {
+    version: GAME3D_VERSION, kind: 'entity', id: 'compso', role: 'prey', object: 'Armature_Compso',
+    clips: { idle: 'compso_idle', walk: 'compso_walk', flee: 'compso_flee', caught: 'compso_caught' },
+    capsule: { radius: 0.3, height: 0.8 },
+  },
+];
+
+/** Couche éditoriale du jeu (ce qu'écrira l'atelier, MJ3) : règles, caméra, textes, sons crédités. */
+function gameEditLayer(): GameEdit {
+  const credit = (f: string, title: string) => ({ asset: `sounds/${f}.wav`, title, author: 'GLBInterpreter', license: 'CC0' });
+  return {
+    version: GAME_EDIT_VERSION,
+    rules: { duration: 300, preys: [{ entity: 'compso', count: 4 }], playerSpeed: 6, preySpeed: 5, detectionRadius: 6, points: 1, respawn: true },
+    camera: { distance: 14 },
+    texts: {
+      title: L('La grande chasse', 'The great hunt', 'La gran cacería'),
+      instructions: L(
+        'Attrape un maximum de compsognathes avant la fin du temps ! Bondis pour les capturer.',
+        'Catch as many compsognathus as you can before time runs out! Leap to catch them.',
+        '¡Atrapa todos los compsognatos que puedas antes de que acabe el tiempo! Salta para capturarlos.',
+      ),
+      end: L('Bravo, belle chasse !', 'Well done, great hunt!', '¡Muy bien, buena cacería!'),
+    },
+    sounds: { capture: 'sounds/jeu_capture.wav', music: 'sounds/jeu_musique.wav' },
+    credits: { assets: [credit('jeu_capture', 'Capture (test)'), credit('jeu_musique', 'Musique du jeu (test)')] },
+  };
+}
+
 /** Efface le dossier du livre de test sauf le dossier réservé `blender/` (point de clôture de ST1). */
 function clearTestBook(): boolean {
   if (!fs.existsSync(dir)) return false;
@@ -568,6 +702,8 @@ async function main(): Promise<void> {
     ogImage: 'images/og.png',
     legal: { year: 2026, text: L('© Éditions Liger', '© Éditions Liger', '© Éditions Liger') },
     cardTypes: CARD_TYPES,
+    // Mini-jeu (MJ1) : débloqué à 3 scènes manipulées (cartes gagnées) sur 5.
+    ...(withoutGame ? {} : { unlockThreshold: 3, game: { template: 'poursuite' as const } }),
   };
   fs.writeFileSync(path.join(dir, 'book.json'), `${JSON.stringify(book, null, 2)}\n`);
 
@@ -629,7 +765,16 @@ async function main(): Promise<void> {
   fs.writeFileSync(path.join(dir, 'sounds/duo_impact.wav'), blip(220));
   fs.writeFileSync(path.join(dir, 'sounds/duo_pas.wav'), blip(550));
   fs.writeFileSync(path.join(dir, 'sounds/vallee_vent.wav'), actionWav(294));
-  console.log(`make-test-book : livre de test écrit dans ${dir}${keptBlender ? ` (dossier ${RESERVED_SOURCE_DIR}/ conservé)` : ''}`);
+  // Mini-jeu (MJ1).
+  if (!withoutGame) {
+    fs.mkdirSync(path.join(dir, 'game'), { recursive: true });
+    await makeArenaGlb(path.join(dir, 'game/arena.glb'));
+    for (const e of GAME_ENTITIES) await makeEntityGlb(path.join(dir, `game/${e.id}.glb`), e);
+    fs.writeFileSync(path.join(dir, 'game/game.edit.json'), `${JSON.stringify(gameEditLayer(), null, 2)}\n`);
+    fs.writeFileSync(path.join(dir, 'sounds/jeu_capture.wav'), blip(740));
+    fs.writeFileSync(path.join(dir, 'sounds/jeu_musique.wav'), ambientWav());
+  }
+  console.log(`make-test-book : livre de test écrit dans ${dir}${withoutGame ? ' (sans jeu)' : ''}${keptBlender ? ` (dossier ${RESERVED_SOURCE_DIR}/ conservé)` : ''}`);
 }
 
 main().catch((e) => {

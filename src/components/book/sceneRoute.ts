@@ -28,6 +28,19 @@ export function sceneIdFromPath(pathOrUrl: string): string | null {
   return SCENE_ID.test(id) ? id : null;
 }
 
+/**
+ * Mini-jeu (MJ1, spec-mini-jeu.md §2) : `#/jeu` (case du menu, QR `/jeu` par le stub `jeu/index.html`, scanner) et
+ * `#/dev/jeu` (développement, hors progression). Un `/` final est admis, comme pour les scènes.
+ */
+export const GAME_HASH = "#/jeu";
+export const isGameHash = (hash: string) => /^#\/jeu\/?$/.test(hash);
+export const isDevGameHash = (hash: string) => /^#\/dev\/jeu\/?$/.test(hash);
+
+/** Ouverture du jeu sans rechargement (scanner interne). */
+export function goToGame(): void {
+  window.location.hash = GAME_HASH.slice(1);
+}
+
 export function sceneHref(sceneId: string): string {
   return `#/s/${encodeURIComponent(sceneId)}`;
 }

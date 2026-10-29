@@ -9,6 +9,23 @@
 import type { z } from 'zod';
 import {
   CAMERA_FRAMING_KEYS,
+  GAME3D_VERSION,
+  GAME_ARENA_ID,
+  GAME_DEFAULTS,
+  GAME_DIR,
+  GAME_EDIT_FILE,
+  GAME_RESERVED_KEYS,
+  GAME_REWARDS_MESSAGE,
+  GAME_VERSION,
+  game3dArenaSchema,
+  game3dEntitySchema,
+  gameConfigSchema,
+  gameEditSchema,
+  type Book,
+  type Game3dArena,
+  type Game3dEntity,
+  type GameConfig,
+  type GameEdit,
   editLayerSchema,
   formatIssues,
   GLBI_VERSION,
@@ -285,4 +302,227 @@ export function mergeLayers(raw3d: unknown, rawEdit: unknown, opts: MergeOptions
   }
 
   return result({ config: errors.length ? null : config, draft, layer3d: l3, edit, orphans, eventOrphans });
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Mini-jeu (MJ1, spec-mini-jeu.md §5, §7, §8, §13) : fusion des couches du jeu
+//
+//   couche 3D          `glbi_game_config` de GLBI_ROOT de chaque GLB de `game/` (addon v0.4) : arène et entités
+//   couche éditoriale  `game/game.edit.json` (atelier MJ3, ou à la main), `gameEditSchema`
+//   couche livre       `book.json.game` (gabarit)
+//   objet fusionné     `gameConfigSchema`, publié dans `game/game.json`
+//
+// Les cartes des scènes sont reçues (DP-21, §13 point 7) sans être contrôlées ni copiées en v1 : identifiants seulement.
+// ---------------------------------------------------------------------------------------------------------
+
+/** Couche 3D d'un GLB de `game/` : identifiant attendu (nom du fichier), objet de `glbi_game_config`, `glbi_game_version`. */
+export interface GameLayerInput {
+  id: string;
+  raw: unknown;
+  version: unknown;
+}
+
+/** Carte d'une scène du livre, par ses identifiants stables seulement (DP-21) : ni texte, ni illustration, ni valeur. */
+export interface GameCardRef {
+  /** Identifiant de la carte = `id` de sa scène (CC3, DP-22). */
+  card: string;
+  /** `id` de son type (`book.json.cardTypes`, ou `personnage` avec `cardFields`). */
+  type: string;
+}
+
+export interface GameMergeInput {
+  /** `book.json` validé : gabarit (`game.template`). */
+  book: Book;
+  /** Cartes des scènes (DP-21) : reçues, non contrôlées en v1 (contrôles à l'activation de `rewards`). */
+  cards: readonly GameCardRef[];
+  /** `game/arena.glb` (`null` si absent). */
+  arena: GameLayerInput | null;
+  /** Autres GLB de `game/` (entités), dans l'ordre des fichiers. */
+  entities: readonly GameLayerInput[];
+  /** Contenu de `game/game.edit.json`, `undefined` si le fichier est absent. */
+  edit: unknown;
+}
+
+export interface GameMergeResult {
+  /** Objet fusionné validé par `gameConfigSchema` ; `null` dès qu'il y a une erreur. */
+  config: GameConfig | null;
+  /** Mode `draft` seulement : objet affichable malgré les erreurs (titre et consigne remplacés, couche éditoriale ignorée si elle le rend invalide). */
+  draft: GameConfig | null;
+  arena: Game3dArena | null;
+  entities: Game3dEntity[];
+  edit: GameEdit | null;
+  errors: string[];
+  warnings: string[];
+}
+
+/** Clés propres à la couche éditoriale du jeu : refusées dans un GLB du jeu avec renvoi vers `game/game.edit.json`. */
+const GAME_EDIT_KEYS = new Set<string>(['rules', 'camera', 'texts', 'sounds', 'credits', 'title', 'instructions', 'end', 'duration', 'preys']);
+/** Clés propres à la couche 3D du jeu : refusées dans `game/game.edit.json` avec renvoi vers l'addon. */
+const GAME_3D_KEYS = new Set<string>(['kind', 'id', 'role', 'object', 'clips', 'capsule', 'collider', 'entities', 'template']);
+
+/** Messages d'une couche du jeu refusée par son schéma, avec renvoi vers la bonne couche (comme `layerIssues`). */
+export function gameLayerIssues(error: z.ZodError, file: string, layer: '3d' | 'edit'): string[] {
+  const label = layer === '3d' ? `${file} (couche 3D du jeu)` : file;
+  const out: string[] = [];
+  for (const i of error.issues) {
+    const w = where(i.path);
+    if (i.code === 'unrecognized_keys') {
+      for (const k of i.keys) {
+        let why: string;
+        if ((GAME_RESERVED_KEYS as readonly string[]).includes(k)) why = GAME_REWARDS_MESSAGE;
+        else if (layer === '3d' && GAME_EDIT_KEYS.has(k)) why = `clé « ${k} » non admise, elle appartient à ${GAME_EDIT_FILE}`;
+        else if (layer === 'edit' && GAME_3D_KEYS.has(k)) why = `clé « ${k} » non admise, elle appartient aux GLB du jeu (addon)`;
+        else why = `clé « ${k} » inconnue`;
+        out.push(`${label} : ${w} : ${why}`);
+      }
+    } else {
+      out.push(`${label} : ${w} : ${i.message}`);
+    }
+  }
+  return out;
+}
+
+const glbOf = (id: string) => `${GAME_DIR}/${id}.glb`;
+
+/** Version, `kind` et identifiant d'une couche 3D du jeu, puis son schéma ; `null` (erreurs ajoutées) si elle est inutilisable. */
+function readGameLayer<T>(
+  l: GameLayerInput,
+  kind: 'arena' | 'entity',
+  schema: { safeParse(v: unknown): { success: true; data: T } | { success: false; error: z.ZodError } },
+  errors: string[],
+): T | null {
+  const file = glbOf(l.id);
+  if (l.version !== GAME3D_VERSION) {
+    errors.push(`${file} : glbi_game_version doit être l'entier ${GAME3D_VERSION} (trouvé : ${l.version === undefined ? 'absent' : JSON.stringify(l.version)})`);
+    return null;
+  }
+  const raw = l.raw as { version?: unknown; kind?: unknown; id?: unknown } | null;
+  if (raw?.version !== l.version) {
+    errors.push(`${file} (couche 3D du jeu) : version vaut ${raw?.version === undefined ? 'absent' : JSON.stringify(raw.version)}, glbi_game_version vaut ${l.version} (doivent être égaux)`);
+    return null;
+  }
+  if (raw.kind !== kind) {
+    const mode = kind === 'arena' ? 'Arène' : 'Entité de jeu';
+    errors.push(`${file} (couche 3D du jeu) : kind vaut ${raw.kind === undefined ? 'absent' : `« ${String(raw.kind)} »`}, attendu « ${kind} » (exporter en mode « ${mode} » de l'addon)`);
+    return null;
+  }
+  const p = schema.safeParse(l.raw);
+  if (!p.success) {
+    errors.push(...gameLayerIssues(p.error, file, '3d'));
+    return null;
+  }
+  if (typeof raw.id === 'string' && raw.id !== l.id) {
+    errors.push(`${file} (couche 3D du jeu) : id vaut « ${raw.id} », attendu « ${l.id} » (nom du fichier)`);
+    return null;
+  }
+  return p.data;
+}
+
+const sameText = (s: string): LocalizedText => ({ fr: s, en: s, es: s });
+
+/** Objet fusionné du jeu, clés dans l'ordre du contrat. `fallback` : textes manquants remplacés (mode `draft`). */
+function buildGame(template: string, entities: Game3dEntity[], e: GameEdit | null, preys: unknown, fallback: boolean): Record<string, unknown> {
+  const r = e?.rules ?? {};
+  return {
+    version: GAME_VERSION,
+    template,
+    entities: entities.map(({ version: _v, kind: _k, ...rest }) => (void _v, void _k, rest)),
+    rules: defined({ duration: r.duration, preys, playerSpeed: r.playerSpeed, preySpeed: r.preySpeed, detectionRadius: r.detectionRadius, points: r.points, respawn: r.respawn }),
+    camera: defined({ distance: e?.camera?.distance }),
+    texts: defined({
+      title: e?.texts?.title ?? (fallback ? sameText('Mini-jeu') : undefined),
+      instructions: e?.texts?.instructions ?? (fallback ? sameText('—') : undefined),
+      end: e?.texts?.end,
+    }),
+    sounds: e?.sounds,
+    credits: e?.credits,
+  };
+}
+
+/**
+ * Fusionne la couche 3D des GLB du jeu (arène et entités), la couche éditoriale (`game/game.edit.json`) et le gabarit de
+ * `book.json`, puis valide l'objet fusionné (`gameConfigSchema`). Contrôles croisés de la fusion : un seul joueur, proies
+ * citées par les règles présentes et de rôle `prey`, titre et consigne. Les contrôles qui demandent le GLB (nœuds, clips,
+ * budgets) sont faits par le build (`scripts/book-check.ts`, `readGame`).
+ */
+export function mergeGame(input: GameMergeInput, opts: { mode: MergeMode }): GameMergeResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const out = (r: Partial<GameMergeResult>): GameMergeResult => ({ config: null, draft: null, arena: null, entities: [], edit: null, ...r, errors, warnings });
+  // DP-21 (§13 point 7) : cartes reçues, non contrôlées en v1 ; rien n'en est copié dans l'objet fusionné.
+  void input.cards;
+  const template = input.book.game?.template;
+  if (!template) {
+    errors.push('book.json : pas de game (gabarit du jeu) : jeu ignoré');
+    return out({});
+  }
+
+  // --- 1. Couche 3D : arène et entités ---
+  let arena: Game3dArena | null = null;
+  if (!input.arena) errors.push(`${glbOf(GAME_ARENA_ID)} absent du dossier source : exporter l'arène avec l'addon (mode « Arène »)`);
+  else arena = readGameLayer(input.arena, 'arena', game3dArenaSchema, errors);
+  const entities: Game3dEntity[] = [];
+  for (const l of input.entities) {
+    const e = readGameLayer(l, 'entity', game3dEntitySchema, errors);
+    if (e) entities.push(e);
+  }
+  if (!input.entities.length) errors.push(`jeu : aucune entité dans ${GAME_DIR}/ (game/<entité>.glb, addon en mode « Entité de jeu »)`);
+  const players = entities.filter((e) => e.role === 'player');
+  const preyIds = entities.filter((e) => e.role === 'prey').map((e) => e.id);
+  if (entities.length === input.entities.length && input.entities.length) {
+    if (!players.length) errors.push(`jeu : aucune entité joueur (role « player ») dans ${GAME_DIR}/`);
+    if (players.length > 1) errors.push(`jeu : ${players.length} entités joueur (${players.map((p) => p.id).join(', ')}) : une seule attendue`);
+    if (!preyIds.length) errors.push(`jeu : aucune entité proie (role « prey ») dans ${GAME_DIR}/`);
+  }
+
+  // --- 2. Couche éditoriale ---
+  let edit: GameEdit | null = null;
+  if (input.edit === undefined) {
+    errors.push(`jeu : ${GAME_EDIT_FILE} absent ; à renseigner dans l'atelier (entrée « Jeu ») ou à la main`);
+  } else {
+    const p = gameEditSchema.safeParse(input.edit);
+    if (p.success) edit = p.data;
+    else errors.push(...gameLayerIssues(p.error, GAME_EDIT_FILE, 'edit'));
+  }
+
+  // --- 3. Cohérence croisée ---
+  let preys: unknown = edit?.rules?.preys;
+  if (edit) {
+    if (!edit.texts?.title) errors.push(`jeu : titre du jeu (texts.title) absent de ${GAME_EDIT_FILE} ; à renseigner dans l'atelier`);
+    if (!edit.texts?.instructions) errors.push(`jeu : consigne du jeu (texts.instructions) absente de ${GAME_EDIT_FILE} ; à renseigner dans l'atelier`);
+    const byId = new Map(entities.map((e) => [e.id, e]));
+    (edit.rules?.preys ?? []).forEach((p, i) => {
+      const e = byId.get(p.entity);
+      if (!e) {
+        if (entities.length === input.entities.length) {
+          errors.push(`${GAME_EDIT_FILE} : rules.preys.${i}.entity : entité « ${p.entity} » absente de ${GAME_DIR}/ (proies : ${preyIds.join(', ') || 'aucune'})`);
+        }
+      } else if (e.role !== 'prey') {
+        errors.push(`${GAME_EDIT_FILE} : rules.preys.${i}.entity : « ${p.entity} » est le joueur, pas une proie (proies : ${preyIds.join(', ') || 'aucune'})`);
+      }
+    });
+    if (!edit.rules?.preys && preyIds.length > 1) {
+      errors.push(`jeu : rules.preys absent de ${GAME_EDIT_FILE} : plusieurs sortes de proies (${preyIds.join(', ')}), à choisir dans l'atelier`);
+    }
+    const cited = new Set((edit.rules?.preys ?? (preyIds.length === 1 ? [{ entity: preyIds[0] }] : [])).map((p) => p.entity));
+    for (const id of preyIds) if (!cited.has(id)) warnings.push(`jeu : proie « ${id} » non citée par rules.preys (${GAME_EDIT_FILE}) : jamais en jeu`);
+  }
+  // Valeur par défaut du gabarit (§6) : une seule sorte de proie, 8 en même temps.
+  if (preys === undefined && preyIds.length === 1) preys = [{ entity: preyIds[0], count: GAME_DEFAULTS.preyCount }];
+
+  // --- 4. Objet fusionné ---
+  let config: GameConfig | null = null;
+  if (!errors.length) {
+    const pm = gameConfigSchema.safeParse(buildGame(template, entities, edit, preys, false));
+    if (pm.success) config = pm.data;
+    else errors.push(...formatIssues(pm.error, `jeu (objet fusionné) : `));
+  }
+  let draft: GameConfig | null = null;
+  if (opts.mode === 'draft') {
+    const draftPreys = preys ?? (preyIds.length ? [{ entity: preyIds[0], count: GAME_DEFAULTS.preyCount }] : undefined);
+    const withEdit = gameConfigSchema.safeParse(buildGame(template, entities, edit, draftPreys, true));
+    const onlyGlb = withEdit.success ? withEdit : gameConfigSchema.safeParse(buildGame(template, entities, null, draftPreys, true));
+    draft = onlyGlb.success ? onlyGlb.data : null;
+  }
+  return out({ config: errors.length ? null : config, draft, arena, entities, edit });
 }

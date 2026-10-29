@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { GalleryVerticalEnd, QrCode, Sparkles } from "lucide-react";
+import { Gamepad2, GalleryVerticalEnd, Lock, QrCode, Sparkles } from "lucide-react";
 import WebDioramaLoader from "@/components/diorama/WebDioramaLoader";
 import { TranslationProvider, useTranslation } from "@/contexts/TranslationContext";
 import LanguageSelector from "@/components/diorama/ui/LanguageSelector";
@@ -18,7 +18,8 @@ import type { QuizModule } from "@/schema/glbi";
 import { cardCount, cardTypeCounts, earnedCards, hasEarnedCard, isNewCard, type ReaderCard } from "@/components/card/cardModel";
 import type { CardEntry } from "@/components/card/CardDialog";
 import type { Lang, Messages } from "@/i18n/messages";
-import { goToScene, parseDevSceneHash, parseSceneHash, sceneHref, useLocationHash } from "./sceneRoute";
+import { GAME_HASH, goToGame, goToScene, isDevGameHash, isGameHash, parseDevSceneHash, parseSceneHash, sceneHref, useLocationHash } from "./sceneRoute";
+import { gameAccess } from "./gameAccess";
 import {
   ProgressStore, isUnlocked, pageStorage, sceneAccess, withCollected, withQuizPassed, withUnlocked, type Progress,
 } from "./progress";
@@ -36,6 +37,11 @@ const QrScannerDialog = dynamic(() => import("@/components/scanner/QrScannerDial
 // ouverture ; listé dans `book.json.files`, servi hors ligne comme le quiz et le scanner.
 const CardDialog = dynamic(() => import("@/components/card/CardDialog"), { ssr: false, loading: () => null });
 
+// Mini-jeu (MJ1, spec-mini-jeu.md §2) : chunk à part (`src/components/game/`), chargé seulement sur `#/jeu` débloqué ou
+// `#/dev/jeu` ; l'écran de blocage et la case du menu n'en dépendent pas. Absent d'un livre sans `book.json.game`
+// (retiré de `out/` et de `book.json.files` par build-book) : ce composant n'y est alors jamais rendu.
+const GameEntry = dynamic(() => import("@/components/game/GameEntry"), { ssr: false, loading: () => <Black /> });
+
 /** Durée du bandeau « Nouvelle carte ! » (spec-carte-collection.md §2). */
 const NEW_CARD_BANNER_MS = 5000;
 
@@ -50,7 +56,7 @@ export default function BookApp() {
   return (
     <TranslationProvider>
       <DebugConsole />
-      <ServiceWorkerRegister inScene={hash !== undefined && parseSceneHash(hash) !== null} />
+      <ServiceWorkerRegister inScene={hash !== undefined && (parseSceneHash(hash) !== null || isGameHash(hash))} />
       {/* Rendu statique (build) : le hash n'est connu qu'au navigateur. */}
       {hash === undefined ? <Black /> : <InstallGate><BookRoute hash={hash} /></InstallGate>}
     </TranslationProvider>
@@ -79,9 +85,10 @@ function useLoaded<T>(run: () => Promise<T>): Loaded<T> {
 
 // Routeur du livre (D-8.4). `#/s/<scène>` → scène du livre (quiz ou blocage selon la progression) ; `#/dev/<scène>` →
 // fixture (développement seulement) ; hash vide (ou `#/debug`) → menu de collection ; autre hash → scène inconnue.
+// MJ1 : `#/jeu` → mini-jeu (blocage selon la progression) ; `#/dev/jeu` → jeu hors progression (développement seulement).
 function BookRoute({ hash }: { hash: string }) {
   const book = useLoaded(loadReaderBook);
-  const devSceneId = isDev ? parseDevSceneHash(hash) : null;
+  const devSceneId = isDev && !isDevGameHash(hash) ? parseDevSceneHash(hash) : null;
   if (devSceneId) return <SceneRoute key={`dev:${devSceneId}`} load={() => loadFixtureScene(devSceneId)} />;
 
   if (book.s === "loading") return <Black />;
@@ -127,6 +134,13 @@ function useProgress(reader: ReaderBook | null): BookProgress | null {
 function BookPage({ hash, reader, progress }: { hash: string; reader: ReaderBook | null; progress: BookProgress | null }) {
   if (hash === "" || hash === "#" || hash === "#/" || hash === "#/debug") return <CollectionMenu book={reader} progress={progress} />;
 
+  // Mini-jeu (MJ1) : livre sans jeu (ou cartouche fixture) → page introuvable du livre, sans rien charger.
+  if (isGameHash(hash) || (isDev && isDevGameHash(hash))) {
+    if (!reader?.game || reader.fixture) return <UnknownScene />;
+    if (isDevGameHash(hash) || !progress) return <GameEntry bookId={reader.bookId} onBack={backToMenu} />;
+    return <BookGame reader={reader} progress={progress} />;
+  }
+
   const sceneId = parseSceneHash(hash);
   if (!sceneId || !reader || !reader.scenes.includes(sceneId)) return <UnknownScene />;
   // `key` : changement de scène = démontage complet du lecteur (comme un changement de page auparavant).
@@ -135,6 +149,64 @@ function BookPage({ hash, reader, progress }: { hash: string; reader: ReaderBook
 }
 
 const backToMenu = () => goToScene(null);
+
+/**
+ * Mini-jeu soumis au déblocage (DP-13) : scènes `collected` ≥ `unlockThreshold` (toutes sans seuil). L'accès est fixé à
+ * l'arrivée ; verrouillé : écran de blocage avant tout chargement (ni chunk du jeu, ni `game/game.json`, ni GLB).
+ */
+function BookGame({ reader, progress }: { reader: ReaderBook; progress: BookProgress }) {
+  const [access] = useState(() => gameAccess(progress.get(), reader.scenes, reader.unlockThreshold));
+  if (!access.unlocked) return <BlockedGame remaining={access.remaining} />;
+  return <GameEntry bookId={reader.bookId} onBack={backToMenu} />;
+}
+
+/** Écran de blocage du jeu : « Encore n cartes à gagner ! », retour au menu. */
+function BlockedGame({ remaining }: { remaining: number }) {
+  const { t } = useTranslation();
+  return (
+    <Screen>
+      <h1 className="text-2xl font-bold" data-testid="blocked-title">
+        {t.blocked.title}
+      </h1>
+      <p className="max-w-md text-white/80" data-testid="game-blocked">
+        {fill(remaining === 1 ? t.jeu.blockedOne : t.jeu.blockedMany, { n: remaining })}
+      </p>
+      <a href="#/" className={linkClass}>
+        {t.collection.backToMenu}
+      </a>
+    </Screen>
+  );
+}
+
+/**
+ * Case « Mini-jeu » en fin de menu (DP-13), seulement si le livre a un jeu : débloquée, lien vers `#/jeu` (plein écran
+ * demandé dans le geste, règles d'Î13bis) ; verrouillée, grisée, avec le nombre de cartes à gagner.
+ */
+function GameTile({ book, progress }: { book: ReaderBook; progress: Progress }) {
+  const { t } = useTranslation();
+  const a = gameAccess(progress, book.scenes, book.unlockThreshold);
+  if (a.unlocked) {
+    return (
+      <a href={GAME_HASH} onClick={requestPageFullscreen} className="glbi-btn glbi-btn-primary w-full max-w-md justify-start gap-4 px-3 py-2 text-left text-lg" data-testid="game-tile">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-black/20" aria-hidden="true">
+          <Gamepad2 className="h-7 w-7" />
+        </span>
+        <span className="min-w-0">{t.jeu.menuTitle}</span>
+      </a>
+    );
+  }
+  return (
+    <div className="flex w-full max-w-md items-center gap-4 rounded-full bg-white/5 px-3 py-2 text-left text-white/45" data-testid="game-tile-locked">
+      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/10" aria-hidden="true">
+        <Lock className="h-6 w-6" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-lg">{t.jeu.menuTitle}</span>
+        <span className="block text-sm text-white/60">{fill(a.remaining === 1 ? t.jeu.lockedOne : t.jeu.lockedMany, { n: a.remaining })}</span>
+      </span>
+    </div>
+  );
+}
 
 /**
  * Scène du livre soumise à la progression (Q1). L'accès est fixé à l'arrivée : une scène non accessible affiche l'écran
@@ -465,7 +537,7 @@ function CollectionMenu({ book, progress }: { book: ReaderBook | null; progress:
             </button>
           )}
           {scanning && (
-            <QrScannerDialog origin={book.origin} scenes={book.scenes} onClose={() => setScanning(false)} onScene={goToScene} />
+            <QrScannerDialog origin={book.origin} scenes={book.scenes} game={!!book.game} onClose={() => setScanning(false)} onScene={goToScene} onGame={goToGame} />
           )}
           <ol className="flex w-full max-w-md flex-col gap-3" data-testid="collection">
             {book.scenes.map((id, i) => {
@@ -500,6 +572,8 @@ function CollectionMenu({ book, progress }: { book: ReaderBook | null; progress:
               );
             })}
           </ol>
+          {/* Mini-jeu (MJ1) : dernière case, hors de la liste des scènes. */}
+          {p && book.game && <GameTile book={book} progress={p} />}
           {progress && count > 0 && (
             <button type="button" className="glbi-btn glbi-btn-link mt-4 text-sm" onClick={() => setConfirmReset(true)} aria-haspopup="dialog" data-testid="collection-reset">
               {t.collection.reset}

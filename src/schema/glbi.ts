@@ -436,6 +436,249 @@ export type Layer3d = z.infer<typeof layer3dSchema>;
 export type EditLayer = z.infer<typeof editLayerSchema>;
 
 // ---------------------------------------------------------------------------------------------------------
+// Mini-jeu de fin de collection (MJ1, spec-mini-jeu.md §5 à §8, DP-12 à DP-16, DP-21). Au niveau du livre, pas d'une scène :
+//   couche 3D « jeu »   `GLBI_ROOT.glbi_game_version` + `glbi_game_config` de chaque GLB de `game/` (addon v0.4) ;
+//   couche éditoriale    `game/game.edit.json` (atelier, MJ3, ou à la main) ;
+//   objet fusionné       `game/game.json` publié (fusion `mergeGame`, `./merge.ts`) ;
+//   couche livre         `book.json.game` (studio, MJ3, ou à la main).
+// Champs ajoutés, tous facultatifs pour un livre : aucune version existante ne change (couches de scène, objet fusionné de
+// scène, `book.json`). Le JSON Schema de la couche 3D du jeu (`schema/glbi-game3d.schema.json`) n'emploie que le
+// sous-ensemble de `schema_check.py` (spec-atelier-glbi.md §6) : pas d'union, de `record`, de borne exclusive.
+// ---------------------------------------------------------------------------------------------------------
+
+/** Version de la couche 3D du jeu : `GLBI_ROOT.glbi_game_version` et `glbi_game_config.version`, l'entier 1. */
+export const GAME3D_VERSION = 1 as const;
+/** Version de la couche éditoriale du jeu : `version` de `game/game.edit.json`, l'entier 1. */
+export const GAME_EDIT_VERSION = 1 as const;
+/** Version de l'objet fusionné du jeu : `version` de `game/game.json` publié, l'entier 1. */
+export const GAME_VERSION = 1 as const;
+
+/** Gabarits de jeu (DP-12) : « poursuite / capture » seul en v1 ; un gabarit nouveau = un lot (spec-mini-jeu.md §1). */
+export const GAME_TEMPLATES = ['poursuite'] as const;
+/** Dossier du jeu dans le dossier source et le dossier construit (DP-14). */
+export const GAME_DIR = 'game';
+/** Identifiant (et nom de fichier) de l'arène : `game/arena.glb`. Une entité ne peut pas s'appeler ainsi. */
+export const GAME_ARENA_ID = 'arena';
+/** Couche éditoriale du jeu et objet fusionné publié. */
+export const GAME_EDIT_FILE = `${GAME_DIR}/game.edit.json`;
+export const GAME_JSON_FILE = `${GAME_DIR}/game.json`;
+
+/** Rôles d'entité du gabarit « poursuite » (spec-mini-jeu.md §5). */
+export const GAME_ROLES = ['player', 'prey'] as const;
+/** Rôles de clip : chacun désigne une Action (clip glTF) du GLB de l'entité. */
+export const GAME_CLIP_ROLES = ['idle', 'walk', 'run', 'attack', 'caught', 'flee'] as const;
+/**
+ * Rôles de clip obligatoires (spec-mini-jeu.md §8) : joueur `idle`, `walk`, `run`, `attack` ; proie `idle`, `walk`, `caught`
+ * et au moins un de `run` ou `flee`.
+ */
+export const GAME_REQUIRED_CLIPS = { player: ['idle', 'walk', 'run', 'attack'], prey: ['idle', 'walk', 'caught'] } as const;
+
+/** Nœuds de l'arène reconnus par leur nom (Blender), protégés de `prune` à l'optimisation (spec-mini-jeu.md §5, §8). */
+export const GAME_NODE_PREFIXES = { spawnPlayer: 'SPAWN_player', spawnPrey: 'SPAWN_prey_', collider: 'COL_', fade: 'FADE_' } as const;
+/** Collisionneur du sol de l'arène (obligatoire). */
+export const GAME_FLOOR_NODE = 'COL_sol';
+/** Empty qui place la capsule d'une entité (facultatif, mesuré par l'addon sinon). */
+export const GAME_COLLIDER_NODE = 'COLLIDER';
+
+/** Bornes du Zod des réglages du gabarit « poursuite » (spec-mini-jeu.md §6). */
+export const GAME_LIMITS = {
+  duration: [300, 600],
+  preys: [1, 12],
+  speed: [1, 20],
+  detectionRadius: [1, 30],
+  points: [1, 10],
+  cameraDistance: [4, 40],
+} as const;
+/** Valeurs par défaut (spec-mini-jeu.md §6, décisions de David du 28/10 : 8 proies par défaut, 12 au plus). */
+export const GAME_DEFAULTS = {
+  duration: 300,
+  preyCount: 8,
+  playerSpeed: 6,
+  preySpeed: 5,
+  detectionRadius: 6,
+  points: 1,
+  respawn: true,
+  cameraDistance: 14,
+} as const;
+
+/**
+ * Clés réservées du contrat du jeu (DP-21, spec-mini-jeu.md §7, §13) : refusées en v1 dans `gameEditSchema` et
+ * `gameConfigSchema`. Les activer plus tard (champ facultatif) ne change aucune version ; aucun gabarit n'emploie ces noms.
+ */
+export const GAME_RESERVED_KEYS = ['rewards'] as const;
+export const GAME_REWARDS_MESSAGE = 'clé « rewards » réservée (éléments du jeu apportés par les cartes), non activable en v1';
+
+/** Message d'une clé refusée à la racine du contrat du jeu : clé réservée (DP-21) ou inconnue. */
+const gameRootKeys = { error: (iss: z.core.$ZodRawIssue) => {
+  if (iss.code !== 'unrecognized_keys') return undefined;
+  return iss.keys.map((k) => ((GAME_RESERVED_KEYS as readonly string[]).includes(k) ? GAME_REWARDS_MESSAGE : `clé « ${k} » inconnue`)).join(' ; ');
+} };
+
+/** Identifiant d'une entité de jeu = nom de son fichier `game/<id>.glb` (motif des identifiants de scène, sans drapeau). */
+export const gameEntityIdSchema = z.string().regex(SCENE_ID_PATTERN, 'identifiant d’entité : lettres, chiffres, _ et -');
+
+/** Rôles de clip → nom du clip (Action) dans le GLB ; obligatoires selon le rôle (contrôle croisé de l'entité). */
+const gameClipsSchema = z.strictObject(
+  Object.fromEntries(GAME_CLIP_ROLES.map((r) => [r, blenderNameSchema.optional()])) as Record<(typeof GAME_CLIP_ROLES)[number], z.ZodOptional<typeof blenderNameSchema>>,
+);
+
+/**
+ * Capsule de collision de l'entité (contrôleur cinématique de Rapier, MJ2), en mètres à l'échelle du jeu : rayon et hauteur
+ * totale (pieds à l'origine de l'entité, ou centre sur l'empty `COLLIDER` s'il est déclaré). Mesurée par l'addon.
+ * Au-delà de 1,2 m de rayon : avertissement du build (coût du pas physique non mesuré, décision du 28/10).
+ */
+const capsuleSchema = z.strictObject({
+  radius: z.number().min(0.01, 'rayon de la capsule : 0,01 m au moins'),
+  height: z.number().min(0.02, 'hauteur de la capsule : 0,02 m au moins'),
+});
+
+/** Règles croisées de l'entité (perdues à l'export du JSON Schema : l'addon les contrôle aussi, le build fait foi). */
+function entityRules(e: { id: string; role: (typeof GAME_ROLES)[number]; clips: Partial<Record<string, string>>; capsule: { radius: number; height: number } }, ctx: z.RefinementCtx): void {
+  if (e.id === GAME_ARENA_ID) ctx.addIssue({ code: 'custom', path: ['id'], message: `« ${GAME_ARENA_ID} » est réservé à l'arène (game/${GAME_ARENA_ID}.glb)` });
+  const who = e.role === 'player' ? 'le joueur' : 'une proie';
+  for (const r of GAME_REQUIRED_CLIPS[e.role]) {
+    if (!e.clips[r]) ctx.addIssue({ code: 'custom', path: ['clips', r], message: `rôle de clip « ${r} » obligatoire pour ${who}` });
+  }
+  if (e.role === 'prey' && !e.clips.run && !e.clips.flee) {
+    ctx.addIssue({ code: 'custom', path: ['clips'], message: 'rôle de clip « run » ou « flee » obligatoire pour une proie (fuite)' });
+  }
+  if (e.capsule.height < 2 * e.capsule.radius) {
+    ctx.addIssue({ code: 'custom', path: ['capsule', 'height'], message: `hauteur de la capsule (${e.capsule.height} m) inférieure à son diamètre (${2 * e.capsule.radius} m)` });
+  }
+}
+
+const entityShape = {
+  id: gameEntityIdSchema,
+  role: z.enum(GAME_ROLES),
+  /** Racine animée de l'entité (armature), nom Blender (V-08 au build). */
+  object: blenderNameSchema,
+  clips: gameClipsSchema,
+  capsule: capsuleSchema,
+  /** Empty `COLLIDER` du GLB qui place la capsule (facultatif). */
+  collider: z.literal(GAME_COLLIDER_NODE).optional(),
+};
+
+/** Couche 3D d'une entité de jeu (`game/<id>.glb`, addon v0.4, mode « Entité de jeu »). */
+export const game3dEntitySchema = z
+  .strictObject({ version: z.literal(GAME3D_VERSION), kind: z.literal('entity'), ...entityShape })
+  .superRefine(entityRules);
+
+/**
+ * Couche 3D de l'arène (`game/arena.glb`, addon v0.4, mode « Arène »). Points d'apparition, collisionneurs, sol et décor à
+ * rendre transparent sont des nœuds reconnus par leur nom (`SPAWN_player`, `SPAWN_prey_*`, `COL_*`, `COL_sol`, `FADE_*`) :
+ * aucune liste à tenir à jour dans la configuration.
+ */
+export const game3dArenaSchema = z.strictObject({
+  version: z.literal(GAME3D_VERSION),
+  kind: z.literal('arena'),
+  id: z.literal(GAME_ARENA_ID),
+});
+
+const gameInt = (lo: number, hi: number, what: string) => z.number().int(`${what} : nombre entier attendu`).min(lo, `${what} : ${lo} au moins`).max(hi, `${what} : ${hi} au plus`);
+const gameNum = (lo: number, hi: number, what: string) => z.number().min(lo, `${what} : ${lo} au moins`).max(hi, `${what} : ${hi} au plus`);
+const L_ = GAME_LIMITS;
+
+/** Sortes de proies et nombre simultané de chacune ; 12 proies en même temps au plus (somme), une ligne par entité. */
+const preysSchema = z
+  .array(z.strictObject({ entity: gameEntityIdSchema, count: gameInt(L_.preys[0], L_.preys[1], 'nombre de proies') }))
+  .min(1, 'au moins une sorte de proie')
+  .superRefine((list, ctx) => {
+    const total = list.reduce((s, p) => s + p.count, 0);
+    if (total > L_.preys[1]) ctx.addIssue({ code: 'custom', message: `${total} proies en même temps (${L_.preys[1]} au plus)` });
+    const seen = new Set<string>();
+    list.forEach((p, i) => {
+      if (seen.has(p.entity)) ctx.addIssue({ code: 'custom', path: [i, 'entity'], message: `entité « ${p.entity} » en double` });
+      seen.add(p.entity);
+    });
+  });
+
+const gameRulesShape = {
+  /** Durée d'une partie, en secondes. */
+  duration: gameInt(L_.duration[0], L_.duration[1], 'durée (s)'),
+  preys: preysSchema,
+  /** Vitesse de course du joueur (m/s). */
+  playerSpeed: gameNum(L_.speed[0], L_.speed[1], 'vitesse du joueur (m/s)'),
+  /** Vitesse de fuite des proies (m/s). */
+  preySpeed: gameNum(L_.speed[0], L_.speed[1], 'vitesse des proies (m/s)'),
+  /** Distance du joueur à laquelle une proie fuit (m). */
+  detectionRadius: gameNum(L_.detectionRadius[0], L_.detectionRadius[1], 'rayon de détection (m)'),
+  points: gameInt(L_.points[0], L_.points[1], 'points par capture'),
+  respawn: z.boolean(),
+};
+
+/** Sons du gabarit (crédités, V-10). */
+const gameSoundsSchema = z.strictObject({
+  capture: audioPathSchema.optional(),
+  jump: audioPathSchema.optional(),
+  music: audioPathSchema.optional(),
+  end: audioPathSchema.optional(),
+});
+
+/**
+ * Couche éditoriale du jeu (`game/game.edit.json`, atelier MJ3 ou à la main). Tout est facultatif dans la couche (saisie en
+ * cours) ; la fusion `strict` exige le titre et la consigne et applique les valeurs par défaut du gabarit. Clé `rewards`
+ * réservée (DP-21).
+ */
+export const gameEditSchema = z.strictObject(
+  {
+    version: z.literal(GAME_EDIT_VERSION),
+    rules: z
+      .strictObject({
+        duration: gameRulesShape.duration.optional(),
+        preys: gameRulesShape.preys.optional(),
+        playerSpeed: gameRulesShape.playerSpeed.optional(),
+        preySpeed: gameRulesShape.preySpeed.optional(),
+        detectionRadius: gameRulesShape.detectionRadius.optional(),
+        points: gameRulesShape.points.optional(),
+        respawn: gameRulesShape.respawn.optional(),
+      })
+      .optional(),
+    camera: z.strictObject({ distance: gameNum(L_.cameraDistance[0], L_.cameraDistance[1], 'distance de la caméra (m)').optional() }).optional(),
+    texts: z
+      .strictObject({ title: localizedTextSchema.optional(), instructions: localizedTextSchema.optional(), end: localizedTextSchema.optional() })
+      .optional(),
+    sounds: gameSoundsSchema.optional(),
+    credits: creditsModuleSchema.optional(),
+  },
+  gameRootKeys,
+);
+
+/** Entité dans l'objet fusionné (couche 3D de son GLB, sans version ni `kind`). */
+export const gameEntitySchema = z.strictObject(entityShape).superRefine(entityRules);
+
+/** Objet fusionné du jeu (`game/game.json` publié), valeurs par défaut du gabarit appliquées. Clé `rewards` réservée (DP-21). */
+export const gameConfigSchema = z.strictObject(
+  {
+    version: z.literal(GAME_VERSION),
+    template: z.enum(GAME_TEMPLATES),
+    entities: z.array(gameEntitySchema).min(1, 'au moins une entité'),
+    rules: z.strictObject({
+      duration: gameRulesShape.duration.default(GAME_DEFAULTS.duration),
+      preys: gameRulesShape.preys,
+      playerSpeed: gameRulesShape.playerSpeed.default(GAME_DEFAULTS.playerSpeed),
+      preySpeed: gameRulesShape.preySpeed.default(GAME_DEFAULTS.preySpeed),
+      detectionRadius: gameRulesShape.detectionRadius.default(GAME_DEFAULTS.detectionRadius),
+      points: gameRulesShape.points.default(GAME_DEFAULTS.points),
+      respawn: gameRulesShape.respawn.default(GAME_DEFAULTS.respawn),
+    }),
+    camera: z.strictObject({ distance: gameNum(L_.cameraDistance[0], L_.cameraDistance[1], 'distance de la caméra (m)').default(GAME_DEFAULTS.cameraDistance) }),
+    texts: z.strictObject({ title: localizedTextSchema, instructions: localizedTextSchema, end: localizedTextSchema.optional() }),
+    sounds: gameSoundsSchema.optional(),
+    credits: creditsModuleSchema.optional(),
+  },
+  gameRootKeys,
+);
+
+/** Couche livre du jeu (`book.json.game`, studio MJ3 ou à la main) : choix du gabarit (DP-14). */
+export const bookGameSchema = z.strictObject({ template: z.enum(GAME_TEMPLATES) });
+
+export type Game3dEntity = z.infer<typeof game3dEntitySchema>;
+export type Game3dArena = z.infer<typeof game3dArenaSchema>;
+export type GameEdit = z.infer<typeof gameEditSchema>;
+export type GameEntity = z.infer<typeof gameEntitySchema>;
+export type GameConfig = z.infer<typeof gameConfigSchema>;
+
+// ---------------------------------------------------------------------------------------------------------
 // book.json (spec §5) — couche livre, hors GLB, écrite à la main
 // ---------------------------------------------------------------------------------------------------------
 
@@ -467,7 +710,10 @@ export const bookSchema = z
       .optional(),
     /** Types de cartes (CC3, DP-20) : au moins 2, sans maximum ; le premier est le type par défaut. Exclut `cardFields`. */
     cardTypes: z.array(cardTypeSchema).min(2, 'au moins 2 types (un seul type : cardFields)').optional(),
+    /** Seuil de déblocage du mini-jeu : nombre de scènes `collected` (DP-13) ; absent : toutes les scènes du livre. */
     unlockThreshold: z.number().int().positive().optional(),
+    /** Mini-jeu de fin de collection (MJ1, DP-13, DP-14) : gabarit ; absent : livre sans jeu (ni chunk du jeu, ni case du menu). */
+    game: bookGameSchema.optional(),
   })
   .superRefine((b, ctx) => {
     const dup = (arr: readonly string[]) => arr.filter((x, i) => arr.indexOf(x) !== i);
@@ -540,6 +786,19 @@ export const builtSceneSchema = glbiConfigSchema.extend({
   }),
 });
 export type BuiltScene = z.infer<typeof builtSceneSchema>;
+
+/**
+ * `game/game.json` du dossier construit (MJ1) : l'objet fusionné du jeu + données de build : chemins des GLB optimisés
+ * (`game/arena.glb`, `game/<entité>.glb`) et crédits des modèles (`src_*` des nœuds de ces GLB, D-8.5).
+ */
+export const builtGameSchema = gameConfigSchema.safeExtend({
+  build: z.strictObject({
+    arena: z.string(),
+    entities: z.record(gameEntityIdSchema, z.string()),
+    modelCredits: z.array(modelCreditSchema),
+  }),
+});
+export type BuiltGame = z.infer<typeof builtGameSchema>;
 
 /** `book.json` du dossier construit : le livre (spec §5) + la liste de fichiers ajoutée par le build. */
 export const builtBookSchema = bookSchema.safeExtend({

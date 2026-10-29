@@ -5,9 +5,12 @@
 //   armatures par clip commun), sans perte au-delà de la tolérance de gltf-transform (1e-4) ; la première et la dernière clé
 //   de chaque piste sont gardées, la durée des clips (borne des événements) est donc inchangée, et contrôlée (survie).
 //   Avant `prune`, qui retire les accesseurs remplacés. Interpolations LINEAR et STEP seulement (CUBICSPLINE intact).
-// - Extras : scène → `glbi_` ; nœuds → `glbi_` et `src_` ; maillages, primitives, matériaux, textures, animations, skins et
-//   caméras → `glbi_` et `src_` aussi (AC1, point ouvert d'Î7) : le lecteur n'en lit aucun et `keepExtras` garderait sinon
-//   une propriété inutilisée qui porte un extra étranger.
+// - Extras : scène et racine du document → `glbi_` ; nœuds → `glbi_` et `src_` ; maillages, primitives, matériaux, textures,
+//   animations, skins, caméras et lumières `KHR_lights_punctual` → `glbi_` et `src_` aussi (AC1, point ouvert d'Î7 ; racine
+//   et lumières en MJ1, point de clôture d'AC1) : le lecteur n'en lit aucun et `keepExtras` garderait sinon une propriété
+//   inutilisée qui porte un extra étranger.
+// - GLB du mini-jeu (MJ1) : même pipeline, en mémoire (`optimizeGlbBytes`), nœuds cités par leur nom protégés (`SPAWN_*`,
+//   `COL_*`, `FADE_*`, `COLLIDER`, racine de l'entité) ; les octets écrits sont ceux que le build a contrôlés.
 // - `meshopt()` de gltf-transform appelle lui-même `reorder` + `quantize` : pas de passe `quantize` séparée
 //   (le doublon signalé au test du 09/10 est confirmé ; une passe `quantize` après `meshopt` en CLI réécrit le fichier
 //   sans EXT_meshopt_compression, d'où la hausse 3,21 → 3,27 Mo constatée).
@@ -31,6 +34,7 @@ import {
   PropertyType,
   TextureChannel,
   type Document,
+  type ExtensionProperty,
   type Property,
 } from '@gltf-transform/core';
 import { ALL_EXTENSIONS, KHRTextureBasisu } from '@gltf-transform/extensions';
@@ -141,6 +145,16 @@ export interface GlbSnapshot {
   extensions: string[];
 }
 
+/** Lumières `KHR_lights_punctual` du document (portées par les nœuds), sans doublon. */
+function listLights(doc: Document): Property[] {
+  const lights = new Set<Property>();
+  for (const n of doc.getRoot().listNodes()) {
+    const l = n.getExtension<ExtensionProperty>('KHR_lights_punctual');
+    if (l) lights.add(l);
+  }
+  return [...lights];
+}
+
 /** Autres propriétés porteuses d'extras, avec leur préfixe de type (maillages et primitives, matériaux, textures…). */
 function otherProperties(doc: Document): (readonly [string, Property])[] {
   const root = doc.getRoot();
@@ -151,6 +165,7 @@ function otherProperties(doc: Document): (readonly [string, Property])[] {
     ...root.listAnimations().map((a) => ['animation', a] as const),
     ...root.listSkins().map((k) => ['skin', k] as const),
     ...root.listCameras().map((c) => ['camera', c] as const),
+    ...listLights(doc).map((l) => ['light', l] as const),
   ];
 }
 
@@ -176,7 +191,7 @@ export function snapshot(doc: Document): GlbSnapshot {
       .map((ex) => pick(ex, /^src_/))
       .sort(),
     nodeNames: new Set(nodes.map((n) => n.getName())),
-    sceneExtraKeys: root.listScenes().flatMap((s) => Object.keys(s.getExtras() ?? {})),
+    sceneExtraKeys: [...root.listScenes().flatMap((s) => Object.keys(s.getExtras() ?? {})), ...Object.keys(root.getExtras() ?? {}).map((k) => `document.${k}`)],
     foreignNodeExtraKeys: [...new Set(nodes.flatMap((n) => Object.keys(n.getExtras() ?? {}).filter((k) => !NODE_KEEP.test(k))))],
     foreignOtherExtraKeys: [...new Set(otherProperties(doc).flatMap(([t, p]) => Object.keys(p.getExtras() ?? {}).filter((k) => !OTHER_KEEP.test(k)).map((k) => `${t}.${k}`)))].sort(),
     clipDurations: Object.fromEntries(anims.map((a) => [a.getName(), Math.max(0, ...a.listSamplers().map((sp) => sp.getInput()?.getMax([0])[0] ?? 0))])),
@@ -220,7 +235,7 @@ export function compareSnapshots(before: GlbSnapshot, after: GlbSnapshot, protec
   for (const name of protect) {
     if (before.nodeNames.has(name) && !after.nodeNames.has(name)) issues.push(`nœud « ${name} » (référencé par la config) supprimé`);
   }
-  const foreignScene = after.sceneExtraKeys.filter((k) => !SCENE_KEEP.test(k));
+  const foreignScene = after.sceneExtraKeys.filter((k) => !SCENE_KEEP.test(k.replace(/^document\./, '')));
   if (foreignScene.length) issues.push(`extras de scène hors glbi_ restants : ${foreignScene.join(', ')}`);
   if (after.foreignNodeExtraKeys.length) issues.push(`extras de nœud hors glbi_/src_ restants : ${after.foreignNodeExtraKeys.join(', ')}`);
   if (after.foreignOtherExtraKeys.length) issues.push(`extras hors glbi_/src_ restants : ${after.foreignOtherExtraKeys.join(', ')}`);
@@ -275,6 +290,10 @@ export function stripForeignExtras(doc: Document): { scene: string[]; node: stri
     return out;
   };
   for (const s of doc.getRoot().listScenes()) s.setExtras(filter(s.getExtras() ?? {}, SCENE_KEEP, removed.scene));
+  // Racine du document (`extras` du JSON glTF, MJ1) : même règle que la scène, clés notées `document.<clé>`.
+  const rootKeys = new Set<string>();
+  doc.getRoot().setExtras(filter(doc.getRoot().getExtras() ?? {}, SCENE_KEEP, rootKeys));
+  for (const k of rootKeys) removed.scene.add(`document.${k}`);
   for (const n of doc.getRoot().listNodes()) n.setExtras(filter(n.getExtras() ?? {}, NODE_KEEP, removed.node));
   for (const [type, p] of otherProperties(doc)) {
     const keys = new Set<string>();
@@ -433,6 +452,31 @@ export interface FileResult extends OptimizeResult {
   survival: string[];
   before: GlbSnapshot;
   after: GlbSnapshot;
+}
+
+/** Résultat de `optimizeGlbBytes` : octets du GLB optimisé, non écrits. */
+export interface BytesResult extends FileResult {
+  bytes: Uint8Array;
+}
+
+/**
+ * Lit `src`, optimise en mémoire, relit les octets produits et vérifie la survie de la config, des clips et des crédits
+ * (même contrôle qu'`optimizeGlbFile`). Mini-jeu (MJ1) : le build mesure les budgets sur ces octets, puis les écrit.
+ */
+export async function optimizeGlbBytes(src: string, opts: OptimizeOptions = {}): Promise<BytesResult> {
+  const inBytes = fs.statSync(src).size;
+  const doc = await readGlbFile(src);
+  const before = snapshot(doc);
+  const protect = [...(opts.protect ?? referencedNodeNamesInGlb(doc))];
+  const result = await optimizeDocument(doc, { ...opts, protect });
+  const io = await getIO();
+  const bytes = await io.writeBinary(doc);
+  const after = snapshot((await io.readBinary(bytes)).setLogger(new Logger(Logger.Verbosity.WARN)));
+  const survival = compareSnapshots(before, after, protect);
+  if (!after.extensions.includes('EXT_meshopt_compression') && after.clips.length + doc.getRoot().listMeshes().length > 0) {
+    survival.push('EXT_meshopt_compression absent du GLB écrit');
+  }
+  return { ...result, protect, inBytes, outBytes: bytes.byteLength, survival, before, after, bytes };
 }
 
 /** Lit `src`, optimise, écrit `dst`, relit `dst` et vérifie la survie de la config, des clips et des crédits. */

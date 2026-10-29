@@ -5,8 +5,9 @@
 //   langues sont envoyés à la page tels quels).
 // - Forme écrite : clés dans l'ordre de `bookSchema` (objets imbriqués compris), indentation 2, UTF-8 sans échappement des
 //   accents (`JSON.stringify`), retour à la ligne final, champs facultatifs vides omis.
-// - Formulaire : valeurs saisies (textes), composées en objet puis validées par `bookSchema` ; `unlockThreshold` (sujet 5)
-//   n'est pas dans le formulaire : sa valeur sur le disque est reprise telle quelle. `cardFields` (intitulés des cartes de
+// - Formulaire : valeurs saisies (textes), composées en objet puis validées par `bookSchema` ; `unlockThreshold` et `game`
+//   (mini-jeu, sujet 5 ; section « Jeu » du studio en MJ3) ne sont pas dans le formulaire : leur valeur sur le disque est
+//   reprise telle quelle (MJ1). `cardFields` (intitulés des cartes de
 //   collection) : section « Carte de collection » du formulaire depuis CC2 (CC1 le reprenait tel quel).
 // - Types de cartes (CC3, DP-20) : le formulaire tient une liste de types (`cardTypes`) ; un livre à `cardFields` y est un
 //   seul type implicite `personnage`, sans nom. Forme la plus courte écrite : un type → `cardFields` (nom perdu), deux ou
@@ -87,6 +88,8 @@ export interface ReadableBook {
   form: BookForm;
   /** `unlockThreshold` lu sur le disque (valeur brute, même invalide), repris tel quel à l'écriture. */
   unlockThreshold?: unknown;
+  /** `game` (mini-jeu, MJ1) lu sur le disque (valeur brute), repris tel quel à l'écriture jusqu'à la section « Jeu » (MJ3). */
+  game?: unknown;
   /** `bookId` lisible sur le disque : celui d'un livre existant, non modifiable. */
   bookIdOnDisk: string | null;
 }
@@ -143,6 +146,7 @@ export function readableBook(raw: unknown, year: number): ReadableBook {
   f.cardTypes = cardTypesOf(raw.cardTypes, raw.cardFields);
   const r: ReadableBook = { form: f, bookIdOnDisk: typeof raw.bookId === 'string' && raw.bookId !== '' ? raw.bookId : null };
   if ('unlockThreshold' in raw) r.unlockThreshold = raw.unlockThreshold;
+  if ('game' in raw) r.game = raw.game;
   return r;
 }
 
@@ -162,7 +166,7 @@ export function formFromBody(v: unknown): BookForm {
 }
 
 /** Objet `book.json` composé du formulaire, avant validation. `languages` : celles du Zod (affichées, non modifiables). */
-export function composeBook(form: BookForm, keep: { unlockThreshold?: unknown } = {}): Obj {
+export function composeBook(form: BookForm, keep: { unlockThreshold?: unknown; game?: unknown } = {}): Obj {
   const y = form.legal.year.trim();
   const book: Obj = {
     bookId: form.bookId.trim(),
@@ -179,6 +183,7 @@ export function composeBook(form: BookForm, keep: { unlockThreshold?: unknown } 
   if (form.cardTypes.length === 1 && form.cardTypes[0].fields.length) book.cardFields = fieldsOf(form.cardTypes[0]);
   if (form.cardTypes.length >= 2) book.cardTypes = form.cardTypes.map((t) => ({ id: t.id.trim(), name: { ...t.name }, fields: fieldsOf(t) }));
   if (keep.unlockThreshold !== undefined) book.unlockThreshold = keep.unlockThreshold;
+  if (keep.game !== undefined) book.game = keep.game;
   return book;
 }
 

@@ -1015,10 +1015,13 @@ const isStamp = (v: unknown): v is { size: number; mtime: number } =>
 const BOOKID_REFUSED = (id: string) =>
   `changer le bookId d’un livre existant est refusé (« ${id} » : clé de progression et nom du cache, figés après publication) : créer un autre livre`;
 
-/** Objet composé du formulaire pour le livre ouvert : `unlockThreshold` du disque repris tel quel (`cardFields` : formulaire, CC2). */
+/**
+ * Objet composé du formulaire pour le livre ouvert : `unlockThreshold` et `game` (mini-jeu, MJ1) du disque repris tels quels
+ * (`cardFields` : formulaire, CC2).
+ */
 function composeForOpenBook(form: ReturnType<typeof formFromBody>) {
   const c = book!.info.file.content;
-  return composeBook(form, { unlockThreshold: c.unlockThreshold });
+  return composeBook(form, { unlockThreshold: c.unlockThreshold, game: c.game });
 }
 
 /** Validation en direct du formulaire (aucune écriture) : messages de `bookSchema` et refus du studio. */

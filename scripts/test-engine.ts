@@ -7,7 +7,8 @@
 // (`src/components/book/progress.ts`, Î13 : règles de déblocage, valeur illisible, stockage indisponible), lecture d'un
 // QR par le scanner interne (`src/components/book/scanTarget.ts`, Î14 : adresse du livre, miroir, autre livre), carte de
 // collection (`src/components/card/cardModel.ts`, CC1 : bandeau une seule fois, compte, cartes gagnées, lecture tolérante ;
-// atelier : onglet Carte, CC2 : aller-retour sans perte, règle d'A3, aperçu, liens du Rapport).
+// atelier : onglet Carte, CC2 : aller-retour sans perte, règle d'A3, aperçu, liens du Rapport) ; mini-jeu (MJ1 : déblocage,
+// QR `/jeu`, meilleur score et réglages des commandes sous des clés à part, `book.json.game`, `game/game.json`).
 // Les mixers tournent sur une scène three minimale (un os animé), le temps est avancé à la main.
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -31,6 +32,10 @@ import {
   ProgressStore, emptyProgress, parseProgress, progressKey, sceneAccess, withCollected, withQuizPassed, withUnlocked, type StorageLike,
 } from '../src/components/book/progress';
 import { sceneFromScan } from '../src/components/book/scanTarget';
+import { collectedCount, gameAccess, gameThreshold } from '../src/components/book/gameAccess';
+import { controlsKey, DEFAULT_CONTROLS, GameStore, gameKey, parseBest, parseControls } from '../src/components/game/gameStorage';
+import { parseReaderGame } from '../src/components/game/gameSource';
+import { parseReaderBook } from '../src/components/book/readerScene';
 import { BOOK_ICON, cardCount, cardScale, cardTypeCounts, earnedCards, isCompactType, isNewCard, parseCardFields, parseCardTypes, readerCardOf, resolveCardType, showCardType } from '../src/components/card/cardModel';
 
 let failed = 0;
@@ -1498,6 +1503,82 @@ test('atelier (CC3) : changement de type : valeurs gardées (orphelines écrites
   assert.equal(at('scenes/duo.edit.json : modules.card.type : type « arme » absent de book.json (cardTypes : personnage, lieu)'), 'card.type');
   assert.equal(at("scenes/duo.edit.json : modules.card.type : type « arme » absent de book.json (book.json n'a qu'un type, « personnage » : cardFields)"), 'card.type');
   assert.equal(at('scenes/duo.edit.json : modules.card.fields : intitulé « taille » absent du type « lieu » (intitulés : region, epoque)'), 'card.field.taille');
+});
+
+// ────────────── Mini-jeu (MJ1) ──────────────
+console.log('Mini-jeu : déblocage, QR /jeu, meilleur score et réglages des commandes, book.json.game, game.json');
+
+test('mini-jeu (DP-13) : débloqué à unlockThreshold scènes collected, toutes sans seuil ; seuil invalide ; scènes inconnues ignorées', () => {
+  const scenes = ['trex', 'raptor', 'ptero', 'duo', 'vallee'];
+  const p = (ids: string[]) => ({ collected: Object.fromEntries(ids.map((id) => [id, true])) });
+  assert.deepEqual(gameAccess(p([]), scenes, 3), { unlocked: false, remaining: 3, threshold: 3 });
+  assert.deepEqual(gameAccess(p(['trex', 'raptor']), scenes, 3), { unlocked: false, remaining: 1, threshold: 3 });
+  assert.deepEqual(gameAccess(p(['trex', 'raptor', 'duo']), scenes, 3), { unlocked: true, remaining: 0, threshold: 3 });
+  assert.equal(gameAccess(p(['trex', 'raptor', 'duo']), scenes, undefined).remaining, 2, 'sans seuil : toutes les scènes');
+  assert.equal(gameThreshold(scenes, 9), 5, 'seuil supérieur au nombre de scènes : toutes');
+  assert.equal(gameThreshold(scenes, 0), 5);
+  assert.equal(gameThreshold(scenes, 2.5), 5);
+  assert.equal(collectedCount({ collected: { trex: true, ancienne: true, raptor: false } }, scenes), 1, 'scène inconnue et faux ignorés');
+});
+
+test('scanner (MJ1) : QR /jeu accepté si le livre a un jeu, même règle d’adresse que les scènes ; refusé sinon', () => {
+  const book = { origin: 'https://dino.editions-liger.com', pageRoot: 'https://miroir.github.io/dino/', scenes: ['trex'], game: true };
+  for (const text of ['https://dino.editions-liger.com/jeu', 'https://dino.editions-liger.com/jeu/', 'https://DINO.editions-liger.com/jeu/index.html?x=1', 'https://miroir.github.io/dino/jeu']) {
+    assert.deepEqual(sceneFromScan(text, book), { kind: 'game' }, text);
+  }
+  assert.deepEqual(sceneFromScan('https://dino.editions-liger.com/jeu', { ...book, game: false }), { kind: 'foreign' }, 'livre sans jeu');
+  assert.deepEqual(sceneFromScan('https://autre.editions-liger.com/jeu', book), { kind: 'foreign' }, 'autre livre');
+  assert.deepEqual(sceneFromScan('https://dino.editions-liger.com/jeux', book), { kind: 'foreign' });
+  assert.deepEqual(sceneFromScan('https://dino.editions-liger.com/s/jeu', book), { kind: 'foreign' }, 'pas une scène');
+  assert.deepEqual(sceneFromScan('https://dino.editions-liger.com/s/trex', book), { kind: 'scene', sceneId: 'trex' });
+});
+
+test('mini-jeu : clés à part (DP-25) : meilleur score et réglages, lecture tolérante, mémoire de session, progression intacte', () => {
+  assert.equal(gameKey('test-dino'), 'glbinterpreter:game:test-dino');
+  assert.equal(controlsKey('test-dino'), 'glbinterpreter:controls:test-dino');
+  assert.equal(parseBest(null), null);
+  assert.equal(parseBest('{"best":12}'), 12);
+  for (const bad of ['{', '[]', '{"best":"12"}', '{"best":-1}', 'null']) assert.equal(parseBest(bad), null, bad);
+  assert.deepEqual(parseControls(null), { settings: DEFAULT_CONTROLS, ok: true });
+  assert.deepEqual(parseControls('{"side":"left","size":"large"}'), { settings: { side: 'left', size: 'large' }, ok: true });
+  assert.deepEqual(parseControls('{"side":"gauche","size":"large"}'), { settings: { side: 'right', size: 'large' }, ok: false });
+  assert.deepEqual(parseControls('{'), { settings: DEFAULT_CONTROLS, ok: false });
+  const data = new Map<string, string>([[progressKey('test-dino'), '{"unlockedScenes":["trex"],"quizPassed":{},"collected":{"trex":true}}']]);
+  const storage: StorageLike = { getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v), removeItem: (k) => void data.delete(k) };
+  const store = new GameStore('test-dino', storage, quiet);
+  assert.equal(store.best(), null);
+  assert.deepEqual(store.recordScore(5), { best: 5, record: true });
+  assert.deepEqual(store.recordScore(3), { best: 5, record: false });
+  assert.deepEqual(store.recordScore(9), { best: 9, record: true });
+  assert.equal(data.get('glbinterpreter:game:test-dino'), '{"best":9}');
+  store.setControls({ side: 'left', size: 'large' });
+  assert.deepEqual(new GameStore('test-dino', storage, quiet).controls(), { side: 'left', size: 'large' });
+  assert.equal(data.get(progressKey('test-dino')), '{"unlockedScenes":["trex"],"quizPassed":{},"collected":{"trex":true}}', 'progression inchangée');
+  // Stockage refusé : en mémoire pour la session, annoncé une fois.
+  const warns: unknown[] = [];
+  const refusing: StorageLike = { getItem: () => null, setItem: () => { throw new Error('plein'); }, removeItem: () => {} };
+  const mem = new GameStore('test-dino', refusing, { warn: (...a) => warns.push(a) });
+  assert.deepEqual(mem.recordScore(4), { best: 4, record: true });
+  assert.equal(mem.best(), 4);
+  mem.setControls({ side: 'left', size: 'normal' });
+  assert.deepEqual(mem.controls(), { side: 'left', size: 'normal' });
+  assert.equal(warns.length, 1);
+  const none = new GameStore('test-dino', null, quiet);
+  none.recordScore(2);
+  assert.equal(none.best(), 2);
+});
+
+test('lecteur (MJ1) : book.json.game et unlockThreshold lus ; game/game.json lu (textes) ; forme fausse refusée', () => {
+  const base = { bookId: 'b', scenes: ['a'] };
+  assert.equal(parseReaderBook(base).game, undefined);
+  assert.deepEqual(parseReaderBook({ ...base, game: { template: 'poursuite' }, unlockThreshold: 3 }).game, { template: 'poursuite' });
+  assert.equal(parseReaderBook({ ...base, unlockThreshold: 3 }).unlockThreshold, 3);
+  assert.equal(parseReaderBook({ ...base, unlockThreshold: '3', game: 'poursuite' }).unlockThreshold, undefined);
+  assert.equal(parseReaderBook({ ...base, game: 'poursuite' }).game, undefined);
+  const g = { version: 1, template: 'poursuite', texts: { title: T('Jeu'), instructions: T('Attrape !') } };
+  assert.deepEqual(parseReaderGame(g), { template: 'poursuite', title: T('Jeu'), instructions: T('Attrape !') });
+  assert.throws(() => parseReaderGame({ ...g, version: 2 }), /version 1/);
+  assert.throws(() => parseReaderGame({ ...g, texts: { title: T('Jeu') } }), /texts\.title et texts\.instructions/);
 });
 
 if (failed) {

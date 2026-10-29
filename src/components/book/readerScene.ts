@@ -42,6 +42,10 @@ export interface ReaderBook {
    * (CC1 ; sans intitulé si le livre n'en a pas). Jamais vide.
    */
   cardTypes: CardType[];
+  /** Mini-jeu du livre (MJ1, `book.json.game`) : gabarit ; absent : livre sans jeu (ni case du menu, ni `#/jeu`). */
+  game?: { template: string };
+  /** Seuil de déblocage du mini-jeu (`book.json.unlockThreshold`, scènes `collected`) ; absent : toutes les scènes. */
+  unlockThreshold?: number;
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -59,6 +63,8 @@ export function parseReaderBook(raw: unknown): ReaderBook {
     legal: isObj(raw.legal) ? (raw.legal as ReaderBook["legal"]) : undefined,
     origin: typeof raw.origin === "string" ? raw.origin : undefined,
     cardTypes: parseCardTypes(raw.cardFields, raw.cardTypes),
+    ...(isObj(raw.game) && typeof raw.game.template === "string" ? { game: { template: raw.game.template } } : {}),
+    ...(Number.isInteger(raw.unlockThreshold) && (raw.unlockThreshold as number) > 0 ? { unlockThreshold: raw.unlockThreshold as number } : {}),
   };
 }
 

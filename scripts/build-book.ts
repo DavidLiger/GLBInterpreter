@@ -30,6 +30,10 @@
 // assets référencés, manifest.webmanifest et icônes (Î9), og:image et titre d'application dans index.html,
 // stubs s/<scène>/index.html (D-8.4),
 // book.json (livre + liste des fichiers { path, size, sha256, parts? }). QR SVG par scène dans dist/qr/<bookId>/.
+// Mini-jeu (MJ1, spec-mini-jeu.md §8), livre à book.json.game : game/<entité>.glb et game/arena.glb optimisés (octets
+// contrôlés par book-check.ts, nœuds cités protégés), game/game.json (objet fusionné + build), sons du jeu, stub
+// jeu/index.html (→ #/jeu), QR dist/qr/<bookId>/jeu.svg. Livre sans jeu (et cartouche fixture) : les chunks du jeu, listés
+// par next build dans .next/glbi-game-chunks.json (next.config.ts), sont retirés de out/, donc de book.json.files.
 // Mode fixture : GLB de out/ optimisés sur place (empties conservés), manifest et icônes d'après public/icon.png, stubs
 // d'après src/content/book.json et out/book.json { bookId, scenes, fixture, files }. Le lecteur lit les scènes de la fixture
 // dans src/content/fixtures/ quand book.json porte `fixture: true` (Î10).
@@ -49,12 +53,16 @@ import {
 } from './glb-pipeline';
 import {
   builtBookSchema,
+  builtGameSchema,
   builtSceneSchema,
+  GAME_DIR,
+  GAME_JSON_FILE,
   formatIssues,
   SCENE_ID_PATTERN,
   type Book,
   type BookFile,
   type BookFilePart,
+  type BuiltGame,
   type BuiltScene,
 } from '../src/schema/glbi';
 import { checkSchemaFresh } from './export-schema';
@@ -67,6 +75,7 @@ import {
   Report,
   ROOT,
   toPosix,
+  type GameResult,
   type SceneResult,
 } from './book-check';
 
@@ -224,6 +233,18 @@ function stubHtml(sceneId: string, title: string, lang: string): string {
 <title>${escapeHtml(title)}</title>
 <script>location.replace(location.pathname.replace(/s\\/[^/]+\\/?(index\\.html)?$/, '') + '#/s/${sceneId}');</script>
 <noscript><meta http-equiv="refresh" content="0;url=../../#/s/${sceneId}"></noscript>
+</head><body style="background:#000"></body></html>
+`;
+}
+
+/** Stub `jeu/index.html` du mini-jeu (MJ1) : redirection vers `<racine du dossier>#/jeu`, comme les stubs des scènes. */
+function gameStubHtml(title: string, lang: string): string {
+  return `<!doctype html>
+<html lang="${escapeHtml(lang)}"><head><meta charset="utf-8"><meta name="robots" content="noindex">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<script>location.replace(location.pathname.replace(/jeu\\/?(index\\.html)?$/, '') + '#/jeu');</script>
+<noscript><meta http-equiv="refresh" content="0;url=../#/jeu"></noscript>
 </head><body style="background:#000"></body></html>
 `;
 }
@@ -449,13 +470,14 @@ async function writeQrCodes(qrDir: string, book: Book): Promise<string[]> {
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   const lines: string[] = [];
-  for (const [i, id] of book.scenes.entries()) {
-    const url = `${book.origin}/s/${id}`;
+  const write = async (file: string, url: string) => {
     const svg = await QRCode.toString(url, { type: 'svg', errorCorrectionLevel: 'M', margin: 4 });
-    const file = `${String(i + 1).padStart(2, '0')}-${id}.svg`;
     fs.writeFileSync(path.join(dir, file), svg);
     lines.push(`${file}\t${url}`);
-  }
+  };
+  for (const [i, id] of book.scenes.entries()) await write(`${String(i + 1).padStart(2, '0')}-${id}.svg`, `${book.origin}/s/${id}`);
+  // QR facultatif du mini-jeu (MJ1, spec-mini-jeu.md §2) : `<adresse>/jeu`, servi par le stub jeu/index.html.
+  if (book.game) await write('jeu.svg', `${book.origin}/jeu`);
   fs.writeFileSync(path.join(dir, 'urls.txt'), `${lines.join('\n')}\n`);
   return lines;
 }
@@ -518,6 +540,84 @@ async function optimizeFixtureGlbs(outDir: string, mode: TextureMode): Promise<v
       warn(`${rel} : optimisation impossible (${(e as Error).message}), fichier d'origine conservé`);
     }
   }
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Mini-jeu (MJ1) : fichiers du jeu, chunks du jeu
+// ---------------------------------------------------------------------------------------------------------
+
+/** GLB optimisés du jeu (octets contrôlés par `readGame`) et `game/game.json` (objet fusionné + données de build). */
+function writeGameFiles(outDir: string, game: GameResult): void {
+  fs.mkdirSync(path.join(outDir, GAME_DIR), { recursive: true });
+  for (const g of game.glbs) {
+    fs.writeFileSync(path.join(outDir, g.rel), g.bytes);
+    console.log(`build-book : ${g.rel} ${formatMiB(g.bytes.byteLength)}`);
+  }
+  const built: BuiltGame = {
+    ...game.config,
+    build: {
+      arena: `${GAME_DIR}/arena.glb`,
+      entities: Object.fromEntries(game.config.entities.map((e) => [e.id, `${GAME_DIR}/${e.id}.glb`])),
+      modelCredits: game.modelCredits,
+    },
+  };
+  const check = builtGameSchema.safeParse(built);
+  if (!check.success) formatIssues(check.error, `${GAME_JSON_FILE} (sortie) : `).forEach(err);
+  fs.writeFileSync(path.join(outDir, GAME_JSON_FILE), `${JSON.stringify(built, null, 2)}\n`);
+}
+
+/** Liste des chunks du jeu écrite par next build (next.config.ts, `GameChunksPlugin`), dans `.next/`. */
+const GAME_CHUNKS_MANIFEST = '.next/glbi-game-chunks.json';
+/** Marqueur du chunk du jeu (`GAME_CHUNK_MARKER` de src/components/game/GameEntry.tsx, même valeur). */
+const GAME_CHUNK_MARKER = 'glbi-game-mj1';
+
+/**
+ * Chunks du jeu (MJ1, décision de David du 28/10) : livre à jeu, leur présence dans out/ est vérifiée ; livre sans jeu (et
+ * cartouche fixture), ils sont retirés de out/ (donc de book.json.files), avec game/game.json, game/*.glb et jeu/index.html
+ * qu'un build précédent aurait laissés. Garde-fous : liste lue, non vide et à jour (ses fichiers portent le marqueur du
+ * jeu) ; après retrait, plus aucun fichier de out/ ne porte le marqueur (code du jeu tombé dans un chunk partagé).
+ */
+function applyGameChunks(outDir: string, hasGame: boolean): void {
+  const manifest = path.join(ROOT, GAME_CHUNKS_MANIFEST);
+  let listed: string[];
+  try {
+    const raw = JSON.parse(fs.readFileSync(manifest, 'utf8')) as { files?: unknown };
+    if (!Array.isArray(raw.files) || !raw.files.every((f) => typeof f === 'string')) throw new Error('{ files: string[] } attendu');
+    listed = (raw.files as string[]).map((f) => `_next/${toPosix(f)}`);
+  } catch (e) {
+    err(`${GAME_CHUNKS_MANIFEST} absent ou illisible (${(e as Error).message}) : relancer npm run build (next build écrit la liste des chunks du jeu)`);
+    return;
+  }
+  if (!listed.length) {
+    err(`${GAME_CHUNKS_MANIFEST} : aucun chunk du jeu repéré par next build (src/components/game/ doit être chargé par import() dynamique)`);
+    return;
+  }
+  const present = listed.filter((f) => fs.existsSync(path.join(outDir, f)));
+  const marked = present.filter((f) => fs.readFileSync(path.join(outDir, f), 'utf8').includes(GAME_CHUNK_MARKER));
+  if (hasGame) {
+    const missing = listed.filter((f) => !present.includes(f));
+    if (missing.length) err(`chunk(s) du jeu absent(s) du dossier construit (${missing.join(', ')}) : relancer npm run build`);
+    else if (!marked.length) err(`${GAME_CHUNKS_MANIFEST} périmé (aucun de ses chunks ne porte le code du jeu) : relancer npm run build`);
+    return;
+  }
+  if (present.length && !marked.length) {
+    err(`${GAME_CHUNKS_MANIFEST} périmé (aucun de ses chunks ne porte le code du jeu) : relancer npm run build`);
+    return;
+  }
+  let bytes = 0;
+  for (const f of present) {
+    bytes += fs.statSync(path.join(outDir, f)).size;
+    fs.rmSync(path.join(outDir, f));
+  }
+  const leftovers = [GAME_JSON_FILE, 'jeu/index.html', ...(fs.existsSync(path.join(outDir, GAME_DIR)) ? fs.readdirSync(path.join(outDir, GAME_DIR)).filter((f) => /\.glb$/i.test(f)).map((f) => `${GAME_DIR}/${f}`) : [])];
+  for (const f of leftovers) fs.rmSync(path.join(outDir, f), { force: true });
+  for (const d of [GAME_DIR, 'jeu']) {
+    const full = path.join(outDir, d);
+    if (fs.existsSync(full) && !fs.readdirSync(full).length) fs.rmdirSync(full);
+  }
+  const still = listFiles(path.join(outDir, '_next')).filter((f) => /\.(js|css)$/.test(f) && fs.readFileSync(path.join(outDir, '_next', f), 'utf8').includes(GAME_CHUNK_MARKER));
+  if (still.length) err(`livre sans jeu : code du jeu dans ${still.map((f) => `_next/${f}`).join(', ')} (chunk partagé avec le lecteur) : le jeu doit rester derrière son import() dynamique`);
+  console.log(`build-book : livre sans jeu : ${present.length} chunk(s) du jeu retiré(s) du dossier construit (${(bytes / 1024).toFixed(1)} Kio)`);
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -623,7 +723,7 @@ async function buildFixture(opts: Options): Promise<void> {
   }
   if (errors.length || opts.check) {
     if (errors.length) fail();
-    console.log('build-book : --check sans --source : src/content/book.json et schema/glbi-layer3d.schema.json à jour');
+    console.log('build-book : --check sans --source : src/content/book.json et JSON Schema (schema/glbi-layer3d.schema.json, schema/glbi-game3d.schema.json) à jour');
     return;
   }
   requireExport(outDir);
@@ -632,6 +732,8 @@ async function buildFixture(opts: Options): Promise<void> {
   injectAppTitle(outDir, 'GLBInterpreter');
   localizeShell(outDir, 'GLBInterpreter', 'fr');
   writeStubs(outDir, scenes as string[], 'GLBInterpreter', 'fr');
+  // Cartouche de test sans jeu (MJ1) : chunks du jeu retirés, comme pour un livre sans book.json.game.
+  applyGameChunks(outDir, false);
   const files = collectFiles(outDir, opts, false);
   if (errors.length) fail();
   fs.writeFileSync(path.join(outDir, 'book.json'), `${JSON.stringify({ bookId, scenes, fixture: true, files }, null, 2)}\n`);
@@ -645,20 +747,21 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
   const outDir = path.resolve(ROOT, opts.out);
   console.log(`build-book : livre ${toPosix(sourceDir)}${opts.check ? ' (validation seule)' : ''}`);
   // Contrôles partagés avec l'atelier (scripts/book-check.ts) : book.json, scènes, V-03, icônes, fichiers non référencés.
-  const checked = await checkBookSource(sourceDir, report);
+  const checked = await checkBookSource(sourceDir, report, undefined, { textures: opts.textures });
   if (!checked) fail();
-  const { book, scenes, assets } = checked;
+  const { book, scenes, assets, game } = checked;
 
   if (errors.length) fail();
   if (opts.check) {
     flushReport();
     console.log(`build-book : livre « ${book.bookId} » valide (${scenes.length} scène(s), ${warnings.length} avertissement(s))`);
     for (const s of scenes) console.log(`  ${s.id} : couche 3D (GLBI_ROOT) + scenes/${s.id}.edit.json, ${s.modelCredits.length} crédit(s) de modèle`);
+    if (game) console.log(`  jeu (${game.config.template}) : ${game.glbs.map((g) => g.rel).join(', ')} + game/game.edit.json`);
     return;
   }
 
   if (opts.dev) {
-    await writeDevBook(opts, sourceDir, book, scenes, assets);
+    await writeDevBook(opts, sourceDir, book, scenes, assets, game);
     return;
   }
 
@@ -676,6 +779,7 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
     if (!check.success) formatIssues(check.error, `scenes/${s.id}.json (sortie) : `).forEach(err);
     fs.writeFileSync(path.join(outDir, `scenes/${s.id}.json`), `${JSON.stringify(built, null, 2)}\n`);
   }
+  if (game) writeGameFiles(outDir, game);
   for (const a of [...assets].sort()) copyIntoOut(sourceDir, outDir, a);
   // Transcodeur Basis (≈ 0,6 MiB) inutile si aucune scène n'a de texture KTX2 : retiré du livre (jamais chargé dans ce cas).
   if (!usesKtx2 && fs.existsSync(path.join(outDir, 'decoders/basis'))) {
@@ -689,6 +793,11 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
   localizeShell(outDir, book.title[book.languages[0]], book.languages[0]);
   injectOg(outDir, book);
   writeStubs(outDir, book.scenes, book.title[book.languages[0]], book.languages[0]);
+  if (game) {
+    fs.mkdirSync(path.join(outDir, 'jeu'), { recursive: true });
+    fs.writeFileSync(path.join(outDir, 'jeu/index.html'), gameStubHtml(book.title[book.languages[0]], book.languages[0]));
+  }
+  applyGameChunks(outDir, !!game);
   if (errors.length) fail();
 
   const files = collectFiles(outDir, opts);
@@ -702,14 +811,14 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
   flushReport();
   const total = files.reduce((sum, f) => sum + f.size, 0);
   console.log(`build-book : livre « ${book.bookId} » : ${scenes.length} scène(s), ${files.length} fichiers (${(total / 1048576).toFixed(1)} MiB) listés dans out/book.json`);
-  console.log(`build-book : ${qr.length} QR dans ${toPosix(path.join(opts.qrDir, book.bookId))}/ (${book.origin}/s/<scène>)`);
+  console.log(`build-book : ${qr.length} QR dans ${toPosix(path.join(opts.qrDir, book.bookId))}/ (${book.origin}/s/<scène>${book.game ? `, ${book.origin}/jeu` : ''})`);
 }
 
 /**
  * Livre de développement (Î10) : mêmes scènes et assets que le dossier construit (GLB optimisés, `scenes/<id>.json`
  * validés), sans l'application. `files` est vide : rien n'est installé ni mis en cache en développement.
  */
-async function writeDevBook(opts: Options, sourceDir: string, book: Book, scenes: SceneResult[], assets: Set<string>): Promise<void> {
+async function writeDevBook(opts: Options, sourceDir: string, book: Book, scenes: SceneResult[], assets: Set<string>, game: GameResult | null): Promise<void> {
   const outDir = path.resolve(ROOT, DEV_BOOK_OUT);
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(outDir, 'scenes'), { recursive: true });
@@ -723,11 +832,12 @@ async function writeDevBook(opts: Options, sourceDir: string, book: Book, scenes
     if (!check.success) formatIssues(check.error, `scenes/${s.id}.json (sortie) : `).forEach(err);
     fs.writeFileSync(path.join(outDir, `scenes/${s.id}.json`), `${JSON.stringify(built, null, 2)}\n`);
   }
+  if (game) writeGameFiles(outDir, game);
   for (const a of [...assets].sort()) copyIntoOut(sourceDir, outDir, a);
   if (errors.length) fail();
   fs.writeFileSync(path.join(outDir, 'book.json'), `${JSON.stringify({ ...book, files: [] }, null, 2)}\n`);
   flushReport();
-  console.log(`build-book : livre de développement « ${book.bookId} » (${scenes.length} scène(s)) dans ${DEV_BOOK_OUT}/ : lancer \`npm run dev\` puis ouvrir #/s/<scène>`);
+  console.log(`build-book : livre de développement « ${book.bookId} » (${scenes.length} scène(s)${game ? ', jeu' : ''}) dans ${DEV_BOOK_OUT}/ : lancer \`npm run dev\` puis ouvrir #/s/<scène>${game ? ' ou #/dev/jeu' : ''}`);
 }
 
 async function main(): Promise<void> {

@@ -386,16 +386,17 @@ test('CC3 : usageType (type explicite, implicite de tête) ; usageIntitule tient
   assert.deepEqual(scenesUsingCardField(edits, 'taille', { id: 'lieu', tete: false }), ['vallee']);
 });
 
-test('formulaire : lu, recomposé, réécrit à l’identique ; unlockThreshold conservé ; ogImage vide omis ; refus de bookSchema', () => {
-  const raw = { ...sampleBook, unlockThreshold: 3 };
+test('formulaire : lu, recomposé, réécrit à l’identique ; unlockThreshold et game (MJ1) conservés ; ogImage vide omis ; refus de bookSchema', () => {
+  const raw = { ...sampleBook, unlockThreshold: 3, game: { template: 'poursuite' } };
   const r = readableBook(raw, 2026);
   assert.equal(r.bookIdOnDisk, 'test-dino');
   assert.equal(r.unlockThreshold, 3);
-  const again = validateBook(composeBook(formFromBody(JSON.parse(JSON.stringify(r.form))), { unlockThreshold: r.unlockThreshold }));
+  assert.deepEqual(r.game, { template: 'poursuite' });
+  const again = validateBook(composeBook(formFromBody(JSON.parse(JSON.stringify(r.form))), { unlockThreshold: r.unlockThreshold, game: r.game }));
   assert.ok(again.ok);
   assert.equal(again.text, `${JSON.stringify(raw, null, 2)}\n`, 'sans modification : octet pour octet');
   const noOg = validateBook(composeBook({ ...r.form, ogImage: '  ' }));
-  assert.ok(noOg.ok && !('ogImage' in JSON.parse(noOg.text)) && !('unlockThreshold' in JSON.parse(noOg.text)));
+  assert.ok(noOg.ok && !('ogImage' in JSON.parse(noOg.text)) && !('unlockThreshold' in JSON.parse(noOg.text)) && !('game' in JSON.parse(noOg.text)));
   // Seuil conservé tel quel, même devenu invalide (retrait de scènes) : refusé par bookSchema, rien d'écrit.
   const bad = validateBook(composeBook({ ...r.form, scenes: ['trex'] }, { unlockThreshold: 3 }));
   assert.ok(!bad.ok && bad.errors.some((e) => e.startsWith('book.json : unlockThreshold')));
