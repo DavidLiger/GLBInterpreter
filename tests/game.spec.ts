@@ -1,7 +1,8 @@
 // Mini-jeu (MJ1, spec-mini-jeu.md §2, §11) sur le livre de test installé (`unlockThreshold` 3) : case du menu verrouillée
 // puis débloquée ; `#/jeu` verrouillé : écran de blocage sans chunk du jeu ni fichier de `game/` (requêtes observées) ;
-// débloqué : écran d'attente du moteur (MJ2) qui lit `game/game.json`, hors ligne compris ; fichiers du jeu dans
-// `book.json.files`. Déblocage pur, QR `/jeu` et clés de stockage : aussi dans `npm run test:engine`.
+// débloqué : écran de consigne du moteur (MJ2 ; écran d'attente en MJ1) qui lit `game/game.json`, Rapier et les GLB de
+// `game/` chargés, hors ligne compris ; fichiers du jeu dans `book.json.files`. Déblocage pur, QR `/jeu` et clés de
+// stockage : aussi dans `npm run test:engine`. Partie jouée : `tests/game-play.spec.ts`.
 import { expect, test } from '@playwright/test';
 import { GAME_KEY, SERVER, gameChunks, installAtMenu, recordGameRequests, setCollected } from './game-helpers';
 
@@ -39,7 +40,7 @@ test('#/jeu verrouillé (QR /jeu) : écran de blocage, sans chunk du jeu ni fich
   await expect(page.getByTestId('collection')).toBeVisible();
 });
 
-test('#/jeu débloqué : chunk du jeu chargé, game/game.json lu (titre, consigne), meilleur score, hors ligne', async ({ page, context }) => {
+test('#/jeu débloqué : chunks du jeu et de Rapier chargés, écran de consigne (titre, consigne), meilleur score, hors ligne', async ({ page, context }) => {
   await installAtMenu(page);
   // Fichiers du jeu dans le livre téléchargé.
   const index = (await (await page.request.get(`${SERVER}/book.json`)).json()) as { files: { path: string }[] };
@@ -52,10 +53,13 @@ test('#/jeu débloqué : chunk du jeu chargé, game/game.json lu (titre, consign
   await page.getByTestId('game-tile').click();
   await expect(page.getByTestId('game-title')).toHaveText('La grande chasse', { timeout: 20_000 });
   await expect(page.getByTestId('game-instructions')).toContainText('Attrape un maximum de compsognathes');
-  await expect(page.getByTestId('game-placeholder')).toHaveText('Le jeu arrive dans une prochaine version du livre.');
+  await expect(page.getByTestId('game-intro')).toBeVisible();
+  await expect(page.getByTestId('game-play')).toHaveText('Jouer');
   await expect(page.getByTestId('game-best')).toHaveText(/Ton meilleur score\s: 7/);
   expect(requests.some((u) => u.endsWith('/game/game.json'))).toBe(true);
-  expect(requests.some((u) => u.includes('/_next/'))).toBe(true);
+  for (const f of ['arena.glb', 'dino.glb', 'compso.glb']) expect(requests.some((u) => u.endsWith(`/game/${f}`))).toBe(true);
+  // Chunks du jeu chargés : moteur et Rapier (les deux sont dans la liste de next build).
+  for (const c of gameChunks()) expect(requests.some((u) => u.endsWith(c.split('/').pop()!))).toBe(true);
   // Langue : textes du jeu dans la langue choisie.
   await page.getByRole('button', { name: 'English' }).click();
   await expect(page.getByTestId('game-title')).toHaveText('The great hunt');
@@ -63,7 +67,8 @@ test('#/jeu débloqué : chunk du jeu chargé, game/game.json lu (titre, consign
   // Hors ligne : rechargement servi par le service worker.
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByTestId('game-title')).toHaveText('La grande chasse', { timeout: 20_000 });
+  await expect(page.getByTestId('game-title')).toHaveText('La grande chasse', { timeout: 30_000 });
+  await expect(page.getByTestId('game-intro')).toBeVisible();
   await context.setOffline(false);
   await page.getByRole('button', { name: 'Retour au menu' }).click();
   await expect(page.getByTestId('collection')).toBeVisible();

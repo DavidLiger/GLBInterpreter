@@ -42,6 +42,9 @@
 //   `SPAWN_prey_1` à `_4`), joueur `dino.glb` et une sorte de proie `compso.glb` (armature, maillage skinné, clips par rôle,
 //   capsule), couche 3D « jeu » (`glbi_game_version` 1, `glbi_game_config`) écrite par ce script comme l'écrira l'addon
 //   v0.4 ; `game/game.edit.json` (règles, caméra, textes, sons crédités). Les GLB des cinq scènes ne changent pas.
+//   MJ2 : modèles du jeu lisibles depuis la caméra plongeante (solides à facettes éclairés, une couleur par objet : sol vert,
+//   mur `Mur` visible, arbre `FADE_arbre` en tronc et houppier avec son collisionneur `COL_arbre`, joueur orange et proies
+//   bleues à museau tourné vers +Z et crête animée).
 //   Options : `--sans-jeu` (livre sans `book.json.game` ni `game/` : exclusion des chunks du jeu) ; `--capsule <r>` (rayon
 //   de la capsule du joueur, en m : avertissement du build au-delà de 1,2 m) ;
 // - un dossier `blender/` déjà posé dans le livre de test (raptor réel, point de clôture de ST1) est conservé : seul le reste
@@ -566,30 +569,117 @@ function withCard(edit: EditLayer, id: string): EditLayer {
 const gameRoot = (doc: Document, config: Game3dEntity | Game3dArena) =>
   doc.createNode('GLBI_ROOT').setExtras({ glbi_game_version: GAME3D_VERSION, glbi_game_config: JSON.stringify(config) });
 
+type V3 = [number, number, number];
+type Tri = [V3, V3, V3];
+
+/** Pavé centré en `c`, de demi-côtés `h` : 12 triangles tournés vers l'extérieur. */
+function boxTris(c: V3, h: V3): Tri[] {
+  const [cx, cy, cz] = c;
+  const [x, y, z] = h;
+  const p = (i: number, j: number, k: number): V3 => [cx + i * x, cy + j * y, cz + k * z];
+  const quad = (a: V3, b: V3, cc: V3, d: V3): Tri[] => [[a, b, cc], [a, cc, d]];
+  return [
+    ...quad(p(-1, -1, 1), p(1, -1, 1), p(1, 1, 1), p(-1, 1, 1)), // +Z
+    ...quad(p(1, -1, -1), p(-1, -1, -1), p(-1, 1, -1), p(1, 1, -1)), // −Z
+    ...quad(p(1, -1, 1), p(1, -1, -1), p(1, 1, -1), p(1, 1, 1)), // +X
+    ...quad(p(-1, -1, -1), p(-1, -1, 1), p(-1, 1, 1), p(-1, 1, -1)), // −X
+    ...quad(p(-1, 1, 1), p(1, 1, 1), p(1, 1, -1), p(-1, 1, -1)), // +Y
+    ...quad(p(-1, -1, -1), p(1, -1, -1), p(1, -1, 1), p(-1, -1, 1)), // −Y
+  ];
+}
+
+/** Pyramide à base carrée (demi-côté `h`, centrée en `base`) de sommet `apex` (faces latérales seulement). */
+function pyramidTris(base: V3, h: number, apex: V3, axis: 'y' | 'z'): Tri[] {
+  const [bx, by, bz] = base;
+  const corners: V3[] = axis === 'y'
+    ? [[bx - h, by, bz + h], [bx + h, by, bz + h], [bx + h, by, bz - h], [bx - h, by, bz - h]]
+    : [[bx - h, by - h, bz], [bx + h, by - h, bz], [bx + h, by + h, bz], [bx - h, by + h, bz]];
+  const tris: Tri[] = [];
+  for (let i = 0; i < 4; i++) tris.push([corners[i], corners[(i + 1) % 4], apex]);
+  // Orientation vers l'extérieur : le sommet doit être du côté de la normale.
+  return tris.map((t) => {
+    const [a, b, c] = t;
+    const n = cross(sub(b, a), sub(c, a));
+    const out = sub(apex, base);
+    return n[0] * out[0] + n[1] * out[1] + n[2] * out[2] >= 0 ? t : [a, c, b];
+  });
+}
+const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const cross = (a: V3, b: V3): V3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+
+/**
+ * Primitive à facettes (sommets non partagés, normales par face, éclairée par le lecteur), d'une couleur ; `joint` : os
+ * de chaque sommet (maillage skinné), sinon aucun attribut de squelette.
+ */
+function solidPrimitive(doc: Document, tris: Tri[], color: [number, number, number], joint?: number) {
+  const buffer = doc.getRoot().listBuffers()[0];
+  const pos = new Float32Array(tris.length * 9);
+  const nor = new Float32Array(tris.length * 9);
+  tris.forEach((t, i) => {
+    const n = cross(sub(t[1], t[0]), sub(t[2], t[0]));
+    const l = Math.hypot(...n) || 1;
+    for (let v = 0; v < 3; v++) {
+      pos.set(t[v], i * 9 + v * 3);
+      nor.set([n[0] / l, n[1] / l, n[2] / l], i * 9 + v * 3);
+    }
+  });
+  const acc = (type: 'VEC3' | 'VEC4', a: TypedArray) => doc.createAccessor().setType(type).setBuffer(buffer).setArray(a);
+  const material = doc.createMaterial(`couleur_${color.map((c) => Math.round(c * 255)).join('_')}`)
+    .setBaseColorFactor([...color, 1]).setMetallicFactor(0).setRoughnessFactor(0.85);
+  const prim = doc.createPrimitive().setAttribute('POSITION', acc('VEC3', pos)).setAttribute('NORMAL', acc('VEC3', nor)).setMaterial(material);
+  if (joint !== undefined) {
+    const n = tris.length * 3;
+    prim.setAttribute('JOINTS_0', acc('VEC4', new Uint16Array(n * 4).map((_, i) => (i % 4 === 0 ? joint : 0))));
+    prim.setAttribute('WEIGHTS_0', acc('VEC4', new Float32Array(n * 4).map((_, i) => (i % 4 === 0 ? 1 : 0))));
+  }
+  return prim;
+}
+
+/** Couleurs du jeu synthétique (MJ2 : chaque objet reconnaissable, éclairé). */
+const GAME_COLORS = {
+  player: [0.95, 0.5, 0.1] as [number, number, number],
+  playerNose: [1, 0.85, 0.2] as [number, number, number],
+  prey: [0.15, 0.55, 0.95] as [number, number, number],
+  preyNose: [0.9, 0.95, 1] as [number, number, number],
+  crest: [0.85, 0.15, 0.2] as [number, number, number],
+  floor: [0.35, 0.6, 0.3] as [number, number, number],
+  wall: [0.6, 0.58, 0.55] as [number, number, number],
+  trunk: [0.45, 0.3, 0.15] as [number, number, number],
+  crown: [0.15, 0.45, 0.15] as [number, number, number],
+};
+
 /**
  * Entité de jeu : armature `Armature_<Nom>` (2 os), maillage skinné crédité (`src_*`), un clip par rôle (rotation de l'os de
- * queue, durée propre au rôle). Pieds à l'origine, capsule donnée par la couche 3D.
+ * crête, durée propre au rôle). Pieds à l'origine, tournée vers +Z (convention glTF : vue de face de Blender), capsule
+ * donnée par la couche 3D. Forme lisible depuis la caméra plongeante (MJ2) : corps en pavé, museau en pyramide vers +Z,
+ * crête rouge sur l'os animé ; joueur orange, proies bleues.
  */
 async function makeEntityGlb(file: string, entity: Game3dEntity): Promise<void> {
   const doc = new Document();
   const buffer = doc.createBuffer();
   const scene = doc.createScene('Scene');
+  const player = entity.role === 'player';
+  // Corps : largeur, hauteur, longueur (m), du rayon et de la hauteur de la capsule.
+  const w = Math.min(entity.capsule.radius, player ? 0.5 : 0.25);
+  const hgt = player ? 0.9 : 0.45;
+  const len = player ? 0.7 : 0.35;
+  const crestY = hgt + 0.05;
   const arm = doc.createNode(entity.object);
   const boneRoot = doc.createNode('Os_racine');
-  const boneTail = doc.createNode('Os_queue').setTranslation([0, 1, 0]);
+  const boneTail = doc.createNode('Os_queue').setTranslation([0, crestY, 0]);
   boneRoot.addChild(boneTail);
   arm.addChild(boneRoot);
-  const acc = (type: 'VEC3' | 'VEC4' | 'MAT4' | 'SCALAR', a: TypedArray) => doc.createAccessor().setType(type).setBuffer(buffer).setArray(a);
-  const prim = doc.createPrimitive()
-    .setAttribute('POSITION', acc('VEC3', new Float32Array([-0.3, 0, 0, 0.3, 0, 0, 0, 1.6, 0])))
-    .setAttribute('JOINTS_0', acc('VEC4', new Uint16Array([0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0])))
-    .setAttribute('WEIGHTS_0', acc('VEC4', new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0])));
-  const ibm = acc('MAT4', new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, -1, 0, 1]));
+  const body = solidPrimitive(doc, boxTris([0, hgt / 2, 0], [w, hgt / 2, len]), player ? GAME_COLORS.player : GAME_COLORS.prey, 0);
+  const nose = solidPrimitive(doc, pyramidTris([0, hgt * 0.55, len], hgt * 0.3, [0, hgt * 0.55, len + (player ? 0.6 : 0.3)], 'z'), player ? GAME_COLORS.playerNose : GAME_COLORS.preyNose, 0);
+  const crest = solidPrimitive(doc, pyramidTris([0, crestY, 0], w * 0.45, [0, crestY + (player ? 0.5 : 0.25), 0], 'y'), GAME_COLORS.crest, 1);
+  const ibm = doc.createAccessor().setType('MAT4').setBuffer(buffer).setArray(new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, -crestY, 0, 1]));
   const skin = doc.createSkin(`${entity.object}_skin`).addJoint(boneRoot).addJoint(boneTail).setInverseBindMatrices(ibm).setSkeleton(boneRoot);
-  arm.addChild(doc.createNode(`${entity.object}_body`).setMesh(doc.createMesh(`${entity.object}_mesh`).addPrimitive(prim)).setSkin(skin).setExtras({
+  const mesh = doc.createMesh(`${entity.object}_mesh`).addPrimitive(body).addPrimitive(nose).addPrimitive(crest);
+  arm.addChild(doc.createNode(`${entity.object}_body`).setMesh(mesh).setSkin(skin).setExtras({
     src_name: `Entité de jeu de test (${entity.id})`, src_author: 'GLBInterpreter', src_license: 'CC0', src_url: 'https://example.org/jeu-test',
   }));
   scene.addChild(arm);
+  const acc = (type: 'VEC4' | 'SCALAR', a: TypedArray) => doc.createAccessor().setType(type).setBuffer(buffer).setArray(a);
   for (const [i, clip] of Object.values(entity.clips).filter((c): c is string => !!c).entries()) {
     const d = 0.5 + 0.25 * i;
     const sampler = doc.createAnimationSampler()
@@ -602,7 +692,7 @@ async function makeEntityGlb(file: string, entity: Game3dEntity): Promise<void> 
   await new NodeIO().write(file, doc);
 }
 
-/** Boîte centrée en `c`, de demi-côtés `h` (12 triangles), en maillage indexé. */
+/** Boîte centrée sur l'origine du nœud, de demi-côtés `h` (12 triangles), en maillage indexé, sans matériau (collisionneur). */
 function boxMesh(doc: Document, name: string, h: [number, number, number]) {
   const buffer = doc.getRoot().listBuffers()[0];
   const [x, y, z] = h;
@@ -615,8 +705,9 @@ function boxMesh(doc: Document, name: string, h: [number, number, number]) {
 }
 
 /**
- * Arène : sol visible `Sol`, collisionneur du sol `COL_sol` (plaque de 2 triangles), mur `COL_mur`, arbre `FADE_arbre` (décor
- * rendu transparent entre la caméra et le joueur), points d'apparition `SPAWN_player` et `SPAWN_prey_1` à `_4`.
+ * Arène : sol visible `Sol` (vert), collisionneur du sol `COL_sol` (plaque de 2 triangles), mur `COL_mur` et sa forme visible
+ * `Mur`, arbre `FADE_arbre` (tronc et houppier, décor rendu transparent entre la caméra et le joueur) et son collisionneur
+ * `COL_arbre` (tronc), points d'apparition `SPAWN_player` et `SPAWN_prey_1` à `_4`. Les `COL_*` ne sont pas dessinés.
  */
 async function makeArenaGlb(file: string): Promise<void> {
   const doc = new Document();
@@ -629,10 +720,21 @@ async function makeArenaGlb(file: string): Promise<void> {
       .setIndices(doc.createAccessor().setType('SCALAR').setBuffer(buffer).setArray(new Uint16Array([0, 2, 1, 0, 3, 2])));
     return doc.createMesh(name).addPrimitive(prim);
   };
-  scene.addChild(doc.createNode('Sol').setMesh(plate('Sol_mesh', 15)).setExtras({ src_name: 'Arène de test', src_author: 'GLBInterpreter', src_license: 'CC0', src_url: 'https://example.org/jeu-test' }));
+  const solid = (name: string, parts: [Tri[], [number, number, number]][]) => {
+    const mesh = doc.createMesh(name);
+    for (const [tris, color] of parts) mesh.addPrimitive(solidPrimitive(doc, tris, color));
+    return mesh;
+  };
+  const floorTris: Tri[] = [[[-15, 0, 15], [15, 0, 15], [15, 0, -15]], [[-15, 0, 15], [15, 0, -15], [-15, 0, -15]]];
+  scene.addChild(doc.createNode('Sol').setMesh(solid('Sol_mesh', [[floorTris, GAME_COLORS.floor]])).setExtras({ src_name: 'Arène de test', src_author: 'GLBInterpreter', src_license: 'CC0', src_url: 'https://example.org/jeu-test' }));
   scene.addChild(doc.createNode('COL_sol').setMesh(plate('COL_sol_mesh', 15)));
   scene.addChild(doc.createNode('COL_mur').setMesh(boxMesh(doc, 'COL_mur_mesh', [5, 1, 0.25])).setTranslation([0, 1, -8]));
-  scene.addChild(doc.createNode('FADE_arbre').setMesh(boxMesh(doc, 'FADE_arbre_mesh', [0.5, 2, 0.5])).setTranslation([4, 2, 4]));
+  scene.addChild(doc.createNode('Mur').setMesh(solid('Mur_mesh', [[boxTris([0, 0, 0], [5, 1, 0.25]), GAME_COLORS.wall]])).setTranslation([0, 1, -8]));
+  scene.addChild(doc.createNode('FADE_arbre').setMesh(solid('FADE_arbre_mesh', [
+    [boxTris([0, 1.25, 0], [0.25, 1.25, 0.25]), GAME_COLORS.trunk],
+    [boxTris([0, 3.2, 0], [1.2, 1, 1.2]), GAME_COLORS.crown],
+  ])).setTranslation([4, 0, 4]));
+  scene.addChild(doc.createNode('COL_arbre').setMesh(boxMesh(doc, 'COL_arbre_mesh', [0.25, 1.25, 0.25])).setTranslation([4, 1.25, 4]));
   scene.addChild(doc.createNode('SPAWN_player').setTranslation([0, 0, 0]));
   for (const [i, p] of ([[10, 0, 10], [-10, 0, 10], [10, 0, -10], [-10, 0, -10]] as [number, number, number][]).entries()) {
     scene.addChild(doc.createNode(`SPAWN_prey_${i + 1}`).setTranslation(p));

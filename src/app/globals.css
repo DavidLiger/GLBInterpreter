@@ -491,3 +491,42 @@ dialog.glbi-card-dialog[open] {
 :root.glbi-sw-update .glbi-menu {
   padding-bottom: calc(var(--safe-bottom) + 7.5rem);
 }
+
+/*
+ * Mini-jeu (MJ2) : boutons du gabarit (taille réglée par le joueur : 64 ou 88 px, posée en ligne) et affichage du chrono
+ * et du score. Bouton en recharge (`data-ready="false"`) : estompé.
+ */
+.glbi-game-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: rgb(251 191 36 / 0.85);
+  color: #000;
+  font-weight: 700;
+  font-size: 0.95rem;
+  border: 2px solid rgb(255 255 255 / 0.7);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.35);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: opacity 0.15s;
+}
+.glbi-game-button[data-ready="false"] {
+  opacity: 0.45;
+}
+.glbi-game-button:active {
+  transform: scale(0.95);
+}
+.glbi-game-hud {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.75rem;
+  padding: 0.25rem 0.9rem;
+  border-radius: 9999px;
+  background: rgb(0 0 0 / 0.6);
+  font-weight: 700;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}

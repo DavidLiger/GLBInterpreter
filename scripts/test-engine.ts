@@ -8,7 +8,10 @@
 // QR par le scanner interne (`src/components/book/scanTarget.ts`, Î14 : adresse du livre, miroir, autre livre), carte de
 // collection (`src/components/card/cardModel.ts`, CC1 : bandeau une seule fois, compte, cartes gagnées, lecture tolérante ;
 // atelier : onglet Carte, CC2 : aller-retour sans perte, règle d'A3, aperçu, liens du Rapport) ; mini-jeu (MJ1 : déblocage,
-// QR `/jeu`, meilleur score et réglages des commandes sous des clés à part, `book.json.game`, `game/game.json`).
+// QR `/jeu`, meilleur score et réglages des commandes sous des clés à part, `book.json.game`, `game/game.json`) ; moteur du
+// mini-jeu (MJ2 : Rapier sous Node, pas fixe et rattrapage limité, joueur, bond, états des proies, capture, réapparition,
+// chrono, déterminisme ; entrées : joystick, réglages des commandes, clavier, manette sur un état Gamepad simulé ; arène
+// lue d'une scène three ; sons du jeu sur le moteur d'Î11).
 // Les mixers tournent sur une scène three minimale (un os animé), le temps est avancé à la main.
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -35,6 +38,11 @@ import { sceneFromScan } from '../src/components/book/scanTarget';
 import { collectedCount, gameAccess, gameThreshold } from '../src/components/book/gameAccess';
 import { controlsKey, DEFAULT_CONTROLS, GameStore, gameKey, parseBest, parseControls } from '../src/components/game/gameStorage';
 import { parseReaderGame } from '../src/components/game/gameSource';
+import RAPIER from '@dimforge/rapier3d-compat';
+import { GameWorld, MAX_STEPS_PER_FRAME, STEP, planSteps, type ArenaDesc } from '../src/components/game/world';
+import { BOND_S, PoursuiteGame, WALK_FACTOR, type EntitySpec, type PoursuiteOptions, type PoursuiteRules, type StepInput } from '../src/components/game/poursuite';
+import { CONTROL_SIZES, InputCollector, controlZones, inJoystickZone, isGameKey, joystickVector, keyButtonIndex, keyboardVector, readGamepad, type GamepadLike } from '../src/components/game/input';
+import { capsuleOf, fadeableClone, readArena } from '../src/components/game/scene';
 import { parseReaderBook } from '../src/components/book/readerScene';
 import { BOOK_ICON, cardCount, cardScale, cardTypeCounts, earnedCards, isCompactType, isNewCard, parseCardFields, parseCardTypes, readerCardOf, resolveCardType, showCardType } from '../src/components/card/cardModel';
 
@@ -850,6 +858,7 @@ class FakeCtx {
   decoded: string[] = [];
   closed = false;
   resume() { this.state = 'running'; return Promise.resolve(); }
+  suspend() { this.state = 'suspended'; return Promise.resolve(); }
   close() { this.state = 'closed'; this.closed = true; return Promise.resolve(); }
   createGain() { const g = new FakeNode(); this.gains.push(g); return g; }
   createBuffer() { return { path: '(muet)' }; }
@@ -1575,10 +1584,435 @@ test('lecteur (MJ1) : book.json.game et unlockThreshold lus ; game/game.json lu 
   assert.equal(parseReaderBook({ ...base, unlockThreshold: 3 }).unlockThreshold, 3);
   assert.equal(parseReaderBook({ ...base, unlockThreshold: '3', game: 'poursuite' }).unlockThreshold, undefined);
   assert.equal(parseReaderBook({ ...base, game: 'poursuite' }).game, undefined);
-  const g = { version: 1, template: 'poursuite', texts: { title: T('Jeu'), instructions: T('Attrape !') } };
-  assert.deepEqual(parseReaderGame(g), { template: 'poursuite', title: T('Jeu'), instructions: T('Attrape !') });
+  const g = {
+    version: 1, template: 'poursuite', texts: { title: T('Jeu'), instructions: T('Attrape !') },
+    entities: [
+      { id: 'dino', role: 'player', object: 'Armature_Dino', clips: { idle: 'i', walk: 'w', run: 'r', attack: 'a' }, capsule: { radius: 0.5, height: 1.8 } },
+      { id: 'compso', role: 'prey', object: 'Armature_Compso', clips: { idle: 'i', walk: 'w', flee: 'f', caught: 'c' }, capsule: { radius: 0.3, height: 0.8 }, collider: 'COLLIDER' },
+    ],
+    rules: { duration: 300, preys: [{ entity: 'compso', count: 4 }], playerSpeed: 6, preySpeed: 5, detectionRadius: 6, points: 1, respawn: true },
+    camera: { distance: 14 },
+    sounds: { capture: 'sounds/hop.wav', music: 'sounds/jeu.wav' },
+    build: { arena: 'game/arena.glb', entities: { dino: 'game/dino.glb', compso: 'game/compso.glb' }, modelCredits: [] },
+  };
+  const read = parseReaderGame(g, 'dev-book/');
+  assert.deepEqual([read.template, read.title, read.instructions, read.end], ['poursuite', T('Jeu'), T('Attrape !'), undefined]);
+  assert.deepEqual(read.entities[1], { id: 'compso', role: 'prey', object: 'Armature_Compso', clips: { idle: 'i', walk: 'w', flee: 'f', caught: 'c' }, capsule: { radius: 0.3, height: 0.8 }, collider: 'COLLIDER' });
+  assert.deepEqual(read.rules.preys, [{ entity: 'compso', count: 4 }]);
+  assert.deepEqual(read.files, { arena: 'dev-book/game/arena.glb', entities: { dino: 'dev-book/game/dino.glb', compso: 'dev-book/game/compso.glb' } });
+  assert.deepEqual(read.sounds, { capture: 'dev-book/sounds/hop.wav', music: 'dev-book/sounds/jeu.wav' }, 'chemins résolus, sons absents omis');
+  assert.equal(read.camera.distance, 14);
   assert.throws(() => parseReaderGame({ ...g, version: 2 }), /version 1/);
   assert.throws(() => parseReaderGame({ ...g, texts: { title: T('Jeu') } }), /texts\.title et texts\.instructions/);
+  assert.throws(() => parseReaderGame({ ...g, build: { arena: 'game/arena.glb', entities: { dino: 'game/dino.glb' } } }), /build\.entities\.compso/);
+});
+
+// ────────────── Mini-jeu, moteur (MJ2) : Rapier sous Node, pas fixe, hasard à graine ──────────────
+console.log('Mini-jeu : moteur (MJ2)');
+await RAPIER.init();
+
+/** Arène de test : sol de 30 m (COL_sol), un mur au nord (COL_mur), quatre points d'apparition aux coins. */
+function testArena(extra: ArenaDesc['colliders'] = []): ArenaDesc {
+  const h = 15;
+  const box = (name: string, cx: number, cy: number, cz: number, hx: number, hy: number, hz: number) => {
+    const v: number[] = [];
+    for (const [x, y, z] of [[-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1], [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]]) v.push(cx + x * hx, cy + y * hy, cz + z * hz);
+    return { name, vertices: new Float32Array(v), indices: new Uint32Array([0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7, 3, 1, 2, 6, 1, 6, 5]) };
+  };
+  return {
+    colliders: [
+      { name: 'COL_sol', vertices: new Float32Array([-h, 0, -h, h, 0, -h, h, 0, h, -h, 0, h]), indices: new Uint32Array([0, 2, 1, 0, 3, 2]) },
+      box('COL_mur', 0, 1, -8, 5, 1, 0.25),
+      ...extra,
+    ],
+    floor: { min: { x: -h, y: 0, z: -h }, max: { x: h, y: 0, z: h } },
+    spawnPlayer: { x: 0, y: 0, z: 0, yaw: 0 },
+    spawnPreys: [{ x: 10, y: 0, z: 10 }, { x: -10, y: 0, z: 10 }, { x: 10, y: 0, z: -10 }, { x: -10, y: 0, z: -10 }],
+  };
+}
+const capsule = (radius: number, height: number) => ({ radius, height, center: { x: 0, y: height / 2, z: 0 } });
+const SPECS: EntitySpec[] = [
+  { id: 'dino', role: 'player', capsule: capsule(0.5, 1.8) },
+  { id: 'compso', role: 'prey', capsule: capsule(0.3, 0.8) },
+];
+const RULES: PoursuiteRules = { duration: 300, preys: [{ entity: 'compso', count: 4 }], playerSpeed: 6, preySpeed: 5, detectionRadius: 6, points: 1, respawn: true };
+const IDLE: StepInput = { move: { x: 0, y: 0 }, buttons: [] };
+const newPoursuite = (opts: PoursuiteOptions = {}, rules: Partial<PoursuiteRules> = {}, arena = testArena()) =>
+  new PoursuiteGame(new GameWorld(RAPIER, arena), SPECS, { ...RULES, ...rules }, { seed: 7, ...opts });
+const run = (g: PoursuiteGame, n: number, input: StepInput = IDLE) => {
+  for (let i = 0; i < n; i++) g.step(input);
+};
+
+test('pas fixe : 1/60 s par pas, rattrapage limité à 3 pas par image, temps en trop abandonné, reste gardé', () => {
+  assert.deepEqual(planSteps(0, 1 / 60), { steps: 1, acc: 0, dropped: 0 });
+  const half = planSteps(0, 1 / 120);
+  assert.equal(half.steps, 0);
+  assert.ok(near(planSteps(half.acc, 1 / 120).acc, 0, 1e-9), 'deux demi-pas font un pas');
+  assert.equal(planSteps(half.acc, 1 / 120).steps, 1);
+  // À-coup de 100 ms (6 pas) : 3 pas, 50 ms abandonnées.
+  const jolt = planSteps(0, 0.1);
+  assert.equal(jolt.steps, MAX_STEPS_PER_FRAME);
+  assert.ok(near(jolt.dropped, 0.05, 1e-9) && near(jolt.acc, 0, 1e-9));
+  // Reste d'un pas gardé même quand le plafond est atteint ; image figée (> 0,25 s) bornée.
+  const frozen = planSteps(0.005, 3);
+  assert.equal(frozen.steps, 3);
+  assert.ok(frozen.acc < STEP && near(frozen.dropped, 3 - 0.25 + (0.255 - 3 * STEP - frozen.acc), 1e-9));
+  assert.equal(planSteps(0, -1).steps, 0);
+  // 60 images à 60 Hz : 60 pas exactement (marge des flottants).
+  let acc = 0;
+  let steps = 0;
+  for (let i = 0; i < 60; i++) {
+    const p = planSteps(acc, 1 / 60);
+    acc = p.acc;
+    steps += p.steps;
+  }
+  assert.equal(steps, 60);
+});
+
+test('monde : joueur posé sur COL_sol, murs de l’arène et limites de l’aire de jeu (COL_sol) arrêtent le contrôleur', () => {
+  const g = newPoursuite({}, {}, { ...testArena(), spawnPlayer: { x: 0, y: 1, z: 0, yaw: 0 } });
+  run(g, 60);
+  const p = g.player.char;
+  assert.ok(p.grounded && p.pos.y > -0.01 && p.pos.y < 0.06, `posé : y = ${p.pos.y}`);
+  // Vers le nord (haut de l'écran = −Z) : arrêté par COL_mur (face sud à z = −7,75), capsule de 0,5 m.
+  run(g, 240, { move: { x: 0, y: 1 }, buttons: [] });
+  assert.ok(p.pos.z > -7.75 + 0.4 && p.pos.z < -6.9, `devant le mur : z = ${p.pos.z}`);
+  // Vers l'est : limite de l'aire de jeu (bord de COL_sol à x = 15).
+  run(g, 300, { move: { x: 1, y: 0 }, buttons: [] });
+  assert.ok(p.pos.x < 15 - 0.4 && p.pos.x > 14, `au bord : x = ${p.pos.x}`);
+  g.world.free();
+  assert.ok(g.world.isFreed);
+  g.world.free(); // idempotent
+});
+
+test('joueur : marche ou course selon l’inclinaison ; vitesse ; lacet vers la direction ; haut de l’écran = −Z', () => {
+  const g = newPoursuite({ preysStill: true });
+  const p = g.player;
+  run(g, 1, { move: { x: 0, y: 0.1 }, buttons: [] });
+  assert.equal(p.clip, 'idle', 'sous la zone morte');
+  const placed = newPoursuite({ playerAt: [4, 2] });
+  assert.ok(placed.player.char.pos.x === 4 && placed.player.char.pos.z === 2, 'option de test : joueur posé');
+  placed.world.free();
+  run(g, 5, { move: { x: 0.4, y: 0 }, buttons: [] });
+  assert.equal(p.clip, 'walk');
+  const x0 = p.char.pos.x;
+  run(g, 60, { move: { x: 0.4, y: 0 }, buttons: [] });
+  assert.ok(near(p.char.pos.x - x0, WALK_FACTOR * 6, 0.05), `marche à 2,4 m/s : ${p.char.pos.x - x0}`);
+  assert.ok(near(p.char.yaw, Math.PI / 2, 1e-6), 'tourné vers +X');
+  run(g, 1, { move: { x: 0, y: 1 }, buttons: [] });
+  assert.equal(p.clip, 'run');
+  const z0 = p.char.pos.z;
+  run(g, 60, { move: { x: 0, y: 1 }, buttons: [] });
+  assert.ok(near(z0 - p.char.pos.z, 6, 0.1), `course à 6 m/s vers −Z : ${z0 - p.char.pos.z}`);
+  assert.ok(near(Math.abs(p.char.yaw), Math.PI, 1e-6), 'tourné vers −Z');
+  g.world.free();
+});
+
+test('Bond : 0,4 s à vitesse doublée (clip attack), recharge de 1 s après le bond, un appui maintenu compte une fois', () => {
+  const g = newPoursuite({ preysStill: true });
+  const p = g.player;
+  run(g, 10); // posé au sol
+  const z0 = p.char.pos.z;
+  const press: StepInput = { move: { x: 0, y: 1 }, buttons: [true] };
+  g.step(press);
+  assert.equal(p.clip, 'attack');
+  assert.deepEqual(g.drainEvents(), ['jump']);
+  run(g, 23, { move: { x: 0, y: 1 }, buttons: [] });
+  assert.ok(near(z0 - p.char.pos.z, 2 * 6 * BOND_S, 0.05), `élan de 4,8 m : ${z0 - p.char.pos.z}`);
+  assert.ok(g.bondTimer <= 0 && !g.bondReady, 'bond fini, recharge');
+  g.step(press);
+  assert.equal(g.drainEvents().length, 0, 'pas de bond pendant la recharge');
+  run(g, 59);
+  assert.ok(g.bondReady, 'recharge de 1 s');
+  g.step({ move: { x: 0, y: 0 }, buttons: [true] });
+  assert.deepEqual(g.drainEvents(), ['jump'], 'immobile : bond dans la direction du regard');
+  // Front montant : `InputCollector` ne rend un bouton maintenu qu'une fois.
+  const input = new InputCollector();
+  input.press(0);
+  assert.deepEqual(input.read(null).buttons.slice(0, 1), [true]);
+  assert.deepEqual(input.read(null).buttons.slice(0, 1), [false]);
+  g.world.free();
+});
+
+test('capture : touchée pendant un bond (pas sans) ; clip caught 1 s, fondu, réapparition au point le plus éloigné du joueur', () => {
+  const g = newPoursuite({ preysStill: true, preyAt: [0, -2.5] }, { points: 3 });
+  const prey = g.preys[0];
+  run(g, 30, { move: { x: 0, y: 1 }, buttons: [] });
+  assert.equal(g.score, 0, 'traversée sans bond : pas de capture');
+  assert.equal(prey.state, 'rest');
+  const g2 = newPoursuite({ preysStill: true, preyAt: [0, -2.5] }, { points: 3 });
+  const q = g2.preys[0];
+  g2.step({ move: { x: 0, y: 1 }, buttons: [true] });
+  run(g2, 12, { move: { x: 0, y: 1 }, buttons: [] });
+  assert.equal(q.state, 'caught');
+  assert.equal(q.clip, 'caught');
+  assert.equal(g2.score, 3, 'points par capture');
+  assert.deepEqual(g2.drainEvents(), ['jump', 'capture']);
+  run(g2, 60);
+  assert.equal(q.state, 'fading');
+  run(g2, 15);
+  assert.ok(q.opacity > 0 && q.opacity < 1, 'fondu');
+  run(g2, 16);
+  // Joueur vers (0, −4,8) : le coin le plus éloigné est au sud, (±10, 10) ; la proie n'y reste pas sur une autre.
+  assert.equal(q.state, 'rest');
+  assert.ok(q.visible && q.opacity === 1 && q.generation === 1);
+  assert.ok(near(q.char.pos.z, 10, 1e-3) && near(Math.abs(q.char.pos.x), 10, 1e-3), `réapparue en (${q.char.pos.x}, ${q.char.pos.z})`);
+  const others = g2.preys.filter((o) => o !== q);
+  assert.ok(others.every((o) => Math.hypot(o.char.pos.x - q.char.pos.x, o.char.pos.z - q.char.pos.z) >= 1), 'pas sur une autre proie');
+  g.world.free();
+  g2.world.free();
+});
+
+test('sans réapparition : la proie capturée disparaît ; point de réapparition à au moins le rayon de détection', () => {
+  const g = newPoursuite({ preysStill: true, preyAt: [0, -2.5] }, { respawn: false });
+  g.step({ move: { x: 0, y: 1 }, buttons: [true] });
+  run(g, 100);
+  assert.equal(g.preys[0].state, 'gone');
+  assert.equal(g.preys[0].visible, false);
+  // Point de réapparition : le plus éloigné parmi ceux à au moins 6 m du joueur.
+  const r = g.respawnPoint();
+  assert.ok(Math.hypot(r.x - g.player.char.pos.x, r.z - g.player.char.pos.z) >= 6);
+  g.world.free();
+});
+
+test('proie : errance (walk) → fuite (flee) si le joueur est à moins du rayon de détection, à l’opposé, puis errance', () => {
+  const g = newPoursuite({ preyAt: [0, 4] }, { preys: [{ entity: 'compso', count: 1 }] });
+  const q = g.preys[0];
+  run(g, 3);
+  assert.equal(q.state, 'flee', 'joueur à 4 m < 6 m');
+  assert.equal(q.clip, 'flee');
+  const d0 = Math.hypot(q.char.pos.x, q.char.pos.z);
+  run(g, 30);
+  assert.ok(Math.hypot(q.char.pos.x, q.char.pos.z) > d0 + 2, 's’éloigne du joueur');
+  assert.ok(q.char.pos.z > 4, 'à l’opposé du joueur (vers +Z)');
+  run(g, 120);
+  const later: string = q.state;
+  assert.ok(later === 'wander' || later === 'rest', `loin du joueur : errance (${later})`);
+  // Errance : cible dans l'aire de jeu, clip walk.
+  const g2 = newPoursuite({}, { preys: [{ entity: 'compso', count: 1 }] });
+  const w = g2.preys[0];
+  run(g2, 120);
+  assert.ok(['wander', 'rest'].includes(w.state));
+  assert.ok(Math.abs(w.target.x) <= 13.5 && Math.abs(w.target.z) <= 13.5, 'cible dans l’aire de jeu (marge 1,5 m)');
+  g.world.free();
+  g2.world.free();
+});
+
+test('proie coincée : trois rayons bloqués (mur devant) → changement de direction, longe le mur sans le traverser', () => {
+  // Proie entre le joueur (au sud) et COL_mur (face sud à z = −7,75, x de −5 à 5) : fuite droit dans le mur.
+  const arena = { ...testArena(), spawnPlayer: { x: 0, y: 0, z: -1, yaw: 0 } };
+  const g = newPoursuite({ preyAt: [0, -6.5] }, { preys: [{ entity: 'compso', count: 1 }] }, arena);
+  const q = g.preys[0];
+  let cornered = false;
+  let minZ = Infinity;
+  for (let i = 0; i < 60; i++) {
+    g.step(IDLE);
+    if (q.cornered > 0) cornered = true;
+    minZ = Math.min(minZ, q.char.pos.z);
+  }
+  assert.ok(cornered, 'coincée (trois rayons bloqués)');
+  assert.ok(Math.abs(q.char.pos.x) > 1.5, `longe le mur : x = ${q.char.pos.x.toFixed(2)}`);
+  assert.ok(minZ > -7.75 + 0.3 - 0.05, `ne traverse pas le mur : z min = ${minZ.toFixed(2)}`);
+  // Coin de l'aire de jeu : la proie change de direction et reste dans l'aire.
+  const g2 = newPoursuite({ preyAt: [13.5, -13.5] }, { preys: [{ entity: 'compso', count: 1 }] }, { ...testArena(), spawnPlayer: { x: 10, y: 0, z: -10, yaw: 0 } });
+  const c = g2.preys[0];
+  const dirs = new Set<string>();
+  for (let i = 0; i < 240; i++) {
+    g2.step(IDLE);
+    if (c.cornered > 0) dirs.add(`${c.dir.x.toFixed(2)},${c.dir.z.toFixed(2)}`);
+    assert.ok(Math.abs(c.char.pos.x) < 15 && Math.abs(c.char.pos.z) < 15, 'dans l’aire de jeu');
+  }
+  assert.ok(dirs.size >= 2, `directions de sortie : ${[...dirs].join(' ; ')}`);
+  g.world.free();
+  g2.world.free();
+});
+
+test('chrono : fin à la durée (événement end une fois), plus rien ne bouge ensuite ; partie raccourcie par option', () => {
+  const g = newPoursuite({ duration: 2 });
+  assert.equal(g.duration, 2);
+  run(g, 119);
+  assert.ok(!g.over && near(g.remaining, 1 / 60, 1e-9));
+  g.step(IDLE);
+  assert.ok(g.over && g.remaining === 0);
+  assert.ok(g.drainEvents().includes('end'));
+  const steps = g.world.steps;
+  g.step(IDLE);
+  assert.equal(g.world.steps, steps, 'partie finie : pas de pas en plus');
+  assert.deepEqual(g.drainEvents(), []);
+  g.world.free();
+});
+
+test('simulation déterministe à pas fixe : même graine, mêmes entrées → mêmes positions et score', () => {
+  const play = () => {
+    const g = newPoursuite({}, { preys: [{ entity: 'compso', count: 8 }] });
+    for (let i = 0; i < 1800; i++) {
+      const p = g.player.char.pos;
+      const prey = g.preys.filter((q) => q.state !== 'caught' && q.state !== 'fading' && q.state !== 'gone').sort((a, b) => Math.hypot(a.char.pos.x - p.x, a.char.pos.z - p.z) - Math.hypot(b.char.pos.x - p.x, b.char.pos.z - p.z))[0];
+      const dx = prey.char.pos.x - p.x;
+      const dz = prey.char.pos.z - p.z;
+      const n = Math.hypot(dx, dz) || 1;
+      g.step({ move: { x: dx / n, y: -dz / n }, buttons: [n < 3] });
+    }
+    const out = { score: g.score, pos: [g.player.char.pos, ...g.preys.map((q) => q.char.pos)].map((v) => [v.x, v.z].map((x) => x.toFixed(6))) };
+    g.world.free();
+    return out;
+  };
+  const a = play();
+  assert.deepEqual(play(), a);
+  assert.ok(a.score >= 3, `poursuite automatique de 30 s : ${a.score} captures`);
+});
+
+test('entrées : joystick absolu (haut de l’écran), zones et tailles selon le côté et la taille (DP-24)', () => {
+  assert.deepEqual(joystickVector(100, 200, 100, 144, 56), { x: 0, y: 1 }, 'vers le haut = y positif');
+  const v = joystickVector(100, 200, 300, 200, 56);
+  assert.deepEqual(v, { x: 1, y: 0 }, 'borné au rayon');
+  const half = joystickVector(100, 200, 128, 200, 56);
+  assert.ok(near(half.x, 0.5) && half.y === 0);
+  assert.deepEqual(controlZones('right'), { joystick: 'left', buttons: 'right' }, 'droitier');
+  assert.deepEqual(controlZones('left'), { joystick: 'right', buttons: 'left' }, 'gaucher');
+  assert.equal(inJoystickZone(100, 800, 'right'), true);
+  assert.equal(inJoystickZone(500, 800, 'right'), false);
+  assert.equal(inJoystickZone(500, 800, 'left'), true);
+  assert.deepEqual(CONTROL_SIZES.normal, { button: 64, joystick: 56 });
+  assert.equal(CONTROL_SIZES.large.button, 88);
+  assert.ok(near(CONTROL_SIZES.large.joystick / CONTROL_SIZES.normal.joystick, 88 / 64, 0.01), 'joystick agrandi dans la même proportion');
+});
+
+test('clavier (DP-26) : position physique (KeyW… = ZQSD en AZERTY), diagonale normée, opposés annulés ; Espace puis J, K, L ; Échap', () => {
+  assert.deepEqual(keyboardVector(new Set(['KeyW'])), { x: 0, y: 1 });
+  assert.deepEqual(keyboardVector(new Set(['ArrowLeft'])), { x: -1, y: 0 });
+  const diag = keyboardVector(new Set(['KeyW', 'KeyD']));
+  assert.ok(near(diag.x, Math.SQRT1_2) && near(diag.y, Math.SQRT1_2));
+  assert.deepEqual(keyboardVector(new Set(['ArrowUp', 'KeyW'])), { x: 0, y: 1 }, 'flèche et lettre : une fois');
+  assert.deepEqual(keyboardVector(new Set(['KeyA', 'KeyD'])), { x: 0, y: 0 });
+  assert.deepEqual(keyboardVector(new Set(['KeyZ', 'KeyQ'])), { x: 0, y: 0 }, 'KeyZ / KeyQ (W, A sur AZERTY) : pas des touches du jeu');
+  assert.deepEqual(['Space', 'KeyJ', 'KeyK', 'KeyL', 'KeyF'].map(keyButtonIndex), [0, 1, 2, 3, -1]);
+  assert.ok(isGameKey('Escape') && isGameKey('ArrowDown') && !isGameKey('Tab'));
+  const input = new InputCollector();
+  input.keys.add('KeyS');
+  input.press(0);
+  input.requestPause();
+  const r = input.read(null);
+  assert.deepEqual(r.move, { x: 0, y: -1 });
+  assert.deepEqual(r.buttons, [true, false, false, false]);
+  assert.equal(r.pause, true);
+  assert.equal(input.read(null).pause, false);
+  input.clear();
+  assert.deepEqual(input.read(null).move, { x: 0, y: 0 });
+});
+
+test('manette (DP-27) : disposition standard (stick gauche ou croix, A B X Y, Start = pause), zone morte, autres ignorées', () => {
+  const pad = (axes: number[], pressed: number[] = [], mapping = 'standard'): GamepadLike => ({
+    mapping, connected: true, axes, buttons: Array.from({ length: 17 }, (_, i) => ({ pressed: pressed.includes(i) })),
+  });
+  assert.equal(readGamepad(pad([0, -1], [], '')), null, 'disposition non standard');
+  assert.equal(readGamepad({ ...pad([0, 0]), connected: false }), null);
+  assert.deepEqual(readGamepad(pad([0.1, 0.1]))!.move, { x: 0, y: 0 }, 'zone morte');
+  const up = readGamepad(pad([0, -1]))!;
+  assert.ok(near(up.move.x, 0) && near(up.move.y, 1), 'stick vers le haut = y positif');
+  const mid = readGamepad(pad([0.6, 0]))!;
+  assert.ok(near(mid.move.x, 0.5), 'remis à l’échelle après la zone morte');
+  const cross = readGamepad(pad([0.5, 0.5], [12, 15]))!.move;
+  assert.ok(near(cross.x, Math.SQRT1_2) && near(cross.y, Math.SQRT1_2), 'croix prioritaire');
+  assert.deepEqual(readGamepad(pad([0, 0], [0, 3]))!.buttons, [true, false, false, true]);
+  assert.equal(readGamepad(pad([0, 0], [9]))!.pause, true);
+  // Fronts montants : A maintenu = un bond ; Start maintenu = une pause.
+  const input = new InputCollector();
+  const held = readGamepad(pad([0, 0], [0, 9]));
+  const first = input.read(held);
+  assert.equal(first.buttons[0] && first.pause, true);
+  const second = input.read(held);
+  assert.equal(second.buttons[0] || second.pause, false);
+  // Déplacement le plus fort parmi doigt, clavier et manette.
+  input.touch = { x: 0.3, y: 0 };
+  assert.deepEqual(input.read(readGamepad(pad([0, -1]))).move.y, 1);
+});
+
+try {
+  // Sons du jeu (MJ2) sur le moteur d'Î11 : musique = ambiance en boucle, sons du gabarit = sons d'événement de l'action « jeu » ;
+  // page masquée : AudioContext suspendu, repris au geste « Continuer » (unlock).
+  const { ctx, engine } = audioRig();
+  engine.setSounds({ ambient: 'sounds/jeu.wav', actions: {}, events: { jeu: { capture: 'sounds/hop.wav', jump: 'sounds/bond.wav' } } });
+  engine.unlock();
+  await flush();
+  await flush();
+  assert.deepEqual(ctx.playing(), ['sounds/jeu.wav (boucle)']);
+  engine.onEvent('jeu', 'capture');
+  await flush();
+  await flush();
+  assert.deepEqual(ctx.playing(), ['sounds/jeu.wav (boucle)', 'sounds/hop.wav']);
+  engine.suspend();
+  await flush();
+  assert.equal(ctx.state, 'suspended');
+  assert.equal(engine.blocked, true);
+  engine.unlock();
+  await flush();
+  assert.equal(ctx.state, 'running');
+  // Fin de partie : musique arrêtée (ambiance retirée), sons du gabarit gardés.
+  engine.setSounds({ actions: {}, events: { jeu: { capture: 'sounds/hop.wav', jump: 'sounds/bond.wav' } } });
+  assert.ok(!ctx.playing().includes('sounds/jeu.wav (boucle)'));
+  engine.dispose();
+  assert.equal(ctx.closed, true);
+  console.log('  ✓ sons du jeu : musique en boucle, son de capture, AudioContext suspendu puis repris, musique arrêtée à la fin');
+} catch (e) {
+  failed++;
+  console.error(`  ✗ sons du jeu\n    ${(e as Error).message}`);
+}
+
+test('arène lue du GLB : COL_* et FADE_* cherchés dans le sous-arbre (maillage déplacé par meshopt), points d’apparition, sol', () => {
+  const root = new THREE.Group();
+  const plate = new THREE.PlaneGeometry(30, 30).rotateX(-Math.PI / 2);
+  const sol = new THREE.Mesh(plate, new THREE.MeshBasicMaterial());
+  sol.userData.name = 'COL_sol';
+  root.add(sol);
+  // COL_mur : nœud nommé sans maillage, maillage sur un enfant sans nom (cas de quantize, constat de MJ1).
+  const mur = new THREE.Object3D();
+  mur.userData.name = 'COL_mur';
+  mur.position.set(0, 1, -8);
+  const murMesh = new THREE.Mesh(new THREE.BoxGeometry(10, 2, 0.5), new THREE.MeshBasicMaterial());
+  mur.add(murMesh);
+  root.add(mur);
+  const arbre = new THREE.Object3D();
+  arbre.userData.name = 'FADE_arbre';
+  const arbreMesh = new THREE.Mesh(new THREE.BoxGeometry(1, 4, 1), new THREE.MeshBasicMaterial());
+  arbre.add(arbreMesh);
+  root.add(arbre);
+  const spawn = (name: string, x: number, z: number) => {
+    const o = new THREE.Object3D();
+    o.userData.name = name;
+    o.position.set(x, 0, z);
+    root.add(o);
+    return o;
+  };
+  spawn('SPAWN_prey_10', 1, 1);
+  spawn('SPAWN_prey_2', 2, 2);
+  spawn('SPAWN_player', 3, 4).rotation.y = Math.PI / 2;
+  const { desc, colliderNodes, fadeMeshes } = readArena(root);
+  assert.deepEqual(desc.colliders.map((c) => c.name), ['COL_sol', 'COL_mur']);
+  assert.equal(desc.colliders[1].indices.length, 36, 'triangles du maillage enfant');
+  assert.ok(near(Math.max(...Array.from(desc.colliders[1].vertices).filter((_, i) => i % 3 === 2)), -7.75), 'coordonnées monde');
+  assert.deepEqual(colliderNodes, [sol, mur]);
+  assert.deepEqual(fadeMeshes, [arbreMesh]);
+  assert.deepEqual(desc.spawnPreys, [{ x: 2, y: 0, z: 2 }, { x: 1, y: 0, z: 1 }], 'tri numérique');
+  assert.ok(near(desc.spawnPlayer.yaw, Math.PI / 2) && desc.spawnPlayer.x === 3);
+  assert.ok(near(desc.floor.min.x, -15) && near(desc.floor.max.z, 15));
+  assert.throws(() => readArena(new THREE.Group()), /COL_sol/);
+  // Capsule : centre sur l'empty COLLIDER déclaré, sinon mi-hauteur.
+  const ent = new THREE.Group();
+  const col = new THREE.Object3D();
+  col.userData.name = 'COLLIDER';
+  col.position.set(0, 0.7, 0.2);
+  ent.add(col);
+  const e = { id: 'compso', role: 'prey' as const, object: 'A', clips: {}, capsule: { radius: 0.3, height: 0.8 } };
+  assert.deepEqual(capsuleOf(e, ent).center, { x: 0, y: 0.4, z: 0 });
+  assert.ok(near(capsuleOf({ ...e, collider: 'COLLIDER' }, ent).center.y, 0.7));
+  // Matériaux qui s'estompent (décor FADE_*, proie capturée) : transparents dès le départ, l'original intact (batterie de
+  // MJ2 : un matériau rendu opaque garde l'alpha à 1 dans son shader, passer `transparent` à vrai en cours de partie était
+  // sans effet).
+  const orig = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+  const faded = fadeableClone(orig);
+  assert.ok(faded !== orig && faded.transparent && faded.opacity === 1 && faded.depthWrite);
+  assert.equal(orig.transparent, false);
 });
 
 if (failed) {

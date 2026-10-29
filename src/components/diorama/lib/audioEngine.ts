@@ -352,6 +352,21 @@ export class AudioEngine {
     this.notifyBlocked();
   }
 
+  /**
+   * Suspend l'`AudioContext` (mini-jeu, MJ2 : page masquée, pause) : les sons s'arrêtent là où ils en sont et reprennent
+   * au prochain `unlock` (dans le geste « Continuer »). Sans effet avant le premier `unlock`.
+   */
+  suspend(): void {
+    const ctx = this.ctx as (AudioContextLike & { suspend?: () => Promise<void> }) | null;
+    if (this.disposed || !ctx || ctx.state !== "running" || !ctx.suspend) return;
+    ctx
+      .suspend()
+      .then(() => {
+        if (this.ctx === ctx) this.notifyBlocked();
+      })
+      .catch(() => {});
+  }
+
   // ────────────── Lecture ──────────────
 
   private play(buffer: AudioBuffer, loop: boolean, onEnded?: () => void): Voice | null {

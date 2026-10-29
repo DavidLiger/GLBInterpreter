@@ -2,6 +2,8 @@
 // pour le livre de test sans `book.json.game` (`make-test-book.ts --sans-jeu`), servie à part (port 4174). Chunks du jeu
 // absents du dossier et de `book.json.files` ; pas de case « Mini-jeu » ; `#/jeu` → page introuvable du livre, sans requête
 // vers le jeu. Chromium seulement (préparation lourde ; rien de propre à WebKit).
+// MJ2 : le chunk de Rapier (≈ 4,1 Mio, WASM en base64), importé par le moteur depuis `src/components/game/`, est dans la
+// liste des chunks du jeu et absent lui aussi, parties comprises (la suite construit `out/` en `--part-mib 1`).
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -45,9 +47,19 @@ test('livre sans jeu : chunks du jeu exclus du dossier et de book.json.files ; p
   const index = JSON.parse(fs.readFileSync(path.join(out, 'book.json'), 'utf8')) as { files: { path: string }[]; game?: unknown };
   const files = index.files.map((f) => f.path);
   expect(index.game).toBeUndefined();
+  // Taille de chaque chunk du jeu dans le livre à jeu (fichier entier ou parties `.partNNN`).
+  const pieces = (dir: string, c: string) => fs.existsSync(path.join(dir, path.dirname(c)))
+    ? fs.readdirSync(path.join(dir, path.dirname(c))).filter((f) => f === path.basename(c) || f.startsWith(`${path.basename(c)}.part`))
+    : [];
+  const sizeIn = (dir: string, c: string) => pieces(dir, c).reduce((n, f) => n + fs.statSync(path.join(dir, path.dirname(c), f)).size, 0);
+  const sizes = gameChunks().map((c) => ({ c, size: sizeIn(path.resolve('out'), c) }));
+  const rapier = sizes.reduce((a, b) => (b.size > a.size ? b : a));
+  expect(rapier.size).toBeGreaterThan(3 * 1024 * 1024);
+  console.log(`chunk de Rapier : ${rapier.c} (${rapier.size} octets, ${(rapier.size / 1048576).toFixed(2)} Mio)`);
   for (const c of gameChunks()) {
     expect(fs.existsSync(path.join(out, c))).toBe(false);
-    expect(files).not.toContain(c);
+    expect(pieces(out, c)).toEqual([]);
+    expect(files.filter((f) => f === c || f.startsWith(`${c}.part`))).toEqual([]);
   }
   expect(files.filter((f) => f.startsWith('game/') || f.startsWith('jeu/'))).toEqual([]);
   expect(files.filter((f) => /\.(js|css)$/.test(f) && fs.readFileSync(path.join(out, f), 'utf8').includes(MARKER))).toEqual([]);

@@ -72,8 +72,8 @@ public/swe-worker-*.js
 /private/
 # Index générés, QR d'impression (build-book : dist/qr/<bookId>/)
 /dist/
-# Livre de test synthétique (npm run book:test-source)
-/books/test-dino/
+# Livres de test synthétiques (npm run book:test-source ; livres d'essai de make-test-book.ts : test-capsule, test-sans-jeu…)
+/books/test-*/
 # Livre de développement lu par `npm run dev` (npm run dev:book -- --source <dossier>, Î10)
 /public/dev-book/
 

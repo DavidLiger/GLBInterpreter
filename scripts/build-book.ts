@@ -576,7 +576,23 @@ const GAME_CHUNK_MARKER = 'glbi-game-mj1';
  * cartouche fixture), ils sont retirés de out/ (donc de book.json.files), avec game/game.json, game/*.glb et jeu/index.html
  * qu'un build précédent aurait laissés. Garde-fous : liste lue, non vide et à jour (ses fichiers portent le marqueur du
  * jeu) ; après retrait, plus aucun fichier de out/ ne porte le marqueur (code du jeu tombé dans un chunk partagé).
+ * MJ2 : un chunk du jeu déjà découpé (`<chunk>.part001`…, dossier out/ repris d'un build précédent, comme le fait
+ * tests/game-absent.spec.ts avec la suite construite en `--part-mib 1` : chunk de Rapier de 4,1 Mio) compte comme présent :
+ * ses parties sont lues et retirées comme lui.
  */
+function chunkPieces(outDir: string, rel: string): string[] {
+  if (fs.existsSync(path.join(outDir, rel))) return [rel];
+  const dir = path.dirname(rel);
+  const base = path.basename(rel);
+  const full = path.join(outDir, dir);
+  if (!fs.existsSync(full)) return [];
+  return fs
+    .readdirSync(full)
+    .filter((f) => f.startsWith(`${base}.part`) && /\.part\d{3}$/.test(f))
+    .sort()
+    .map((f) => `${dir}/${f}`);
+}
+
 function applyGameChunks(outDir: string, hasGame: boolean): void {
   const manifest = path.join(ROOT, GAME_CHUNKS_MANIFEST);
   let listed: string[];
@@ -592,8 +608,9 @@ function applyGameChunks(outDir: string, hasGame: boolean): void {
     err(`${GAME_CHUNKS_MANIFEST} : aucun chunk du jeu repéré par next build (src/components/game/ doit être chargé par import() dynamique)`);
     return;
   }
-  const present = listed.filter((f) => fs.existsSync(path.join(outDir, f)));
-  const marked = present.filter((f) => fs.readFileSync(path.join(outDir, f), 'utf8').includes(GAME_CHUNK_MARKER));
+  const pieces = new Map(listed.map((f) => [f, chunkPieces(outDir, f)]));
+  const present = listed.filter((f) => pieces.get(f)!.length > 0);
+  const marked = present.filter((f) => pieces.get(f)!.map((p) => fs.readFileSync(path.join(outDir, p), 'utf8')).join('').includes(GAME_CHUNK_MARKER));
   if (hasGame) {
     const missing = listed.filter((f) => !present.includes(f));
     if (missing.length) err(`chunk(s) du jeu absent(s) du dossier construit (${missing.join(', ')}) : relancer npm run build`);
@@ -606,8 +623,10 @@ function applyGameChunks(outDir: string, hasGame: boolean): void {
   }
   let bytes = 0;
   for (const f of present) {
-    bytes += fs.statSync(path.join(outDir, f)).size;
-    fs.rmSync(path.join(outDir, f));
+    for (const p of pieces.get(f)!) {
+      bytes += fs.statSync(path.join(outDir, p)).size;
+      fs.rmSync(path.join(outDir, p));
+    }
   }
   const leftovers = [GAME_JSON_FILE, 'jeu/index.html', ...(fs.existsSync(path.join(outDir, GAME_DIR)) ? fs.readdirSync(path.join(outDir, GAME_DIR)).filter((f) => /\.glb$/i.test(f)).map((f) => `${GAME_DIR}/${f}`) : [])];
   for (const f of leftovers) fs.rmSync(path.join(outDir, f), { force: true });
