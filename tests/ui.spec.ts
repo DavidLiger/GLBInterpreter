@@ -269,15 +269,15 @@ test.describe('téléphone Android', () => {
     await expect(installHeading(page)).toBeHidden({ timeout: 120_000 });
     const webgl = await page.evaluate(() => !!document.createElement('canvas').getContext('webgl2'));
     test.skip(!webgl, 'navigateur de test sans WebGL 2 : lecteur non monté');
-    // Chargeur rond (Î13bis) : pas de bouton ; pas d'indice sous l'écran de chargement
+    // Chargeur rond (Î13bis) : pas de bouton ; l'indice n'apparaît qu'au lancement de la scène. Il part pendant le fondu de
+    // sortie du chargeur (0,45 s) : « chargeur visible » ne prouve donc pas l'absence d'indice (test fragile corrigé en MJ2,
+    // en échec à chaque fois sur une machine rapide) ; on vérifie qu'à son apparition la scène est lancée.
     await expect(page.getByTestId('round-loader').or(page.getByTestId('action-buttons')).first()).toBeVisible({ timeout: 30_000 });
-    if (await page.getByTestId('round-loader').isVisible()) {
-      await expect(page.getByTestId('rotate-hint')).toHaveCount(0);
-      await shot(page, 'phone-loader');
-    }
-    await sceneLaunched(page);
+    if (await page.getByTestId('round-loader').isVisible()) await shot(page, 'phone-loader');
     const hint = page.getByTestId('rotate-hint');
-    await expect(hint).toBeVisible();
+    await expect(hint).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('action-buttons')).toBeVisible();
+    await sceneLaunched(page);
     await expect(hint).toContainText('Tourner le téléphone');
     await shot(page, 'phone-portrait');
     await hint.tap();

@@ -20,7 +20,7 @@ import LanguageSelector from "@/components/diorama/ui/LanguageSelector";
 import RotateHint from "@/components/diorama/ui/RotateHint";
 import VolumeControl from "@/components/diorama/audio/VolumeControl";
 import { useOrientation } from "@/components/diorama/hooks/useOrientation";
-import { requestPageFullscreen } from "@/components/diorama/lib/pageFullscreen";
+import { FULLSCREEN_CHANGE_EVENTS, isPageFullscreen, requestPageFullscreen } from "@/components/diorama/lib/pageFullscreen";
 import { AudioEngine, type AudioSettings, type SceneSounds } from "@/components/diorama/lib/audioEngine";
 import type { GLTFLoaderWithDecoders } from "@/components/diorama/lib/gltfDecoders";
 import { pageStorage } from "@/components/book/progress";
@@ -467,13 +467,30 @@ export default function GameView({ bookId, game, onBack }: GameViewProps) {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [input]);
 
+  // ────────────── Sortie du plein écran pendant la partie : pause (décision de David du 29/10, option B) ──────────────
+  // En plein écran, le premier Échap (ordinateur) et le bouton Retour (Android) font sortir du plein écran sans que la page
+  // reçoive la touche : la partie se met en pause, comme avec Échap hors plein écran. Un Échap qui arriverait aussi à la
+  // page juste après (selon le navigateur) ne relance pas aussitôt la partie (`fsPauseAt`).
+  const fsPauseAt = useRef(-Infinity);
+  useEffect(() => {
+    const onChange = () => {
+      if (isPageFullscreen() || phaseRef.current !== "playing") return;
+      fsPauseAt.current = performance.now();
+      fns.current.pause();
+    };
+    for (const type of FULLSCREEN_CHANGE_EVENTS) document.addEventListener(type, onChange);
+    return () => {
+      for (const type of FULLSCREEN_CHANGE_EVENTS) document.removeEventListener(type, onChange);
+    };
+  }, []);
+
   // ────────────── Clavier (DP-26) ──────────────
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       const ph = phaseRef.current;
       if (e.code === PAUSE_KEY) {
         if (ph === "playing") input.requestPause();
-        else if (ph === "paused") fns.current.resume();
+        else if (ph === "paused" && performance.now() - fsPauseAt.current > 400) fns.current.resume();
         return;
       }
       if (ph !== "playing" || !isGameKey(e.code)) return;

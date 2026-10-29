@@ -59,7 +59,7 @@ test('partie raccourcie : Jouer, capture par un bond au clavier, fin au chrono, 
   await expect(page.getByTestId('collection')).toBeVisible();
 });
 
-test('pause en arrière-plan : partie figée, écran « Continuer », reprise', async ({ page }) => {
+test('pause en arrière-plan : partie figée, écran « Continuer », reprise ; Échap et sortie du plein écran : pause', async ({ page }) => {
   await openGame(page, { duration: 300 });
   await page.getByTestId('game-play').click();
   await expect.poll(async () => (await state(page))?.steps ?? 0, { timeout: 15_000 }).toBeGreaterThan(30);
@@ -72,11 +72,19 @@ test('pause en arrière-plan : partie figée, écran « Continuer », reprise', 
   await page.getByTestId('game-resume').click();
   await expect(page.getByTestId('game-view')).toHaveAttribute('data-phase', 'playing');
   await expect.poll(async () => (await state(page))!.steps, { timeout: 15_000 }).toBeGreaterThan(frozen.steps);
-  // Échap : pause au clavier (DP-26), puis reprise par Échap.
+  // Échap : pause au clavier (DP-26) ; en plein écran (WebKit l'accorde au clic sur « Continuer »), le navigateur garde le
+  // premier Échap pour sortir du plein écran : la sortie du plein écran met en pause (option B du 29/10).
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('game-paused')).toBeVisible();
+  await page.waitForTimeout(500);
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('game-view')).toHaveAttribute('data-phase', 'playing');
+  // Sortie du plein écran pendant la partie (Retour d'Android, Échap en plein écran) : pause.
+  await page.evaluate(async () => {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else document.dispatchEvent(new Event('fullscreenchange'));
+  });
+  await expect(page.getByTestId('game-paused')).toBeVisible();
 });
 
 test('réglages des commandes : côté et taille appliqués, joystick tactile, gardés au rechargement et par « Effacer ma collection »', async ({ page }) => {
