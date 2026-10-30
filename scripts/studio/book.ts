@@ -330,6 +330,11 @@ export interface Reglages {
   essai: { projet: string };
   /** Dernière suite complète menée à son terme par le studio (MJ3, point de CC3) : durée (ms) et date (ms) ; `null` : jamais. */
   suite: { dureeMs: number; date: number } | null;
+  /**
+   * Annonces (AN2) : projet Cloudflare Pages du flux (vide : publication refusée) ; sauvegarde des clés confirmée par David
+   * pour un dossier de clés (date, ms). Aucune clé ici.
+   */
+  annonces: { projet: string; sauvegarde: { dir: string; date: number } | null };
 }
 
 export const DEFAULT_PORTS: Reglages['ports'] = { atelier: 4100, dev: 3000, test: 8001 };
@@ -342,6 +347,7 @@ export const MAX_RECENTS = 10;
 export function readReglages(file: string): Reglages {
   const r: Reglages = {
     recents: [], ports: { ...DEFAULT_PORTS }, blender: { exe: null, gabarit: null, detecte: false }, essai: { projet: DEFAULT_PROJECT }, suite: null,
+    annonces: { projet: '', sauvegarde: null },
   };
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -358,6 +364,10 @@ export function readReglages(file: string): Reglages {
     if (typeof projet === 'string' && !projectNameError(projet)) r.essai.projet = projet;
     const su = raw?.suite;
     if (Number.isFinite(su?.dureeMs) && su.dureeMs > 0 && Number.isFinite(su?.date)) r.suite = { dureeMs: su.dureeMs, date: su.date };
+    const an = raw?.annonces;
+    if (typeof an?.projet === 'string' && !projectNameError(an.projet)) r.annonces.projet = an.projet;
+    const sv = an?.sauvegarde;
+    if (typeof sv?.dir === 'string' && Number.isFinite(sv?.date)) r.annonces.sauvegarde = { dir: sv.dir, date: sv.date };
   } catch {
     // absent ou illisible : valeurs par défaut
   }
@@ -439,8 +449,11 @@ export function detectBlender(): string | null {
 // Explorateur de la page (« Parcourir… », correctif ST2 du 20/10) : lecture seule du disque
 // ---------------------------------------------------------------------------------------------------------
 
-/** Ce que l'explorateur choisit : dossier d'un livre, dossier parent d'un nouveau livre, `blender.exe`, gabarit `.blend`. */
-export type BrowseKind = 'livre' | 'parent' | 'blender' | 'gabarit';
+/**
+ * Ce que l'explorateur choisit : dossier d'un livre, dossier parent d'un nouveau livre, `blender.exe`, gabarit `.blend`, image
+ * d'une annonce (AN2 : WebP, PNG, JPEG).
+ */
+export type BrowseKind = 'livre' | 'parent' | 'blender' | 'gabarit' | 'image';
 
 export interface DirListing {
   /** Dossier listé (casse réelle). */
@@ -466,7 +479,7 @@ export function listDir(dir: string, kind: BrowseKind): DirListing | { error: st
   } catch (e) {
     return { error: `${real} : lecture impossible (${(e as NodeJS.ErrnoException).code ?? (e as Error).message})` };
   }
-  const fileRe = kind === 'blender' ? /\.exe$/i : kind === 'gabarit' ? /\.blend$/i : null;
+  const fileRe = kind === 'blender' ? /\.exe$/i : kind === 'gabarit' ? /\.blend$/i : kind === 'image' ? /\.(webp|png|jpe?g)$/i : null;
   const byName = (a: string, b: string) => a.localeCompare(b, 'fr', { sensitivity: 'base', numeric: true });
   const dossiers: DirListing['dossiers'] = [];
   const fichiers: string[] = [];

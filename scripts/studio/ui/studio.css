@@ -363,3 +363,37 @@ dialog.alert[open] { width: min(340px, 92vw); background: var(--canvas); border:
   animation: toast-in .22s var(--ease); }
 #toast .t.err { background: var(--danger); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: none; } }
+
+/* ===== Annonces (AN2) : feuille commune à tous les livres ===== */
+.sheet-body.split.an { grid-template-columns: minmax(0, 1fr) 420px; }
+.split.an .col-left, .split.an .col-right { overflow: auto; gap: var(--s-lg); padding-right: var(--s-xs); }
+input[type="date"], textarea {
+  min-height: 34px; padding: 6px var(--s-md); border: 1px solid var(--hairline); border-radius: var(--r-md);
+  background: var(--canvas); color: var(--ink); font: inherit; font-size: var(--f-callout); font-weight: 400; }
+textarea { width: 100%; min-height: 58px; resize: vertical; }
+input[type="date"]:focus, textarea:focus { outline: none; border-color: var(--accent); }
+.an-item { display: flex; flex-direction: column; gap: var(--s-sm); padding: var(--s-md) 0; border-top: 1px solid var(--hairline); }
+.an-item .an-head { display: flex; align-items: center; gap: var(--s-sm); }
+.an-item .an-head .grow { font-weight: 600; }
+.an-item.sel .an-head .grow { color: var(--accent-text); }
+.an-langs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-md); }
+.cnt { font-weight: 400; color: var(--ink-48); font-variant-numeric: tabular-nums; }
+.cnt.over { color: var(--danger-text); font-weight: 600; }
+.an-essai { padding: var(--s-sm) var(--s-base); border-radius: var(--r-md); background: var(--warning); color: #000; font-weight: 600; }
+.an-issues li { color: var(--ink); }
+.an-issues li .ou { color: var(--ink-48); }
+.an-issues.err li::before { content: "✕ "; color: var(--danger-text); font-weight: 700; }
+.an-issues.warn li::before { content: "! "; color: var(--warning-text); font-weight: 700; }
+/* Aperçu : reproduction approximative de la fenêtre « Pour les parents » du livre (panneau sombre, boutons en pilule). */
+.an-preview { background: #18181b; color: #fff; border-radius: 16px; padding: 20px; display: flex; flex-direction: column; gap: 12px;
+  max-width: 380px; font-family: var(--font); }
+.an-preview .p-kicker { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: rgba(255, 255, 255, .7); }
+.an-preview img { max-height: 190px; width: 100%; object-fit: contain; border-radius: 12px; }
+.an-preview .p-title { font-size: 20px; font-weight: 700; margin: 0; }
+.an-preview .p-text { margin: 0; white-space: pre-line; color: rgba(255, 255, 255, .9); }
+.an-preview .p-see { align-self: stretch; min-height: 44px; border-radius: 999px; background: #fff; color: #000; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; }
+.an-preview .p-hint { text-align: center; font-size: 12px; color: rgba(255, 255, 255, .7); }
+.an-preview .p-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.an-preview .p-stop { font-size: 14px; color: rgba(255, 255, 255, .8); text-decoration: underline; }
+.an-preview .p-close { min-height: 44px; padding: 0 24px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .5); display: inline-flex; align-items: center; font-weight: 600; }

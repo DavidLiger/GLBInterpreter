@@ -126,6 +126,9 @@ export function childEnv(): NodeJS.ProcessEnv {
   delete env.BOOK_SOURCE;
   // Annonces de test (AN1) : réservée au build du livre de test de la suite complète (posée par sa seule étape).
   delete env.GLBI_ANNONCES_TEST;
+  // Dossier de clés et keys.ts d'essai (AN2) : lus par le studio seul, jamais transmis aux outils qu'il lance.
+  delete env.GLBI_ANNONCES_CLES;
+  delete env.GLBI_ANNONCES_KEYS_TS;
   return env;
 }
 

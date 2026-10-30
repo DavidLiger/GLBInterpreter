@@ -8,6 +8,8 @@
 // sauf les lignes de book:check par scène) ; une seule « prochaine action » mise en avant (le seul bouton plein hors des feuilles) ;
 // messages de book:check rangés par outil et reformulés dans la page, sans changer ceux du build ; le reste dans des feuilles
 // (journaux et processus, réglages, outils de développement, informations du livre).
+// AN2 (spec-annonces.md §6) : feuille « Annonces », commune à tous les livres : clés, brouillon (enregistré tout seul, contrôlé par
+// le serveur, qui seul applique les règles), signature, publication, relecture, aperçu approximatif de la fenêtre du livre.
 'use strict';
 
 const STUDIO_MARKER = 'glbi-studio-st1';
@@ -135,11 +137,12 @@ $('alerte').addEventListener('cancel', (ev) => {
   if (alertResolve) alertResolve(false);
 });
 
-const SHEETS = { journaux: 'feuille-journaux', reglages: 'feuille-reglages', outils: 'feuille-outils', livre: 'feuille-livre', creer: 'feuille-creer' };
+const SHEETS = { journaux: 'feuille-journaux', reglages: 'feuille-reglages', outils: 'feuille-outils', livre: 'feuille-livre', creer: 'feuille-creer', annonces: 'feuille-annonces' };
 function openSheet(name) {
   const d = $(SHEETS[name]);
   if (!d.open) d.showModal();
   if (name === 'creer') onCreateOpen();
+  if (name === 'annonces') onAnnoncesOpen();
   if (name === 'journaux') showJournal();
   return d;
 }
@@ -257,6 +260,14 @@ function blockReason(n) {
     if (isRunning(byName('cloudflare'))) return 'connexion à Cloudflare en cours';
   }
   if (n === 'cloudflare' && isRunning(byName('publier'))) return 'publication d’essai en cours';
+  if (n === 'cloudflare' && isRunning(byName('annonces'))) return 'publication des annonces en cours';
+  if (n === 'annonces') {
+    const an = S.annonces;
+    if (!an.projet) return 'aucun projet Cloudflare Pages réglé pour les annonces';
+    if (!an.signe) return 'aucun flux signé : « Signer » d’abord';
+    if (!an.signe.aJour) return an.signe.raison;
+    if (isRunning(byName('cloudflare'))) return 'connexion à Cloudflare en cours';
+  }
   return '';
 }
 
@@ -867,6 +878,11 @@ function renderCoulisses() {
   $('meta-proc').textContent = live.length ? `${live.length} en marche` : '';
   $('meta-proc').title = live.map((m) => m.label).join(', ');
   $('dot-reglages').className = `dot${!S.blender.exe || !S.blender.exeOk ? ' warn' : ''}`;
+  const an = S.annonces;
+  const anPub = an.publication;
+  const anKeys = an.cles.presentes.k1 && an.cles.presentes.k2;
+  $('dot-annonces').className = `dot${isRunning(byName('annonces')) ? ' run' : anPub && !anPub.verifie ? ' err' : !anKeys || an.cles.dirError ? ' warn' : ''}`;
+  $('meta-annonces').textContent = an.cles.essai ? 'clés d’essai' : anPub?.verifie ? `publié ${quand(Date.parse(anPub.date))}` : !anKeys ? 'clés à générer' : '';
   const dev = ['test-engine', 'test-schema', 'suite'].map(byName);
   $('dot-outils').className = `dot${dev.some(isRunning) ? ' run' : dev.some((m) => m.state === 'erreur') ? ' err' : ''}`;
 }
@@ -890,6 +906,7 @@ function render() {
   renderPorts();
   renderBlender();
   renderEssaiReglages();
+  renderAnnonces();
   checkPendingTabs();
 }
 
@@ -936,7 +953,7 @@ function detailLivre() {
     sub: bookUsable() ? 'Informations de book.json, écrites par le studio.' : 'book.json à corriger.',
     actions: `${button({ label: 'Ouvrir le dossier', act: 'ouvrirDossier' }, 'ghost')}${button({ label: 'Copier le chemin', act: 'copier', data: { texte: b.dir } }, 'ghost')}${button({ label: 'Modifier le livre…', act: 'feuille', data: { f: 'livre' } })}`,
     body: `${errs}<dl class="facts two">${facts.map(([k, v], i) => (i === facts.length - 1 ? `<dt class="first">${k}</dt><dd class="full">${v}</dd>` : `<dt>${k}</dt><dd>${v}</dd>`)).join('')}</dl>
-      <p class="hint">Plus tard ici : annonces (section de book.json d’un lot suivant).</p>${openPanel()}`,
+      <p class="hint">Annonces des nouveaux livres : communes à tous les livres, dans « Annonces » (colonne de gauche).</p>${openPanel()}`,
   };
 }
 
@@ -1968,6 +1985,7 @@ const EXPL = {
   parent: { titre: 'Dossier parent du nouveau livre', aide: 'Entrer dans le dossier qui contiendra le livre, puis « Choisir ce dossier ». Le dossier du livre est créé par « Créer le livre ».', dossier: true },
   blender: { titre: 'Programme blender.exe', aide: 'Choisir blender.exe (C:\\Program Files\\Blender Foundation\\Blender <version>\\).', dossier: false },
   gabarit: { titre: 'Gabarit de scène (.blend)', aide: 'Choisir le fichier .blend préparé comme gabarit.', dossier: false },
+  image: { titre: 'Image de l’annonce', aide: 'WebP, PNG ou JPEG, 200 Ko au plus. L’image est copiée dans le brouillon (.studio/annonces/images/).', dossier: false },
 };
 const joinPath = (dir, name) => (dir.endsWith(E.liste.sep) ? dir + name : dir + E.liste.sep + name);
 
@@ -2062,6 +2080,7 @@ function onBrowsed(d) {
     openBook(d.chemin);
     return;
   }
+  if (d.quoi === 'image' && d.cible?.startsWith('annonce-')) return annonceImageChosen(Number(d.cible.slice(8)), d.chemin);
   if (d.cible === 'blender-direct' || d.cible === 'gabarit-direct') {
     blenderKey = null;
     const bl = S.blender;
@@ -2074,6 +2093,285 @@ function onBrowsed(d) {
     target.dispatchEvent(new Event('input', { bubbles: true }));
   }
 }
+
+// ---------------------------------------------------------------------------------------------------------
+// Annonces (AN2, spec-annonces.md §6) : feuille commune à tous les livres
+// ---------------------------------------------------------------------------------------------------------
+
+// A : brouillon édité dans la page (null : pas encore lu) ; contrôle : dernière réponse du serveur (refus, avertissements).
+let A = null;
+let anControle = null;
+let anTimer = null;
+let anSel = 0;
+let anLang = 'fr';
+let anProjetKey = null;
+const AN_LIMITS = { title: 60, text: 200, items: 5 };
+const AN_LANGS = [['fr', 'FR'], ['en', 'EN'], ['es', 'ES']];
+const chars = (v) => [...String(v ?? '').trim()].length;
+
+async function onAnnoncesOpen() {
+  if (A) return;
+  const r = await post('annoncesLire');
+  if (!r.ok) return toast(r.error, true);
+  A = r.brouillon;
+  anControle = r.controle;
+  renderAnnoncesForm();
+  renderAnnonces();
+}
+
+/** Brouillon enregistré et contrôlé 500 ms après la dernière saisie. */
+function annoncesEdited(now = false) {
+  clearTimeout(anTimer);
+  const run = async () => {
+    const r = await post('annoncesBrouillon', { brouillon: A });
+    if (r.ok) anControle = r.controle;
+    else toast(r.error, true);
+    renderAnnonces();
+  };
+  if (now) return run();
+  anTimer = setTimeout(run, 500);
+}
+
+const newItem = () => ({ id: '', bookId: '', start: S.annonces.aujourdhui, end: '', title: { fr: '', en: '', es: '' }, text: { fr: '', en: '', es: '' }, url: '', image: null });
+const getA = (p) => p.split('.').reduce((x, k) => (x == null ? undefined : x[k]), A);
+function setA(p, v) {
+  const ks = p.split('.');
+  const last = ks.pop();
+  ks.reduce((x, k) => x[k], A)[last] = v;
+}
+
+function anInput(label, p, { type = 'text', ph = '', max = 0, area = false } = {}) {
+  const v = getA(p) ?? '';
+  const cnt = max ? ` <span class="cnt${chars(v) > max ? ' over' : ''}" data-cnt="${p}" data-max="${max}">${chars(v)}/${max}</span>` : '';
+  const ctl = area
+    ? `<textarea data-an="${p}" rows="2" spellcheck="true">${h(v)}</textarea>`
+    : `<input type="${type}" data-an="${p}" value="${h(v)}" spellcheck="false"${ph ? ` placeholder="${h(ph)}"` : ''}>`;
+  return `<label class="field${type === 'date' ? '' : ' grow'}">${h(label)}${cnt}${ctl}</label>`;
+}
+
+/** Formulaire (rendu seulement au chargement et aux changements de structure : la saisie n'est jamais réécrite). */
+function renderAnnoncesForm() {
+  if (!A) return;
+  $('an-flux').innerHTML = typo(`<div class="field-row wrap">
+      ${anInput('Émission (issued)', 'issued', { type: 'date' })}
+      ${anInput('Expiration (expires)', 'expires', { type: 'date' })}
+      <label class="field">Clé de signature<select data-an="keyId"><option value="k1"${A.keyId === 'k1' ? ' selected' : ''}>k1 (courante)</option><option value="k2"${A.keyId === 'k2' ? ' selected' : ''}>k2 (secours)</option></select></label>
+      <button type="button" class="btn sm ghost" data-act="anAujourdhui">Émis aujourd’hui, expire dans 90 jours</button>
+    </div>
+    <p class="hint">Les apps ignorent le flux après son expiration (90 jours au plus après l’émission) : republier avant. La clé de secours ne sert que si la clé courante est perdue ou compromise.</p>`);
+  $('an-items').innerHTML = (A.items.map((it, i) => `<div class="an-item${i === anSel ? ' sel' : ''}" data-i="${i}">
+      <div class="an-head"><span class="grow">Annonce ${i + 1}${it.id ? ` · ${h(it.id)}` : ''}</span>
+        <button type="button" class="btn sm ghost" data-act="anApercu" data-i="${i}">Aperçu</button>
+        <button type="button" class="btn sm ghost icon" data-act="anMonter" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Monter">↑</button>
+        <button type="button" class="btn sm ghost icon" data-act="anDescendre" data-i="${i}" ${i === A.items.length - 1 ? 'disabled' : ''} aria-label="Descendre">↓</button>
+        <button type="button" class="btn sm ghost" data-act="anRetirer" data-i="${i}">Retirer</button></div>
+      <div class="field-row wrap">
+        ${anInput('Identifiant', `items.${i}.id`, { ph: 'ex. dino-2' })}
+        ${anInput('Livre annoncé (bookId)', `items.${i}.bookId`, { ph: 'ex. dino-2' })}
+        ${anInput('Début', `items.${i}.start`, { type: 'date' })}
+        ${anInput('Fin', `items.${i}.end`, { type: 'date' })}
+      </div>
+      <div class="an-langs">${AN_LANGS.map(([l, L]) => anInput(`Titre ${L}`, `items.${i}.title.${l}`, { max: AN_LIMITS.title })).join('')}</div>
+      <div class="an-langs">${AN_LANGS.map(([l, L]) => anInput(`Texte ${L}`, `items.${i}.text.${l}`, { max: AN_LIMITS.text, area: true })).join('')}</div>
+      ${anInput('Lien « Voir le livre » (facultatif)', `items.${i}.url`, { ph: 'ex. https://www.editions-liger.com/dino-2 ou https://www.amazon.fr/…' })}
+      <div class="field-row wrap"><span class="grow" id="an-img-${i}"></span>
+        <button type="button" class="btn sm" data-act="parcourir" data-quoi="image" data-cible="annonce-${i}">${it.image ? 'Changer l’image…' : 'Choisir une image…'}</button>
+        ${it.image ? `<button type="button" class="btn sm ghost" data-act="anImageRetirer" data-i="${i}">Retirer l’image</button>` : ''}</div>
+    </div>`).join('') || '<p class="hint">Aucune annonce : publié, ce flux retire les annonces en cours.</p>');
+  $('an-ajouter').disabled = A.items.length >= AN_LIMITS.items;
+}
+
+function imageLine(i) {
+  const it = A.items[i];
+  if (!it?.image) return '<span class="muted">sans image (facultative)</span>';
+  const info = anControle?.images?.[it.image];
+  if (info === undefined) return `<span class="mono">${h(it.image)}</span>`;
+  if (!info) return `<span class="t-err">${h(it.image)} introuvable</span>`;
+  const ko = Math.round(info.taille / 102.4) / 10;
+  return `<span class="mono">${h(it.image)}</span> · ${info.format ?? 'format non reconnu'} · <span class="${info.taille > 200 * 1024 ? 't-err' : ''}">${ko} Ko</span> · <span class="mono muted" title="${h(info.sha256)}">sha256 ${h(info.sha256.slice(0, 12))}…</span>`;
+}
+
+function issuesHtml(list, cls) {
+  return `<ul class="errors an-issues ${cls}">${list.map((x) => `<li><span class="ou">${h(x.ou)} : </span>${h(x.message)}</li>`).join('')}</ul>`;
+}
+
+function renderAnnonces() {
+  const an = S.annonces;
+  const cl = an.cles;
+  // Clés.
+  const pres = (k, role) => (cl.presentes[k] ? `<span class="t-ok">${k} (${role}) présente</span>` : `<span class="t-warn">${k} (${role}) absente</span>`);
+  const ktsLabel = { vide: '<span class="t-warn">vide : les apps construites avec ne lisent jamais le flux</span>', 'à jour': '<span class="t-ok">à jour (mêmes clés que le dossier)</span>', différent: '<span class="t-err">différent des clés du dossier</span>', illisible: '<span class="t-err">forme non reconnue</span>', absent: '<span class="muted">absent</span>' }[cl.keysTs.etat];
+  const both = cl.presentes.k1 && cl.presentes.k2;
+  const anyKey = cl.presentes.k1 || cl.presentes.k2;
+  const actions = [];
+  if (!anyKey && !cl.dirError) actions.push(button({ label: 'Générer les clés', act: 'annoncesGenerer' }, 'sm'));
+  if (both && cl.keysTs.chemin && cl.keysTs.etat !== 'à jour') actions.push(button({ label: 'Écrire keys.ts', act: 'annoncesKeysTs' }, 'sm'));
+  if (anyKey) actions.push(button({ label: 'Ouvrir le dossier des clés', act: 'annoncesDossierCles' }, 'sm ghost'));
+  if (anyKey && !cl.sauvegarde) actions.push(button({ label: 'Sauvegarde faite', act: 'annoncesSauvegarde' }, 'sm ghost'));
+  setHtml('an-cles', `<h3>Clés de signature</h3>
+    ${cl.essai ? '<p class="an-essai">Clés d’ESSAI (variable GLBI_ANNONCES_CLES) : jamais les vraies clés.</p>' : ''}
+    ${cl.dirError ? `<div class="notice err">${h(cl.dirError)}</div>` : ''}
+    <dl class="facts"><dt>Dossier</dt><dd class="mono">${h(cl.dir)}</dd>
+      <dt>Clés</dt><dd>${pres('k1', 'courante')} · ${pres('k2', 'secours')}</dd>
+      <dt>keys.ts</dt><dd>${cl.keysTs.chemin ? `${ktsLabel}<br><span class="mono muted">${h(cl.keysTs.chemin)}</span>` : `<span class="muted">non écrit : ${h(cl.keysTs.erreur ?? '')}</span>`}</dd></dl>
+    ${anyKey && !cl.sauvegarde ? '<div class="notice warn">Sauvegarder le dossier des clés hors de ce PC (clé USB, coffre), la clé de secours à part si possible : une clé perdue ne se recrée pas, et les apps publiées ne connaissent que ces deux clés.</div>' : ''}
+    ${cl.sauvegarde ? `<p class="hint">Sauvegarde notée ${quand(cl.sauvegarde)}.</p>` : ''}
+    ${cl.keysTs.etat === 'à jour' && !cl.essai ? '<p class="hint">Après une écriture de keys.ts : le commiter, puis reconstruire et republier les livres (avant la publication du livre 1).</p>' : ''}
+    <div class="form-actions">${actions.join('')}</div>`);
+  // Projet.
+  const f = $('an-projet');
+  if (anProjetKey !== an.projet && !f.contains(document.activeElement)) {
+    f.elements.projet.value = an.projet;
+    anProjetKey = an.projet;
+  }
+  const c = S.essai.cloudflare;
+  const cf = byName('cloudflare');
+  setHtml('an-projet-etat', `<p class="hint">${an.adresse ? `Flux relu à ${h(an.adresse)}` : 'Aucun projet : publication refusée.'} Adresse lue par les apps : ${h(an.production)} (domaine du projet de production). Cloudflare : ${!c ? 'connexion vérifiée à chaque publication' : c.connecte === true ? `connecté${c.compte ? ` (${h(c.compte)})` : ''}` : c.connecte === false ? 'non connecté' : 'réponse non reconnue'}.</p>
+    <div class="form-actions">${isRunning(cf) ? button(stop('cloudflare'), 'sm') : button(start('Se connecter à Cloudflare', 'cloudflare'), 'sm ghost')}</div>`);
+  // État : signature, publication.
+  const sg = an.signe;
+  const pub = an.publication;
+  const pm = byName('annonces');
+  const signWhy = !A ? 'brouillon en cours de lecture' : !(cl.presentes[A.keyId]) ? `clé ${A.keyId} absente : générer les clés` : isRunning(pm) ? 'publication en cours' : '';
+  setHtml('an-etat', `<h3>Signature et publication</h3>
+    <dl class="facts">
+      <dt>Signé</dt><dd>${sg ? `${quand(Date.parse(sg.date))} par ${h(sg.keyId)} · ${plural(sg.annonces, 'annonce', 'annonces')} · ${sg.taille} octets ${sg.aJour ? '<span class="t-ok">à jour</span>' : `<span class="t-warn">${h(sg.raison)}</span>`}` : '<span class="muted">jamais</span>'}</dd>
+      <dt>Publié</dt><dd>${pub ? `${quand(Date.parse(pub.date))} sur ${h(pub.adresse)}<br>${pub.verifie ? '<strong class="t-ok">publié et vérifié</strong>' : `<strong class="t-err">écart constaté</strong> : ${h(pub.ecarts.join(' ; '))}`}${sg && pub.sha256 !== sg.sha256 ? '<br><span class="t-warn">le flux signé depuis n’est pas encore publié</span>' : ''}` : '<span class="muted">jamais</span>'}</dd>
+      ${isRunning(pm) ? `<dt>En cours</dt><dd>${h(pm.detail ?? 'publication')} ${timeOf(pm)}</dd>` : pm.state === 'erreur' && pm.detail ? `<dt>Dernier essai</dt><dd class="t-err">${h(pm.detail)}</dd>` : ''}
+    </dl>
+    <div class="form-actions">${button({ label: 'Signer', act: 'anSigner', why: signWhy }, 'primary')}${isRunning(pm) ? button(stop('annonces'), '') : button(start('Publier', 'annonces'))}${button({ label: 'Journal', act: 'journal', data: { nom: 'annonces' } }, 'ghost')}</div>`);
+  if (!A) return;
+  // Contrôle.
+  const k = anControle;
+  setHtml('an-controle', !k ? '' : k.refus.length
+    ? `<h3>Signature refusée pour l’instant</h3>${issuesHtml(k.refus, 'err')}${k.avertissements.length ? issuesHtml(k.avertissements, 'warn') : ''}`
+    : `<h3>Prêt à signer</h3><p class="hint">Flux de ${k.taille} octets une fois signé (32 768 au plus).</p>${k.avertissements.length ? issuesHtml(k.avertissements, 'warn') : ''}`);
+  $('an-compte').textContent = `${A.items.length} / ${AN_LIMITS.items}`;
+  for (let i = 0; i < A.items.length; i++) {
+    const el = $(`an-img-${i}`);
+    if (el) setHtml(el, imageLine(i));
+  }
+  for (const el of document.querySelectorAll('#an-items .an-item')) el.classList.toggle('sel', Number(el.dataset.i) === anSel);
+  // Aperçu.
+  $('an-langues').innerHTML = AN_LANGS.map(([l, L]) => `<button type="button" class="chip" data-act="anLangue" data-l="${l}" aria-selected="${l === anLang}">${L}</button>`).join('');
+  const it = A.items[anSel];
+  const t = an.textes[anLang];
+  // Lien refusé par le contrôle : la fenêtre du livre ne montrerait pas « Voir le livre » (l'app retire un lien hors liste).
+  const linkBad = !!it && !!k?.refus.some((x) => x.ou.startsWith(`annonce ${anSel + 1}`) && /^lien /.test(x.message));
+  const linkShown = !!it && !!it.url.trim() && !linkBad;
+  setRaw('an-apercu', !it ? '<p class="hint">Aucune annonce à montrer.</p>'
+    : `<p class="hint">Aperçu approximatif (fenêtre du livre reproduite ici, sans le lecteur) : annonce ${anSel + 1}, ${anLang.toUpperCase()}.</p>
+    <div class="an-preview" lang="${anLang}">
+      <div class="p-kicker">${h(t.title)}</div>
+      ${it.image ? `<img src="/__studio/annonce-image?nom=${encodeURIComponent(it.image)}" alt="">` : ''}
+      <p class="p-title">${h(it.title[anLang].trim() || '(titre vide)')}</p>
+      <p class="p-text">${h(it.text[anLang].trim() || '(texte vide)')}</p>
+      ${linkShown ? `<div class="p-see">${h(t.see)}</div><div class="p-hint">${h(t.hold)}</div>` : ''}
+      <div class="p-foot"><span class="p-stop">${h(t.stop)}</span><span class="p-close">${h(t.close)}</span></div>
+    </div>
+    ${linkBad ? '<p class="hint t-warn">Lien refusé : la fenêtre du livre ne montrerait pas « Voir le livre » (signature refusée tant qu’il reste).</p>' : ''}`);
+}
+
+/** Contenu remplacé s'il a changé, sans la typographie de la page : le texte saisi est montré tel que l'app le montrera. */
+function setRaw(id, html) {
+  const el = $(id);
+  if (lastHtml.get(el) === html) return;
+  lastHtml.set(el, html);
+  el.innerHTML = html;
+}
+
+async function annonceImageChosen(i, chemin) {
+  const r = await act('annoncesImage', { chemin });
+  if (!r.ok || !A?.items[i]) return;
+  A.items[i].image = r.nom;
+  anSel = i;
+  renderAnnoncesForm();
+  annoncesEdited(true);
+}
+
+const ANNONCE_ACTS = {
+  anAjouter: () => {
+    if (!A || A.items.length >= AN_LIMITS.items) return;
+    A.items.push(newItem());
+    anSel = A.items.length - 1;
+    renderAnnoncesForm();
+    annoncesEdited(true);
+  },
+  anRetirer: async (b) => {
+    const i = Number(b.dataset.i);
+    const it = A.items[i];
+    if ((it.id || it.title.fr) && !(await confirmer(`Retirer l’annonce ${i + 1}${it.id ? ` (${it.id})` : ''} du brouillon ?`, { titre: 'Retirer l’annonce', ok: 'Retirer', danger: true }))) return;
+    A.items.splice(i, 1);
+    anSel = Math.max(0, Math.min(anSel, A.items.length - 1));
+    renderAnnoncesForm();
+    annoncesEdited(true);
+  },
+  anMonter: (b) => moveAnnonce(Number(b.dataset.i), -1),
+  anDescendre: (b) => moveAnnonce(Number(b.dataset.i), 1),
+  anImageRetirer: (b) => {
+    A.items[Number(b.dataset.i)].image = null;
+    renderAnnoncesForm();
+    annoncesEdited(true);
+  },
+  anApercu: (b) => {
+    anSel = Number(b.dataset.i);
+    renderAnnonces();
+  },
+  anLangue: (b) => {
+    anLang = b.dataset.l;
+    renderAnnonces();
+  },
+  anAujourdhui: () => {
+    const t = S.annonces.aujourdhui;
+    const d = new Date(`${t}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 90);
+    A.issued = t;
+    A.expires = d.toISOString().slice(0, 10);
+    renderAnnoncesForm();
+    annoncesEdited(true);
+  },
+  anSigner: async () => {
+    clearTimeout(anTimer);
+    const r = await act('annoncesSigner', { brouillon: A });
+    if (r.controle) anControle = r.controle;
+    renderAnnonces();
+  },
+};
+
+function moveAnnonce(i, d) {
+  const j = i + d;
+  if (j < 0 || j >= A.items.length) return;
+  [A.items[i], A.items[j]] = [A.items[j], A.items[i]];
+  anSel = j;
+  renderAnnoncesForm();
+  annoncesEdited(true);
+}
+
+/** Saisie : valeur gardée dans A, compteur mis à jour sur place, enregistrement et contrôle différés. */
+function onAnnonceInput(ev) {
+  const el = ev.target.closest('[data-an]');
+  if (!el || !A) return;
+  setA(el.dataset.an, el.value);
+  const cnt = el.parentElement.querySelector(`[data-cnt="${el.dataset.an}"]`);
+  if (cnt) {
+    const n = chars(el.value);
+    cnt.textContent = `${n}/${cnt.dataset.max}`;
+    cnt.classList.toggle('over', n > Number(cnt.dataset.max));
+  }
+  const m = /^items\.(\d+)\./.exec(el.dataset.an);
+  if (m) anSel = Number(m[1]);
+  if (el.dataset.an.endsWith('.id')) el.closest('.an-item').querySelector('.an-head .grow').textContent = `Annonce ${anSel + 1}${el.value ? ` · ${el.value}` : ''}`;
+  renderAnnonces();
+  annoncesEdited();
+}
+$('feuille-annonces').addEventListener('input', onAnnonceInput);
+$('feuille-annonces').addEventListener('change', onAnnonceInput);
+
+$('an-projet').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  anProjetKey = null;
+  act('annoncesProjet', { projet: ev.target.elements.projet.value });
+});
 
 // ---------------------------------------------------------------------------------------------------------
 // Journal
@@ -2144,6 +2442,8 @@ const CONFIRMS = {
   publier: () => ({ titre: 'Publier un essai ?', message: `Le livre préparé « ${S.book?.bookId ?? '?'} » est envoyé sur ${S.essai.adresse}. L’essai précédent est remplacé (même adresse : installation et collection gardées sur les téléphones).`, ok: 'Publier' }),
   arreterRestes: () => ({ titre: 'Arrêter les restes ?', message: 'Les processus restés d’un studio précédent sont arrêtés (arbre complet).', ok: 'Arrêter', danger: true }),
   arreterPid: () => ({ titre: 'Arrêter ce processus ?', message: 'Le processus qui occupe le port est arrêté (arbre complet).', ok: 'Arrêter', danger: true }),
+  annonces: () => ({ titre: 'Publier les annonces ?', message: `Le flux signé (${S.annonces.signe?.annonces ?? 0} annonce(s)) est envoyé sur ${S.annonces.adresse}, puis relu et vérifié. Il remplace le flux publié jusqu’ici.`, ok: 'Publier' }),
+  annoncesGenerer: () => ({ titre: 'Générer les clés ?', message: `Deux clés (courante k1, secours k2) sont créées dans ${S.annonces.cles.dir}. Elles ne seront jamais remplacées par le studio : à sauvegarder aussitôt (clé USB, coffre).`, ok: 'Générer' }),
 };
 
 async function copyText(text) {
@@ -2219,6 +2519,8 @@ document.addEventListener('click', async (ev) => {
   if (a === 'explHaut') return E.liste?.parent && explGo(E.liste.parent);
   if (a === 'explAller') return explGo(b.dataset.chemin);
   if (a === 'explChoisir') return explChoose();
+  // Annonces (AN2) : brouillon gardé dans la page, enregistré et contrôlé par le serveur.
+  if (a.startsWith('an') && ANNONCE_ACTS[a]) return ANNONCE_ACTS[a](b);
   // Visionneuses de QR (ST3).
   if (a === 'qrPrec' || a === 'qrSuiv') {
     QV[b.dataset.q] = Math.max(0, QV[b.dataset.q] + (a === 'qrPrec' ? -1 : 1));

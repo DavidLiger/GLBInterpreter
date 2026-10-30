@@ -29,6 +29,12 @@
 // suppriment out/). « Se connecter à Cloudflare » (`wrangler login`, navigateur ouvert). QR d'essai écrits dans
 // dist/qr-essai/<bookId>/<id>.svg (→ https://<projet>.pages.dev/s/<id>), build inchangé. Adresse Wi-Fi du PC et QR du serveur
 // de test, QR d'impression du build (dist/qr/<bookId>/) : affichés dans la page (GET /__studio/qr, sans effet).
+//
+// AN2 (spec-annonces.md §6, §13) : feuille « Annonces », commune à tous les livres (sans livre ouvert) : clés de signature hors
+// du repo (dossier du profil, ou d'essai par GLBI_ANNONCES_CLES), keys.ts écrit après confirmation (ou keys.ts d'essai par
+// GLBI_ANNONCES_KEYS_TS), brouillon dans .studio/annonces/, signature refusée hors des règles, sortie signée publiée par la
+// tâche « annonces » (`wrangler pages deploy .studio/annonces/sortie`), puis flux relu à son adresse et vérifié par
+// src/annonces/feed.ts. Détail : scripts/studio/annonces.ts.
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -48,6 +54,31 @@ import {
   withReceivedValues,
 } from './bookjson';
 import { LANGUAGES, RESERVED_SOURCE_DIR } from '../../src/schema/glbi';
+import { MESSAGES } from '../../src/i18n/messages';
+import {
+  draftFrom,
+  draftText,
+  generateKeys,
+  importImage,
+  keysConfig,
+  keysTsText,
+  keysView,
+  KEY_ROLES,
+  nodeFetcher,
+  PRODUCTION_FEED_URL,
+  publishedFeedUrl,
+  readBack,
+  readDraft,
+  readPublics,
+  readSignedFeed,
+  sha256Hex,
+  signDraft,
+  checkDraft,
+  todayText,
+  type Draft,
+  type ReadBack,
+} from './annonces';
+import { todayOf } from '../../src/annonces/feed';
 import {
   copyTemplate,
   JEU_BLEND_DIR,
@@ -164,6 +195,14 @@ const UI_DIR = path.join(ROOT, 'scripts', 'studio', 'ui');
 const OUT_BOOK = path.join(ROOT, 'out', 'book.json');
 const DEV_BOOK = path.join(ROOT, 'public', 'dev-book', 'book.json');
 const HTTP_SERVER_BIN = path.join(ROOT, 'node_modules', 'http-server', 'bin', 'http-server');
+// Annonces (AN2) : brouillon, images, sortie signée et état ; jamais de clé ici.
+const ANNONCES_DIR = path.join(STUDIO_DIR, 'annonces');
+const ANNONCES_DRAFT = path.join(ANNONCES_DIR, 'brouillon.json');
+const ANNONCES_IMAGES = path.join(ANNONCES_DIR, 'images');
+const ANNONCES_OUT = path.join(ANNONCES_DIR, 'sortie');
+const ANNONCES_ETAT = path.join(ANNONCES_DIR, 'etat.json');
+/** Dossier des clés et keys.ts (réels, ou d'essai par variable d'environnement), lus une fois au démarrage. */
+const KEYS = keysConfig(ROOT);
 
 /** Écart entre le dossier de lancement (ou le chemin du script) et la casse réelle du repo (incident d'Î16). */
 const CASE_WARNING =
@@ -176,7 +215,7 @@ const CASE_WARNING =
 // ---------------------------------------------------------------------------------------------------------
 
 type ProcessName = 'atelier' | 'dev' | 'serveur-test';
-type TaskName = 'book-check' | 'dev-book' | 'build' | 'test-engine' | 'test-schema' | 'suite' | 'publier' | 'cloudflare';
+type TaskName = 'book-check' | 'dev-book' | 'build' | 'test-engine' | 'test-schema' | 'suite' | 'publier' | 'cloudflare' | 'annonces';
 type Name = ProcessName | TaskName;
 type State = 'arrêté' | 'démarrage' | 'prêt' | 'en cours' | 'terminé' | 'erreur';
 
@@ -210,6 +249,7 @@ const JOURNAL_LABELS: Record<Name | 'studio', string> = {
   suite: 'Suite complète',
   publier: 'Publication d’essai',
   cloudflare: 'Connexion à Cloudflare',
+  annonces: 'Publication des annonces',
 };
 
 function entry(name: Name, kind: Entry['kind'], exclusive = false): Entry {
@@ -233,6 +273,8 @@ const entries: Record<Name, Entry> = {
   // n'écrit rien du repo.
   publier: entry('publier', 'task'),
   cloudflare: entry('cloudflare', 'task'),
+  // AN2 : publication du flux d'annonces (lit .studio/annonces/sortie/, n'écrit rien du repo ni d'un livre).
+  annonces: entry('annonces', 'task'),
 };
 /** Tâches qui suppriment ou réécrivent out/ : jamais pendant une publication d'essai. */
 const OUT_WRITERS: TaskName[] = ['build', 'suite'];
@@ -319,8 +361,8 @@ interface Step {
   cwd?: string;
   /** Lecture de la sortie de l'étape (code 0) ; un message = échec de la tâche (ST3 : `wrangler whoami`). */
   check?: (lines: string[]) => string | null;
-  /** Après succès ; un texte = détail affiché à la fin de la tâche (ST3 : adresse publiée). */
-  after?: () => void | string | Promise<void | string>;
+  /** Après succès ; un texte = détail affiché à la fin de la tâche (ST3 : adresse publiée) ; `{ fail }` : tâche en erreur (AN2). */
+  after?: () => void | string | { fail: string } | Promise<void | string | { fail: string }>;
 }
 
 /** Sorties d'un processus terminé lues jusqu'au bout (les dernières lignes peuvent arriver après `exit`) ; 2 s au plus. */
@@ -375,6 +417,11 @@ async function runTask(e: Entry, steps: Step[]): Promise<boolean> {
     }
     const d = await s.after?.();
     if (typeof d === 'string') doneDetail = d;
+    else if (d && typeof d === 'object') {
+      e.journal.note(d.fail);
+      finish(e, 'erreur', null, d.fail);
+      return false;
+    }
   }
   if (e.stopping) {
     finish(e, 'arrêté', null);
@@ -519,6 +566,10 @@ interface Result {
   /** Empreinte de book.json après enregistrement (base du formulaire, ST2). */
   stamp?: { size: number; mtime: number } | null;
   inchange?: boolean;
+  /** Annonces (AN2) : brouillon lu, contrôle (refus et avertissements), nom d'une image importée. */
+  brouillon?: Draft;
+  controle?: unknown;
+  nom?: string;
 }
 
 const fail = (error: string): Result => ({ ok: false, error });
@@ -682,6 +733,9 @@ function startTask(name: TaskName): Result {
   if ((name === 'publier' && running(entries.cloudflare)) || (name === 'cloudflare' && running(entries.publier))) {
     return fail(`${entries[name === 'publier' ? 'cloudflare' : 'publier'].label} en cours : attendre sa fin`);
   }
+  if ((name === 'annonces' && running(entries.cloudflare)) || (name === 'cloudflare' && running(entries.annonces))) {
+    return fail(`${entries[name === 'annonces' ? 'cloudflare' : 'annonces'].label} en cours : attendre sa fin`);
+  }
   const needsBook = name === 'book-check' || name === 'build' || name === 'dev-book' || name === 'publier';
   if (needsBook) {
     const noBook = requireBook();
@@ -777,6 +831,12 @@ function startTask(name: TaskName): Result {
       ];
       void runTask(e, steps);
       return { ok: true, message: 'connexion à Cloudflare : autoriser wrangler dans la page du navigateur qui s’ouvre (2 min au plus)' };
+    case 'annonces': {
+      const r = annoncesSteps();
+      if ('error' in r) return fail(r.error);
+      void runTask(e, r.steps);
+      return { ok: true, message: `publication des annonces lancée vers ${publishedFeedUrl(reglages.annonces.projet)}` };
+    }
   }
   void runTask(e, steps);
   return { ok: true, message: `lancement : ${e.label}${name === 'suite' ? ` (${suiteDurationText()})` : ''}` };
@@ -994,7 +1054,7 @@ async function openBookAction(input: string, confirmed: boolean): Promise<Result
   return { ok: true, message: `livre ouvert : ${r.dir}` };
 }
 
-const BROWSE_KINDS: readonly BrowseKind[] = ['livre', 'parent', 'blender', 'gabarit'];
+const BROWSE_KINDS: readonly BrowseKind[] = ['livre', 'parent', 'blender', 'gabarit', 'image'];
 
 /**
  * « Parcourir… » (correctif ST2 du 20/10, choix de David) : explorateur dans la page, au premier plan, nourri par ce serveur
@@ -1013,6 +1073,7 @@ function browseList(body: Record<string, unknown>): Result & { liste?: unknown }
       kind === 'livre' ? (book ? path.dirname(book.info.dir) : books)
       : kind === 'parent' ? (book ? path.dirname(book.info.dir) : books)
       : kind === 'blender' ? (exe ? path.dirname(exe) : IS_WIN ? 'C:\\Program Files\\Blender Foundation' : ROOT)
+      : kind === 'image' ? (process.env.USERPROFILE ?? process.env.HOME ?? ROOT)
       : gab ? path.dirname(gab) : (book?.info.dir ?? books);
     dir = realCase(start) ? start : ROOT;
   }
@@ -1443,6 +1504,238 @@ async function stopPortOwner(pid: number): Promise<Result> {
 }
 
 // ---------------------------------------------------------------------------------------------------------
+// Annonces (AN2, spec-annonces.md §6, §13) : clés, brouillon, signature, publication et relecture
+// ---------------------------------------------------------------------------------------------------------
+
+interface AnnoncesEtat {
+  /** Dernière signature réussie (aucune clé : identifiant, empreintes, dossier des clés). */
+  signe: { date: string; keyId: string; sha256: string; taille: number; annonces: number; brouillon: string; dossierCles: string } | null;
+  /** Dernière publication : relecture du flux à son adresse et verdict du vérificateur de l'app. */
+  publication: { projet: string; adresse: string; date: string; sha256: string; verifie: boolean; ecarts: string[]; deploiement: string | null } | null;
+}
+
+function readAnnoncesEtat(): AnnoncesEtat {
+  try {
+    const raw = JSON.parse(fs.readFileSync(ANNONCES_ETAT, 'utf8'));
+    return { signe: raw?.signe ?? null, publication: raw?.publication ?? null };
+  } catch {
+    return { signe: null, publication: null };
+  }
+}
+const annoncesEtat: AnnoncesEtat = readAnnoncesEtat();
+function saveAnnoncesEtat(): void {
+  try {
+    fs.mkdirSync(ANNONCES_DIR, { recursive: true });
+    fs.writeFileSync(ANNONCES_ETAT, `${JSON.stringify(annoncesEtat, null, 2)}\n`);
+  } catch (e) {
+    studioJournal.note(`.studio/annonces/etat.json non écrit (${(e as Error).message})`);
+  }
+}
+
+/** Empreinte du brouillon enregistré (signature à refaire s'il a changé depuis). */
+function draftSha(): string | null {
+  try {
+    return sha256Hex(fs.readFileSync(ANNONCES_DRAFT));
+  } catch {
+    return null;
+  }
+}
+
+/** Contrôle du brouillon pour la page (sans le payload construit). */
+function draftControl(d: Draft) {
+  const c = checkDraft(d, ANNONCES_IMAGES, todayOf(new Date()));
+  return { refus: c.refus, avertissements: c.avertissements, taille: c.taille, images: c.images };
+}
+
+/** Brouillon enregistré seulement s'il change (fichier temporaire puis renommage). */
+async function saveDraft(d: Draft): Promise<void> {
+  const text = draftText(d);
+  try {
+    if (fs.readFileSync(ANNONCES_DRAFT, 'utf8') === text) return;
+  } catch {
+    // absent
+  }
+  fs.mkdirSync(ANNONCES_DIR, { recursive: true });
+  await writeFileAtomic(ANNONCES_DRAFT, text);
+}
+
+/** Signature et sortie à jour : sortie signée inchangée, brouillon inchangé depuis, mêmes clés. */
+function signedState(): { aJour: boolean; raison: string | null } {
+  const sg = annoncesEtat.signe;
+  if (!sg) return { aJour: false, raison: 'aucun flux signé' };
+  const out = readSignedFeed(ANNONCES_OUT);
+  if (!out || sha256Hex(out) !== sg.sha256) return { aJour: false, raison: 'flux signé absent ou modifié hors du studio : signer à nouveau' };
+  if (draftSha() !== sg.brouillon) return { aJour: false, raison: 'brouillon modifié depuis la signature : signer à nouveau' };
+  if (!samePath(sg.dossierCles, KEYS.dir)) return { aJour: false, raison: `flux signé avec les clés d’un autre dossier (${sg.dossierCles}) : signer à nouveau` };
+  return { aJour: true, raison: null };
+}
+
+function annoncesView() {
+  const cles = keysView(KEYS);
+  const sv = reglages.annonces.sauvegarde;
+  const textes = Object.fromEntries(Object.entries(MESSAGES).map(([l, m]) => [l, { ...m.annonces, close: m.common.close }]));
+  const projet = reglages.annonces.projet;
+  return {
+    cles: { ...cles, sauvegarde: sv && samePath(sv.dir, KEYS.dir) ? sv.date : null },
+    projet,
+    adresse: projet ? publishedFeedUrl(projet) : null,
+    production: PRODUCTION_FEED_URL,
+    projetEssaiLivres: reglages.essai.projet,
+    signe: annoncesEtat.signe ? { ...annoncesEtat.signe, ...signedState() } : null,
+    publication: annoncesEtat.publication,
+    aujourdhui: todayText(),
+    textes,
+  };
+}
+
+/** Projet Cloudflare Pages du flux d'annonces ; vide : publication refusée. Jamais le projet d'essai des livres. */
+function setAnnoncesProject(body: Record<string, unknown>): Result {
+  const projet = String(body.projet ?? '').trim();
+  if (projet) {
+    const bad = projectNameError(projet);
+    if (bad) return fail(bad);
+    if (projet === reglages.essai.projet) {
+      return fail(`« ${projet} » est le projet d’essai des livres : la publication des annonces y remplacerait le livre publié en essai ; choisir un projet à part`);
+    }
+  }
+  if (running(entries.annonces)) return fail('publication des annonces en cours : changer de projet après sa fin');
+  reglages.annonces.projet = projet;
+  saveReglages();
+  changed();
+  return { ok: true, message: projet ? `projet des annonces : ${projet} (${publishedFeedUrl(projet)})` : 'projet des annonces retiré : publication refusée tant qu’aucun projet n’est réglé' };
+}
+
+async function generateKeysAction(): Promise<Result> {
+  const r = await generateKeys(KEYS);
+  if ('error' in r) return fail(r.error);
+  studioJournal.note(`annonces : clés ${r.publics.map((k) => `${k.keyId} (${KEY_ROLES[k.keyId as 'k1' | 'k2']})`).join(' et ')} générées dans ${KEYS.dir}${KEYS.essai ? ' (dossier d’essai)' : ''}`);
+  changed();
+  return { ok: true, message: `Clés générées dans ${KEYS.dir}. À sauvegarder maintenant (clé USB, coffre), puis écrire keys.ts.` };
+}
+
+async function writeKeysTsAction(confirmed: boolean): Promise<Result> {
+  if (!KEYS.keysTs) return fail(KEYS.keysTsError ?? 'keys.ts non écrit');
+  if (KEYS.dirError) return fail(KEYS.dirError);
+  const publics = readPublics(KEYS.dir);
+  if (!publics || publics.length !== 2) return fail(`clés publiques absentes ou illisibles dans ${KEYS.dir} : générer les clés d’abord`);
+  const v = keysView(KEYS);
+  if (v.keysTs.etat === 'à jour') return { ok: true, message: 'keys.ts déjà à jour : rien écrit' };
+  if (!confirmed) {
+    const warn = v.keysTs.etat === 'différent'
+      ? 'keys.ts déclare d’autres clés : les apps déjà publiées avec ces clés ne liront plus les flux signés par les nouvelles. '
+      : '';
+    return {
+      ok: false,
+      confirm: `${warn}Écrire les clés publiques k1 (courante) et k2 (secours) dans ${KEYS.keysTs} ? Ensuite : commiter ce fichier, puis reconstruire et republier les livres (une app construite sans ces clés ne lit jamais le flux).`,
+    };
+  }
+  await writeFileAtomic(KEYS.keysTs, keysTsText(publics, todayText()));
+  studioJournal.note(`annonces : keys.ts écrit (${publics.map((k) => k.keyId).join(', ')}) : ${KEYS.keysTs}`);
+  changed();
+  return { ok: true, message: `keys.ts écrit (${KEYS.keysTs}) : le commiter, puis reconstruire et republier les livres` };
+}
+
+async function signAction(body: Record<string, unknown>): Promise<Result> {
+  const d = draftFrom(body.brouillon);
+  await saveDraft(d);
+  if (running(entries.annonces)) return fail('publication des annonces en cours : signer après sa fin');
+  const r = await signDraft(d, { cfg: KEYS, imagesDir: ANNONCES_IMAGES, outDir: ANNONCES_OUT });
+  if (!r.ok) {
+    studioJournal.note(`annonces : signature refusée : ${r.refus.map((x) => `${x.ou} : ${x.message}`).join(' ; ')}`);
+    return { ok: false, error: `Signature refusée : ${r.refus.length} motif(s), voir la liste`, controle: { refus: r.refus, avertissements: r.avertissements, taille: null, images: {} } };
+  }
+  annoncesEtat.signe = {
+    date: new Date().toISOString(), keyId: r.keyId, sha256: r.sha256, taille: r.taille, annonces: r.annonces, brouillon: draftSha() ?? '', dossierCles: KEYS.dir,
+  };
+  saveAnnoncesEtat();
+  studioJournal.note(`annonces : flux signé par ${r.keyId} (${r.annonces} annonce(s), ${r.taille} octets, sha256 ${r.sha256.slice(0, 12)}…), vérifié par feed.ts : ${ANNONCES_OUT}`);
+  changed();
+  return { ok: true, message: `Flux signé par ${r.keyId} et vérifié (${r.annonces} annonce(s), ${r.taille} octets) : prêt à publier`, controle: draftControl(d) };
+}
+
+async function openKeysFolder(): Promise<Result> {
+  if (KEYS.dirError) return fail(KEYS.dirError);
+  if (!fs.existsSync(KEYS.dir)) return fail(`dossier des clés absent : ${KEYS.dir} (générer les clés d’abord)`);
+  const r = await openFolder(KEYS.dir);
+  if ('error' in r) return fail(`Dossier des clés non ouvert : ${r.error}. L’ouvrir à la main : ${KEYS.dir}`);
+  return { ok: true, message: 'Dossier des clés ouvert dans l’Explorateur' };
+}
+
+/** GET /__studio/annonce-image?nom=… (sans effet) : image du brouillon, pour l'aperçu. */
+function serveAnnonceImage(url: URL, res: http.ServerResponse): void {
+  const nom = url.searchParams.get('nom') ?? '';
+  const ext = /\.(webp|png|jpe?g)$/i.exec(nom)?.[1].toLowerCase();
+  if (!ext || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]*$/.test(nom)) return sendJson(res, 400, fail('nom d’image refusé'));
+  try {
+    const data = fs.readFileSync(path.join(ANNONCES_IMAGES, nom));
+    res.writeHead(200, { 'content-type': ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg', 'cache-control': 'no-store' });
+    res.end(data);
+  } catch {
+    sendJson(res, 404, fail('image introuvable'));
+  }
+}
+
+/**
+ * Étapes de la publication des annonces : projet réglé (jamais celui des essais de livres), flux signé et à jour ; wrangler
+ * connecté ; `wrangler pages deploy .studio/annonces/sortie --project-name <projet> --branch main` depuis le dossier parent du
+ * repo ; puis relecture du flux à son adresse (jusqu'à une minute, le temps que Pages serve la nouvelle version) et
+ * vérification par feed.ts avec les clés publiques du dossier : « publié et vérifié », ou l'écart (tâche en erreur).
+ */
+function annoncesSteps(): { steps: Step[] } | { error: string } {
+  const projet = reglages.annonces.projet;
+  if (!projet) return { error: 'aucun projet Cloudflare Pages réglé pour les annonces : le régler dans la feuille Annonces (projet créé à part)' };
+  const bad = projectNameError(projet);
+  if (bad) return { error: bad };
+  if (projet === reglages.essai.projet) return { error: `« ${projet} » est le projet d’essai des livres : choisir un projet à part pour les annonces` };
+  const st = signedState();
+  if (!st.aJour) return { error: `publication refusée : ${st.raison}` };
+  const sg = annoncesEtat.signe!;
+  const publics = readPublics(KEYS.dir);
+  if (!publics?.length) return { error: `clés publiques illisibles dans ${KEYS.dir} : relecture impossible` };
+  const url = publishedFeedUrl(projet);
+  let deploy: DeployResult = { termine: false, deploiement: null, alias: null };
+  return {
+    steps: [
+      whoamiStep(),
+      {
+        label: `envoi des annonces vers https://${projet}.pages.dev`,
+        cwd: path.dirname(ROOT),
+        before: () => {
+          const again = signedState();
+          return again.aJour && annoncesEtat.signe?.sha256 === sg.sha256 ? null : `publication refusée : ${again.raison ?? 'flux signé à nouveau pendant la publication'}`;
+        },
+        launch: () => npmExec(WRANGLER_PACKAGE, 'wrangler', ['pages', 'deploy', ANNONCES_OUT, '--project-name', projet, '--branch', DEPLOY_BRANCH]),
+        check: (lines) => {
+          deploy = parseDeploy(lines);
+          return null;
+        },
+        after: async () => {
+          const e = entries.annonces;
+          if (!deploy.termine) e.journal.note('fin du déploiement non reconnue dans la sortie de wrangler (code 0) : relecture quand même');
+          if (deploy.alias) e.journal.note(`alias ${deploy.alias} : la branche ${DEPLOY_BRANCH} n’est pas la production du projet, l’adresse stable n’est pas mise à jour`);
+          const expected = readSignedFeed(ANNONCES_OUT)!;
+          let rb: ReadBack = { identique: false, verifie: false, ecarts: ['relecture non faite'] };
+          for (let i = 1; i <= 12 && !e.stopping; i++) {
+            rb = await readBack(url, expected, publics, nodeFetcher);
+            e.journal.note(`relecture ${i} de ${url} : ${rb.verifie ? 'publié et vérifié' : rb.ecarts.join(' ; ')}`);
+            if (rb.verifie || rb.identique) break;
+            await sleep(5_000);
+          }
+          annoncesEtat.publication = {
+            projet, adresse: url, date: new Date().toISOString(), sha256: sg.sha256, verifie: rb.verifie, ecarts: rb.ecarts,
+            deploiement: deploy.deploiement ?? deploy.alias,
+          };
+          saveAnnoncesEtat();
+          changed();
+          if (!rb.verifie) return { fail: `publié, mais écart constaté à la relecture de ${url} : ${rb.ecarts.join(' ; ')}` };
+          return `publié et vérifié : ${url} (flux signé par ${sg.keyId}, ${sg.annonces} annonce(s))`;
+        },
+      },
+    ],
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------------
 // État envoyé à la page
 // ---------------------------------------------------------------------------------------------------------
 
@@ -1479,6 +1772,8 @@ function view() {
     // MJ3 : onglets connectés à l'atelier (un atelier ouvert à la main est retrouvé) ; dernière suite complète mesurée.
     atelier: { onglets: atelierTabs },
     suite: reglages.suite,
+    // AN2 : annonces (communes à tous les livres) ; aucune clé privée, seulement les clés publiques et l'état.
+    annonces: annoncesView(),
   };
 }
 
@@ -1657,6 +1952,38 @@ async function action(body: Record<string, unknown>): Promise<Result> {
       return cardFieldUsage(body);
     case 'usageType':
       return cardTypeUsageOf(body);
+    // Annonces (AN2).
+    case 'annoncesLire': {
+      const d = readDraft(ANNONCES_DRAFT);
+      return { ok: true, brouillon: d, controle: draftControl(d) };
+    }
+    case 'annoncesBrouillon': {
+      const d = draftFrom(body.brouillon);
+      await saveDraft(d);
+      changed();
+      return { ok: true, controle: draftControl(d) };
+    }
+    case 'annoncesImage': {
+      const r = importImage(path.resolve(ROOT, unquote(body.chemin)), ANNONCES_IMAGES);
+      if ('error' in r) return fail(r.error);
+      return { ok: true, nom: r.nom, message: `image copiée dans le brouillon : ${r.nom}` };
+    }
+    case 'annoncesGenerer':
+      return generateKeysAction();
+    case 'annoncesKeysTs':
+      return writeKeysTsAction(body.confirme === true);
+    case 'annoncesSigner':
+      return signAction(body);
+    case 'annoncesProjet':
+      return setAnnoncesProject(body);
+    case 'annoncesSauvegarde':
+      if (KEYS.dirError || !fs.existsSync(KEYS.dir)) return fail('aucune clé à sauvegarder');
+      reglages.annonces.sauvegarde = { dir: KEYS.dir, date: Date.now() };
+      saveReglages();
+      changed();
+      return { ok: true, message: 'sauvegarde des clés notée' };
+    case 'annoncesDossierCles':
+      return openKeysFolder();
     case 'oublierRecent':
       reglages.recents = reglages.recents.filter((r) => !samePath(r, String(body.chemin ?? '')));
       writeReglages(REGLAGES_FILE, reglages);
@@ -1755,6 +2082,7 @@ function handle(req: http.IncomingMessage, res: http.ServerResponse): void {
     serveQr(url, res).catch((e: Error) => sendJson(res, 500, fail(e.message)));
     return;
   }
+  if (p === '/__studio/annonce-image') return serveAnnonceImage(url, res);
   if (p === '/__studio/ping') {
     // Second lancement (point ajouté à la clôture de ST1) : la page n'est rouverte que si aucun onglet n'est connecté ;
     // sinon, les onglets connectés l'annoncent.
@@ -1879,6 +2207,9 @@ async function main(): Promise<void> {
   }
 
   await findRestes();
+  // Annonces (AN2) : dossier des clés d'essai annoncé ; dossier refusé (dans le repo) signalé.
+  if (KEYS.essai) studioJournal.note(`annonces : clés d’ESSAI (${'GLBI_ANNONCES_CLES'}) : ${KEYS.dir} ; keys.ts : ${KEYS.keysTs ?? `non écrit (${KEYS.keysTsError})`}`);
+  if (KEYS.dirError) studioJournal.note(`annonces : ${KEYS.dirError}`);
   // Blender (ST2, §8) : chemin détecté au premier lancement, puis modifiable dans la page.
   if (!reglages.blender.detecte) {
     reglages.blender.detecte = true;

@@ -5,7 +5,11 @@
 // version de Blender la plus récente, nom de dossier d'un nouveau livre.
 // ST3 : nom du projet Pages, sorties de wrangler (whoami, pages deploy), adresses du réseau local, QR d'essai et d'impression,
 // réglages et état (projet par défaut, publications).
+// AN2 : annonces : dossier des clés (réel, d'essai, refusé dans le repo), génération sans écrasement, keys.ts d'essai, une
+// règle de refus de signature par test, flux signé vérifié par src/annonces/feed.ts (clé courante, clé de secours), signature
+// r ‖ s (DER refusée), enveloppe à trois clés, poids, images, clé privée absente des sorties, relecture du flux publié.
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -45,6 +49,32 @@ import {
 } from './bookjson';
 import { SCENE_ID_PATTERN } from '../../src/schema/glbi';
 import {
+  checkDraft,
+  defaultKeysDir,
+  draftFrom,
+  emptyDraft,
+  ENV_KEYS_DIR,
+  ENV_KEYS_TS,
+  envelopeText,
+  generateKeys,
+  importImage,
+  isInside,
+  keysConfig,
+  keysTsState,
+  keysTsText,
+  keysView,
+  parseKeysTs,
+  PRIVATE_FILES,
+  readBack,
+  readPublics,
+  signDraft,
+  dayText,
+  type Draft,
+  type DraftItem,
+  type Fetcher,
+} from './annonces';
+import { decodeBase64, parsePayload, todayOf, verifyEnvelope } from '../../src/annonces/feed';
+import {
   actionAllowed,
   commandMentions,
   findLeftovers,
@@ -74,7 +104,7 @@ function test(name: string, fn: () => void | Promise<void>): void {
   else ok();
 }
 
-console.log('test:studio — studio de fabrication (ST1, ST2, ST3)');
+console.log('test:studio — studio de fabrication (ST1 à ST4, CC2, CC3, MJ3, AN2)');
 
 test('Host et Origin : 127.0.0.1 et localhost du port seulement', () => {
   assert.equal(hostAllowed('127.0.0.1:4000', undefined, 4000), true);
@@ -603,6 +633,279 @@ test('MJ3 : .blend du jeu (blender/jeu/, sauvegardes ignorées) ; durée de la d
     assert.deepEqual(readReglages(reg).suite, { dureeMs: 1_140_000, date: 1 });
     fs.writeFileSync(reg, JSON.stringify({ suite: { dureeMs: -3, date: 1 } }));
     assert.equal(readReglages(reg).suite, null, 'valeur fausse ignorée');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------------------------------------
+// AN2 : annonces
+// ---------------------------------------------------------------------------------------------------------
+
+const REPO = path.resolve(import.meta.dirname, '..', '..');
+const NOW = new Date(2026, 10, 15, 12); // 15/11/2026, jour local
+const TODAY = todayOf(NOW);
+const D = (n: number) => dayText(TODAY + n);
+const TT3 = (s: string) => ({ fr: `${s} (fr)`, en: `${s} (en)`, es: `${s} (es)` });
+// Images minimales reconnues à leurs premiers octets (le studio ne les décode pas).
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(200, 1)]);
+const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 2)]);
+const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBP'), Buffer.alloc(200, 3)]);
+
+function item(over: Partial<DraftItem> = {}): DraftItem {
+  return {
+    id: 'dino-2', bookId: 'dino-2', start: D(0), end: D(60), title: TT3('Nouveau livre'), text: TT3('Un nouveau livre augmenté.'),
+    url: 'https://www.editions-liger.com/dino-2', image: null, ...over,
+  };
+}
+const draft = (over: Partial<Draft> = {}): Draft => ({ issued: D(0), expires: D(90), keyId: 'k1', items: [item()], ...over });
+
+/** Dossier d'essai : clés générées hors du repo, keys.ts d'essai ; jamais le dossier réel ni le vrai keys.ts. */
+async function keysFixture() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-an2-'));
+  const env = { [ENV_KEYS_DIR]: path.join(root, 'cles'), [ENV_KEYS_TS]: path.join(root, 'keys.ts') };
+  const cfg = keysConfig(REPO, env);
+  const g = await generateKeys(cfg);
+  assert.ok('publics' in g, 'clés générées');
+  const imagesDir = path.join(root, 'images');
+  const outDir = path.join(root, 'sortie');
+  fs.mkdirSync(imagesDir);
+  return { root, cfg, imagesDir, outDir, publics: g.publics };
+}
+
+test('AN2 : dossier des clés réel (profil), d’essai par variable, refusé dans le repo ; keys.ts d’essai seulement', () => {
+  const real = keysConfig(REPO, { USERPROFILE: path.join(os.tmpdir(), 'profil') });
+  assert.equal(real.dir, path.join(os.tmpdir(), 'profil', '.editions-liger', 'annonces-cles'));
+  assert.equal(real.essai, false);
+  assert.equal(real.dirError, null);
+  assert.equal(real.keysTs, path.join(REPO, 'src', 'annonces', 'keys.ts'), 'sans variable : vrai keys.ts');
+  assert.equal(defaultKeysDir({ HOME: '/home/x' }), path.join('/home/x', '.editions-liger', 'annonces-cles'));
+  const essai = keysConfig(REPO, { [ENV_KEYS_DIR]: path.join(os.tmpdir(), 'essai-cles') });
+  assert.equal(essai.essai, true);
+  assert.equal(essai.keysTs, null, 'clés d’essai sans keys.ts d’essai : keys.ts jamais écrit');
+  assert.match(essai.keysTsError!, /GLBI_ANNONCES_KEYS_TS/);
+  const touchReal = keysConfig(REPO, { [ENV_KEYS_DIR]: path.join(os.tmpdir(), 'c'), [ENV_KEYS_TS]: path.join(REPO, 'src', 'annonces', 'keys.ts') });
+  assert.equal(touchReal.keysTs, null, 'variable qui désigne le vrai keys.ts : refusée');
+  for (const inRepo of [REPO, path.join(REPO, '.studio', 'cles'), path.join(REPO, 'books', 'x', 'cles')]) {
+    const c = keysConfig(REPO, { [ENV_KEYS_DIR]: inRepo });
+    assert.match(c.dirError ?? '', /dans le repo/, `refusé : ${inRepo}`);
+  }
+  assert.equal(isInside('C:\\Repo\\GLBI\\.studio', 'c:\\repo\\glbi', true), true, 'casse ignorée sous Windows');
+  assert.equal(isInside(path.join(REPO, '..', 'ailleurs'), REPO), false);
+  assert.equal(isInside(`${REPO}-copie`, REPO), false, 'nom qui commence comme le repo : hors du repo');
+});
+
+test('AN2 : dossier des clés dans le repo : génération refusée, rien écrit', async () => {
+  const cfg = keysConfig(REPO, { [ENV_KEYS_DIR]: path.join(REPO, '.studio', 'cles-test-an2') });
+  const r = await generateKeys(cfg);
+  assert.ok('error' in r && /dans le repo/.test(r.error));
+  assert.equal(fs.existsSync(path.join(REPO, '.studio', 'cles-test-an2')), false);
+});
+
+test('AN2 : génération (k1 courante, k2 secours) sans écrasement ; keys.ts d’essai écrit, relu, comparé ; keys.ts du repo vide', async () => {
+  const f = await keysFixture();
+  try {
+    for (const k of ['k1', 'k2'] as const) assert.match(fs.readFileSync(path.join(f.cfg.dir, PRIVATE_FILES[k]), 'utf8'), /^-----BEGIN PRIVATE KEY-----\n/);
+    assert.deepEqual(f.publics.map((k) => k.keyId), ['k1', 'k2']);
+    assert.deepEqual(readPublics(f.cfg.dir), f.publics);
+    const again = await generateKeys(f.cfg);
+    assert.ok('error' in again && /déjà présentes/.test(again.error), 'jamais d’écrasement');
+    assert.equal(keysTsState(f.cfg.keysTs, f.publics), 'absent');
+    fs.writeFileSync(f.cfg.keysTs!, fs.readFileSync(path.join(REPO, 'src', 'annonces', 'keys.ts')));
+    assert.equal(keysTsState(f.cfg.keysTs, f.publics), 'vide', 'forme d’AN1 lue (liste vide)');
+    fs.writeFileSync(f.cfg.keysTs!, keysTsText(f.publics, '2026-11-15'));
+    assert.deepEqual(parseKeysTs(fs.readFileSync(f.cfg.keysTs!, 'utf8')), f.publics);
+    assert.equal(keysTsState(f.cfg.keysTs, f.publics), 'à jour');
+    assert.equal(keysTsState(f.cfg.keysTs, [...f.publics].reverse()), 'différent');
+    assert.equal(parseKeysTs('export const ANNONCES_KEYS: readonly AnnonceKey[] = [ autre ];'), null, 'forme inconnue');
+    // keys.ts du repo : resté vide (jamais écrit par les tests).
+    assert.deepEqual(parseKeysTs(fs.readFileSync(path.join(REPO, 'src', 'annonces', 'keys.ts'), 'utf8')), []);
+    const v = keysView(f.cfg);
+    assert.deepEqual(v.presentes, { k1: true, k2: true });
+    assert.equal(v.keysTs.etat, 'à jour');
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('AN2 : flux signé (k1, puis k2) vérifié par feed.ts ; r ‖ s 64 octets, DER refusée ; enveloppe à trois clés ; sortie et clé privée absente', async () => {
+  const f = await keysFixture();
+  try {
+    fs.writeFileSync(path.join(f.imagesDir, 'dino-2.png'), PNG);
+    for (const keyId of ['k1', 'k2'] as const) {
+      const r = await signDraft(draft({ keyId, items: [item({ image: 'dino-2.png' })] }), { cfg: f.cfg, imagesDir: f.imagesDir, outDir: f.outDir, now: NOW });
+      assert.ok(r.ok, `signé par ${keyId}`);
+      const env = JSON.parse(r.envelope.toString('utf8'));
+      assert.deepEqual(Object.keys(env), ['payload', 'signature', 'keyId'], 'exactement trois clés, dans cet ordre');
+      assert.equal(env.keyId, keyId);
+      assert.equal(decodeBase64(env.signature)!.length, 64, 'r ‖ s, 64 octets');
+      assert.ok(decodeBase64(env.payload), 'base64 standard strict');
+      const v = await verifyEnvelope(new Uint8Array(r.envelope), f.publics, crypto.subtle);
+      assert.ok(v.ok, 'vérifié avec la clé publique correspondante');
+      const p = parsePayload(v.ok ? v.value : new Uint8Array(), TODAY);
+      assert.ok(p.ok && p.value.items.length === 1 && !p.value.notes.length);
+      assert.equal(p.ok && p.value.items[0].image?.sha256, crypto.createHash('sha256').update(PNG).digest('hex'));
+      // Mauvaise clé publique sous le même keyId : refusé.
+      const other = f.publics.find((k) => k.keyId !== keyId)!;
+      const wrong = await verifyEnvelope(new Uint8Array(r.envelope), [{ keyId, spki: other.spki }], crypto.subtle);
+      assert.equal(wrong.ok, false);
+      // Signature DER (ASN.1 SEQUENCE de r et s) : refusée par le vérificateur de l'app.
+      const sig = decodeBase64(env.signature)!;
+      const int = (b: Uint8Array) => {
+        let x = Buffer.from(b);
+        while (x.length > 1 && x[0] === 0 && x[1] < 0x80) x = x.subarray(1);
+        if (x[0] >= 0x80) x = Buffer.concat([Buffer.from([0]), x]);
+        return Buffer.concat([Buffer.from([0x02, x.length]), x]);
+      };
+      const body = Buffer.concat([int(sig.subarray(0, 32)), int(sig.subarray(32))]);
+      const der = Buffer.concat([Buffer.from([0x30, body.length]), body]);
+      const derEnv = Buffer.from(envelopeText(decodeBase64(env.payload)!, der, keyId));
+      assert.equal((await verifyEnvelope(new Uint8Array(derEnv), f.publics, crypto.subtle)).ok, false, 'DER refusée');
+      // Clé en trop dans l'enveloppe : refusée par l'app.
+      const extra = Buffer.from(JSON.stringify({ ...env, note: 'x' }));
+      assert.equal((await verifyEnvelope(new Uint8Array(extra), f.publics, crypto.subtle)).ok, false);
+    }
+    // Sortie : _headers (CORS), v1/annonces.json, v1/images/.
+    assert.match(fs.readFileSync(path.join(f.outDir, '_headers'), 'utf8'), /\/v1\/\*\n {2}Access-Control-Allow-Origin: \*/);
+    assert.ok(fs.existsSync(path.join(f.outDir, 'v1', 'annonces.json')));
+    assert.deepEqual(fs.readdirSync(path.join(f.outDir, 'v1', 'images')), ['dino-2.png']);
+    // Clé privée absente de la sortie, du brouillon et de l'état envoyé à la page.
+    const secrets = (['k1', 'k2'] as const).map((k) => fs.readFileSync(path.join(f.cfg.dir, PRIVATE_FILES[k]), 'utf8').split('\n').slice(1, -2).join(''));
+    const walk = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+    const texts = [...walk(f.outDir).map((x) => fs.readFileSync(x).toString('latin1')), JSON.stringify(keysView(f.cfg)), JSON.stringify(draft())];
+    for (const sct of secrets) for (const t of texts) assert.ok(!t.includes(sct) && !t.includes(sct.slice(0, 40)), 'clé privée absente');
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('AN2 : signature refusée, une règle par cas (rien n’est écrit) ; avertissements', async () => {
+  const f = await keysFixture();
+  try {
+    fs.writeFileSync(path.join(f.imagesDir, 'ok.png'), PNG);
+    fs.writeFileSync(path.join(f.imagesDir, 'faux.png'), JPEG);
+    fs.writeFileSync(path.join(f.imagesDir, 'texte.webp'), Buffer.from('pas une image'));
+    fs.writeFileSync(path.join(f.imagesDir, 'lourde.webp'), Buffer.concat([WEBP, Buffer.alloc(200 * 1024)]));
+    const long = (n: number) => 'é'.repeat(n);
+    const cases: [string, Draft, RegExp][] = [
+      ['issued futur', draft({ issued: D(1), expires: D(30) }), /issued\) .* dans le futur/],
+      ['issued jour inexistant', draft({ issued: '2026-02-30' }), /issued\) « 2026-02-30 » : jour civil inexistant/],
+      ['expires mal écrit', draft({ expires: '15/02/2027' }), /expires\) « 15\/02\/2027 »/],
+      ['expires > issued + 90', draft({ expires: D(91) }), /au-delà de l’émission \+ 90 jours/],
+      ['expires < issued', draft({ issued: D(-2), expires: D(-3) }), /avant l’émission/],
+      ['flux expiré', draft({ issued: D(-30), expires: D(-1) }), /flux déjà expiré/],
+      ['end > start + 365', draft({ items: [item({ end: D(366) })] }), /au-delà du début \+ 365 jours/],
+      ['end < start', draft({ items: [item({ start: D(5), end: D(4) })] }), /fin .* avant le début/],
+      ['start inexistant', draft({ items: [item({ start: '2027-13-01' })] }), /début \(start\) « 2027-13-01 »/],
+      ['plus de 5 annonces', draft({ items: [1, 2, 3, 4, 5, 6].map((i) => item({ id: `a${i}` })) }), /6 annonces \(5 au plus\)/],
+      ['identifiant hors motif', draft({ items: [item({ id: 'dino 2' })] }), /identifiant « dino 2 » refusé/],
+      ['identifiant en double', draft({ items: [item(), item()] }), /« dino-2 » en double/],
+      ['bookId hors motif', draft({ items: [item({ bookId: 'dino/2' })] }), /bookId\) « dino\/2 » refusé/],
+      ['titre absent', draft({ items: [item({ title: { fr: 'x', en: '  ', es: 'y' } })] }), /titre en anglais absent/],
+      ['titre trop long', draft({ items: [item({ title: { fr: long(61), en: 'x', es: 'y' } })] }), /titre en français trop long : 61 caractères \(60 au plus\)/],
+      ['texte trop long', draft({ items: [item({ text: { fr: 'x', en: 'y', es: long(201) } })] }), /texte en espagnol trop long : 201 caractères \(200 au plus\)/],
+      ['lien hors liste', draft({ items: [item({ url: 'https://exemple.com/livre' })] }), /lien « https:\/\/exemple\.com\/livre » hors de la liste/],
+      ['lien http', draft({ items: [item({ url: 'http://www.editions-liger.com/' })] }), /hors de la liste/],
+      ['image de mauvais format', draft({ items: [item({ image: 'faux.png' })] }), /contenu JPEG, extension \.png/],
+      ['image non reconnue', draft({ items: [item({ image: 'texte.webp' })] }), /format non reconnu à ses premiers octets/],
+      ['image trop lourde', draft({ items: [item({ image: 'lourde.webp' })] }), /trop lourde : \d+ octets \(204800 au plus/],
+      ['image introuvable', draft({ items: [item({ image: 'absente.png' })] }), /introuvable/],
+      ['clé inconnue', draft({ keyId: 'k3' as 'k1' }), /clé de signature « k3 » inconnue/],
+      [
+        'flux trop gros',
+        draft({ items: [1, 2, 3, 4, 5].map((i) => item({ id: `a${i}`, title: TT3('🦖'.repeat(55)), text: TT3('🦕'.repeat(190)), url: `https://www.editions-liger.com/${'x'.repeat(1900)}` })) }),
+        /flux trop gros : \d+ octets une fois signé \(32768 au plus\)/,
+      ],
+    ];
+    for (const [name, d, re] of cases) {
+      const c = checkDraft(d, f.imagesDir, TODAY);
+      assert.ok(c.refus.some((x) => re.test(x.message)), `${name} : ${JSON.stringify(c.refus)}`);
+      const r = await signDraft(d, { cfg: f.cfg, imagesDir: f.imagesDir, outDir: f.outDir, now: NOW });
+      assert.equal(r.ok, false, name);
+      assert.equal(fs.existsSync(f.outDir), false, `${name} : rien écrit`);
+    }
+    // Valide avec image et lien Amazon : aucun refus ; avertissements.
+    const ok = checkDraft(draft({ items: [item({ image: 'ok.png', url: 'https://www.amazon.fr/dp/123' })] }), f.imagesDir, TODAY);
+    assert.deepEqual(ok.refus, []);
+    assert.ok(ok.taille! > 0 && ok.taille! <= 32768);
+    const w = checkDraft(draft({ items: [item({ url: '', start: D(-30), end: D(-1) })] }), f.imagesDir, TODAY);
+    assert.deepEqual(w.refus, []);
+    assert.ok(w.avertissements.some((x) => /sans lien/.test(x.message)) && w.avertissements.some((x) => /terminée/.test(x.message)));
+    assert.ok(checkDraft(draft({ items: [] }), f.imagesDir, TODAY).avertissements.some((x) => /retire les annonces/.test(x.message)));
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('AN2 : clé privée qui ne correspond pas à sa clé publique : signature refusée par la vérification', async () => {
+  const f = await keysFixture();
+  try {
+    fs.writeFileSync(path.join(f.cfg.dir, 'cles-publiques.json'), JSON.stringify([f.publics[1], f.publics[0]].map((k, i) => ({ keyId: `k${i + 1}`, spki: k.spki }))));
+    const r = await signDraft(draft(), { cfg: f.cfg, imagesDir: f.imagesDir, outDir: f.outDir, now: NOW });
+    assert.ok(!r.ok && /vérificateur de l’app/.test(r.refus[0].message));
+    assert.equal(fs.existsSync(f.outDir), false);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('AN2 : relecture du flux publié : identique et vérifié ; empreinte d’image, format, CORS, autre version : écarts', async () => {
+  const f = await keysFixture();
+  try {
+    fs.writeFileSync(path.join(f.imagesDir, 'dino-2.png'), PNG);
+    const r = await signDraft(draft({ items: [item({ image: 'dino-2.png' })] }), { cfg: f.cfg, imagesDir: f.imagesDir, outDir: f.outDir, now: NOW });
+    assert.ok(r.ok);
+    const feedUrl = 'https://essai.pages.dev/v1/annonces.json';
+    const site = (files: Record<string, Buffer>, cors = '*'): Fetcher => async (url) => {
+      const body = files[new URL(url).pathname];
+      return { status: body ? 200 : 404, headers: { get: (n: string) => (n === 'access-control-allow-origin' ? cors : null) }, bytes: new Uint8Array(body ?? Buffer.alloc(0)) };
+    };
+    const good = { '/v1/annonces.json': r.envelope, '/v1/images/dino-2.png': PNG };
+    const ok = await readBack(feedUrl, r.envelope, f.publics, site(good), NOW);
+    assert.deepEqual(ok, { identique: true, verifie: true, ecarts: [] });
+    const badImg = await readBack(feedUrl, r.envelope, f.publics, site({ ...good, '/v1/images/dino-2.png': Buffer.concat([PNG, Buffer.from('x')]) }), NOW);
+    assert.ok(!badImg.verifie && badImg.ecarts.some((e) => /empreinte différente/.test(e)));
+    const badFmt = await readBack(feedUrl, r.envelope, f.publics, site({ ...good, '/v1/images/dino-2.png': Buffer.from('html') }), NOW);
+    assert.ok(!badFmt.verifie && badFmt.ecarts.some((e) => /format non reconnu/.test(e)));
+    const noCors = await readBack(feedUrl, r.envelope, f.publics, site(good, ''), NOW);
+    assert.ok(!noCors.verifie && noCors.ecarts.some((e) => /Access-Control-Allow-Origin/.test(e)));
+    const old = await readBack(feedUrl, Buffer.from('autre'), f.publics, site(good), NOW);
+    assert.ok(!old.identique && !old.verifie, 'autre version servie');
+    const missing = await readBack(feedUrl, r.envelope, f.publics, site({}), NOW);
+    assert.ok(!missing.verifie && /réponse 404/.test(missing.ecarts[0]));
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('AN2 : brouillon lu tolérant ; image importée (nom sûr, même contenu réutilisé, autre contenu suffixé) ; réglages des annonces', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-an2-img-'));
+  try {
+    const d = draftFrom({ issued: 3, keyId: 'k2', items: [{ id: 'x', title: { fr: 'a' }, image: '' }] }, NOW);
+    assert.equal(d.issued, emptyDraft(NOW).issued, 'issued illisible : aujourd’hui');
+    assert.equal(d.expires, D(90));
+    assert.equal(d.keyId, 'k2');
+    assert.deepEqual(d.items[0].title, { fr: 'a', en: '', es: '' });
+    assert.equal(d.items[0].image, null);
+    const src = path.join(root, 'Couverture Été 2026.PNG');
+    fs.writeFileSync(src, PNG);
+    const images = path.join(root, 'images');
+    const a = importImage(src, images);
+    assert.ok('nom' in a && a.nom === 'Couverture-Ete-2026.png');
+    const b = importImage(src, images);
+    assert.ok('nom' in b && b.nom === 'Couverture-Ete-2026.png', 'même contenu : réutilisé');
+    fs.writeFileSync(src, JPEG);
+    const c = importImage(src, images);
+    assert.ok('nom' in c && c.nom === 'Couverture-Ete-2026-2.png', 'autre contenu : suffixé');
+    const txt = path.join(root, 'notes.txt');
+    fs.writeFileSync(txt, 'x');
+    assert.ok('error' in importImage(txt, images));
+    const reg = path.join(root, 'reglages.json');
+    assert.deepEqual(readReglages(reg).annonces, { projet: '', sauvegarde: null });
+    fs.writeFileSync(reg, JSON.stringify({ annonces: { projet: 'liger-annonces', sauvegarde: { dir: 'C:\\cles', date: 5 } } }));
+    assert.deepEqual(readReglages(reg).annonces, { projet: 'liger-annonces', sauvegarde: { dir: 'C:\\cles', date: 5 } });
+    fs.writeFileSync(reg, JSON.stringify({ annonces: { projet: 'Mauvais Nom' } }));
+    assert.equal(readReglages(reg).annonces.projet, '', 'nom de projet refusé : ignoré');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

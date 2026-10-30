@@ -1,6 +1,6 @@
 <!doctype html>
 <!-- Studio de fabrication d'un livre (ST1 ; ST2 : book.json et Blender ; ST3 : essais sur téléphone ; ST4 : parcours en six étapes et
-     design ; spec-app-bureau.md). Servi par scripts/studio/server.ts ; jamais dans un livre (marqueur cherché par le contrôle de fin
+     design ; AN2 : feuille « Annonces », commune à tous les livres ; spec-app-bureau.md, spec-annonces.md). Servi par scripts/studio/server.ts ; jamais dans un livre (marqueur cherché par le contrôle de fin
      de build : glbi-studio-st1). Aucune ressource venue d'Internet : la page marche hors ligne. -->
 <html lang="fr" data-studio="glbi-studio-st1">
 <head>
@@ -34,6 +34,7 @@
         <ul class="group">
           <li><button type="button" class="row-link" data-act="feuille" data-f="journaux"><span class="dot" id="dot-proc"></span><span class="lbl">Journaux et processus</span><span class="meta" id="meta-proc"></span><span class="chev" aria-hidden="true">›</span></button></li>
           <li><button type="button" class="row-link" data-act="feuille" data-f="reglages"><span class="dot" id="dot-reglages"></span><span class="lbl">Réglages</span><span class="meta">Blender, essai, ports</span><span class="chev" aria-hidden="true">›</span></button></li>
+          <li><button type="button" class="row-link" data-act="feuille" data-f="annonces"><span class="dot" id="dot-annonces"></span><span class="lbl">Annonces</span><span class="meta" id="meta-annonces"></span><span class="chev" aria-hidden="true">›</span></button></li>
           <li><button type="button" class="row-link" data-act="feuille" data-f="outils"><span class="dot" id="dot-outils"></span><span class="lbl">Outils de développement</span><span class="chev" aria-hidden="true">›</span></button></li>
         </ul>
       </nav>
@@ -121,6 +122,47 @@
       </form>
       <p class="hint">Studio : port <span id="studio-port"></span> (option <code>--port</code>) ; tests d’installation : 4173.</p>
     </section>
+  </div>
+</dialog>
+
+<!-- Annonces des nouveaux livres (AN2, spec-annonces.md §6) : communes à tous les livres, sans livre ouvert. -->
+<dialog class="sheet wide" id="feuille-annonces" aria-labelledby="fa-titre">
+  <header class="sheet-head"><div class="grow"><h2 id="fa-titre">Annonces des nouveaux livres</h2><p class="sub">Flux commun à toutes les apps de livres, signé par le studio puis publié sur Cloudflare Pages. Brouillon enregistré tout seul (.studio/annonces/).</p></div>
+    <button type="button" class="btn sm" data-act="fermer">Fermer</button></header>
+  <div class="sheet-body split an">
+    <div class="col-left">
+      <section class="block">
+        <h3>Flux</h3>
+        <div id="an-flux"></div>
+      </section>
+      <section class="block">
+        <div class="row between"><h3>Annonces</h3><span class="hint" id="an-compte"></span></div>
+        <div id="an-items"></div>
+        <div class="form-actions"><button type="button" class="btn" data-act="anAjouter" id="an-ajouter">Ajouter une annonce</button></div>
+        <p class="hint">L’identifiant d’une annonce la désigne sur les téléphones : chaque annonce n’est montrée qu’une fois ; un identifiant changé = une annonce montrée de nouveau. Les textes sont adressés aux parents (vouvoiement).</p>
+      </section>
+    </div>
+    <div class="col-right">
+      <section class="block" id="an-etat"></section>
+      <section class="block" id="an-controle"></section>
+      <section class="block">
+        <div class="row between"><h3>Aperçu de la fenêtre</h3><div class="chips" id="an-langues"></div></div>
+        <div id="an-apercu"></div>
+      </section>
+      <section class="block" id="an-cles"></section>
+      <section class="block">
+        <h3>Projet Cloudflare Pages des annonces</h3>
+        <form id="an-projet" class="form" autocomplete="off">
+          <div class="field-row">
+            <label class="field grow">Projet (créé à part, jamais celui des essais de livres)
+              <input name="projet" type="text" spellcheck="false" placeholder="ex. liger-annonces">
+            </label>
+            <button type="submit" class="btn">Enregistrer</button>
+          </div>
+        </form>
+        <div id="an-projet-etat"></div>
+      </section>
+    </div>
   </div>
 </dialog>
 
