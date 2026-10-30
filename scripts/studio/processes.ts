@@ -462,10 +462,22 @@ export function openFolder(dir: string): Promise<{ ok: true } | { error: string 
   return new Promise((resolve) => {
     try {
       const p = spawn(cmd, args as string[], { stdio: 'ignore', detached: true, windowsHide: false });
-      p.once('error', (e) => resolve({ error: e.message }));
+      // Commande absente (MJ3, point de CC2 : `xdg-open` manque sur un Linux sans bureau) : dit en clair.
+      p.once('error', (e) => resolve({ error: (e as NodeJS.ErrnoException).code === 'ENOENT' ? `${cmd} introuvable` : e.message }));
       p.once('spawn', () => {
-        p.unref();
-        resolve({ ok: true });
+        if (IS_WIN) {
+          p.unref();
+          return resolve({ ok: true });
+        }
+        // `open` et `xdg-open` sortent en échec quand aucune application ne peut ouvrir le dossier : attendus 1,5 s au plus.
+        const t = setTimeout(() => {
+          p.unref();
+          resolve({ ok: true });
+        }, 1500);
+        p.once('exit', (code) => {
+          clearTimeout(t);
+          resolve(code === 0 || code === null ? { ok: true } : { error: `${cmd} a échoué (code ${code}) : aucune application pour ouvrir un dossier ?` });
+        });
       });
     } catch (e) {
       resolve({ error: (e as Error).message });

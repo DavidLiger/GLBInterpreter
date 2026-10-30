@@ -8,6 +8,8 @@
 // toute modification du dossier source (SSE) : un réexport depuis Blender recharge la scène sans perdre la saisie.
 // Caméra (A4) : le cadrage saisi est posé en place sur le lecteur (caméra et contrôles de la poignée `onEngineReady`,
 // `applyFramingInPlace`), sans remonter le lecteur ni relire le GLB ; le livre publié n'est pas concerné.
+// Jeu (MJ3) : entrée « Jeu » du sélecteur (livre à `book.json.game`, adresse `#/jeu`), page `GameWorkshop.tsx`. Le studio
+// peut faire passer un onglet déjà ouvert sur une scène ou sur le jeu (événement `ouvrir` du flux SSE).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import WebDioramaLoader, { type ReaderEngine } from "@/components/diorama/WebDioramaLoader";
 import type { ModelCredit } from "@/schema/glbi";
@@ -22,6 +24,7 @@ import { cardStarted, formFromEdit, layerFromForm, usedAssets, withCardType, typ
 import ReportTab from "./ReportTab";
 import { fieldOfMessage } from "./reportLinks";
 import { readerBookOf, readerSceneOf, sceneFiles } from "./readerFromScene";
+import GameWorkshop from "./GameWorkshop";
 import { parseCardTypes, showCardType } from "@/components/card/cardModel";
 
 const LANGS: Lang[] = ["fr", "en", "es"];
@@ -53,6 +56,10 @@ async function sendJson<T>(method: "PUT" | "POST", path: string, body: unknown):
   const res = await fetch(path, { method, cache: "no-store", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   return { status: res.status, body: (await res.json().catch(() => ({ ok: false, error: `${path} : HTTP ${res.status}`, messages: [] }))) as T };
 }
+
+/** Valeur du sélecteur et adresse de l'entrée « Jeu » (MJ3). */
+const GAME_ENTRY = "#jeu";
+const GAME_HASH = "#/jeu";
 
 function hashScene(): string | null {
   const m = /^#\/s\/([^/]+)$/.exec(window.location.hash);
@@ -91,6 +98,12 @@ export default function Atelier() {
   // Caméra (A4) : bornes appliquées au lecteur pendant le réglage ; demande de retour à la vue de départ.
   const [cameraBounds, setCameraBounds] = useState(true);
   const [startTick, setStartTick] = useState(0);
+  // Jeu (MJ3) : entrée « Jeu » ouverte ; dernière modification du dossier source transmise à sa page ; saisie du jeu non enregistrée.
+  const [gameOpen, setGameOpen] = useState(false);
+  const [gameChange, setGameChange] = useState<{ n: number; ev: ChangeEvent | null }>({ n: 0, ev: null });
+  const gameDirtyRef = useRef(false);
+  const gameOpenRef = useRef(false);
+  gameOpenRef.current = gameOpen;
 
   const sceneIdRef = useRef<string | null>(null);
   const sceneRef = useRef<SceneResponse | null>(null);
@@ -132,6 +145,10 @@ export default function Atelier() {
     setLang(readLang());
     void loadBook().then((b) => {
       if (!b) return;
+      if (window.location.hash === GAME_HASH && b.book?.game) {
+        setGameOpen(true);
+        return;
+      }
       const wanted = hashScene();
       const id = wanted && b.scenes.some((s) => s.id === wanted) ? wanted : (b.scenes[0]?.id ?? null);
       setSceneId(id);
@@ -164,6 +181,13 @@ export default function Atelier() {
         if (sceneIdRef.current) void loadScene(sceneIdRef.current).then((s) => s && setReload((r) => r + 1));
       }
       generation = g;
+      setGameChange((c) => ({ n: c.n + 1, ev: null }));
+    });
+    // Studio (MJ3, point de CC2) : onglet déjà ouvert à la main, retrouvé par le studio et passé sur la scène ou le jeu demandé.
+    es.addEventListener("ouvrir", (e) => {
+      const { hash } = JSON.parse((e as MessageEvent).data) as { hash: string };
+      if (window.location.hash !== hash) window.location.hash = hash;
+      window.focus();
     });
     es.addEventListener("change", (e) => {
       const ev = JSON.parse((e as MessageEvent).data) as ChangeEvent;
@@ -171,6 +195,7 @@ export default function Atelier() {
       const before = sceneRef.current;
       const deps = before ? sceneFiles(before) : new Set<string>();
       void loadBook();
+      setGameChange((c) => ({ n: c.n + 1, ev }));
       const id = sceneIdRef.current;
       if (!id) return;
       const editRel = `scenes/${id}.edit.json`;
@@ -277,7 +302,7 @@ export default function Atelier() {
       }
     };
     const onLeave = (e: BeforeUnloadEvent) => {
-      if (!dirtyRef.current) return;
+      if (!dirtyRef.current && !gameDirtyRef.current) return;
       e.preventDefault();
       e.returnValue = "";
     };
@@ -289,8 +314,27 @@ export default function Atelier() {
     };
   }, []);
 
+  /** Entrée « Jeu » (MJ3) ouverte : la scène affichée est quittée (saisie abandonnée après confirmation). */
+  const openGame = useCallback(() => {
+    setGameOpen(true);
+    setSceneId(null);
+    setFormState(null);
+    setEngine(null);
+    dirtyRef.current = false;
+    if (window.location.hash !== GAME_HASH) history.replaceState(null, "", GAME_HASH);
+  }, []);
+
   const changeScene = (id: string) => {
+    if (gameOpen) {
+      if (id === GAME_ENTRY) return;
+      if (gameDirtyRef.current && !window.confirm("Modifications non enregistrées sur le jeu : les abandonner ?")) return;
+      gameDirtyRef.current = false;
+      setGameOpen(false);
+      setSceneId(id);
+      return;
+    }
     if (dirtyRef.current && !window.confirm(`Modifications non enregistrées sur « ${sceneId} » : les abandonner ?`)) return;
+    if (id === GAME_ENTRY) return openGame();
     setSceneId(id);
   };
 
@@ -298,6 +342,27 @@ export default function Atelier() {
   // onglet et n'en change que la scène. Saisie non enregistrée : confirmation, comme le sélecteur ; refus : adresse remise.
   useEffect(() => {
     const onHash = () => {
+      // Jeu (MJ3) : #/jeu ouvre l'entrée « Jeu » ; une scène demandée pendant le jeu la referme (confirmation si saisie).
+      if (window.location.hash === GAME_HASH) {
+        if (gameOpenRef.current) return;
+        if (!book?.book?.game || (dirtyRef.current && !window.confirm(`Modifications non enregistrées sur « ${sceneIdRef.current} » : les abandonner pour ouvrir le jeu ?`))) {
+          if (sceneIdRef.current) history.replaceState(null, "", `#/s/${encodeURIComponent(sceneIdRef.current)}`);
+          return;
+        }
+        return openGame();
+      }
+      if (gameOpenRef.current) {
+        const w = hashScene();
+        if (!w || !book?.scenes.some((s) => s.id === w)) return;
+        if (gameDirtyRef.current && !window.confirm(`Modifications non enregistrées sur le jeu : les abandonner pour ouvrir « ${w} » ?`)) {
+          history.replaceState(null, "", GAME_HASH);
+          return;
+        }
+        gameDirtyRef.current = false;
+        setGameOpen(false);
+        setSceneId(w);
+        return;
+      }
       const wanted = hashScene();
       const current = sceneIdRef.current;
       if (!wanted || wanted === current) return;
@@ -308,7 +373,7 @@ export default function Atelier() {
     };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
-  }, [book]);
+  }, [book, openGame]);
 
   // --- Rapport → champ ---
   const goto = useCallback((ref: FieldRef) => {
@@ -443,12 +508,13 @@ export default function Atelier() {
         </div>
         <label className="flex items-center gap-2">
           Scène
-          <select className="rounded bg-neutral-800 px-2 py-1" value={sceneId ?? ""} onChange={(e) => changeScene(e.target.value)} data-testid="scene-select">
+          <select className="rounded bg-neutral-800 px-2 py-1" value={gameOpen ? GAME_ENTRY : (sceneId ?? "")} onChange={(e) => changeScene(e.target.value)} data-testid="scene-select">
             {bookScenes.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.id}
               </option>
             ))}
+            {!!book?.book?.game && <option value={GAME_ENTRY}>Jeu (mini-jeu)</option>}
             {extraScenes.length > 0 && (
               <optgroup label="Hors book.json (diagnostic seul)">
                 {extraScenes.map((s) => (
@@ -483,12 +549,12 @@ export default function Atelier() {
           {errors} erreur(s), {warnings} avertissement(s)
         </button>
         <div className="ml-auto flex items-center gap-3">
-          {editable && (
+          {editable && !gameOpen && (
             <span className={`text-xs ${dirty ? "text-amber-300" : "text-neutral-500"}`} data-testid="dirty">
               {dirty ? "● modifié, non enregistré" : scene?.edit === null ? "edit.json absent" : "enregistré"}
             </span>
           )}
-          <button
+          {!gameOpen && <button
             type="button"
             onClick={() => void save()}
             disabled={!canSave}
@@ -497,11 +563,14 @@ export default function Atelier() {
             data-testid="save"
           >
             {saving ? "Enregistrement…" : "Enregistrer"}
-          </button>
+          </button>}
           <span className={`inline-block h-2 w-2 rounded-full ${live ? "bg-emerald-500" : "bg-red-500"}`} title={live ? "surveillance active" : "serveur déconnecté"} />
         </div>
       </header>
 
+      {gameOpen && book ? (
+        <GameWorkshop book={book} lang={lang} onLang={changeLang} change={gameChange} assets={assets} dirtyRef={gameDirtyRef} />
+      ) : (
       <main className="flex min-h-0 flex-1">
         {/* `transform` : les éléments `fixed` du lecteur (modales) restent dans cette zone. */}
         <div className="relative min-w-0 flex-1 overflow-hidden bg-black" style={{ transform: "translateZ(0)" }} data-testid="reader-area">
@@ -606,7 +675,8 @@ export default function Atelier() {
             {tab === "ambiance" && editTab(form && <AmbianceTab form={form} setForm={setForm} assets={assets} />)}
             {tab === "quiz" && editTab(form && <QuizTab form={form} setForm={setForm} lang={lang} sceneId={scene?.id ?? ""} />)}
             {tab === "card" && editTab(form && <CardTab form={form} setForm={setForm} assets={assets} lang={lang} sceneId={scene?.id ?? ""} info={cardInfo} />)}
-            {tab === "credits" && editTab(form && <CreditsTab form={form} setForm={setForm} used={used} modelCredits={modelCredits} />)}
+            {tab === "credits" &&
+              editTab(form && <CreditsTab credits={form.credits} setCredits={(u) => setForm((f) => ({ ...f, credits: u(f.credits) }))} used={used} modelCredits={modelCredits} />)}
             {book && tab === "rapport" && (
               <ReportTab report={report} summary={summary} scene={shown} incomplete={editable ? incomplete : []} previewing={!!activePreview} linkOf={linkOf} onGoto={goto} />
             )}
@@ -620,6 +690,7 @@ export default function Atelier() {
           )}
         </aside>
       </main>
+      )}
     </div>
   );
 }

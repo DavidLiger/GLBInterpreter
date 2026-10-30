@@ -498,26 +498,28 @@ function QuizPreview({ quiz, lang, title }: { quiz: QuizForm; lang: Lang; title:
 }
 
 export function CreditsTab({
-  form,
-  setForm,
+  credits,
+  setCredits,
   used,
   modelCredits,
+  usedTitle = "Sons et images de la scène",
+  modelsHint = "Modifiés dans Blender, propriétés src_name, src_author, src_license, src_url.",
 }: {
-  form: EditForm;
-  setForm: SetForm;
+  credits: CreditForm[];
+  /** Mise à jour des crédits du formulaire (scène, ou jeu en MJ3). */
+  setCredits: (update: (c: CreditForm[]) => CreditForm[]) => void;
   /** Assets utilisés par la scène (image de chargement, icônes, illustration de la carte, sons). */
   used: { asset: string; kind: "image" | "son" }[];
   /** Crédits `src_*` du GLB, dédoublonnés (lecture seule). */
   modelCredits: ModelCredit[];
+  usedTitle?: string;
+  modelsHint?: string;
 }) {
   const credit = (asset: string): CreditForm =>
-    form.credits.find((c) => c.asset === asset) ?? { asset, title: "", author: "", license: "", source: "" };
+    credits.find((c) => c.asset === asset) ?? { asset, title: "", author: "", license: "", source: "" };
   const setCredit = (c: CreditForm) =>
-    setForm((f) => ({
-      ...f,
-      credits: f.credits.some((x) => x.asset === c.asset) ? f.credits.map((x) => (x.asset === c.asset ? c : x)) : [...f.credits, c],
-    }));
-  const unused = form.credits.filter((c) => !used.some((u) => u.asset === c.asset));
+    setCredits((list) => (list.some((x) => x.asset === c.asset) ? list.map((x) => (x.asset === c.asset ? c : x)) : [...list, c]));
+  const unused = credits.filter((c) => !used.some((u) => u.asset === c.asset));
   const state = (c: CreditForm, kind: "image" | "son" | null) => {
     const filled = [c.title, c.author, c.license].filter((v) => v.trim()).length;
     if (filled === 3) return { text: "crédité", cls: "text-emerald-400" };
@@ -546,7 +548,7 @@ export function CreditsTab({
         {f("license", "Licence")}
         {f("source", "Source")}
         {kind === null && (
-          <button type="button" className={`${small} self-start`} onClick={() => setForm((ff) => ({ ...ff, credits: ff.credits.filter((x) => x.asset !== c.asset) }))}>
+          <button type="button" className={`${small} self-start`} onClick={() => setCredits((list) => list.filter((x) => x.asset !== c.asset))}>
             Supprimer ce crédit
           </button>
         )}
@@ -556,12 +558,12 @@ export function CreditsTab({
 
   return (
     <div className="flex flex-col gap-5 text-sm" data-field="credits">
-      <Section title="Sons et images de la scène" hint="Un crédit par son est obligatoire (V-10) ; titre, auteur et licence requis, source facultative.">
+      <Section title={usedTitle} hint="Un crédit par son est obligatoire (V-10) ; titre, auteur et licence requis, source facultative.">
         {used.length === 0 && <p className="text-neutral-400">Aucun son ni image utilisé.</p>}
         {used.map((u) => row(credit(u.asset), u.kind))}
       </Section>
       {unused.length > 0 && <Section title="Crédits d'assets non utilisés">{unused.map((c) => row(c, null))}</Section>}
-      <Section title="Modèles 3D (src_* du GLB, lecture seule)" hint="Modifiés dans Blender, propriétés src_name, src_author, src_license, src_url.">
+      <Section title="Modèles 3D (src_* du GLB, lecture seule)" hint={modelsHint}>
         {modelCredits.length === 0 && <p className="text-neutral-400">Aucun crédit de modèle dans le GLB.</p>}
         {modelCredits.map((c, i) => (
           <p key={i} className="rounded bg-neutral-900 px-3 py-2 text-xs">

@@ -92,6 +92,23 @@ export function orderEditLayer(edit: unknown, actionOrder: readonly string[], ev
   })(edit);
 }
 
+/**
+ * Texte de `game/game.edit.json` tel que l'atelier l'écrit (MJ3, couche éditoriale du jeu, `gameEditSchema`) : clés dans
+ * l'ordre du contrat, proies dans l'ordre du fichier, mêmes règles d'écriture que `formatEditLayer`.
+ */
+export function formatGameEdit(edit: unknown): string {
+  const ordered = obj(["version", "rules", "camera", "texts", "sounds", "credits"], {
+    rules: obj(["duration", "preys", "playerSpeed", "preySpeed", "detectionRadius", "points", "respawn"], {
+      preys: map(obj(["entity", "count"])),
+    }),
+    camera: obj(["distance"]),
+    texts: obj(["title", "instructions", "end"], { title: text, instructions: text, end: text }),
+    sounds: obj(["capture", "jump", "music", "end"]),
+    credits: obj(["assets"], { assets: map(obj(["asset", "title", "author", "license", "source"])) }),
+  })(pruneEmpty(edit) ?? {});
+  return `${JSON.stringify(ordered, null, 2)}\n`;
+}
+
 /** Texte du fichier tel que l'atelier l'écrit (`edit` déjà validé par `editLayerSchema`, ou à valider). */
 export function formatEditLayer(edit: unknown, actionOrder: readonly string[], eventOrder: EventOrder = {}): string {
   return `${JSON.stringify(orderEditLayer(pruneEmpty(edit) ?? {}, actionOrder, eventOrder), null, 2)}\n`;

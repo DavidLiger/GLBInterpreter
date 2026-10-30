@@ -82,7 +82,9 @@ export interface EditForm {
 }
 
 /** Onglets d'édition (et Rapport, Diagnostic). */
-export type TabId = "scene" | "camera" | "actions" | "ambiance" | "quiz" | "card" | "credits" | "rapport" | "diagnostic";
+export type TabId = "scene" | "camera" | "actions" | "ambiance" | "quiz" | "card" | "credits" | "rapport" | "diagnostic" | GameTabId;
+/** Onglets de l'entrée « Jeu » (MJ3, `GameWorkshop.tsx`) ; Rapport et Diagnostic partagés. */
+export type GameTabId = "regles" | "gcamera" | "textes" | "sons" | "gcredits";
 
 /** Champ du formulaire : onglet et identifiant (`data-field`) pour les liens du Rapport. */
 export interface FieldRef {

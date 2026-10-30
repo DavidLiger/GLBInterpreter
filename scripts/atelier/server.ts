@@ -11,8 +11,11 @@
 //   le reste               transmis à `next dev` (page, /_next/…, WebSocket du rechargement à chaud)
 // Les chemins relatifs de la configuration se résolvent depuis /atelier/ comme dans le livre publié (D-8.1 inchangée).
 //
-// Seule écriture (A3) : `scenes/<id>.edit.json` d'une scène de book.json, validé par `editLayerSchema`, écrit dans un fichier
-// temporaire du même dossier puis renommé ; jamais le GLB, jamais hors du dossier source. Le dossier source est scruté toutes
+// Écritures (A3, MJ3) : `scenes/<id>.edit.json` d'une scène de book.json, validé par `editLayerSchema`, et
+// `game/game.edit.json` (entrée « Jeu », livre à `book.json.game`), validé par `gameEditSchema` ; chacun écrit dans un fichier
+// temporaire du même dossier puis renommé ; jamais un GLB, jamais hors du dossier source.
+// MJ3 : jeu (`/atelier/__api/game` : GLB de game/, couche éditoriale, fusion `draft`, aperçu, écriture) ; onglets connectés et
+// navigation d'un onglet ouvert (`onglets`, `ouvrir`), demandés par le studio pour retrouver un atelier ouvert à la main. Le dossier source est scruté toutes
 // les 500 ms ; un fichier
 // modifié est pris en compte quand sa taille et sa date n'ont pas bougé pendant deux relevés (un GLB, en plus, quand son
 // en-tête annonce la taille du fichier : écriture par Blender terminée). Le rapport est alors recalculé et la page prévenue.
@@ -29,19 +32,34 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { checkBookSource, listSourceFiles, readScene, Report, ROOT, toPosix, type ReadSceneFn, type SceneResult } from '../book-check';
 import { checkSchemaFresh } from '../export-schema';
-import { layerIssues, mergeLayers } from '../../src/schema/merge';
-import { editLayerSchema, isReservedSourcePath, RESERVED_SOURCE_DIR, SCENE_ID_PATTERN, type BuiltScene, type ModelCredit } from '../../src/schema/glbi';
+import { gameLayerIssues, layerIssues, mergeGame, mergeLayers, type GameLayerInput } from '../../src/schema/merge';
+import {
+  editLayerSchema,
+  GAME_ARENA_ID,
+  GAME_DIR,
+  GAME_EDIT_FILE,
+  gameEditSchema,
+  isReservedSourcePath,
+  RESERVED_SOURCE_DIR,
+  SCENE_ID_PATTERN,
+  type Book,
+  type BuiltScene,
+  type ModelCredit,
+} from '../../src/schema/glbi';
 import type {
   AtelierScene,
   BookResponse,
   ChangeEvent,
+  GameGlbInfo,
+  GamePreviewResponse,
+  GameResponse,
   LastChange,
   PreviewResponse,
   ReportLine,
   SaveResponse,
   SceneResponse,
 } from '../../src/atelier/api';
-import { formatEditLayer, glbActionIds, glbEventIds, pruneEmpty } from '../../src/atelier/editLayerFile';
+import { formatEditLayer, formatGameEdit, glbActionIds, glbEventIds, pruneEmpty } from '../../src/atelier/editLayerFile';
 import { diagnoseGlb } from './diagnose';
 
 const HOST = '127.0.0.1';
@@ -135,7 +153,7 @@ function readJsonLoose(file: string): unknown {
  * `override` (aperçu, A3) : couche éditoriale saisie pour une scène, contrôlée à la place de son fichier ; les autres scènes
  * sont rejouées depuis `cache` (pas de relecture de leur GLB).
  */
-async function runChecks(override?: { id: string; value: unknown }, cache?: Map<string, SceneCheck>) {
+async function runChecks(override?: { id: string; value: unknown }, cache?: Map<string, SceneCheck>, gameEdit?: { value: unknown }) {
   const report = new Report();
   const stale = checkSchemaFresh();
   if (stale) report.error(stale);
@@ -154,7 +172,7 @@ async function runChecks(override?: { id: string; value: unknown }, cache?: Map<
     }
     return entry.result;
   };
-  const checked = await checkBookSource(sourceDir, report, readFn);
+  const checked = await checkBookSource(sourceDir, report, readFn, gameEdit ? { gameEdit } : {});
   const summary =
     report.errors.length || !checked
       ? `build-book : ${report.errors.length} erreur(s), ${report.warnings.length} avertissement(s). Rien n'a été écrit.`
@@ -272,6 +290,7 @@ async function recompute(): Promise<void> {
       generation++;
       sceneCache.clear();
       diagCache.clear();
+      gameCache = null;
       try {
         bookState = await computeBook();
       } catch (e) {
@@ -300,6 +319,99 @@ async function sceneResponse(id: string): Promise<SceneResponse> {
   sceneCache.set(id, { generation, value });
   value.catch(() => sceneCache.delete(id));
   return value;
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Jeu (MJ3, spec-mini-jeu.md §9) : GLB de game/, game/game.edit.json, fusion `draft` (src/schema/merge.ts, `mergeGame`)
+// ---------------------------------------------------------------------------------------------------------
+
+let gameCache: { generation: number; value: Promise<GameResponse> } | null = null;
+
+/** `book.json.game` lu (même si book.json est refusé par son schéma) : gabarit, ou `null`. */
+function bookGameTemplate(state: BookState): string | null {
+  const g = state.response.book?.game;
+  return isObj(g) && typeof g.template === 'string' ? g.template : null;
+}
+
+/**
+ * Jeu du livre pour l'entrée « Jeu » : GLB de `game/` (diagnostic, couche 3D du jeu), couche éditoriale (fichier, ou saisie
+ * `override` pour l'aperçu), objet fusionné `draft` (monté dans la page). Les contrôles sont ceux de `book:check` (rapport).
+ */
+async function computeGame(state: BookState, override?: { value: unknown }): Promise<GameResponse> {
+  const template = bookGameTemplate(state);
+  const dir = path.join(sourceDir, GAME_DIR);
+  const files = fs.existsSync(dir) && fs.statSync(dir).isDirectory() ? fs.readdirSync(dir).filter((f) => /\.glb$/i.test(f)).sort() : [];
+  // Arène d'abord, puis les entités dans l'ordre des fichiers (ordre de `readGame`).
+  files.sort((a, b) => Number(b.replace(/\.glb$/i, '') === GAME_ARENA_ID) - Number(a.replace(/\.glb$/i, '') === GAME_ARENA_ID));
+  const glbs: GameGlbInfo[] = [];
+  let arena: GameLayerInput | null = null;
+  const entities: GameLayerInput[] = [];
+  let usable = true;
+  for (const f of files) {
+    const id = f.replace(/\.glb$/i, '');
+    const rel = `${GAME_DIR}/${f}`;
+    const full = path.join(dir, f);
+    const d = await diagnoseCachedFile(rel);
+    const raw = d.rawGame as { kind?: unknown; role?: unknown } | undefined;
+    glbs.push({
+      rel,
+      id,
+      mtime: fs.statSync(full).mtimeMs,
+      kind: typeof raw?.kind === 'string' ? raw.kind : null,
+      role: typeof raw?.role === 'string' ? raw.role : null,
+      diagnostic: d.diagnostic,
+    });
+    if (d.rawGame === undefined) {
+      usable = false;
+      continue;
+    }
+    const layer = { id, raw: d.rawGame, version: d.gameVersion };
+    if (id === GAME_ARENA_ID) arena = layer;
+    else entities.push(layer);
+  }
+  const editFile = path.join(sourceDir, GAME_EDIT_FILE);
+  const editExists = fs.existsSync(editFile);
+  const fileEdit = editExists ? (readJsonLoose(editFile) ?? null) : null;
+  const rawEdit = override ? override.value : editExists ? (readJsonLoose(editFile) ?? undefined) : undefined;
+  let draft: GameResponse['draft'] = null;
+  let editIgnored = editExists && !isObj(fileEdit);
+  if (template && usable) {
+    const book = { game: { template } } as unknown as Book;
+    const m = mergeGame({ book, cards: [], arena, entities, edit: isObj(rawEdit) ? rawEdit : undefined }, { mode: 'draft' });
+    draft = m.draft;
+    editIgnored ||= isObj(rawEdit) && m.edit === null;
+  }
+  const preyIds = entities.filter((e) => isObj(e.raw) && e.raw.role === 'prey').map((e) => e.id);
+  return { inBook: !!template, template, glbs, edit: fileEdit, editIgnored, draft, preyIds, generation };
+}
+
+/** Diagnostic d'un GLB du dossier source (relatif), relu une fois par génération. */
+function diagnoseCachedFile(rel: string): ReturnType<typeof diagnoseGlb> {
+  const key = `file:${rel}`;
+  const hit = diagCache.get(key);
+  if (hit && hit.generation === generation) return hit.value;
+  const value = diagnoseGlb(path.join(sourceDir, rel));
+  diagCache.set(key, { generation, value });
+  value.catch(() => diagCache.delete(key));
+  return value;
+}
+
+async function gameResponse(): Promise<GameResponse> {
+  const state = await currentBook();
+  if (gameCache && gameCache.generation === generation) return gameCache.value;
+  const value = computeGame(state);
+  gameCache = { generation, value };
+  value.catch(() => (gameCache = null));
+  return value;
+}
+
+/** Aperçu d'une saisie du jeu non enregistrée : fusion `draft` et contrôles du livre avec cette couche éditoriale. */
+async function gamePreview(body: unknown): Promise<GamePreviewResponse> {
+  const state = await currentBook();
+  const value = pruneEmpty(body) ?? {};
+  const checks = await runChecks(undefined, state.sceneChecks, { value });
+  const game = await computeGame(state, { value });
+  return { game, report: checks.lines, summary: checks.summary };
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -382,6 +494,16 @@ const clients = new Set<http.ServerResponse>();
 function broadcast(e: ChangeEvent): void {
   const msg = `event: change\ndata: ${JSON.stringify(e)}\n\n`;
   for (const c of clients) c.write(msg);
+}
+
+/**
+ * Navigation demandée par le studio (MJ3, point de CC2 : atelier ouvert à la main) : chaque onglet connecté passe sur `hash`
+ * (`#/s/<scène>` ou `#/jeu`), avec la confirmation habituelle si une saisie n'est pas enregistrée.
+ */
+function broadcastOpen(hash: string): number {
+  const msg = `event: ouvrir\ndata: ${JSON.stringify({ hash })}\n\n`;
+  for (const c of clients) c.write(msg);
+  return clients.size;
 }
 
 function events(req: http.IncomingMessage, res: http.ServerResponse): void {
@@ -560,15 +682,24 @@ async function save(id: string, body: unknown): Promise<{ status: number; body: 
   const { raw3d } = await diagnoseCached(id);
   const text = formatEditLayer(value, glbActionIds(raw3d), glbEventIds(raw3d));
 
-  const scenesDir = path.resolve(sourceDir, 'scenes');
-  const target = path.resolve(scenesDir, `${id}.edit.json`);
+  return writeSourceFile('scenes', `${id}.edit.json`, text);
+}
+
+/**
+ * Écriture d'un fichier éditorial du dossier source (`<dossier>/<nom>`) : rien si le contenu est identique ; sinon fichier
+ * temporaire du même dossier puis renommage ; écriture connue de la scrutation, relecture et annonce aux onglets.
+ */
+async function writeSourceFile(sub: string, name: string, text: string): Promise<{ status: number; body: SaveResponse }> {
+  const editRel = `${sub}/${name}`;
+  const scenesDir = path.resolve(sourceDir, sub);
+  const target = path.resolve(scenesDir, name);
   if (path.dirname(target) !== scenesDir || !scenesDir.startsWith(sourceDir + path.sep)) {
     return { status: 400, body: { ok: false, error: `${editRel} : chemin hors du dossier source`, messages: [] } };
   }
   if (fs.existsSync(target) && fs.readFileSync(target, 'utf8') === text) return { status: 200, body: { ok: true, unchanged: true, generation } };
 
   fs.mkdirSync(scenesDir, { recursive: true });
-  const tmp = path.join(scenesDir, `.${id}.edit.json.${process.pid}.tmp`);
+  const tmp = path.join(scenesDir, `.${name}.${process.pid}.tmp`);
   fs.writeFileSync(tmp, text, 'utf8');
   // Windows : un renommage peut échouer brièvement si le fichier est ouvert ailleurs (antivirus, éditeur).
   for (let attempt = 1; ; attempt++) {
@@ -599,7 +730,51 @@ async function save(id: string, body: unknown): Promise<{ status: number; body: 
   return { status: 200, body: { ok: true, unchanged: false, generation } };
 }
 
+/**
+ * Écriture de `game/game.edit.json` (MJ3, entrée « Jeu ») : couche validée par `gameEditSchema` (mêmes messages qu'au build),
+ * mise en forme du contrat (`formatGameEdit`), même écriture que les scènes. Refusée si book.json n'a pas de `game`.
+ */
+async function saveGame(body: unknown): Promise<{ status: number; body: SaveResponse }> {
+  const value = pruneEmpty(body) ?? {};
+  const parsed = gameEditSchema.safeParse(value);
+  if (!parsed.success) {
+    return { status: 400, body: { ok: false, error: `${GAME_EDIT_FILE} non écrit : couche refusée par son schéma`, messages: gameLayerIssues(parsed.error, GAME_EDIT_FILE, 'edit') } };
+  }
+  return writeSourceFile(GAME_DIR, 'game.edit.json', formatGameEdit(value));
+}
+
+/** Hash admis pour la navigation demandée par le studio : `#/s/<scène>` (motif des scènes) ou `#/jeu`. */
+const OPEN_HASH = new RegExp(`^#/(?:s/${SCENE_ID_PATTERN.source.slice(1, -1)}|jeu)$`);
+
 async function api(req: http.IncomingMessage, res: http.ServerResponse, route: string): Promise<void> {
+  if (route === 'game/edit' || route === 'game/preview') {
+    const method = route === 'game/edit' ? 'PUT' : 'POST';
+    if (req.method !== method) return sendJson(res, 405, { error: `${method} attendu` });
+    const state = await currentBook();
+    if (!bookGameTemplate(state)) return sendJson(res, 400, { ok: false, error: `book.json n'a pas de game (gabarit du jeu) : ${GAME_EDIT_FILE} non modifiable ici ; choisir le gabarit dans le studio`, messages: [] });
+    let body: unknown;
+    try {
+      body = await readBody(req);
+    } catch (e) {
+      return sendJson(res, 400, { ok: false, error: (e as Error).message, messages: [] });
+    }
+    if (!isObj(body)) return sendJson(res, 400, { ok: false, error: 'objet JSON attendu', messages: [] });
+    if (route === 'game/preview') return sendJson(res, 200, await gamePreview(body));
+    const r = await saveGame(body);
+    return sendJson(res, r.status, r.body);
+  }
+  if (route === 'ouvrir') {
+    if (req.method !== 'POST') return sendJson(res, 405, { error: 'POST attendu' });
+    let body: unknown;
+    try {
+      body = await readBody(req);
+    } catch (e) {
+      return sendJson(res, 400, { error: (e as Error).message });
+    }
+    const hash = isObj(body) && typeof body.hash === 'string' ? body.hash : '';
+    if (!OPEN_HASH.test(hash)) return sendJson(res, 400, { error: `adresse refusée « ${hash} » (#/s/<scène> ou #/jeu)` });
+    return sendJson(res, 200, { onglets: broadcastOpen(hash) });
+  }
   const write = /^scene\/([^/]+)\/(edit|preview)$/.exec(route);
   if (write) {
     const id = decodeURIComponent(write[1]);
@@ -621,6 +796,8 @@ async function api(req: http.IncomingMessage, res: http.ServerResponse, route: s
   }
   if (req.method !== 'GET') return sendJson(res, 405, { error: 'GET attendu' });
   if (route === 'book') return sendJson(res, 200, (await currentBook()).response);
+  if (route === 'game') return sendJson(res, 200, await gameResponse());
+  if (route === 'onglets') return sendJson(res, 200, { onglets: clients.size });
   if (route === 'events') return events(req, res);
   const m = /^scene\/([^/]+)$/.exec(route);
   if (m) {

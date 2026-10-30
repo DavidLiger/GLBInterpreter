@@ -470,14 +470,15 @@ function gameOrigin(message: string): ReportOrigin {
 /**
  * Lit et contrôle le jeu du livre (`book.json.game`), d'après les fichiers de `game/` du dossier source. Renvoie `null` si le
  * livre n'a pas de jeu ou si le jeu n'est pas utilisable (erreurs dans `report`, scène `null`). Les GLB sont optimisés en
- * mémoire : le build écrit les octets contrôlés ici, `book:check` les mesure sans rien écrire.
+ * mémoire : le build écrit les octets contrôlés ici, `book:check` les mesure sans rien écrire. `opts.gameEdit` (atelier, MJ3) :
+ * couche éditoriale saisie, contrôlée à la place de `game/game.edit.json` (aperçu d'une saisie non enregistrée).
  */
 export async function readGame(
   sourceDir: string,
   book: Book,
   scenes: readonly SceneResult[],
   report: Report,
-  opts: { textures?: TextureMode } = {},
+  opts: { textures?: TextureMode; gameEdit?: { value: unknown } } = {},
 ): Promise<GameResult | null> {
   const gameDir = path.join(sourceDir, GAME_DIR);
   const files = fs.existsSync(gameDir) && fs.statSync(gameDir).isDirectory() ? fs.readdirSync(gameDir).filter((f) => fs.statSync(path.join(gameDir, f)).isFile()).sort() : [];
@@ -535,7 +536,8 @@ export async function readGame(
   }
   let rawEdit: unknown;
   const editFile = path.join(sourceDir, GAME_EDIT_FILE);
-  if (fs.existsSync(editFile)) {
+  if (opts.gameEdit) rawEdit = opts.gameEdit.value;
+  else if (fs.existsSync(editFile)) {
     rawEdit = readJson(editFile, GAME_EDIT_FILE, (m) => err(m, 'edit'));
     if (rawEdit === undefined) return null;
   }
@@ -738,7 +740,7 @@ export async function checkBookSource(
   sourceDir: string,
   report: Report,
   readSceneFn: ReadSceneFn = readScene,
-  opts: { textures?: TextureMode } = {},
+  opts: { textures?: TextureMode; gameEdit?: { value: unknown } } = {},
 ): Promise<BookCheck | null> {
   const err = (m: string) => report.error(m);
   const warn = (m: string) => report.warning(m);

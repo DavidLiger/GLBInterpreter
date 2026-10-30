@@ -41,6 +41,15 @@ export const projectUrl = (projet: string) => `https://${projet}.pages.dev`;
 
 /** Adresse codée dans un QR d'essai : même forme que les QR imprimés (`<origin>/s/<id>`), sur l'adresse d'essai. */
 export const trialSceneUrl = (projet: string, id: string) => `${projectUrl(projet)}/s/${id}`;
+/** QR d'essai du mini-jeu (MJ3) : même forme que le QR imprimé `jeu.svg` (`<origin>/jeu`), sur l'adresse d'essai. */
+export const trialGameUrl = (projet: string) => `${projectUrl(projet)}/jeu`;
+/**
+ * Fichier du QR d'essai du jeu dans `dist/qr-essai/<bookId>/` : `_jeu.svg`, nom qu'aucune scène ne peut porter (un
+ * identifiant de scène commence par une lettre ou un chiffre) ; une scène « jeu » garde son `jeu.svg`.
+ */
+export const TRIAL_GAME_FILE = '_jeu.svg';
+/** QR imprimé du jeu écrit par build-book (`dist/qr/<bookId>/jeu.svg`, MJ1). */
+export const PRINT_GAME_FILE = 'jeu.svg';
 
 /** Adresse du serveur de test par le réseau local (`/s/<id>/`, comme les liens du serveur de test) ; sans scène : le menu. */
 export const lanSceneUrl = (ip: string, port: number, id: string | null) => `http://${ip}:${port}/${id ? `s/${id}/` : ''}`;
@@ -131,18 +140,18 @@ export function qrSvg(url: string): Promise<string> {
 }
 
 /** Scènes et `bookId` du livre exporté (`out/book.json`) : ce qui vient d'être publié. */
-export function readOutBook(outBookJson: string): { bookId: string; scenes: string[] } | { error: string } {
+export function readOutBook(outBookJson: string): { bookId: string; scenes: string[]; game: boolean } | { error: string } {
   try {
     const b = JSON.parse(fs.readFileSync(outBookJson, 'utf8'));
     if (!safeId(b?.bookId) || !Array.isArray(b?.scenes)) return { error: 'out/book.json : bookId ou scenes illisible' };
-    return { bookId: b.bookId, scenes: b.scenes.filter(safeId) };
+    return { bookId: b.bookId, scenes: b.scenes.filter(safeId), game: !!b.game && typeof b.game === 'object' };
   } catch (e) {
     return { error: `out/book.json illisible (${(e as Error).message})` };
   }
 }
 
-/** Écrit un QR d'essai par scène (dossier du livre vidé d'abord). Renvoie les adresses codées. */
-export async function writeTrialQrs(root: string, bookId: string, projet: string, scenes: string[]): Promise<string[]> {
+/** Écrit un QR d'essai par scène, et celui du jeu si le livre publié en a un (dossier du livre vidé d'abord). Adresses codées. */
+export async function writeTrialQrs(root: string, bookId: string, projet: string, scenes: string[], game = false): Promise<string[]> {
   if (!safeId(bookId)) throw new Error(`bookId « ${bookId} » refusé pour un nom de dossier`);
   const dir = path.join(root, TRIAL_QR_DIR, bookId);
   fs.rmSync(dir, { recursive: true, force: true });
@@ -153,7 +162,19 @@ export async function writeTrialQrs(root: string, bookId: string, projet: string
     fs.writeFileSync(path.join(dir, `${id}.svg`), await qrSvg(url));
     urls.push(url);
   }
+  if (game) {
+    const url = trialGameUrl(projet);
+    fs.writeFileSync(path.join(dir, TRIAL_GAME_FILE), await qrSvg(url));
+    urls.push(url);
+  }
   return urls;
+}
+
+/** QR d'essai du jeu (`null` s'il n'a pas été écrit : livre publié sans jeu, ou publié avant MJ3). */
+export function trialGameQrFile(root: string, bookId: string): string | null {
+  if (!safeId(bookId)) return null;
+  const f = path.join(root, TRIAL_QR_DIR, bookId, TRIAL_GAME_FILE);
+  return fs.existsSync(f) ? f : null;
 }
 
 /** Fichier d'un QR d'essai (`null` s'il n'existe pas ou si l'identifiant est refusé). */
@@ -181,7 +202,10 @@ export function trialQrScenes(root: string, bookId: string, order: string[]): st
 // ---------------------------------------------------------------------------------------------------------
 
 export interface PrintQr {
-  scene: string;
+  /** Scène du QR ; `null` pour le QR du mini-jeu (`jeu.svg`, MJ3). */
+  scene: string | null;
+  /** QR du mini-jeu (`<origin>/jeu`). */
+  jeu?: true;
   fichier: string;
   url: string | null;
 }
@@ -219,7 +243,16 @@ export function printQrs(root: string, bookId: string): { items: PrintQr[]; date
     const scene = printQrScene(f);
     if (scene) items.push({ scene, fichier: f, url: urls.get(f) ?? null });
   }
+  // QR du mini-jeu (MJ1 : écrit par build-book quand le livre a un jeu), après les scènes, comme dans urls.txt.
+  if (files.includes(PRINT_GAME_FILE)) items.push({ scene: null, jeu: true, fichier: PRINT_GAME_FILE, url: urls.get(PRINT_GAME_FILE) ?? null });
   return { items, date };
+}
+
+/** Fichier du QR imprimé du jeu (`dist/qr/<bookId>/jeu.svg`), `null` s'il est absent. */
+export function printGameQrFile(root: string, bookId: string): string | null {
+  if (!safeId(bookId)) return null;
+  const f = path.join(root, PRINT_QR_DIR, bookId, PRINT_GAME_FILE);
+  return fs.existsSync(f) ? f : null;
 }
 
 export function printQrFile(root: string, bookId: string, id: string): string | null {

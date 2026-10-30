@@ -24,6 +24,7 @@ export default function ReportTab({
   previewing,
   linkOf,
   onGoto,
+  only,
 }: {
   report: ReportLine[];
   summary: string;
@@ -33,9 +34,12 @@ export default function ReportTab({
   previewing: boolean;
   linkOf: (line: ReportLine) => FieldRef | null;
   onGoto: (ref: FieldRef) => void;
+  /** Filtre proposé (case à cocher) ; par défaut « scène affichée seulement ». Entrée « Jeu » (MJ3) : lignes du jeu. */
+  only?: { label: string; test: (line: ReportLine) => boolean };
 }) {
   const [onlyScene, setOnlyScene] = useState(false);
-  const lines = onlyScene && scene ? report.filter((l) => l.scene === scene.id) : report;
+  const filter = only ?? (scene ? { label: "scène affichée seulement", test: (l: ReportLine) => l.scene === scene.id } : null);
+  const lines = onlyScene && filter ? report.filter(filter.test) : report;
   const errors = report.filter((l) => l.level === "error").length;
   const warnings = report.length - errors;
 
@@ -67,7 +71,7 @@ export default function ReportTab({
         </span>
         <label className="flex items-center gap-1">
           <input type="checkbox" checked={onlyScene} onChange={(e) => setOnlyScene(e.target.checked)} />
-          scène affichée seulement
+          {filter?.label ?? "scène affichée seulement"}
         </label>
       </div>
 

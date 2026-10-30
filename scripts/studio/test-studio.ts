@@ -10,17 +10,19 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { listSourceFiles } from '../book-check';
-import { copyTemplate, listDir, newestSourceFile, OpenBook, readEtat, readReglages, resolveBookDir, walkSource, writeFileAtomic } from './book';
+import { copyTemplate, jeuBlends, listDir, newestSourceFile, OpenBook, readEtat, readReglages, resolveBookDir, walkSource, writeFileAtomic } from './book';
 import {
   DEFAULT_PROJECT,
   lanAddresses,
   lanSceneUrl,
   parseDeploy,
   parseWhoami,
+  printGameQrFile,
   printQrs,
   printQrScene,
   projectNameError,
   trialQrFile,
+  trialGameQrFile,
   trialQrScenes,
   trialSceneUrl,
   writeTrialQrs,
@@ -297,7 +299,7 @@ test('CC2, CC3 : un seul type : cardFields lu dans le formulaire (type implicite
   const raw = { ...sampleBook, cardFields, unlockThreshold: 2 };
   const r = readableBook(raw, 2026);
   assert.deepEqual(r.form.cardTypes, [{ id: 'personnage', name: { fr: '', en: '', es: '' }, fields: cardFields }]);
-  const again = validateBook(composeBook(formFromBody(JSON.parse(JSON.stringify(r.form))), { unlockThreshold: r.unlockThreshold }));
+  const again = validateBook(composeBook(formFromBody(JSON.parse(JSON.stringify(r.form)))));
   assert.ok(again.ok);
   assert.equal(again.text, `${JSON.stringify(raw, null, 2)}\n`, 'sans modification : octet pour octet, cardFields après legal (livre 1)');
   // Ajout puis ordre : écrits dans l'ordre du formulaire.
@@ -386,20 +388,31 @@ test('CC3 : usageType (type explicite, implicite de tête) ; usageIntitule tient
   assert.deepEqual(scenesUsingCardField(edits, 'taille', { id: 'lieu', tete: false }), ['vallee']);
 });
 
-test('formulaire : lu, recomposé, réécrit à l’identique ; unlockThreshold et game (MJ1) conservés ; ogImage vide omis ; refus de bookSchema', () => {
+test('formulaire : lu, recomposé, réécrit à l’identique ; section Jeu (MJ3 : gabarit, seuil) ; ogImage vide omis ; refus de bookSchema', () => {
   const raw = { ...sampleBook, unlockThreshold: 3, game: { template: 'poursuite' } };
   const r = readableBook(raw, 2026);
   assert.equal(r.bookIdOnDisk, 'test-dino');
-  assert.equal(r.unlockThreshold, 3);
-  assert.deepEqual(r.game, { template: 'poursuite' });
-  const again = validateBook(composeBook(formFromBody(JSON.parse(JSON.stringify(r.form))), { unlockThreshold: r.unlockThreshold, game: r.game }));
+  assert.equal(r.form.unlockThreshold, '3');
+  assert.equal(r.form.gameTemplate, 'poursuite');
+  const again = validateBook(composeBook(formFromBody(JSON.parse(JSON.stringify(r.form)))));
   assert.ok(again.ok);
   assert.equal(again.text, `${JSON.stringify(raw, null, 2)}\n`, 'sans modification : octet pour octet');
-  const noOg = validateBook(composeBook({ ...r.form, ogImage: '  ' }));
+  const noOg = validateBook(composeBook({ ...r.form, ogImage: '  ', unlockThreshold: ' ', gameTemplate: '' }));
   assert.ok(noOg.ok && !('ogImage' in JSON.parse(noOg.text)) && !('unlockThreshold' in JSON.parse(noOg.text)) && !('game' in JSON.parse(noOg.text)));
-  // Seuil conservé tel quel, même devenu invalide (retrait de scènes) : refusé par bookSchema, rien d'écrit.
-  const bad = validateBook(composeBook({ ...r.form, scenes: ['trex'] }, { unlockThreshold: 3 }));
+  // Seuil devenu invalide (retrait de scènes), ou saisi faux : refusé par bookSchema, rien d'écrit.
+  const bad = validateBook(composeBook({ ...r.form, scenes: ['trex'] }));
   assert.ok(!bad.ok && bad.errors.some((e) => e.startsWith('book.json : unlockThreshold')));
+  for (const th of ['0', '2,5', 'abc']) assert.ok(!validateBook(composeBook({ ...r.form, unlockThreshold: th })).ok, `seuil « ${th} » refusé`);
+  const two = validateBook(composeBook({ ...r.form, unlockThreshold: ' 2 ' }));
+  assert.ok(two.ok && JSON.parse(two.text).unlockThreshold === 2, 'seuil écrit en nombre');
+  assert.ok(!validateBook(composeBook({ ...r.form, gameTemplate: 'baston' })).ok, 'gabarit inconnu refusé');
+  // Jeu choisi sans seuil : jeu après legal, seuil omis (toutes les scènes).
+  const g = validateBook(composeBook({ ...r.form, unlockThreshold: '' }));
+  assert.ok(g.ok && JSON.parse(g.text).game.template === 'poursuite' && !('unlockThreshold' in JSON.parse(g.text)));
+  // Point de CC3 : cardFields et cardTypes ensemble signalés (cardFields serait perdu).
+  const both = readableBook({ ...sampleBook, cardFields: [{ id: 'a', label: { fr: 'A', en: 'A', es: 'A' } }], cardTypes: [] }, 2026);
+  assert.equal(both.bothCardForms, true);
+  assert.equal(readableBook(raw, 2026).bothCardForms, undefined);
   const empty = validateBook(composeBook(emptyForm(2026)));
   assert.ok(!empty.ok && empty.errors.some((e) => /scenes/.test(e)) && empty.errors.some((e) => /title\.fr/.test(e)));
   assert.equal(emptyForm(2026).legal.text.fr, '© 2026 Éditions Liger');
@@ -547,6 +560,17 @@ test('ST3 : QR d’essai et d’impression sur disque ; réglages et état', asy
     fs.writeFileSync(path.join(qr, 'urls.txt'), '01-trex.svg\thttps://dino.example/s/trex\n02-raptor.svg\thttps://dino.example/s/raptor\n');
     const p = printQrs(root, 'dino');
     assert.deepEqual(p.items.map((x) => [x.scene, x.url]), [['trex', 'https://dino.example/s/trex'], ['raptor', 'https://dino.example/s/raptor']]);
+    assert.equal(printGameQrFile(root, 'dino'), null);
+    // MJ3 : QR du jeu (jeu.svg de build-book) après les scènes ; QR d'essai du jeu (_jeu.svg, distinct d'une scène « jeu »).
+    fs.writeFileSync(path.join(qr, 'jeu.svg'), '<svg/>');
+    fs.appendFileSync(path.join(qr, 'urls.txt'), 'jeu.svg\thttps://dino.example/jeu\n');
+    assert.deepEqual(printQrs(root, 'dino').items.map((x) => [x.scene, x.jeu ?? false, x.url]).at(-1), [null, true, 'https://dino.example/jeu']);
+    assert.ok(printGameQrFile(root, 'dino'));
+    const gUrls = await writeTrialQrs(root, 'dino', 'glbi-essai', ['jeu'], true);
+    assert.deepEqual(gUrls, ['https://glbi-essai.pages.dev/s/jeu', 'https://glbi-essai.pages.dev/jeu']);
+    assert.ok(trialGameQrFile(root, 'dino') && trialQrFile(root, 'dino', 'jeu'), 'scène « jeu » et QR du jeu distincts');
+    await writeTrialQrs(root, 'dino', 'glbi-essai', ['trex']);
+    assert.equal(trialGameQrFile(root, 'dino'), null, 'livre publié sans jeu : pas de QR du jeu');
     assert.ok(p.date);
     assert.deepEqual(printQrs(root, 'absent').items, []);
 
@@ -560,6 +584,25 @@ test('ST3 : QR d’essai et d’impression sur disque ; réglages et état', asy
     assert.deepEqual(readEtat(et).publications, {});
     fs.writeFileSync(et, JSON.stringify({ out: null, devBook: null }));
     assert.deepEqual(readEtat(et).publications, {}, 'état de ST1/ST2 relu sans publication');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('MJ3 : .blend du jeu (blender/jeu/, sauvegardes ignorées) ; durée de la dernière suite gardée dans les réglages', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'studio-mj3-'));
+  try {
+    assert.deepEqual(jeuBlends(root), [], 'dossier absent');
+    const d = path.join(root, 'blender', 'jeu');
+    fs.mkdirSync(d, { recursive: true });
+    for (const f of ['raptor.blend', 'arena.blend', 'arena.blend1', 'notes.txt', '.cache.blend']) fs.writeFileSync(path.join(d, f), 'x');
+    assert.deepEqual(jeuBlends(root).map((b) => b.name), ['arena.blend', 'raptor.blend']);
+    const reg = path.join(root, 'reglages.json');
+    assert.equal(readReglages(reg).suite, null, 'jamais mesurée');
+    fs.writeFileSync(reg, JSON.stringify({ suite: { dureeMs: 1_140_000, date: 1 } }));
+    assert.deepEqual(readReglages(reg).suite, { dureeMs: 1_140_000, date: 1 });
+    fs.writeFileSync(reg, JSON.stringify({ suite: { dureeMs: -3, date: 1 } }));
+    assert.equal(readReglages(reg).suite, null, 'valeur fausse ignorée');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

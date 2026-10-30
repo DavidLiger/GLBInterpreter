@@ -12,6 +12,11 @@
 //   textures, contexte WebGL), sons arrêtés et `AudioContext` fermé.
 // - Débogage sans Mac et tests : `window.__glbiGame.state()` (phase, score, temps, positions) ; options de test lues dans
 //   `window.__glbiGameTest` à chaque partie (durée raccourcie, proies immobiles, proie posée).
+// - Atelier (MJ3, prop `embedded`) : vue montée dans la page de l'atelier sur l'objet fusionné `draft` ; ni plein écran, ni
+//   « Retour au menu », ni indice de rotation ; « Recommencer » (`newGame`, prop `restartRef`, bouton de l'atelier) ; touches
+//   du jeu ignorées pendant une saisie dans un champ de la page ; aucun bouton ne prend le focus de lui-même (le jeu remonté
+//   pendant une saisie le volerait au champ de l'atelier) ; stockage fourni par l'atelier (en mémoire : rien sous les clés du
+//   livre).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { Pause } from "lucide-react";
@@ -23,7 +28,7 @@ import { useOrientation } from "@/components/diorama/hooks/useOrientation";
 import { FULLSCREEN_CHANGE_EVENTS, isPageFullscreen, requestPageFullscreen } from "@/components/diorama/lib/pageFullscreen";
 import { AudioEngine, type AudioSettings, type SceneSounds } from "@/components/diorama/lib/audioEngine";
 import type { GLTFLoaderWithDecoders } from "@/components/diorama/lib/gltfDecoders";
-import { pageStorage } from "@/components/book/progress";
+import { pageStorage, type StorageLike } from "@/components/book/progress";
 import { loadRapier, type Rapier } from "./rapier";
 import { GameWorld, STEP, planSteps } from "./world";
 import { PoursuiteGame, POURSUITE_BUTTONS, type Actor, type EntitySpec, type PoursuiteOptions } from "./poursuite";
@@ -115,16 +120,27 @@ interface GameViewProps {
   bookId: string;
   game: ReaderGame;
   onBack: () => void;
+  /** Atelier (MJ3) : vue dans la page de l'atelier (voir l'en-tête). */
+  embedded?: boolean;
+  /** Stockage du meilleur score et des réglages des commandes ; par défaut celui de la page (`localStorage`). */
+  storage?: StorageLike | null;
+  /** Atelier : reçoit « Recommencer » (`newGame` puis partie lancée), appelé par le bouton de la page. */
+  restartRef?: { current: (() => void) | null };
 }
 
-export default function GameView({ bookId, game, onBack }: GameViewProps) {
+/** Cible d'un événement clavier dans un champ de saisie (atelier : les touches du jeu ne doivent pas gêner la saisie). */
+const typing = (t: EventTarget | null) =>
+  t instanceof HTMLElement && (t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT");
+
+export default function GameView({ bookId, game, onBack, embedded = false, storage, restartRef }: GameViewProps) {
   const { t, lang } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const rt = useRef<Runtime | null>(null);
   const [phase, setPhaseState] = useState<Phase>("loading");
   const phaseRef = useRef<Phase>("loading");
   const [error, setError] = useState<string | null>(null);
-  const store = useMemo(() => new GameStore(bookId, pageStorage()), [bookId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- stockage fixé au montage
+  const store = useMemo(() => new GameStore(bookId, storage === undefined ? pageStorage() : storage), [bookId]);
   const [controls, setControlsState] = useState<ControlSettings>(() => store.controls());
   const [result, setResult] = useState<{ score: number; best: number; record: boolean } | null>(null);
   const [best, setBest] = useState<number | null>(() => store.best());
@@ -379,7 +395,7 @@ export default function GameView({ bookId, game, onBack }: GameViewProps) {
   // ────────────── Actions des écrans (dans le geste : son et plein écran) ──────────────
   const play = useCallback(() => {
     if (phaseRef.current !== "intro" && phaseRef.current !== "ended") return;
-    requestPageFullscreen();
+    if (!embedded) requestPageFullscreen();
     if (phaseRef.current === "ended") newGame();
     const a = audioRef.current;
     a?.unlock();
@@ -387,11 +403,25 @@ export default function GameView({ bookId, game, onBack }: GameViewProps) {
     setResult(null);
     setPhase("playing");
     if (rt.current) rt.current.acc = 0;
+  }, [newGame, setPhase, sounds, embedded]);
+
+  /** « Recommencer » (atelier, MJ3) : nouvelle partie (`newGame`), lancée aussitôt (le clic débloque le son). */
+  const restart = useCallback(() => {
+    const ph = phaseRef.current;
+    if (ph === "loading" || ph === "error" || !rt.current?.game) return;
+    newGame();
+    const a = audioRef.current;
+    a?.unlock();
+    a?.setSounds(sounds(true));
+    setResult(null);
+    setPhase("playing");
+    if (rt.current) rt.current.acc = 0;
   }, [newGame, setPhase, sounds]);
+  if (restartRef) restartRef.current = restart;
 
   const resume = useCallback(() => {
     if (phaseRef.current !== "paused") return;
-    requestPageFullscreen();
+    if (!embedded) requestPageFullscreen();
     audioRef.current?.unlock();
     const r = rt.current;
     if (r) {
@@ -401,7 +431,7 @@ export default function GameView({ bookId, game, onBack }: GameViewProps) {
       r.perf.frames = 0;
     }
     setPhase("playing");
-  }, [setPhase]);
+  }, [setPhase, embedded]);
 
   const pauseGame = useCallback(() => {
     if (phaseRef.current !== "playing") return;
@@ -473,6 +503,7 @@ export default function GameView({ bookId, game, onBack }: GameViewProps) {
   // page juste après (selon le navigateur) ne relance pas aussitôt la partie (`fsPauseAt`).
   const fsPauseAt = useRef(-Infinity);
   useEffect(() => {
+    if (embedded) return;
     const onChange = () => {
       if (isPageFullscreen() || phaseRef.current !== "playing") return;
       fsPauseAt.current = performance.now();
@@ -482,11 +513,12 @@ export default function GameView({ bookId, game, onBack }: GameViewProps) {
     return () => {
       for (const type of FULLSCREEN_CHANGE_EVENTS) document.removeEventListener(type, onChange);
     };
-  }, []);
+  }, [embedded]);
 
   // ────────────── Clavier (DP-26) ──────────────
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      if (embedded && typing(e.target)) return;
       const ph = phaseRef.current;
       if (e.code === PAUSE_KEY) {
         if (ph === "playing") input.requestPause();
@@ -511,7 +543,7 @@ export default function GameView({ bookId, game, onBack }: GameViewProps) {
       window.removeEventListener("keyup", up);
       window.removeEventListener("blur", blur);
     };
-  }, [input]);
+  }, [input, embedded]);
 
   // Clavier présent (aide affichée) : appareil à souris (survol et pointeur fin) ; manette branchée.
   useEffect(() => {
@@ -534,7 +566,7 @@ export default function GameView({ bookId, game, onBack }: GameViewProps) {
       <LanguageSelector />
     </div>
   );
-  const back = (
+  const back = embedded ? null : (
     <button type="button" className="glbi-btn glbi-btn-secondary px-6 py-3" onClick={onBack} data-testid="game-back">
       {t.collection.backToMenu}
     </button>
@@ -577,7 +609,7 @@ export default function GameView({ bookId, game, onBack }: GameViewProps) {
           <h1 className="text-2xl font-bold" data-testid="game-title">{game.title[lang]}</h1>
           <p className="max-w-md text-white/85" data-testid="game-instructions">{game.instructions[lang]}</p>
           {best !== null && <p className="text-white/80" data-testid="game-best">{fill(t.jeu.best, { n: best })}</p>}
-          <button type="button" className="glbi-btn glbi-btn-primary px-10 py-3 text-lg" onClick={play} autoFocus data-testid="game-play">
+          <button type="button" className="glbi-btn glbi-btn-primary px-10 py-3 text-lg" onClick={play} autoFocus={!embedded} data-testid="game-play">
             {t.jeu.play}
           </button>
           <ControlsPanel settings={controls} onChange={setControls} />
@@ -590,7 +622,7 @@ export default function GameView({ bookId, game, onBack }: GameViewProps) {
         <GameScreen testId="game-paused" label={t.jeu.pause}>
           {corner}
           <h1 className="text-2xl font-bold">{t.jeu.pause}</h1>
-          <button type="button" className="glbi-btn glbi-btn-primary px-10 py-3 text-lg" onClick={resume} autoFocus data-testid="game-resume">
+          <button type="button" className="glbi-btn glbi-btn-primary px-10 py-3 text-lg" onClick={resume} autoFocus={!embedded} data-testid="game-resume">
             {t.jeu.resume}
           </button>
           <ControlsPanel settings={controls} onChange={setControls} />
@@ -609,7 +641,7 @@ export default function GameView({ bookId, game, onBack }: GameViewProps) {
           ) : (
             <p className="text-white/80" data-testid="game-best">{fill(t.jeu.best, { n: result.best })}</p>
           )}
-          <button type="button" className="glbi-btn glbi-btn-primary px-10 py-3 text-lg" onClick={play} autoFocus data-testid="game-replay">
+          <button type="button" className="glbi-btn glbi-btn-primary px-10 py-3 text-lg" onClick={play} autoFocus={!embedded} data-testid="game-replay">
             {t.jeu.replay}
           </button>
           {back}
@@ -629,7 +661,7 @@ export default function GameView({ bookId, game, onBack }: GameViewProps) {
         </GameScreen>
       )}
 
-      <RotateHint show={showRotateHint} onDismiss={dismissRotateHint} />
+      <RotateHint show={!embedded && showRotateHint} onDismiss={dismissRotateHint} />
     </div>
   );
 }

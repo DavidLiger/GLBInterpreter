@@ -766,11 +766,12 @@ function gameEditLayer(): GameEdit {
     texts: {
       title: L('La grande chasse', 'The great hunt', 'La gran cacería'),
       instructions: L(
-        'Attrape un maximum de compsognathes avant la fin du temps ! Bondis pour les capturer.',
+        // Insécable (U+00A0) avant « ! » (MJ3 : typographie française, comme les textes de messages.ts).
+        'Attrape un maximum de compsognathes avant la fin du temps\u00a0! Bondis pour les capturer.',
         'Catch as many compsognathus as you can before time runs out! Leap to catch them.',
         '¡Atrapa todos los compsognatos que puedas antes de que acabe el tiempo! Salta para capturarlos.',
       ),
-      end: L('Bravo, belle chasse !', 'Well done, great hunt!', '¡Muy bien, buena cacería!'),
+      end: L('Bravo, belle chasse\u00a0!', 'Well done, great hunt!', '¡Muy bien, buena cacería!'),
     },
     sounds: { capture: 'sounds/jeu_capture.wav', music: 'sounds/jeu_musique.wav' },
     credits: { assets: [credit('jeu_capture', 'Capture (test)'), credit('jeu_musique', 'Musique du jeu (test)')] },

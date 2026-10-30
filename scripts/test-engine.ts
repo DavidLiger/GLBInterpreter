@@ -11,7 +11,9 @@
 // QR `/jeu`, meilleur score et réglages des commandes sous des clés à part, `book.json.game`, `game/game.json`) ; moteur du
 // mini-jeu (MJ2 : Rapier sous Node, pas fixe et rattrapage limité, joueur, bond, états des proies, capture, réapparition,
 // chrono, déterminisme ; entrées : joystick, réglages des commandes, clavier, manette sur un état Gamepad simulé ; arène
-// lue d'une scène three ; sons du jeu sur le moteur d'Î11).
+// lue d'une scène three ; sons du jeu sur le moteur d'Î11) ; entrée « Jeu » de l'atelier (MJ3 : formulaire de
+// `game/game.edit.json`, aller-retour sans perte, bornes, insécables, liens du Rapport, jeu monté sur l'objet fusionné,
+// stockage en mémoire).
 // Les mixers tournent sur une scène three minimale (un os animé), le temps est avancé à la main.
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -24,9 +26,12 @@ import { FrameTasks } from '../src/components/diorama/lib/frameTasks';
 import { addFallbackLightsIfNone, FALLBACK_LIGHTS_NAME } from '../src/components/diorama/lib/fallbackLights';
 import { ClipPreview } from '../src/components/diorama/lib/clipPreview';
 import { applyFramingInPlace, cameraFormFromRaw, cameraLayerOf, framingOf, takeFromView, viewOf, withFields } from '../src/atelier/cameraForm';
-import { editLayerSchema } from '../src/schema/glbi';
 import { cardPreviewOf, formFromEdit, layerFromForm, usedAssets, withCardType } from '../src/atelier/editModel';
-import { formatEditLayer, glbActionIds, glbActionsOf, glbEventIds } from '../src/atelier/editLayerFile';
+import { formatEditLayer, formatGameEdit, glbActionIds, glbActionsOf, glbEventIds } from '../src/atelier/editLayerFile';
+import {
+  fixFrenchSpacing, frenchSpacingIssues, gameFieldOfMessage, gameFormFromEdit, gameLayerFromForm, gameUsedSounds, isGameLine, MemoryStorage, readerGameOf,
+} from '../src/atelier/gameModel';
+import { editLayerSchema, gameEditSchema, type GameConfig } from '../src/schema/glbi';
 import { fieldOfMessage } from '../src/atelier/reportLinks';
 import {
   AudioEngine, audioSettingsKey, effectiveVolume, parseAudioSettings, withMuteToggled, withVolume, type AudioContextLike,
@@ -2013,6 +2018,129 @@ test('arène lue du GLB : COL_* et FADE_* cherchés dans le sous-arbre (maillage
   const faded = fadeableClone(orig);
   assert.ok(faded !== orig && faded.transparent && faded.opacity === 1 && faded.depthWrite);
   assert.equal(orig.transparent, false);
+});
+
+// ────────────── Entrée « Jeu » de l'atelier (MJ3) ──────────────
+console.log('Atelier : entrée « Jeu » (MJ3)');
+
+const NB = '\u00a0';
+const T3 = (fr: string, en = fr, es = fr) => ({ fr, en, es });
+/** Couche éditoriale du jeu du livre de test (make-test-book.ts), insécables comprises. */
+const testGameEdit = {
+  version: 1,
+  rules: { duration: 300, preys: [{ entity: 'compso', count: 4 }], playerSpeed: 6, preySpeed: 5, detectionRadius: 6, points: 1, respawn: true },
+  camera: { distance: 14 },
+  texts: {
+    title: T3('La grande chasse', 'The great hunt', 'La gran cacería'),
+    instructions: T3(`Attrape un maximum de compsognathes avant la fin du temps${NB}! Bondis pour les capturer.`, 'Catch!', '¡Atrapa!'),
+    end: T3(`Bravo, belle chasse${NB}!`, 'Well done!', '¡Muy bien!'),
+  },
+  sounds: { capture: 'sounds/jeu_capture.wav', music: 'sounds/jeu_musique.wav' },
+  credits: { assets: [{ asset: 'sounds/jeu_capture.wav', title: 'Capture (test)', author: 'GLBInterpreter', license: 'CC0' }, { asset: 'sounds/jeu_musique.wav', title: 'Musique du jeu (test)', author: 'GLBInterpreter', license: 'CC0' }] },
+};
+
+test('formulaire du jeu : aller-retour sans modification identique octet pour octet (forme du livre de test), schéma accepté', () => {
+  const text = `${JSON.stringify(testGameEdit, null, 2)}\n`;
+  assert.equal(formatGameEdit(testGameEdit), text, 'ordre des clés du contrat = ordre de make-test-book.ts');
+  const { layer, incomplete } = gameLayerFromForm(gameFormFromEdit(testGameEdit));
+  assert.deepEqual(incomplete, []);
+  assert.equal(formatGameEdit(layer), text);
+  assert.ok(gameEditSchema.safeParse(JSON.parse(formatGameEdit(layer))).success);
+  // Clés dans le désordre (fichier écrit à la main) : remises dans l'ordre du contrat.
+  const shuffled = { credits: testGameEdit.credits, texts: testGameEdit.texts, version: 1, rules: { respawn: false, duration: 400 } };
+  assert.equal(formatGameEdit(shuffled).indexOf('"version"') < formatGameEdit(shuffled).indexOf('"rules"'), true);
+  assert.match(formatGameEdit(shuffled), /"duration": 400,\n {4}"respawn": false/);
+  // Formulaire vide : seule la version (tout le reste vaut par défaut).
+  assert.equal(formatGameEdit(gameLayerFromForm(gameFormFromEdit({ version: 1 })).layer), '{\n  "version": 1\n}\n');
+});
+
+test('formulaire du jeu : bornes du §6 (hors bornes non écrit, signalé), virgule décimale, proies (somme ≤ 12, doublon, ligne incomplète)', () => {
+  const f = gameFormFromEdit(testGameEdit);
+  f.rules.duration = '120';
+  f.rules.playerSpeed = '7,5';
+  f.rules.points = '1.5';
+  f.camera.distance = '3';
+  f.rules.respawn = 'non';
+  const { layer, incomplete } = gameLayerFromForm(f);
+  const out = JSON.parse(formatGameEdit(layer));
+  assert.equal(out.rules.duration, undefined, 'durée hors bornes : non écrite');
+  assert.equal(out.rules.playerSpeed, 7.5);
+  assert.equal(out.rules.points, undefined, 'entier attendu');
+  assert.equal(out.rules.respawn, false);
+  assert.equal(out.camera, undefined);
+  assert.deepEqual(incomplete.map((i) => i.field).sort(), ['camera.distance', 'rules.duration', 'rules.points']);
+  assert.match(incomplete.find((i) => i.field === 'rules.duration')!.message, /de 300 à 600 attendu \(saisi : 120\), non enregistré/);
+  assert.ok(gameEditSchema.safeParse(out).success);
+  // Proies : 13 en tout → liste non écrite ; doublon → non écrite ; nombre manquant → non écrite.
+  const p = gameFormFromEdit(testGameEdit);
+  p.rules.preys = [['compso', '8'], ['raptor', '5']];
+  const r1 = gameLayerFromForm(p);
+  assert.equal((r1.layer.rules as { preys?: unknown }).preys, undefined);
+  assert.match(r1.incomplete[0].message, /13 en même temps \(12 au plus\)/);
+  p.rules.preys = [['compso', '2'], ['compso', '3']];
+  assert.match(gameLayerFromForm(p).incomplete[0].message, /en double/);
+  p.rules.preys = [['compso', '']];
+  assert.match(gameLayerFromForm(p).incomplete[0].message, /nombre à saisir/);
+  p.rules.preys = [['', ''], ['compso', '6']];
+  assert.deepEqual((gameLayerFromForm(p).layer.rules as { preys?: unknown }).preys, [{ entity: 'compso', count: 6 }]);
+  // Texte traduit incomplet : non écrit ; crédit incomplet : non écrit.
+  const t = gameFormFromEdit(testGameEdit);
+  t.texts.end = T3('Bravo', '', '');
+  t.credits[0].license = '';
+  const r2 = gameLayerFromForm(t);
+  assert.equal((r2.layer.texts as { end?: unknown }).end, undefined);
+  assert.deepEqual(r2.incomplete.map((i) => i.tab).sort(), ['gcredits', 'textes']);
+  assert.deepEqual(gameUsedSounds(t).map((u) => u.asset), ['sounds/jeu_capture.wav', 'sounds/jeu_musique.wav']);
+});
+
+test('insécables (MJ3) : espace ordinaire avant ? ! : ; » et après « repérée et corrigée ; texte correct inchangé', () => {
+  assert.deepEqual(frenchSpacingIssues('Attrape-les ! Prêt ? Dis « oui » : go ; fin'), ['!', '?', '»', ':', ';', '«']);
+  assert.equal(fixFrenchSpacing('Attrape-les ! Dis « oui »'), `Attrape-les${NB}! Dis «${NB}oui${NB}»`);
+  assert.deepEqual(frenchSpacingIssues(testGameEdit.texts.instructions.fr), []);
+  assert.deepEqual(frenchSpacingIssues('https://x.org Bravo!'), [], 'pas d’espace avant : rien à signaler');
+  assert.equal(fixFrenchSpacing(testGameEdit.texts.end.fr), testGameEdit.texts.end.fr);
+});
+
+test('Rapport du jeu → champ ; lignes du jeu reconnues', () => {
+  const f = gameFormFromEdit(testGameEdit);
+  assert.deepEqual(gameFieldOfMessage('game/game.edit.json : rules.duration : durée (s) : 300 au moins', f), { tab: 'regles', field: 'rules.duration' });
+  assert.deepEqual(gameFieldOfMessage('game/game.edit.json : rules.preys.0.entity : entité « x » absente de game/ (proies : compso)', f), { tab: 'regles', field: 'rules.preys' });
+  assert.deepEqual(gameFieldOfMessage('game/game.edit.json : texts.end.fr : traduction vide (V-09)', f), { tab: 'textes', field: 'texts.end' });
+  assert.deepEqual(gameFieldOfMessage('game/game.edit.json : credits.assets.1.title : vide', f), { tab: 'gcredits', field: 'credit.sounds/jeu_musique.wav' });
+  assert.deepEqual(gameFieldOfMessage('jeu : titre du jeu (texts.title) absent de game/game.edit.json ; à renseigner dans l’atelier', f), { tab: 'textes', field: 'texts.title' });
+  assert.deepEqual(gameFieldOfMessage('jeu : son « sounds/hop.wav » sans entrée dans credits.assets de game/game.edit.json (V-10)', f), { tab: 'gcredits', field: 'credit.sounds/hop.wav' });
+  assert.deepEqual(gameFieldOfMessage('asset « sounds/jeu_capture.wav » introuvable dans le dossier source (V-03)', f), { tab: 'sons', field: 'sounds.capture' });
+  assert.equal(gameFieldOfMessage('game/arena.glb : pas de sol (maillage « COL_sol »)', f), null, 'couche 3D : Blender');
+  assert.ok(isGameLine({ scene: null, message: 'jeu : aucun crédit de modèle (propriétés src_*) dans les GLB de game/' }));
+  assert.ok(isGameLine({ scene: null, message: 'game/compso.glb : capsule de 1,5 m' }));
+  assert.ok(!isGameLine({ scene: 'trex', message: 'jeu : x' }));
+  assert.ok(!isGameLine({ scene: null, message: 'book.json : pas de ogImage (aperçu de partage)' }));
+});
+
+test('jeu monté dans l’atelier : ReaderGame tiré de l’objet fusionné (GLB source de game/) ; meilleur score et commandes en mémoire, rien sous les clés du livre', () => {
+  const draft = {
+    version: 1, template: 'poursuite',
+    entities: [
+      { id: 'dino', role: 'player', object: 'Armature_Dino', clips: { idle: 'i', walk: 'w', run: 'r', attack: 'a' }, capsule: { radius: 0.5, height: 1.8 } },
+      { id: 'compso', role: 'prey', object: 'Armature_Compso', clips: { idle: 'i', walk: 'w', flee: 'f', caught: 'c' }, capsule: { radius: 0.3, height: 0.8 } },
+    ],
+    rules: { duration: 300, preys: [{ entity: 'compso', count: 4 }], playerSpeed: 6, preySpeed: 5, detectionRadius: 6, points: 2, respawn: true },
+    camera: { distance: 20 },
+    texts: { title: T3('Jeu'), instructions: T3('Va') },
+    sounds: { capture: 'sounds/hop.wav' },
+  } as unknown as GameConfig;
+  const g = readerGameOf(draft);
+  assert.deepEqual(g.files, { arena: 'game/arena.glb', entities: { dino: 'game/dino.glb', compso: 'game/compso.glb' } });
+  assert.equal(g.rules.points, 2);
+  assert.equal(g.camera.distance, 20);
+  assert.equal(g.sounds.capture, 'sounds/hop.wav');
+  const mem = new MemoryStorage();
+  const store = new GameStore('test-dino', mem, quiet);
+  assert.deepEqual(store.recordScore(7), { best: 7, record: true });
+  store.setControls({ side: 'left', size: 'large' });
+  assert.equal(store.best(), 7);
+  assert.deepEqual(new GameStore('test-dino', mem, quiet).controls(), { side: 'left', size: 'large' }, 'gardé pour l’onglet (remontage du jeu)');
+  assert.equal(mem.getItem(gameKey('test-dino')), '{"best":7}');
 });
 
 if (failed) {

@@ -66,14 +66,19 @@ export interface BookInfo {
   errors: string[];
   /** Fichier le plus récent du dossier source (hors `blender/` et fichiers cachés) : base du « périmé ». */
   newest: { rel: string; mtime: number } | null;
-  /** Dernier `book:check` lancé par le studio sur ce livre. */
-  check: (CheckSummary & { date: number }) | { date: number; error: string } | null;
+  /**
+   * Dernier `book:check` lancé par le studio sur ce livre. `interrupted` (MJ3) : une vérification suivante s'est arrêtée sans
+   * rapport, le résultat affiché est le précédent.
+   */
+  check: (CheckSummary & { date: number; interrupted?: { date: number; message: string } }) | { date: number; error: string } | null;
   /** `book.json` pour le formulaire (ST2) : empreinte de la lecture, champs lisibles, validité. */
   file: BookFileInfo;
   /** Images du dossier source (hors `blender/` et fichiers cachés), pour le menu `ogImage`. */
   images: string[];
   /** `icon.png` présent (icône du livre, obligatoire : erreur de `book:check` sinon). */
   icon: boolean;
+  /** `.blend` du mini-jeu (MJ3) : `blender/jeu/*.blend` (DP-14), triés par nom. */
+  jeuBlends: { name: string; mtime: number }[];
 }
 
 export interface BookFileInfo {
@@ -94,7 +99,7 @@ export class OpenBook {
 
   constructor(dir: string, typed: string | null) {
     this.info = {
-      dir, typed, bookId: null, title: null, scenes: [], errors: [], newest: null, check: null, images: [], icon: false,
+      dir, typed, bookId: null, title: null, scenes: [], errors: [], newest: null, check: null, images: [], icon: false, jeuBlends: [],
       file: { stamp: null, readable: false, valid: false, content: readableBook(undefined, new Date().getFullYear()) },
     };
     this.refresh();
@@ -130,6 +135,7 @@ export class OpenBook {
     this.info.newest = walk.newest;
     this.info.images = walk.images;
     this.info.icon = !!stampOf(path.join(this.info.dir, 'icon.png'));
+    this.info.jeuBlends = jeuBlends(this.info.dir);
   }
 
   /** Relecture immédiate de `book.json` (après une écriture du studio), puis du tableau. */
@@ -160,6 +166,28 @@ export class OpenBook {
     const t = o.title && typeof o.title === 'object' ? (o.title as Record<string, unknown>) : {};
     this.info.title = typeof t.fr === 'string' ? t.fr : null;
   }
+}
+
+/** Dossier des `.blend` du mini-jeu (DP-14, spec-mini-jeu.md §5), dans le dossier réservé. */
+export const JEU_BLEND_DIR = path.join(RESERVED_SOURCE_DIR, 'jeu');
+/** Nom d'un `.blend` du mini-jeu ouvrable par le studio (un fichier de `blender/jeu/`, sans chemin). */
+export const JEU_BLEND_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]*\.blend$/;
+
+/** `.blend` de `blender/jeu/` (MJ3) : nom et date, triés ; dossier absent : aucun. Les sauvegardes `.blend1` sont ignorées. */
+export function jeuBlends(dir: string): { name: string; mtime: number }[] {
+  let names: string[];
+  try {
+    names = fs.readdirSync(path.join(dir, JEU_BLEND_DIR));
+  } catch {
+    return [];
+  }
+  return names
+    .filter((n) => JEU_BLEND_NAME.test(n))
+    .sort()
+    .flatMap((name) => {
+      const st = stampOf(path.join(dir, JEU_BLEND_DIR, name));
+      return st ? [{ name, mtime: st.mtime }] : [];
+    });
 }
 
 /** Fichier le plus récent d'un dossier source, sans `blender/` ni fichiers cachés (temporaires de l'atelier). */
@@ -300,6 +328,8 @@ export interface Reglages {
   blender: { exe: string | null; gabarit: string | null; detecte: boolean };
   /** Publication d'essai (ST3, §9) : projet Cloudflare Pages, `glbi-essai` par défaut. */
   essai: { projet: string };
+  /** Dernière suite complète menée à son terme par le studio (MJ3, point de CC3) : durée (ms) et date (ms) ; `null` : jamais. */
+  suite: { dureeMs: number; date: number } | null;
 }
 
 export const DEFAULT_PORTS: Reglages['ports'] = { atelier: 4100, dev: 3000, test: 8001 };
@@ -309,7 +339,7 @@ export const MAX_RECENTS = 10;
 
 export function readReglages(file: string): Reglages {
   const r: Reglages = {
-    recents: [], ports: { ...DEFAULT_PORTS }, blender: { exe: null, gabarit: null, detecte: false }, essai: { projet: DEFAULT_PROJECT },
+    recents: [], ports: { ...DEFAULT_PORTS }, blender: { exe: null, gabarit: null, detecte: false }, essai: { projet: DEFAULT_PROJECT }, suite: null,
   };
   try {
     const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -324,6 +354,8 @@ export function readReglages(file: string): Reglages {
     r.blender.detecte = b?.detecte === true;
     const projet = raw?.essai?.projet;
     if (typeof projet === 'string' && !projectNameError(projet)) r.essai.projet = projet;
+    const su = raw?.suite;
+    if (Number.isFinite(su?.dureeMs) && su.dureeMs > 0 && Number.isFinite(su?.date)) r.suite = { dureeMs: su.dureeMs, date: su.date };
   } catch {
     // absent ou illisible : valeurs par défaut
   }

@@ -72,8 +72,10 @@ public/swe-worker-*.js
 /private/
 # Index générés, QR d'impression (build-book : dist/qr/<bookId>/)
 /dist/
-# Livres de test synthétiques (npm run book:test-source ; livres d'essai de make-test-book.ts : test-capsule, test-sans-jeu…)
-/books/test-*/
+# Livres (MJ3, décision de David du 30/10) : tout books/ est ignoré : livres de test synthétiques (npm run book:test-source,
+# test-capsule, test-sans-jeu…), livres d'essai (test-jeu) et vrais livres (dinosaures, .blend et assets sous licence) ; un
+# livre ne va jamais dans le dépôt public. Le studio accepte un livre rangé n'importe où.
+/books/
 # Livre de développement lu par `npm run dev` (npm run dev:book -- --source <dossier>, Î10)
 /public/dev-book/
 

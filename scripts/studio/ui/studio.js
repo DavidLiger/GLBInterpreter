@@ -275,10 +275,13 @@ const stop = (nom, label = 'Arrêter') => ({ label, act: 'arreter', data: { nom 
 
 const pendingTabs = {};
 
+/** Entrée « Jeu » de l'atelier (MJ3) : valeur de `scene` qui ouvre `#/jeu`. */
+const JEU = '#jeu';
+
 function toolUrl(n, scene) {
   const m = byName(n);
-  // Atelier : sur la scène demandée (#/s/<scène>, lu par l'atelier à son ouverture ; CC2).
-  if (n === 'atelier') return `http://127.0.0.1:${m.port}/atelier/${scene ? `#/s/${encodeURIComponent(scene)}` : ''}`;
+  // Atelier : sur la scène demandée (#/s/<scène>, lu par l'atelier à son ouverture ; CC2) ou sur le jeu (#/jeu, MJ3).
+  if (n === 'atelier') return `http://127.0.0.1:${m.port}/atelier/${scene === JEU ? '#/jeu' : scene ? `#/s/${encodeURIComponent(scene)}` : ''}`;
   return `http://localhost:${m.port}/${scene ? `#/s/${encodeURIComponent(scene)}` : ''}`;
 }
 
@@ -298,10 +301,13 @@ function writeTab(w, title, text) {
 /**
  * Onglet de l'atelier réutilisé (correctif CC2, remarque du test 6) : toujours le même onglet, nommé, au lieu d'un nouvel
  * onglet à chaque clic. `window.open('', nom)` rend l'onglet existant sans le recharger, ou ouvre un onglet vide
- * (`about:blank`, lisible car de la même origine ; un onglet de l'atelier, d'une autre origine, ne l'est pas). Limite :
- * seul un onglet ouvert par cette page du studio est retrouvé (un atelier ouvert à la main reste à part).
+ * (`about:blank`, lisible car de la même origine ; un onglet de l'atelier, d'une autre origine, ne l'est pas). Seul un onglet
+ * ouvert par cette page du studio est retrouvé par son nom ; un atelier ouvert à la main (MJ3, point de CC2) est retrouvé par
+ * le serveur de l'atelier (onglets connectés, `S.atelier.onglets`) et passé sur la scène demandée sans nouvel onglet.
  */
 const ATELIER_TAB = 'glbi-atelier';
+/** Onglet de l'atelier ouvert par cette page (retrouvé par son nom tant qu'il est ouvert). */
+let atelierWin = null;
 function namedTab(name) {
   const w = window.open('', name);
   if (!w) return null;
@@ -322,8 +328,15 @@ async function openTool(n, scene) {
       window.open(toolUrl(n, scene), '_blank');
       return;
     }
+    // Atelier déjà ouvert dans un onglet que cette page n'a pas ouvert (à la main, autre page du studio) : le serveur de
+    // l'atelier le fait passer sur la scène ou le jeu ; pas de second onglet.
+    if ((!atelierWin || atelierWin.closed) && S.atelier?.onglets > 0) {
+      const r = await act('atelierVers', scene === JEU ? { jeu: true } : { scene: scene ?? '' });
+      if (r.ok) return;
+    }
     const t = namedTab(ATELIER_TAB);
     if (!t) return toast('Le navigateur a bloqué l’ouverture d’un onglet : autoriser les fenêtres surgissantes pour le studio.', true);
+    atelierWin = t.w;
     // Onglet neuf : adresse complète. Onglet de l'atelier déjà ouvert : seule la scène change (#/s/<scène>, sans
     // rechargement, l'atelier suit et demande confirmation si une saisie n'est pas enregistrée) ; sans scène : mis au premier plan.
     if (t.blank || scene) t.w.location.href = toolUrl(n, scene);
@@ -333,6 +346,7 @@ async function openTool(n, scene) {
   const why = isRunning(m) ? '' : blockReason(n);
   if (why) return toast(why, true);
   const w = n === 'atelier' ? namedTab(ATELIER_TAB)?.w : window.open('', '_blank');
+  if (n === 'atelier' && w) atelierWin = w;
   if (w) {
     writeTab(w, `${label} : démarrage…`, 'Cette page s’ouvrira toute seule dès que le studio aura démarré le serveur (une minute au plus la première fois).');
     pendingTabs[n] = { w, scene, since: Date.now() };
@@ -440,9 +454,11 @@ const EXPLAIN = [
   [/^book\.json : cardTypes\.(\d+)\.fields\.(\d+)\.label\.(fr|en|es) : (\d+) caractères \((\d+) au plus\)/, 'studio', 'livre', (m) => `L’intitulé n° ${Number(m[2]) + 1} du type de carte n° ${Number(m[1]) + 1} est trop long en ${LANG_FR[m[3]]} (${m[4]} caractères, ${m[5]} au plus) : le raccourcir dans « Modifier le livre ».`],
   [/^book\.json : cardTypes\.(\d+)\.(name|id)\b/, 'studio', 'livre', (m) => `Le type de carte n° ${Number(m[1]) + 1} est refusé (${m[2] === 'id' ? 'identifiant' : 'nom, à traduire en français, anglais et espagnol'}) : le corriger dans « Modifier le livre ».`],
   [/^book\.json : cardTypes\.(\d+)\.fields\.(\d+)\./, 'studio', 'livre', (m) => `L’intitulé n° ${Number(m[2]) + 1} du type de carte n° ${Number(m[1]) + 1} est refusé (identifiant ou traduction) : le corriger dans « Modifier le livre ».`],
-  // Mini-jeu (MJ1) : gabarit du jeu dans book.json (section « Jeu » du studio en MJ3 ; en attendant, book.json à la main)
-  [/^book\.json : game\b/, 'studio', 'livre', 'Le mini-jeu déclaré dans book.json (game) est refusé : seul le gabarit « poursuite » existe, écrit { "template": "poursuite" }. Le corriger dans book.json (la section Jeu du studio viendra avec l’atelier du jeu).'],
-  [/^game\/ : fichiers du jeu présents mais book\.json n'a pas de game/, 'studio', 'livre', 'Le dossier game/ contient un jeu, mais le livre n’en déclare pas : il ne sera pas publié. Ajouter "game": { "template": "poursuite" } à book.json pour le publier, ou retirer game/ du dossier.'],
+  // Mini-jeu (MJ1 ; section « Mini-jeu » de « Modifier le livre » depuis MJ3) : gabarit et seuil dans book.json
+  [/^book\.json : game\b/, 'studio', 'livre', 'Le mini-jeu déclaré dans book.json (game) est refusé : seul le gabarit « poursuite » existe. Le choisir dans « Modifier le livre » (section Mini-jeu).'],
+  [/^book\.json : unlockThreshold : seuil \((\d+)\) > nombre de scènes \((\d+)\)/, 'studio', 'livre', (m) => `Le mini-jeu se débloque à ${m[1]} cartes, mais le livre n’a que ${m[2]} scènes : baisser le nombre dans « Modifier le livre » (section Mini-jeu), ou le vider (toutes les scènes).`],
+  [/^book\.json : unlockThreshold\b/, 'studio', 'livre', 'Le nombre de cartes qui débloque le mini-jeu est refusé (nombre entier de 1 au nombre de scènes) : le corriger dans « Modifier le livre » (section Mini-jeu), ou le vider.'],
+  [/^game\/ : fichiers du jeu présents mais book\.json n'a pas de game/, 'studio', 'livre', 'Le dossier game/ contient un jeu, mais le livre n’en déclare pas : il ne sera pas publié. Choisir le gabarit dans « Modifier le livre » (section Mini-jeu) pour le publier, ou retirer game/ du dossier.'],
   [/^book\.json : (.+)$/, 'studio', 'livre', (m) => `Une information du livre est refusée (${m[1]}) : la corriger dans « Modifier le livre ».`],
   [/^icon\.png absent/, 'studio', 'dossier', 'L’icône du livre manque : déposer icon.png (image carrée de 512 px ou plus) dans le dossier du livre.'],
   [/^icon(-maskable)?\.png : .*carré/, 'studio', 'dossier', (m) => `L’icône${m[1] ? ' maskable' : ' du livre'} n’a pas la bonne taille : il faut une image carrée d’au moins 512 × 512 px.`],
@@ -487,21 +503,21 @@ const EXPLAIN = [
   [/^jeu : ([\d,]+ Mo) au total \(GLB optimisés et sons ; ([\d,]+ Mo) au plus/, 'blender', 'blender', (m) => `Le mini-jeu pèse ${m[1]} (modèles optimisés et sons), plus que le budget du gabarit (${m[2]}) : alléger les modèles du jeu ou ses sons. Sans blocage (budget à confirmer sur l’iPhone SE).`],
   [/^game\/(.+)\.glb : optimisation/, 'blender', 'blender', (m) => `L’optimisation de game/${m[1]}.glb a échoué ou abîmé le modèle (message d’origine) : l’exporter à nouveau depuis Blender.`],
   [/^jeu : aucun crédit de modèle .* GLB de game\//, 'blender', 'blender', 'Les modèles du mini-jeu n’ont pas de crédit (auteur, licence) : le renseigner dans Blender (propriétés src_* de l’addon).'],
-  // Mini-jeu (MJ1) : couche éditoriale game/game.edit.json (entrée « Jeu » de l'atelier en MJ3 ; en attendant, à la main)
-  [/^jeu : game\/game\.edit\.json absent/, 'atelier', 'atelier', 'Les réglages du mini-jeu (game/game.edit.json : règles, textes, sons) n’existent pas encore : les écrire (l’entrée « Jeu » de l’atelier viendra en MJ3).'],
-  [/^game\/game\.edit\.json : .*clé « rewards » réservée/, 'atelier', 'atelier', 'Les réglages du mini-jeu contiennent « rewards » (éléments du jeu apportés par les cartes), réservé pour plus tard : le retirer de game/game.edit.json.'],
-  [rx(`^game\\/game\\.edit\\.json : .* : clé ${Q} non admise, elle appartient aux GLB du jeu`), 'atelier', 'atelier', (m) => `Les réglages du mini-jeu contiennent « ${m[1]} », qui se règle dans Blender (addon) : le retirer de game/game.edit.json.`],
+  // Mini-jeu (MJ1) : couche éditoriale game/game.edit.json (entrée « Jeu » de l'atelier depuis MJ3)
+  [/^jeu : game\/game\.edit\.json absent/, 'atelier', 'atelier', 'Les réglages du mini-jeu (titre, consigne, règles, sons) n’existent pas encore : les écrire dans l’atelier (entrée « Jeu »), puis Enregistrer.'],
+  [/^game\/game\.edit\.json : .*clé « rewards » réservée/, 'atelier', 'atelier', 'Les réglages du mini-jeu contiennent « rewards » (éléments du jeu apportés par les cartes), réservé pour plus tard : l’atelier le retire en réenregistrant les réglages du jeu (entrée « Jeu »).'],
+  [rx(`^game\\/game\\.edit\\.json : .* : clé ${Q} non admise, elle appartient aux GLB du jeu`), 'atelier', 'atelier', (m) => `Les réglages du mini-jeu contiennent « ${m[1]} », qui se règle dans Blender (addon) : l’atelier le retire en réenregistrant les réglages du jeu (entrée « Jeu »).`],
   [rx(`^game\\/game\\.edit\\.json : rules\\.preys\\.\\d+\\.entity : entité ${Q} absente de game\\/ \\(proies : (.*)\\)`), 'atelier', 'atelier', (m) => `Les règles du jeu citent la proie « ${m[1]} », qui n’est pas dans game/ (proies : ${m[2]}) : choisir une autre proie, ou exporter « ${m[1]} » depuis Blender.`],
   [rx(`^game\\/game\\.edit\\.json : rules\\.preys\\.\\d+\\.entity : ${Q} est le joueur`), 'atelier', 'atelier', (m) => `Les règles du jeu font de « ${m[1]} » une proie, alors que c’est le joueur : choisir une proie dans les règles.`],
   [/^game\/game\.edit\.json : rules\.preys : (\d+) proies en même temps \((\d+) au plus\)/, 'atelier', 'atelier', (m) => `Les règles du jeu demandent ${m[1]} proies en même temps, ${m[2]} au plus : réduire les nombres de proies.`],
-  [/^game\/game\.edit\.json : ((?:rules|camera)\.[\w.]+) : (.+)$/, 'atelier', 'atelier', (m) => `Un réglage du mini-jeu est hors des bornes du gabarit (${m[1]} : ${m[2]}) : le corriger dans game/game.edit.json.`],
-  [/^game\/game\.edit\.json : /, 'atelier', 'atelier', 'Les réglages du mini-jeu (game/game.edit.json) sont refusés : voir le message d’origine et corriger le fichier (l’atelier du jeu viendra en MJ3).'],
-  [/^jeu : (titre|consigne) du jeu \(texts\.\w+\) absente? de game\/game\.edit\.json/, 'atelier', 'atelier', (m) => `Le mini-jeu n’a pas encore de ${m[1]} : l’écrire dans game/game.edit.json (texts), en français, anglais et espagnol.`],
-  [/^jeu : rules\.preys absent .*plusieurs sortes de proies \((.+)\)/, 'atelier', 'atelier', (m) => `Le mini-jeu a plusieurs sortes de proies (${m[1]}) : choisir lesquelles et combien dans les règles (rules.preys).`],
+  [/^game\/game\.edit\.json : ((?:rules|camera)\.[\w.]+) : (.+)$/, 'atelier', 'atelier', (m) => `Un réglage du mini-jeu est hors des bornes du gabarit (${m[1]} : ${m[2]}) : le corriger dans l’atelier (entrée « Jeu », onglet ${m[1].startsWith('camera') ? 'Caméra' : 'Règles'}).`],
+  [/^game\/game\.edit\.json : /, 'atelier', 'atelier', 'Les réglages du mini-jeu (game/game.edit.json) sont refusés : voir le message d’origine et les corriger dans l’atelier (entrée « Jeu »).'],
+  [/^jeu : (titre|consigne) du jeu \(texts\.\w+\) absente? de game\/game\.edit\.json/, 'atelier', 'atelier', (m) => `Le mini-jeu n’a pas encore de ${m[1]} : l’écrire dans l’atelier (entrée « Jeu », onglet Textes), en français, anglais et espagnol.`],
+  [/^jeu : rules\.preys absent .*plusieurs sortes de proies \((.+)\)/, 'atelier', 'atelier', (m) => `Le mini-jeu a plusieurs sortes de proies (${m[1]}) : choisir lesquelles et combien dans l’atelier (entrée « Jeu », onglet Règles).`],
   [rx(`^jeu : proie ${Q} non citée par rules\\.preys`), 'atelier', 'atelier', (m) => `La proie « ${m[1]} » est dans game/ mais les règles ne la font jamais apparaître : l’ajouter aux règles, ou retirer son fichier. Sans blocage.`],
-  [rx(`^jeu : son ${Q} sans entrée dans credits\\.assets`), 'atelier', 'atelier', (m) => `Le son « ${m[1]} » du mini-jeu n’a pas de crédit : l’ajouter dans game/game.edit.json (credits).`],
-  [rx(`^jeu : crédit pour ${Q}, asset non utilisé par le jeu`), 'atelier', 'atelier', (m) => `Un crédit du mini-jeu concerne « ${m[1]} », que le jeu n’utilise pas : le retirer de game/game.edit.json.`],
-  [/^jeu \(objet fusionné\) : /, 'atelier', 'atelier', 'Les réglages du mini-jeu et ses modèles ne s’accordent pas (message d’origine) : vérifier game/game.edit.json.'],
+  [rx(`^jeu : son ${Q} sans entrée dans credits\\.assets`), 'atelier', 'atelier', (m) => `Le son « ${m[1]} » du mini-jeu n’a pas de crédit : l’ajouter dans l’atelier (entrée « Jeu », onglet Crédits).`],
+  [rx(`^jeu : crédit pour ${Q}, asset non utilisé par le jeu`), 'atelier', 'atelier', (m) => `Un crédit du mini-jeu concerne « ${m[1]} », que le jeu n’utilise pas : le retirer dans l’atelier (entrée « Jeu », onglet Crédits).`],
+  [/^jeu \(objet fusionné\) : /, 'atelier', 'atelier', 'Les réglages du mini-jeu et ses modèles ne s’accordent pas (message d’origine) : vérifier les réglages du jeu dans l’atelier (entrée « Jeu »).'],
   // Mini-jeu (MJ1) : chunks du jeu au build (« Préparer le livre »)
   [/glbi-game-chunks\.json (absent|périmé|: aucun chunk)|chunk\(s\) du jeu absent|livre sans jeu : code du jeu/, 'studio', 'dossier', 'Le programme du mini-jeu n’a pas été repéré correctement pendant la préparation du livre : relancer « Préparer le livre ». Si le message revient, le signaler (message d’origine).'],
   // Modèle exporté (Blender, addon GLBGenerator)
@@ -697,6 +713,11 @@ function stepVerifier() {
   if (n && n.mtime > c.date) {
     return { state: 'again', status: `à refaire : ${base(n.rel)} modifié`,
       next: { title: 'Vérifier à nouveau', text: `${h(n.rel)} a changé ${quand(n.mtime)}, après la dernière vérification.`, btn: verify('Vérifier à nouveau') } };
+  }
+  // Vérification suivante interrompue (MJ3, point de CC2) : le résultat précédent reste affiché ; à refaire.
+  if (c.interrupted) {
+    return { state: 'again', status: 'dernière vérification interrompue',
+      next: { title: 'Vérifier à nouveau', text: `La vérification ${quand(c.interrupted.date)} s’est arrêtée sans résultat (voir son journal) ; le résultat précédent reste affiché.`, btn: verify('Vérifier à nouveau') } };
   }
   if (c.errors) return { state: 'error', status: `${plural(c.errors, 'erreur', 'erreurs')} à corriger`, next: fixNext(checkGroups(c)) };
   return { state: 'done', status: c.warnings ? `livre valide · ${plural(c.warnings, 'point', 'points')} à regarder` : 'livre valide', next: null };
@@ -906,6 +927,7 @@ function detailLivre() {
     ['Image de partage', f.ogImage ? `<span class="mono">${h(f.ogImage)}</span>` : '<span class="muted">aucune</span>'],
     ['Mention légale', h(legal.text?.fr ? `${legal.text.fr} (${legal.year ?? '?'})` : '—')],
     ['Carte de collection', cardFacts(f.cardTypes ?? [])],
+    ['Mini-jeu', f.gameTemplate ? `gabarit « ${h(f.gameTemplate)} » · ${f.unlockThreshold ? `débloqué à ${plural(Number(f.unlockThreshold) || 0, 'carte', 'cartes')}` : 'débloqué quand toutes les scènes sont manipulées'}` : '<span class="muted">aucun</span>'],
     ['Dossier', `<span class="mono">${h(b.dir)}</span>${b.typed ? `<br><span class="muted">saisi « ${h(b.typed)} », ramené à la casse réelle</span>` : ''}`],
   ];
   const errs = b.errors.length ? `<div class="notice err"><strong>book.json refusé</strong><ul class="errors">${b.errors.map((e) => `<li>${h(e)}</li>`).join('')}</ul></div>` : '';
@@ -914,7 +936,7 @@ function detailLivre() {
     sub: bookUsable() ? 'Informations de book.json, écrites par le studio.' : 'book.json à corriger.',
     actions: `${button({ label: 'Ouvrir le dossier', act: 'ouvrirDossier' }, 'ghost')}${button({ label: 'Copier le chemin', act: 'copier', data: { texte: b.dir } }, 'ghost')}${button({ label: 'Modifier le livre…', act: 'feuille', data: { f: 'livre' } })}`,
     body: `${errs}<dl class="facts two">${facts.map(([k, v], i) => (i === facts.length - 1 ? `<dt class="first">${k}</dt><dd class="full">${v}</dd>` : `<dt>${k}</dt><dd>${v}</dd>`)).join('')}</dl>
-      <p class="hint">Plus tard ici : mini-jeu, annonces (sections de book.json des lots suivants).</p>${openPanel()}`,
+      <p class="hint">Plus tard ici : annonces (section de book.json d’un lot suivant).</p>${openPanel()}`,
   };
 }
 
@@ -922,6 +944,22 @@ function box(c, label) {
   return c.present
     ? `<span class="box"><span class="tick">${ICON.check}</span>${h(label)}${c.mtime ? ` <span class="d">${frDate(c.mtime).slice(0, 11)}</span>` : ''}</span>`
     : `<span class="box no"><span class="tick"></span>à faire</span>`;
+}
+
+/** Mini-jeu (MJ3) : .blend de blender/jeu/ (« Ouvrir dans Blender ») et réglages du jeu dans l'atelier. */
+function gameBlock() {
+  const b = S.book;
+  const f = b.file.content.form;
+  if (!f.gameTemplate && !b.jeuBlends.length) return '';
+  const bl = S.blender;
+  const why = !bl.exe ? 'chemin de blender.exe non réglé (Réglages)' : !bl.exeOk ? 'blender.exe introuvable (Réglages)' : '';
+  const rows = b.jeuBlends.map((x) => `<tr><td class="id">${h(x.name)}</td><td class="small muted nowrap">${frDate(x.mtime).slice(0, 16)}</td>
+      <td><div class="acts">${button({ label: 'Ouvrir dans Blender', act: 'ouvrirBlender', data: { jeu: x.name }, why }, 'sm')}</div></td></tr>`);
+  const atelier = f.gameTemplate ? button({ label: 'Régler le jeu dans l’atelier', act: 'ouvrirOutil', data: { nom: 'atelier', jeu: '1' } }, 'sm ghost') : '';
+  return `<h3 class="section-title">Mini-jeu${f.gameTemplate ? ` <span class="muted">· gabarit « ${h(f.gameTemplate)} »</span>` : ''}</h3>
+    ${rows.length ? `<table class="table"><thead><tr><th title="blender/jeu/">Fichier Blender du jeu</th><th>Modifié</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table>` : '<p class="empty">Aucun .blend dans blender/jeu/ : y enregistrer l’arène (arena.blend) et chaque personnage du jeu (« Enregistrer sous » dans Blender).</p>'}
+    <div class="buttons">${atelier}</div>
+    ${f.gameTemplate ? '' : '<p class="hint">blender/jeu/ contient des fichiers, mais le livre n’a pas de jeu : choisir le gabarit dans « Modifier le livre » (section Mini-jeu).</p>'}`;
 }
 
 function detailScenes() {
@@ -945,7 +983,7 @@ function detailScenes() {
     actions: `<form class="add-scene" id="ajout-scene" autocomplete="off"><label><span class="sr">Nouvelle scène</span><input data-keep="nouvelle-scene" type="text" spellcheck="false" placeholder="nouvelle scène, ex. trex" title="${h(`ajoutée en fin de liste et enregistrée dans book.json ; ${tpl}`)}"></label>
       <button type="submit" class="btn">Ajouter</button></form>${button({ label: 'Ordre, retrait…', act: 'feuille', data: { f: 'livre' } }, 'ghost')}`,
     body: `<table class="table"><thead><tr><th>Scène</th><th title="blender/&lt;scène&gt;.blend">Scène Blender</th><th title="scenes/&lt;scène&gt;.glb">Modèle exporté</th><th title="scenes/&lt;scène&gt;.edit.json">Réglages</th><th>Vérification</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table>
-      <p class="hint">L’ordre des scènes est l’ordre de déblocage dans le livre. Un modèle s’exporte depuis Blender avec l’addon GLBGenerator ; il arrive tout seul ici.</p>`,
+      <p class="hint">L’ordre des scènes est l’ordre de déblocage dans le livre. Un modèle s’exporte depuis Blender avec l’addon GLBGenerator ; il arrive tout seul ici.</p>${gameBlock()}`,
   };
 }
 
@@ -961,7 +999,8 @@ function detailVerifier(st) {
   if (c.error) return { title: 'Vérifier le livre', sub: `Vérification ${quand(c.date)} : interrompue.`, actions, body: `<p class="empty">${h(c.error)} ${button({ label: 'Voir le journal', act: 'journal', data: { nom: 'book-check' } }, 'sm ghost')}</p>` };
   const g = checkGroups(c);
   const stale = st.state === 'again' ? ` · <span class="t-warn">à refaire : ${h(b.newest.rel)} modifié depuis</span>` : '';
-  const sub = `Vérifié ${quand(c.date)} · ${plural(c.errors, 'erreur', 'erreurs')}, ${plural(c.warnings, 'point', 'points')} à regarder${stale}`;
+  const cut = c.interrupted ? ` · <span class="t-warn">vérification ${h(quand(c.interrupted.date))} interrompue (voir son journal) : résultat précédent</span>` : '';
+  const sub = `Vérifié ${quand(c.date)} · ${plural(c.errors, 'erreur', 'erreurs')}, ${plural(c.warnings, 'point', 'points')} à regarder${stale}${cut}`;
   const groups = ['blender', 'atelier', 'studio'].filter((k) => g[k].length).map((k) => {
     const errs = g[k].filter((l) => l.level === 'error').length;
     const warns = g[k].length - errs;
@@ -975,7 +1014,9 @@ function detailVerifier(st) {
       const s = l.scene ? b.scenes.find((x) => x.id === l.scene) : null;
       const blend = k === 'blender' && s?.blend.present ? button({ label: 'Ouvrir dans Blender', act: 'ouvrirBlender', data: { scene: s.id }, why: !S.blender.exeOk ? 'blender.exe non réglé (Réglages)' : '' }, 'sm ghost') : '';
       // Atelier ouvert sur la scène à corriger (CC2, point de clôture de ST4).
-      const atel = k === 'atelier' && s ? button({ label: 'Ouvrir dans l’atelier', act: 'ouvrirOutil', data: { nom: 'atelier', scene: s.id } }, 'sm ghost') : '';
+      // Lignes du mini-jeu (sans scène, MJ3) : entrée « Jeu » de l'atelier.
+      const jeu = k === 'atelier' && !l.scene && /^(game\/|jeu )/.test(l.message);
+      const atel = k === 'atelier' && (s || jeu) ? button({ label: jeu ? 'Ouvrir le jeu dans l’atelier' : 'Ouvrir dans l’atelier', act: 'ouvrirOutil', data: jeu ? { nom: 'atelier', jeu: '1' } : { nom: 'atelier', scene: s.id } }, 'sm ghost') : '';
       return `<li class="issue${l.level === 'error' ? '' : ' warn'}"><span class="lvl" title="${l.level === 'error' ? 'erreur' : 'à regarder'}"></span>
         <div>${l.scene ? `<span class="scene">${h(l.scene)}</span>` : ''}${h(l.ex.say)}</div>${blend || atel || '<span></span>'}
         <details data-k="orig-${k}-${j}-${h(l.message.slice(0, 40))}"><summary>Message d’origine</summary><code>${h(l.message)}</code></details></li>`;
@@ -1113,7 +1154,7 @@ function tileIphone() {
   const p = E3.publication;
   if (p) {
     parts.push(`<p class="small">Dernier essai : ${h(quand(Date.parse(p.date)))} ${E3.outPublie ? '<span class="badge ok">à jour</span>' : '<span class="badge warn">à republier</span>'}</p>`);
-    const items = E3.qr.map((q) => ({ label: `scène ${q.scene}`, url: q.url, src: qrSrc({ type: 'essai', scene: q.scene, v: p.date }) }));
+    const items = E3.qr.map((q) => ({ label: q.jeu ? 'mini-jeu' : `scène ${q.scene}`, url: q.url, src: qrSrc(q.jeu ? { type: 'essai', jeu: '1', v: p.date } : { type: 'essai', scene: q.scene, v: p.date }) }));
     parts.push(items.length ? qrViewer('essai', items) : '<p class="small t-warn">QR d’essai absents de dist/qr-essai/ : publier à nouveau.</p>');
     if (p.deploiement) parts.push(`<p class="hint">Ce déploiement : ${h(p.deploiement)}</p>`);
   }
@@ -1129,7 +1170,11 @@ function tileImpression() {
   const b = S.book;
   const I = S.impression;
   if (!I.items.length) return `<div class="tile"><h3>QR du livre imprimé</h3><p class="small muted">Écrits par « Préparer le livre » dans dist/qr/${h(b.bookId ?? '?')}/.</p></div>`;
-  const items = I.items.map((q) => ({ label: q.fichier.replace(/\.svg$/, ''), url: q.url ?? '(adresse inconnue : urls.txt absent)', src: qrSrc({ type: 'impression', scene: q.scene, v: I.date ?? 0 }) }));
+  const items = I.items.map((q) => ({
+    label: q.jeu ? 'jeu (mini-jeu)' : q.fichier.replace(/\.svg$/, ''),
+    url: q.url ?? '(adresse inconnue : urls.txt absent)',
+    src: qrSrc(q.jeu ? { type: 'impression', jeu: '1', v: I.date ?? 0 } : { type: 'impression', scene: q.scene, v: I.date ?? 0 }),
+  }));
   return `<div class="tile"><h3>QR du livre imprimé</h3><p class="small muted">dist/qr/${h(b.bookId)}/ — préparés ${h(quand(I.date))}</p>${qrViewer('impression', items)}
     <details data-k="impression-aide"><summary>À quoi servent-ils ?</summary><ol>
       <li>Ouvrir le livre sur le téléphone (Android par le Wi-Fi, ou essai publié).</li>
@@ -1180,10 +1225,17 @@ function renderOutputs() {
 // Feuille « Outils de développement »
 // ---------------------------------------------------------------------------------------------------------
 
+/** Durée annoncée de la suite complète (MJ3, point de CC3) : la dernière mesurée par le studio, sinon le dire. */
+function suiteDuree() {
+  const s = S.suite;
+  if (!s) return 'durée encore jamais mesurée par ce studio, compter une vingtaine de minutes sous Windows';
+  return `environ ${Math.max(1, Math.round(s.dureeMs / 60000))} minutes d’après la dernière suite (${frDate(s.date).slice(0, 10)})`;
+}
+
 const TASKS = [
   ['test-engine', 'Tests sans navigateur du lecteur (npm run test:engine).'],
   ['test-schema', 'Tests sans navigateur du contrat (Zod, fusion ; npm run test:schema).'],
-  ['suite', 'Livre de test, préparation en parties de 1 Mio, puis test:install (environ 9 min sous Windows) ; le livre préparé est ensuite le livre de test.'],
+  ['suite', () => `Livre de test, préparation en parties de 1 Mio, puis test:install (${suiteDuree()}) ; le livre préparé est ensuite le livre de test.`],
   ['book-check', 'Vérification du livre ouvert, la même que l’étape 3 (npm run book:check).'],
   ['dev-book', 'Mise à jour de public/dev-book/ pour le lecteur du PC (npm run dev:book), lancée toute seule par le lecteur.'],
   ['build', 'Préparation du livre ouvert dans out/ (npm run build), la même que l’étape 5.'],
@@ -1196,7 +1248,7 @@ function renderTasks() {
     return `${i === 3 ? '<h3 class="eyebrow" style="padding-top:16px">Commandes du parcours</h3>' : ''}<div class="proc"><div class="proc-head"><span class="proc-name">${h(m.label)}</span>${m.startedAt ? badge(m) : '<span class="badge">jamais lancée</span>'}
       <span class="proc-meta">${[timeOf(m), m.pid ? `PID ${m.pid}` : ''].filter(Boolean).join(' · ')}</span>
       ${run ? button(stop(n), 'sm') : button(start('Lancer', n), 'sm')}${button({ label: 'Journal', act: 'journal', data: { nom: n } }, 'sm ghost')}</div>
-      <div class="proc-detail muted">${h(help)}</div>${m.detail ? `<div class="proc-detail">${h(m.detail)}</div>` : ''}</div>`;
+      <div class="proc-detail muted">${h(typeof help === 'function' ? help() : help)}</div>${m.detail ? `<div class="proc-detail">${h(m.detail)}</div>` : ''}</div>`;
   }).join(''));
 }
 
@@ -1295,8 +1347,7 @@ function loadForm() {
     values: { ...clone(c.form), cardTypes: clone(c.form.cardTypes ?? []) },
     loaded: JSON.stringify({ ...c.form, cardTypes: c.form.cardTypes ?? [] }),
     bookIdLocked: c.bookIdOnDisk !== null,
-    unlock: c.unlockThreshold,
-    hasUnlock: Object.prototype.hasOwnProperty.call(c, 'unlockThreshold'),
+    bothCardForms: !!c.bothCardForms,
     // Types et intitulés des cartes lus sur le disque (CC2, CC3) : identifiants non modifiables (clés dans edit.json).
     diskTypeIds: (c.form.cardTypes ?? []).map((t) => t.id),
     diskFieldIds: Object.fromEntries((c.form.cardTypes ?? []).map((t) => [t.id, t.fields.map((f) => f.id)])),
@@ -1348,7 +1399,13 @@ function renderForm() {
       <label class="field">Année <input type="number" min="2000" max="2100" data-f="legal.year" value="${h(v.legal.year)}"></label>
       ${fieldText('Mention légale en français', 'legal.text.fr')}${fieldText('en anglais', 'legal.text.en')}${fieldText('en espagnol', 'legal.text.es')}
     </div>
-    ${F.hasUnlock ? `<p class="hint">unlockThreshold : <code>${h(JSON.stringify(F.unlock))}</code> (mini-jeu, hors formulaire) : conservé tel quel.</p>` : ''}
+    <h3 class="section-title">Mini-jeu</h3>
+    <p class="hint">Jeu de fin de collection : ouvert depuis le menu du livre (et par le QR jeu) quand assez de cartes sont gagnées. Ses modèles se font dans Blender (blender/jeu/, addon en mode « Arène » et « Entité de jeu »), ses règles, textes et sons dans l’atelier (entrée « Jeu »).</p>
+    <div class="fields">
+      <label class="field">Gabarit du jeu <select data-f="gameTemplate">${[['', 'aucun jeu'], ['poursuite', 'poursuite (capture au chrono)']].map(([val, l]) => `<option value="${val}" ${v.gameTemplate === val ? 'selected' : ''}>${h(l)}</option>`).join('')}</select></label>
+      <label class="field">Cartes à gagner pour débloquer le jeu <input type="text" inputmode="numeric" data-f="unlockThreshold" value="${h(v.unlockThreshold ?? '')}" placeholder="toutes les scènes" spellcheck="false"></label>
+    </div>
+    <p class="hint">Vide : il faut avoir manipulé toutes les scènes. Sans gabarit, le livre n’a pas de jeu (le dossier game/ n’est pas publié).</p>
     <h3 class="section-title" id="f-cards-title">Carte de collection</h3>
     <div id="f-cards"></div>
     <h3 class="section-title">Scènes</h3>
@@ -1595,6 +1652,10 @@ function renderFormStatus() {
     parts.push(`<div class="notice err"><p>book.json ${F.readable ? 'refusé par bookSchema' : 'illisible'} à la lecture : formulaire prérempli avec ce qui est lisible ; rien n’est écrit tant que l’ensemble n’est pas valide.</p></div>`);
   }
   if (!F.exists) parts.push('<div class="notice err"><p>book.json absent du dossier : « Enregistrer » le crée.</p></div>');
+  // Point de CC3 : cardFields et cardTypes écrits ensemble à la main.
+  if (F.bothCardForms) {
+    parts.push('<div class="notice warn"><p><strong>book.json a à la fois cardFields et cardTypes</strong> (refusé par bookSchema). Le formulaire a repris les types de cartes (cardTypes) : les intitulés de cardFields seront <strong>perdus</strong> à l’enregistrement (le studio demandera confirmation). Pour les garder, les recopier dans un type avant d’enregistrer.</p></div>');
+  }
   setHtml('f-status', parts.join(''));
   $('f-errors').innerHTML = F.errors.map((e) => `<li>${h(e)}</li>`).join('');
   $('f-save').disabled = F.errors.length > 0 || F.saving;
@@ -2075,7 +2136,7 @@ function appendJournal(name, lines) {
 /** Confirmations (alertes au style Apple), en mots de tous les jours. */
 const CONFIRMS = {
   quitter: () => ({ titre: 'Tout arrêter et quitter ?', message: 'L’atelier, le lecteur du PC, le serveur de test et les tâches en cours sont arrêtés, puis le studio se ferme. Blender reste ouvert.', ok: 'Quitter', danger: true }),
-  suite: () => ({ titre: 'Suite complète', message: 'Livre de test, préparation, puis tests d’installation : environ 9 minutes sous Windows. Le serveur de test et le lecteur du PC sont arrêtés ; ensuite, le livre préparé est le livre de test (« Préparer le livre » à refaire pour le vrai livre).', ok: 'Lancer' }),
+  suite: () => ({ titre: 'Suite complète', message: `Livre de test, préparation, puis tests d’installation : ${suiteDuree()}. Le serveur de test et le lecteur du PC sont arrêtés ; ensuite, le livre préparé est le livre de test (« Préparer le livre » à refaire pour le vrai livre).`, ok: 'Lancer' }),
   build: () => {
     const live = [['serveur-test', 'le serveur de test'], ['dev', 'le lecteur du PC']].filter(([n]) => isRunning(byName(n))).map(([, l]) => l);
     return live.length ? { titre: 'Préparer le livre', message: `La préparation arrête d’abord ${live.join(' et ')} (à relancer ensuite depuis le parcours).`, ok: 'Préparer' } : null;
@@ -2118,7 +2179,7 @@ document.addEventListener('click', async (ev) => {
   if (a === 'copier') return copyText(b.dataset.texte);
   if (a === 'ouvrirOutil') {
     chosen = null;
-    return openTool(b.dataset.nom, b.dataset.scene);
+    return openTool(b.dataset.nom, b.dataset.jeu ? JEU : b.dataset.scene);
   }
   if (a === 'journal') {
     openSheet('journaux');
@@ -2172,6 +2233,7 @@ document.addEventListener('click', async (ev) => {
   if (b.dataset.chemin) extra.chemin = b.dataset.chemin;
   if (b.dataset.pid) extra.pid = Number(b.dataset.pid);
   if (b.dataset.scene) extra.scene = b.dataset.scene;
+  if (b.dataset.jeu) extra.jeu = b.dataset.jeu;
   if (a === 'demarrer' && b.dataset.nom) {
     journalName = b.dataset.nom;
     if ($('feuille-journaux').open) selectJournal(b.dataset.nom);

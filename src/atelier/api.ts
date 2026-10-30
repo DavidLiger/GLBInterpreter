@@ -1,6 +1,6 @@
 // Types de l'API de l'atelier (`/atelier/__api/`), partagés par le serveur (scripts/atelier/server.ts) et la page
 // (src/app/atelier/page.atelier.tsx). Types seulement : aucun code exécuté.
-import type { BuiltScene, ModelCredit } from "@/schema/glbi";
+import type { BuiltScene, GameConfig, ModelCredit } from "@/schema/glbi";
 
 /**
  * Marqueur du code de l'atelier : écrit dans la page (attribut de la racine) et cherché par le contrôle de fin de build
@@ -30,7 +30,7 @@ export interface BookResponse {
   /** Dossier source (chemin absolu, pour l'affichage). */
   source: string;
   /** `book.json` lu (même invalide), `null` s'il est absent ou illisible. */
-  book: { bookId?: string; title?: { fr?: string; en?: string; es?: string }; scenes?: string[]; legal?: unknown; cardFields?: unknown; cardTypes?: unknown } | null;
+  book: { bookId?: string; title?: { fr?: string; en?: string; es?: string }; scenes?: string[]; legal?: unknown; cardFields?: unknown; cardTypes?: unknown; game?: unknown } | null;
   /** Scènes de `book.json` dans leur ordre, puis GLB de `scenes/` absents de `book.json`. */
   scenes: AtelierScene[];
   /** Fichiers du dossier source par dossier de premier niveau (`images`, `icons`, `sounds`, …). */
@@ -84,6 +84,10 @@ export interface GlbDiagnostic {
   glbiVersion: unknown;
   /** `glbi_config` présent et lisible comme objet JSON. */
   glbiConfigOk: boolean;
+  /** GLB du jeu (MJ3) : `glbi_game_version` lu sur GLBI_ROOT (`undefined` : absent). */
+  gameVersion?: unknown;
+  /** GLB du jeu : `glbi_game_config` présent et lisible comme objet JSON. */
+  gameConfigOk?: boolean;
   clips: ClipInfo[];
   skins: SkinInfo[];
   /** Nœuds porteurs d'extras (clés seulement), extras de la scène glTF compris (nœud « (scène) »). */
@@ -145,3 +149,41 @@ export interface PreviewResponse {
 export type SaveResponse =
   | { ok: true; unchanged: boolean; generation: number }
   | { ok: false; error: string; messages: string[] };
+
+/** GLB de `game/` (MJ3) : fichier, couche 3D du jeu lue et diagnostic. */
+export interface GameGlbInfo {
+  /** `game/<id>.glb`. */
+  rel: string;
+  id: string;
+  mtime: number;
+  /** `kind` de la couche 3D du jeu (`arena`, `entity`), `null` si illisible. */
+  kind: string | null;
+  /** Rôle d'une entité (`player`, `prey`). */
+  role: string | null;
+  diagnostic: GlbDiagnostic;
+}
+
+/** `GET /atelier/__api/game` (MJ3) ; aussi `game` de l'aperçu (`POST …/game/preview`), calculé avec la saisie. */
+export interface GameResponse {
+  /** `book.json` a un `game` (gabarit) : entrée « Jeu » de l'atelier. */
+  inBook: boolean;
+  template: string | null;
+  /** GLB de `game/`, arène d'abord. */
+  glbs: GameGlbInfo[];
+  /** `game/game.edit.json` brut, `null` s'il est absent. */
+  edit: unknown;
+  /** `game.edit.json` présent mais refusé par son schéma (ou illisible) : jeu monté sans lui. */
+  editIgnored: boolean;
+  /** Objet fusionné `draft` (`mergeGame`), `null` si les GLB ne permettent pas de monter le jeu. */
+  draft: GameConfig | null;
+  /** Entités proies (couche 3D), pour le menu des proies de l'onglet Règles. */
+  preyIds: string[];
+  generation: number;
+}
+
+/** `POST /atelier/__api/game/preview` (MJ3) : corps = couche éditoriale du jeu saisie (non enregistrée). */
+export interface GamePreviewResponse {
+  game: GameResponse;
+  report: ReportLine[];
+  summary: string;
+}

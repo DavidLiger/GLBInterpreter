@@ -50,6 +50,8 @@ import {
 import { LANGUAGES, RESERVED_SOURCE_DIR } from '../../src/schema/glbi';
 import {
   copyTemplate,
+  JEU_BLEND_DIR,
+  JEU_BLEND_NAME,
   DEFAULT_PORTS,
   detectBlender,
   drives,
@@ -78,6 +80,7 @@ import {
   lanSceneUrl,
   parseDeploy,
   parseWhoami,
+  printGameQrFile,
   printQrFile,
   printQrs,
   projectNameError,
@@ -85,6 +88,8 @@ import {
   qrSvg,
   readOutBook,
   safeId,
+  trialGameQrFile,
+  trialGameUrl,
   trialQrFile,
   trialQrScenes,
   WRANGLER_PACKAGE,
@@ -738,9 +743,16 @@ function startTask(name: TaskName): Result {
           },
         },
         {
-          label: 'test:install (environ 9 min sous Windows)',
+          label: `test:install (${suiteDurationText()})`,
           before: () => requireFreePort(TESTS_PORT, 'tests d’installation'),
           launch: () => npmRun(ROOT, 'test:install'),
+          // Durée de la suite complète menée à son terme, annoncée au lancement suivant (MJ3, point de CC3).
+          after: () => {
+            if (e.startedAt) {
+              reglages.suite = { dureeMs: Date.now() - e.startedAt, date: Date.now() };
+              saveReglages();
+            }
+          },
         },
       ];
       break;
@@ -765,7 +777,7 @@ function startTask(name: TaskName): Result {
       return { ok: true, message: 'connexion à Cloudflare : autoriser wrangler dans la page du navigateur qui s’ouvre (2 min au plus)' };
   }
   void runTask(e, steps);
-  return { ok: true, message: `lancement : ${e.label}${name === 'suite' ? ' (environ 9 min sous Windows)' : ''}` };
+  return { ok: true, message: `lancement : ${e.label}${name === 'suite' ? ` (${suiteDurationText()})` : ''}` };
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -830,7 +842,7 @@ function publishSteps(): { steps: Step[] } | { error: string } {
           if ('error' in ob) e.journal.note(`QR d’essai non écrits : ${ob.error}`);
           else {
             try {
-              const urls = await writeTrialQrs(ROOT, ob.bookId, projet, ob.scenes);
+              const urls = await writeTrialQrs(ROOT, ob.bookId, projet, ob.scenes, ob.game);
               qr = `${urls.length} QR d’essai dans dist/qr-essai/${ob.bookId}/`;
               e.journal.note(`${qr} (${adresse}/s/<scène>)`);
             } catch (err) {
@@ -877,7 +889,11 @@ async function serveQr(url: URL, res: http.ServerResponse): Promise<void> {
   const bookId = book?.info.bookId ?? '';
   let svg: string | null = null;
   if (type === 'essai' || type === 'impression') {
-    const f = type === 'essai' ? trialQrFile(ROOT, bookId, scene) : printQrFile(ROOT, bookId, scene);
+    // QR du mini-jeu (MJ3) : `jeu=1`, sans scène.
+    const jeu = url.searchParams.get('jeu') === '1';
+    const f = jeu
+      ? type === 'essai' ? trialGameQrFile(ROOT, bookId) : printGameQrFile(ROOT, bookId)
+      : type === 'essai' ? trialQrFile(ROOT, bookId, scene) : printQrFile(ROOT, bookId, scene);
     if (f) svg = fs.readFileSync(f, 'utf8');
   } else if (type === 'reseau') {
     const ip = url.searchParams.get('ip') ?? '';
@@ -904,7 +920,12 @@ function readCheck(dir: string, startedAt: number | null): void {
   }
   const s = summarizeReport(raw);
   const date = startedAt ?? Date.now();
-  book.info.check = s ? { ...s, date } : { date, error: 'pas de rapport (arrêt ou échec inattendu) : voir le journal de book:check' };
+  // Vérification arrêtée ou en échec sans rapport (MJ3, point de CC2) : le dernier résultat du livre reste affiché (celui de
+  // l'écran, sinon celui gardé dans .studio/verifications.json), marqué « vérification interrompue » ; sans résultat précédent,
+  // l'étape le dit.
+  const interrupted = { date, message: 'pas de rapport (arrêt ou échec inattendu) : voir le journal de book:check' };
+  const prev = book.info.check && !('error' in book.info.check) ? book.info.check : restoredCheck(readCheckRecords(), dir);
+  book.info.check = s ? { ...s, date } : prev ? { ...prev, interrupted } : { date, error: interrupted.message };
   if (s) {
     try {
       fs.mkdirSync(STUDIO_DIR, { recursive: true });
@@ -1015,13 +1036,9 @@ const isStamp = (v: unknown): v is { size: number; mtime: number } =>
 const BOOKID_REFUSED = (id: string) =>
   `changer le bookId d’un livre existant est refusé (« ${id} » : clé de progression et nom du cache, figés après publication) : créer un autre livre`;
 
-/**
- * Objet composé du formulaire pour le livre ouvert : `unlockThreshold` et `game` (mini-jeu, MJ1) du disque repris tels quels
- * (`cardFields` : formulaire, CC2).
- */
+/** Objet composé du formulaire pour le livre ouvert (tout `book.json` est dans le formulaire depuis MJ3 : jeu et seuil). */
 function composeForOpenBook(form: ReturnType<typeof formFromBody>) {
-  const c = book!.info.file.content;
-  return composeBook(form, { unlockThreshold: c.unlockThreshold, game: c.game });
+  return composeBook(form);
 }
 
 /** Validation en direct du formulaire (aucune écriture) : messages de `bookSchema` et refus du studio. */
@@ -1080,6 +1097,10 @@ async function saveBook(body: Record<string, unknown>): Promise<Result> {
   if (body.confirme !== true && disk.stamp) {
     if (!isStamp(body.base) || body.base.size !== disk.stamp.size || Math.abs(body.base.mtime - disk.stamp.mtime) >= 1) {
       return { ok: false, confirm: 'book.json a été modifié à la main depuis sa lecture par le studio. L’écraser avec le contenu du formulaire ?' };
+    }
+    // Point de CC3 : cardFields et cardTypes ensemble (écrits à la main) : le formulaire a repris cardTypes, cardFields serait perdu.
+    if (disk.content.bothCardForms) {
+      return { ok: false, confirm: 'book.json contient à la fois cardFields et cardTypes (refusé par bookSchema). Le formulaire a repris les types de cartes (cardTypes) : les intitulés de cardFields seront perdus à l’enregistrement. Enregistrer quand même ?' };
     }
     if (!disk.valid) {
       return { ok: false, confirm: `book.json actuel ${disk.readable ? 'refusé par bookSchema' : 'illisible'} : le remplacer par le formulaire (ce qui n’était pas lisible est perdu) ?` };
@@ -1145,6 +1166,16 @@ async function createBook(body: Record<string, unknown>): Promise<Result> {
 // Blender (ST2, §8)
 // ---------------------------------------------------------------------------------------------------------
 
+/**
+ * Durée annoncée de la suite complète (MJ3, point de CC3) : celle de la dernière suite menée à son terme par ce studio ;
+ * jamais mesurée : le dire (repère : environ 19 min sous Windows en octobre 2026, 118 tests).
+ */
+function suiteDurationText(): string {
+  const s = reglages.suite;
+  if (!s) return 'durée encore jamais mesurée par ce studio : compter une vingtaine de minutes sous Windows';
+  return `environ ${Math.max(1, Math.round(s.dureeMs / 60_000))} min d’après la dernière suite, le ${frDate(s.date).slice(0, 10)}`;
+}
+
 function saveReglages(): void {
   try {
     writeReglages(REGLAGES_FILE, reglages);
@@ -1189,11 +1220,22 @@ function sceneOf(v: unknown): { id: string; blend: string } | { error: string } 
   return { id, blend: path.join(book.info.dir, RESERVED_SOURCE_DIR, `${id}.blend`) };
 }
 
-/** « Ouvrir dans Blender » : `blender/<id>.blend`, processus indépendant (non géré, non arrêté, hors journal). */
+/** `.blend` du mini-jeu demandé (`blender/jeu/<nom>.blend`, MJ3) : nom d'un fichier de ce dossier ; sinon message. */
+function jeuBlendOf(v: unknown): { id: string; blend: string; rel: string } | { error: string } {
+  if (!book) return { error: 'aucun livre ouvert' };
+  const name = String(v ?? '');
+  if (!JEU_BLEND_NAME.test(name)) return { error: `nom de fichier refusé « ${name} » (un .blend de ${RESERVED_SOURCE_DIR}/jeu/)` };
+  return { id: name, blend: path.join(book.info.dir, JEU_BLEND_DIR, name), rel: `${RESERVED_SOURCE_DIR}/jeu/${name}` };
+}
+
+/**
+ * « Ouvrir dans Blender » : `blender/<id>.blend` d'une scène, ou `blender/jeu/<nom>.blend` du mini-jeu (`body.jeu`, MJ3) ;
+ * processus indépendant (non géré, non arrêté, hors journal).
+ */
 async function openInBlender(body: Record<string, unknown>): Promise<Result> {
-  const sc = sceneOf(body.scene);
+  const sc = body.jeu !== undefined ? jeuBlendOf(body.jeu) : sceneOf(body.scene);
   if ('error' in sc) return fail(sc.error);
-  const rel = `${RESERVED_SOURCE_DIR}/${sc.id}.blend`;
+  const rel = 'rel' in sc ? sc.rel : `${RESERVED_SOURCE_DIR}/${sc.id}.blend`;
   if (!stampOf(sc.blend)) return fail(`${rel} absent : « Ouvrir dans Blender » désactivé (« Créer depuis le gabarit » ou « Enregistrer sous » dans Blender)`);
   const exe = reglages.blender.exe;
   if (!exe) return fail('chemin de blender.exe non réglé (section Blender)');
@@ -1207,11 +1249,84 @@ async function openInBlender(body: Record<string, unknown>): Promise<Result> {
   return { ok: true, message: `Blender ouvert sur ${rel}` };
 }
 
+// ---------------------------------------------------------------------------------------------------------
+// Onglet de l'atelier ouvert à la main (MJ3, point de CC2) : onglets connectés à l'atelier, relevés toutes les 2 s ; un
+// onglet déjà ouvert est passé sur la scène ou le jeu demandé par le serveur de l'atelier (`/atelier/__api/ouvrir`).
+// ---------------------------------------------------------------------------------------------------------
+
+let atelierTabs = 0;
+
+/** Requête du studio à l'API de l'atelier (127.0.0.1, `Host` de l'atelier, sans `Origin` ; ne compte pas comme un onglet). */
+function atelierApi(route: string, body?: unknown): Promise<{ status: number; json: Record<string, unknown> }> {
+  const port = entries.atelier.port;
+  return new Promise((resolve, reject) => {
+    const data = body === undefined ? undefined : JSON.stringify(body);
+    const req = http.request(
+      {
+        host: HOST, port, method: data ? 'POST' : 'GET', path: `/atelier/__api/${route}`, timeout: 2000,
+        headers: { host: `127.0.0.1:${port}`, 'x-atelier-probe': '1', ...(data ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) } : {}) },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => {
+          try {
+            resolve({ status: res.statusCode ?? 0, json: JSON.parse(Buffer.concat(chunks).toString('utf8')) });
+          } catch (e) {
+            reject(e);
+          }
+        });
+      },
+    );
+    req.on('timeout', () => req.destroy(new Error('atelier : pas de réponse')));
+    req.on('error', reject);
+    req.end(data);
+  });
+}
+
+async function pollAtelierTabs(): Promise<void> {
+  const before = atelierTabs;
+  const m = entries.atelier;
+  if (m.state !== 'prêt' || !m.port) atelierTabs = 0;
+  else {
+    try {
+      const r = await atelierApi('onglets');
+      atelierTabs = typeof r.json.onglets === 'number' ? r.json.onglets : 0;
+    } catch {
+      atelierTabs = 0;
+    }
+  }
+  if (atelierTabs !== before) changed();
+}
+
+/** Onglet de l'atelier déjà ouvert (à la main ou par une autre page du studio) passé sur `scene`, ou sur le jeu (`jeu`). */
+async function atelierGoTo(body: Record<string, unknown>): Promise<Result> {
+  const m = entries.atelier;
+  if (m.state !== 'prêt' || !m.port) return fail('atelier non démarré');
+  const scene = String(body.scene ?? '');
+  if (body.jeu !== true && scene && !safeId(scene)) return fail(`scène « ${scene} » refusée`);
+  const hash = body.jeu === true ? '#/jeu' : scene ? `#/s/${scene}` : null;
+  if (!hash) return { ok: true, message: 'Atelier déjà ouvert dans un autre onglet du navigateur' };
+  try {
+    const r = await atelierApi('ouvrir', { hash });
+    if (r.status !== 200) return fail(String(r.json.error ?? `atelier : HTTP ${r.status}`));
+    const n = Number(r.json.onglets ?? 0);
+    if (!n) return fail('aucun onglet de l’atelier ouvert');
+    return { ok: true, message: `Atelier déjà ouvert dans un autre onglet : il affiche maintenant ${body.jeu === true ? 'le jeu' : `la scène ${scene}`}` };
+  } catch (e) {
+    return fail(`atelier injoignable : ${(e as Error).message}`);
+  }
+}
+
 /** « Ouvrir le dossier » (CC2) : dossier du livre ouvert dans l'Explorateur de Windows (ou l'explorateur du système). */
 async function openBookFolder(): Promise<Result> {
   if (!book) return fail('aucun livre ouvert');
   const r = await openFolder(book.info.dir);
-  if ('error' in r) return fail(`dossier du livre non ouvert : ${r.error}`);
+  if ('error' in r) {
+    const hint = /^xdg-open introuvable/.test(r.error) ? ' (installer xdg-utils)' : '';
+    studioJournal.note(`dossier du livre non ouvert : ${r.error}`);
+    return fail(`Dossier du livre non ouvert : ${r.error}${hint}. L’ouvrir à la main : ${book.info.dir}`);
+  }
   studioJournal.note(`dossier du livre ouvert dans l’explorateur : ${book.info.dir}`);
   return { ok: true, message: 'Dossier du livre ouvert dans l’Explorateur' };
 }
@@ -1359,6 +1474,9 @@ function view() {
     essai: trialView(),
     reseau: { adresses: lanAddresses(os.networkInterfaces()), port: testPort() },
     impression: book?.info.bookId ? printQrs(ROOT, book.info.bookId) : { items: [], date: null },
+    // MJ3 : onglets connectés à l'atelier (un atelier ouvert à la main est retrouvé) ; dernière suite complète mesurée.
+    atelier: { onglets: atelierTabs },
+    suite: reglages.suite,
   };
 }
 
@@ -1375,7 +1493,13 @@ function trialView() {
     publication: pub,
     /** out/ actuel = celui de la dernière publication de ce livre. */
     outPublie: !!pub && !!out && out.date === pub.build && samePath(out.source, pub.source),
-    qr: pub && id ? trialQrScenes(ROOT, id, pub.scenes ?? []).map((s) => ({ scene: s, url: `${pub.adresse}/s/${s}` })) : [],
+    qr: pub && id
+      ? [
+          ...trialQrScenes(ROOT, id, pub.scenes ?? []).map((s) => ({ scene: s as string | null, url: `${pub.adresse}/s/${s}` })),
+          // QR d'essai du mini-jeu (MJ3), si le livre publié en a un.
+          ...(trialGameQrFile(ROOT, id) ? [{ scene: null, jeu: true, url: trialGameUrl(pub.projet) }] : []),
+        ]
+      : [],
   };
 }
 
@@ -1523,6 +1647,8 @@ async function action(body: Record<string, unknown>): Promise<Result> {
       return createFromTemplate(body);
     case 'reglerEssai':
       return setTrialProject(body);
+    case 'atelierVers':
+      return atelierGoTo(body);
     case 'ouvrirDossier':
       return openBookFolder();
     case 'usageIntitule':
@@ -1791,6 +1917,7 @@ async function main(): Promise<void> {
   setInterval(() => {
     book?.refresh();
     changed();
+    void pollAtelierTabs();
   }, SCAN_MS).unref();
   setInterval(flushJournals, 200).unref();
   void checkPorts();

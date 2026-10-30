@@ -5,10 +5,10 @@
 //   langues sont envoyés à la page tels quels).
 // - Forme écrite : clés dans l'ordre de `bookSchema` (objets imbriqués compris), indentation 2, UTF-8 sans échappement des
 //   accents (`JSON.stringify`), retour à la ligne final, champs facultatifs vides omis.
-// - Formulaire : valeurs saisies (textes), composées en objet puis validées par `bookSchema` ; `unlockThreshold` et `game`
-//   (mini-jeu, sujet 5 ; section « Jeu » du studio en MJ3) ne sont pas dans le formulaire : leur valeur sur le disque est
-//   reprise telle quelle (MJ1). `cardFields` (intitulés des cartes de
-//   collection) : section « Carte de collection » du formulaire depuis CC2 (CC1 le reprenait tel quel).
+// - Formulaire : valeurs saisies (textes), composées en objet puis validées par `bookSchema`. Mini-jeu (MJ3, section « Jeu ») :
+//   gabarit (`game: { template }`, vide = pas de jeu) et seuil de déblocage (`unlockThreshold`, vide = toutes les scènes) ;
+//   jusqu'à MJ3 ils étaient repris tels quels du disque. `cardFields` (intitulés des cartes de collection) : section « Carte
+//   de collection » du formulaire depuis CC2 (CC1 le reprenait tel quel).
 // - Types de cartes (CC3, DP-20) : le formulaire tient une liste de types (`cardTypes`) ; un livre à `cardFields` y est un
 //   seul type implicite `personnage`, sans nom. Forme la plus courte écrite : un type → `cardFields` (nom perdu), deux ou
 //   plus → `cardTypes`.
@@ -81,17 +81,22 @@ export interface BookForm {
    * ni `cardTypes` (livre sans caractéristiques) ; un seul type : `cardFields` ; deux ou plus : `cardTypes`.
    */
   cardTypes: CardTypeForm[];
+  /** Mini-jeu (MJ3) : gabarit (`""` : pas de jeu, `game` omis). */
+  gameTemplate: string;
+  /** Seuil de déblocage du mini-jeu, tel que saisi (`""` : omis, toutes les scènes). */
+  unlockThreshold: string;
 }
 
-/** Champs lisibles d'un `book.json` (pour préremplir le formulaire) et champ hors formulaire conservé. */
+/** Champs lisibles d'un `book.json` (pour préremplir le formulaire). */
 export interface ReadableBook {
   form: BookForm;
-  /** `unlockThreshold` lu sur le disque (valeur brute, même invalide), repris tel quel à l'écriture. */
-  unlockThreshold?: unknown;
-  /** `game` (mini-jeu, MJ1) lu sur le disque (valeur brute), repris tel quel à l'écriture jusqu'à la section « Jeu » (MJ3). */
-  game?: unknown;
   /** `bookId` lisible sur le disque : celui d'un livre existant, non modifiable. */
   bookIdOnDisk: string | null;
+  /**
+   * `cardFields` et `cardTypes` présents ensemble (écrits à la main, refusés par `bookSchema`) : le formulaire reprend
+   * `cardTypes`, `cardFields` serait perdu au premier enregistrement (prévenir, point de CC3).
+   */
+  bothCardForms?: boolean;
 }
 
 export const legalDefault = (year: number): string => `© ${year} Éditions Liger`;
@@ -106,10 +111,16 @@ export function emptyForm(year: number): BookForm {
     ogImage: '',
     legal: { year: String(year), text: { fr: text, en: text, es: text } },
     cardTypes: [],
+    gameTemplate: '',
+    unlockThreshold: '',
   };
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+/** Seuil lu (nombre ou texte) ramené au texte du champ ; autre valeur : vide. */
+const thresholdText = (v: unknown): string => (typeof v === 'number' && Number.isFinite(v) ? String(v) : typeof v === 'string' ? v : '');
+/** Gabarit lu (`game.template`) ; `game` mal formé : vide. */
+const templateOf = (v: unknown): string => (isObj(v) ? str(v.template) : '');
 const texts = (v: unknown): Texts => {
   const o = isObj(v) ? v : {};
   return { fr: str(o.fr), en: str(o.en), es: str(o.es) };
@@ -144,9 +155,10 @@ export function readableBook(raw: unknown, year: number): ReadableBook {
     f.legal = { year: typeof y === 'number' || typeof y === 'string' ? String(y) : '', text: texts(raw.legal.text) };
   }
   f.cardTypes = cardTypesOf(raw.cardTypes, raw.cardFields);
+  f.gameTemplate = templateOf(raw.game);
+  f.unlockThreshold = thresholdText(raw.unlockThreshold);
   const r: ReadableBook = { form: f, bookIdOnDisk: typeof raw.bookId === 'string' && raw.bookId !== '' ? raw.bookId : null };
-  if ('unlockThreshold' in raw) r.unlockThreshold = raw.unlockThreshold;
-  if ('game' in raw) r.game = raw.game;
+  if (Array.isArray(raw.cardTypes) && Array.isArray(raw.cardFields)) r.bothCardForms = true;
   return r;
 }
 
@@ -162,11 +174,13 @@ export function formFromBody(v: unknown): BookForm {
     ogImage: str(o.ogImage),
     legal: { year: typeof legal.year === 'number' ? String(legal.year) : str(legal.year), text: texts(legal.text) },
     cardTypes: cardTypesOf(o.cardTypes, o.cardFields),
+    gameTemplate: typeof o.gameTemplate === 'string' ? o.gameTemplate : '',
+    unlockThreshold: typeof o.unlockThreshold === 'number' ? String(o.unlockThreshold) : str(o.unlockThreshold),
   };
 }
 
 /** Objet `book.json` composé du formulaire, avant validation. `languages` : celles du Zod (affichées, non modifiables). */
-export function composeBook(form: BookForm, keep: { unlockThreshold?: unknown; game?: unknown } = {}): Obj {
+export function composeBook(form: BookForm): Obj {
   const y = form.legal.year.trim();
   const book: Obj = {
     bookId: form.bookId.trim(),
@@ -182,8 +196,10 @@ export function composeBook(form: BookForm, keep: { unlockThreshold?: unknown; g
   const fieldsOf = (t: CardTypeForm) => t.fields.map((f) => ({ id: f.id.trim(), label: { ...f.label } }));
   if (form.cardTypes.length === 1 && form.cardTypes[0].fields.length) book.cardFields = fieldsOf(form.cardTypes[0]);
   if (form.cardTypes.length >= 2) book.cardTypes = form.cardTypes.map((t) => ({ id: t.id.trim(), name: { ...t.name }, fields: fieldsOf(t) }));
-  if (keep.unlockThreshold !== undefined) book.unlockThreshold = keep.unlockThreshold;
-  if (keep.game !== undefined) book.game = keep.game;
+  // Mini-jeu (MJ3) : seuil écrit en nombre s'il est entier, sinon tel quel (refus lisible de `bookSchema`) ; gabarit choisi.
+  const th = (form.unlockThreshold ?? '').trim();
+  if (th) book.unlockThreshold = /^\d+$/.test(th) ? Number(th) : th;
+  if ((form.gameTemplate ?? '').trim()) book.game = { template: form.gameTemplate.trim() };
   return book;
 }
 

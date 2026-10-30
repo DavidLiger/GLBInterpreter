@@ -1,5 +1,6 @@
 // scripts/atelier/diagnose.ts — onglet Diagnostic de l'atelier (A2, spec-atelier-glbi.md §10.8, repris de test-glb.html) :
-// lecture du GLB source par gltf-transform, avec ou sans GLBI_ROOT. Aucune écriture.
+// lecture du GLB source par gltf-transform, avec ou sans GLBI_ROOT. Aucune écriture. MJ3 : aussi les GLB du jeu (`game/`,
+// couche 3D du jeu `glbi_game_config`, clips déclarés par rôle).
 import fs from 'node:fs';
 import type { Document } from '@gltf-transform/core';
 import { readGlbFile } from '../glb-pipeline';
@@ -16,6 +17,8 @@ function declaredClips(raw3d: unknown): Map<string, string[]> {
   const add = (clip: unknown, as: string) => {
     if (typeof clip === 'string') out.set(clip, [...(out.get(clip) ?? []), as]);
   };
+  // Entité du jeu (MJ3) : `clips` = { <rôle>: <clip> }.
+  if (isObj(raw3d) && raw3d.kind === 'entity' && isObj(raw3d.clips)) for (const [role, clip] of Object.entries(raw3d.clips)) add(clip, role);
   const anims = isObj(raw3d) && isObj(raw3d.modules) ? raw3d.modules.animations : undefined;
   if (isObj(anims)) {
     if (isObj(anims.idle)) add(anims.idle.clip, 'idle');
@@ -38,6 +41,9 @@ export interface DiagnoseResult {
   diagnostic: GlbDiagnostic;
   /** Couche 3D brute (`glbi_config` parsé) si GLBI_ROOT est unique et lisible. */
   raw3d: unknown;
+  /** Couche 3D du jeu brute (`glbi_game_config` parsé, MJ3) et sa version, si GLBI_ROOT est unique. */
+  rawGame: unknown;
+  gameVersion: unknown;
 }
 
 export async function diagnoseGlb(file: string): Promise<DiagnoseResult> {
@@ -61,14 +67,15 @@ export async function diagnoseGlb(file: string): Promise<DiagnoseResult> {
   try {
     doc = await readGlbFile(file);
   } catch (e) {
-    return { diagnostic: { ...empty, error: (e as Error).message }, raw3d: undefined };
+    return { diagnostic: { ...empty, error: (e as Error).message }, raw3d: undefined, rawGame: undefined, gameVersion: undefined };
   }
   const root = doc.getRoot();
   const nodes = root.listNodes();
   const glbiRoots = nodes.filter((n) => n.getName() === GLBI_ROOT_NAME);
   const rootExtras = glbiRoots.length === 1 ? glbiRoots[0].getExtras() ?? {} : {};
   const raw3d = glbiRoots.length === 1 ? parseConfig(rootExtras.glbi_config) : undefined;
-  const declared = declaredClips(raw3d);
+  const rawGame = glbiRoots.length === 1 ? parseConfig(rootExtras.glbi_game_config) : undefined;
+  const declared = declaredClips(raw3d ?? rawGame);
 
   const clips: ClipInfo[] = root.listAnimations().map((a) => {
     let duration = 0;
@@ -107,6 +114,8 @@ export async function diagnoseGlb(file: string): Promise<DiagnoseResult> {
 
   return {
     raw3d,
+    rawGame,
+    gameVersion: rootExtras.glbi_game_version,
     diagnostic: {
       ...empty,
       rootNode: root.listScenes()[0]?.listChildren()[0]?.getName() || null,
@@ -122,6 +131,8 @@ export async function diagnoseGlb(file: string): Promise<DiagnoseResult> {
       glbiRoots: glbiRoots.length,
       glbiVersion: rootExtras.glbi_version,
       glbiConfigOk: raw3d !== undefined,
+      gameVersion: rootExtras.glbi_game_version,
+      gameConfigOk: rawGame !== undefined,
       clips,
       skins,
       extras,
