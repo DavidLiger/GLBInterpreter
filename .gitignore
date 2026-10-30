@@ -86,6 +86,9 @@ public/decoders/
 # Studio de fabrication (npm run studio, ST1) : état des sorties, PID, réglages, journaux
 /.studio/
 
+# Guides en PDF (npm run docs:pdf, GD) : régénérés depuis docs/guide-*.md, jamais édités ni commités
+/docs/pdf/
+
 # Tests d'installation (Playwright, Î8)
 /test-results/
 /playwright-report/
