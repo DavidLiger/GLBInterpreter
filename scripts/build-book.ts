@@ -683,10 +683,18 @@ const ATELIER_TRACES = [ATELIER_MARKER, '/atelier/__api/', '__api/events', 'page
 const STUDIO_MARKER = 'glbi-studio-st1';
 const STUDIO_TRACES = [STUDIO_MARKER, '/__studio/'];
 const TEXT_FILE = /\.(html?|js|mjs|cjs|css|json|txt|webmanifest|map|svg|xml)$/i;
+/**
+ * Annonces (AN1, décision de David du 30/10) : `next build` lancé avec GLBI_ANNONCES_TEST=1 compile les clés publiques de
+ * test (identifiants marqués) et l'adresse du flux de test (next.config.ts, src/annonces/config.ts). Réservé au livre de
+ * test (`bookId` « test-dino », scripts/make-test-book.ts) : tout autre livre construit ainsi est refusé.
+ */
+const ANNONCES_TEST_MARKER = 'glbi-annonces-test';
+const ANNONCES_TEST_BOOK = 'test-dino';
 
-function checkNoAtelier(outDir: string): void {
+function checkNoAtelier(outDir: string, testBook: boolean): void {
   const found: string[] = [];
   const studio: string[] = [];
+  const annoncesTest: string[] = [];
   for (const rel of listFiles(outDir)) {
     if (/^atelier(\/|\.html$)/.test(rel)) {
       found.push(rel);
@@ -696,6 +704,7 @@ function checkNoAtelier(outDir: string): void {
     const text = fs.readFileSync(path.join(outDir, rel), 'utf8');
     if (ATELIER_TRACES.some((t) => text.includes(t))) found.push(rel);
     if (STUDIO_TRACES.some((t) => text.includes(t))) studio.push(rel);
+    if (text.includes(ANNONCES_TEST_MARKER)) annoncesTest.push(rel);
   }
   const list = (l: string[]) => `${l.slice(0, 5).join(', ')}${l.length > 5 ? ', …' : ''}`;
   if (found.length) {
@@ -707,9 +716,19 @@ function checkNoAtelier(outDir: string): void {
   if (studio.length) {
     err(`code du studio dans le dossier construit (${list(studio)}) : scripts/studio/ ne doit être importé par aucun fichier de src/ ni copié dans public/`);
   }
+  if (annoncesTest.length && !testBook) {
+    err(
+      `clés et flux d'annonces de test dans le dossier construit (${list(annoncesTest)}) : GLBI_ANNONCES_TEST=1 est réservé au ` +
+        'livre de test ; retirer la variable, supprimer out/ et .next/, puis relancer npm run build',
+    );
+  }
 }
 
-function requireExport(outDir: string): void {
+function requireExport(outDir: string, testBook: boolean): void {
+  if (process.env.GLBI_ANNONCES_TEST === '1' && !testBook) {
+    err(`GLBI_ANNONCES_TEST=1 défini : variable réservée au livre de test (bookId « ${ANNONCES_TEST_BOOK} ») ; la retirer, supprimer out/ et .next/, puis relancer npm run build`);
+    fail();
+  }
   if (process.env.ATELIER === '1') {
     // Avec ATELIER=1, next.config.ts déclare la page de l'atelier et exporte dans .next-atelier/ (dossier de l'atelier).
     err("ATELIER=1 défini : variable réservée à npm run atelier ; la retirer, supprimer out/ et .next-atelier/, puis relancer npm run build");
@@ -720,7 +739,7 @@ function requireExport(outDir: string): void {
     fail();
   }
   writingOut = outDir;
-  checkNoAtelier(outDir);
+  checkNoAtelier(outDir, testBook);
   if (errors.length) fail();
   // `next build` recopie tout public/, y compris le livre de développement (npm run dev:book, Î10) : jamais publié.
   const devBook = path.join(outDir, path.basename(DEV_BOOK_OUT));
@@ -745,7 +764,7 @@ async function buildFixture(opts: Options): Promise<void> {
     console.log('build-book : --check sans --source : src/content/book.json et JSON Schema (schema/glbi-layer3d.schema.json, schema/glbi-game3d.schema.json) à jour');
     return;
   }
-  requireExport(outDir);
+  requireExport(outDir, false);
   await optimizeFixtureGlbs(outDir, opts.textures);
   writeWebManifest(outDir, 'GLBInterpreter', 'fr', await writeIcons(path.join(ROOT, 'public/icon.png'), null, outDir, false));
   injectAppTitle(outDir, 'GLBInterpreter');
@@ -785,7 +804,7 @@ async function buildBook(opts: Options, sourceArg: string): Promise<void> {
   }
 
   // --- Écriture du dossier construit ---
-  requireExport(outDir);
+  requireExport(outDir, book.bookId === ANNONCES_TEST_BOOK);
   removeFixtureMedia(outDir);
   const textures = resolveTextureModeOrFail(opts.textures);
   let usesKtx2 = false;

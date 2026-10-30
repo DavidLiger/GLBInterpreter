@@ -12,7 +12,7 @@ export default defineConfig({
   reporter: 'list',
   use: { locale: 'fr-FR', serviceWorkers: 'allow' },
   webServer: {
-    command: 'npx tsx tests/static-server.ts 4173 out',
+    command: 'npx tsx tests/static-server.ts 4173 out --annonces 4175',
     url: 'http://localhost:4173/__stats',
     reuseExistingServer: false,
   },

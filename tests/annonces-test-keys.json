@@ -1,0 +1,19 @@
+{
+  "_note": "Clés de TEST du flux d’annonces (AN1). Clés privées publiées volontairement : leurs clés publiques ne sont compilées que dans le build du livre de test (GLBI_ANNONCES_TEST=1), jamais dans un livre publié. keys[0] = courante, keys[1] = secours ; foreign = clé non déclarée (signature fausse sous un keyId connu).",
+  "keys": [
+    {
+      "keyId": "glbi-annonces-test-k1",
+      "spki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEk7QMGtw2Lhz7Ex9z1LfFWnKVVyRkerpJDb+IEszALdO/gFmwfagkrVp4LfjRucqKh+LNKBlQIUEVz12BlzHx8w==",
+      "pkcs8": "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQguAcEgmNUibS2VlNYbMRn1d8gF0uC97NuNzqozlB2+vmhRANCAASTtAwa3DYuHPsTH3PUt8VacpVXJGR6ukkNv4gSzMAt07+AWbB9qCStWngt+NG5yoqH4s0oGVAhQRXPXYGXMfHz"
+    },
+    {
+      "keyId": "glbi-annonces-test-k2",
+      "spki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAER66AnhmCkLDh1g3D8qnN9Z7Nhy7PjItaUouO7M+6Uwc/Q7+0dZ9gmy9We+q4NsRE92JFbfSbxr5WKoDOfyTPqA==",
+      "pkcs8": "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgUtbqPqISwHc5JSRBnbmtHb/Y5aBACZ0mKxlJZItoP8ChRANCAARHroCeGYKQsOHWDcPyqc31ns2HLs+Mi1pSi47sz7pTBz9Dv7R1n2CbL1Z76rg2xET3YkVt9JvGvlYqgM5/JM+o"
+    }
+  ],
+  "foreign": {
+    "spki": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEF5OVcGs2Qm19Qy4h94zRNZyTLXMdaFBPIxZ9IUkIpEGHncPslDDqRY3B4CxFUQ4eDrTE2BqD/JnOFN3OXBQ2lQ==",
+    "pkcs8": "MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgNn5ZhYz110+z5ahKejTCRloiEH2Iq36BQkTxYujnISChRANCAAQXk5VwazZCbX1DLiH3jNE1nJMtcx1oUE8jFn0hSQikQYedw+yUMOpFjcHgLEVRDh4OtMTYGoP8mc4U3c5cFDaV"
+  }
+}

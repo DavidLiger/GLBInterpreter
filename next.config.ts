@@ -62,6 +62,17 @@ class GameChunksPlugin {
   }
 }
 
+// Annonces (AN1, spec-annonces.md §3 ; décision de David du 30/10, question 2) : livre de test seulement. Avec
+// GLBI_ANNONCES_TEST=1, les clés publiques de test (`tests/annonces-test-keys.json`, identifiants marqués
+// `glbi-annonces-test`) sont compilées dans `src/annonces/config.ts` et le flux est lu sur le serveur de test (port 4175).
+// Sans la variable, la valeur compilée est vide : ni clé de test ni adresse de test dans le bundle. build-book refuse
+// tout livre autre que le livre de test construit avec la variable.
+function annoncesTestKeys(): string {
+  if (process.env.GLBI_ANNONCES_TEST !== '1') return '';
+  const raw = JSON.parse(fs.readFileSync(path.resolve('tests/annonces-test-keys.json'), 'utf8')) as { keys: { keyId: string; spki: string }[] };
+  return JSON.stringify(raw.keys.map(({ keyId, spki }) => ({ keyId, spki })));
+}
+
 const withSerwist = withSerwistInit({
   swSrc: 'src/sw.ts',
   swDest: 'public/sw.js',
@@ -74,6 +85,7 @@ const withSerwist = withSerwistInit({
 
 const nextConfig: NextConfig = {
   output: 'export',
+  env: { GLBI_ANNONCES_TEST_KEYS: annoncesTestKeys() },
   trailingSlash: true,
   images: { unoptimized: true },
   // Relatif en production seulement : le serveur de dev sert toujours à la racine.

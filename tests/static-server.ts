@@ -5,14 +5,26 @@
 //   GET /__fail?path=<p>&times=<n>     coupe la connexion au milieu du corps des <n> prochaines réponses de <p>
 //   GET /__mutate?on=1                 simule une reconstruction du livre : index.html modifié, book.json à jour
 //
-//   npx tsx tests/static-server.ts [port] [dossier]      (défauts : 4173, out)
+//   GET /__annonces?scenario=<s>       flux d'annonces servi (AN1, tests/annonces-feed.ts ; défaut : valide)
+//   GET /__annonces/stats              requêtes reçues par le serveur du flux : { feed, image, headers } (en-têtes de la
+//                                      dernière requête du flux)
+//
+//   npx tsx tests/static-server.ts [port] [dossier] [--annonces <port>]      (défauts : 4173, out ; flux : aucun)
+// Avec `--annonces <port>` (AN1), un second serveur sert le flux d'annonces de test sur ce port, toutes interfaces
+// (`/v1/annonces.json`, `/v1/images/…`, CORS ouvert) : c'est l'adresse lue par le livre de test construit avec
+// GLBI_ANNONCES_TEST=1 (même hôte que la page, port 4175).
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { IMAGE_PATH, feedFor, isScenario, testImage, type Scenario } from './annonces-feed';
 
-const port = Number(process.argv[2] ?? 4173);
-const root = path.resolve(process.argv[3] ?? 'out');
+const args = process.argv.slice(2);
+const flag = args.indexOf('--annonces');
+const annoncesPort = flag >= 0 ? Number(args[flag + 1]) : null;
+const positional = flag >= 0 ? args.filter((_, i) => i !== flag && i !== flag + 1) : args;
+const port = Number(positional[0] ?? 4173);
+const root = path.resolve(positional[1] ?? 'out');
 
 const TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
@@ -58,6 +70,15 @@ const server = http.createServer((req, res) => {
     stats = {};
     failures = {};
     mutate = false;
+    resetAnnonces();
+    return send(200, 'ok');
+  }
+  if (url.pathname === '/__annonces/stats') return send(200, JSON.stringify(annonceStats), 'application/json');
+  if (url.pathname === '/__annonces') {
+    const sc = url.searchParams.get('scenario');
+    if (!isScenario(sc)) return send(400, `scénario inconnu : ${sc}`);
+    scenario = sc;
+    annonceStats = { feed: 0, image: 0, headers: null };
     return send(200, 'ok');
   }
   if (url.pathname === '/__fail') {
@@ -92,3 +113,45 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(port, () => console.log(`serveur de test : http://localhost:${port}/ et /depot/ → ${root}`));
+
+// ── Flux d'annonces de test (AN1) ──
+let scenario: Scenario = 'valide';
+let annonceStats: { feed: number; image: number; headers: Record<string, string | string[] | undefined> | null } = { feed: 0, image: 0, headers: null };
+function resetAnnonces() {
+  scenario = 'valide';
+  annonceStats = { feed: 0, image: 0, headers: null };
+}
+
+if (annoncesPort) {
+  const cors = { 'access-control-allow-origin': '*', 'cache-control': 'no-store' };
+  http
+    .createServer(async (req, res) => {
+      const p = new URL(req.url ?? '/', 'http://x').pathname;
+      if (req.method === 'OPTIONS') {
+        res.writeHead(204, cors);
+        return res.end();
+      }
+      if (p === '/v1/annonces.json') {
+        annonceStats.feed++;
+        annonceStats.headers = req.headers;
+        const r = await feedFor(scenario);
+        const reply = () => {
+          if (res.destroyed) return;
+          res.writeHead(r.status, { ...cors, 'content-type': 'application/json', 'content-length': String(r.body.length) });
+          res.end(r.body);
+        };
+        if (r.delayMs) setTimeout(reply, r.delayMs);
+        else reply();
+        return;
+      }
+      if (p === `/v1/${IMAGE_PATH}`) {
+        annonceStats.image++;
+        const img = await testImage();
+        res.writeHead(200, { ...cors, 'content-type': 'image/png', 'content-length': String(img.length) });
+        return res.end(img);
+      }
+      res.writeHead(404, cors);
+      res.end('introuvable');
+    })
+    .listen(annoncesPort, () => console.log(`flux d'annonces de test : http://<hôte>:${annoncesPort}/v1/annonces.json (scénario : ${scenario})`));
+}

@@ -335,6 +335,8 @@ export interface Reglages {
 export const DEFAULT_PORTS: Reglages['ports'] = { atelier: 4100, dev: 3000, test: 8001 };
 /** Port des tests d'installation (playwright.config.ts) : réservé. */
 export const TESTS_PORT = 4173;
+/** Flux d'annonces de test servi pendant la suite complète (AN1, `tests/static-server.ts --annonces`). */
+export const ANNONCES_TESTS_PORT = 4175;
 export const MAX_RECENTS = 10;
 
 export function readReglages(file: string): Reglages {

@@ -20,6 +20,8 @@ import type { CardEntry } from "@/components/card/CardDialog";
 import type { Lang, Messages } from "@/i18n/messages";
 import { GAME_HASH, goToGame, goToScene, isDevGameHash, isGameHash, parseDevSceneHash, parseSceneHash, sceneHref, useLocationHash } from "./sceneRoute";
 import { gameAccess } from "./gameAccess";
+import AnnoncesSetting from "@/components/annonces/AnnoncesSetting";
+import { useMenuAnnonce } from "@/components/annonces/useAnnonces";
 import {
   ProgressStore, isUnlocked, pageStorage, sceneAccess, withCollected, withQuizPassed, withUnlocked, type Progress,
 } from "./progress";
@@ -41,6 +43,10 @@ const CardDialog = dynamic(() => import("@/components/card/CardDialog"), { ssr: 
 // `#/dev/jeu` ; l'écran de blocage et la case du menu n'en dépendent pas. Absent d'un livre sans `book.json.game`
 // (retiré de `out/` et de `book.json.files` par build-book) : ce composant n'y est alors jamais rendu.
 const GameEntry = dynamic(() => import("@/components/game/GameEntry"), { ssr: false, loading: () => <Black /> });
+
+// Annonces des nouveaux livres (AN1, spec-annonces.md §5) : fenêtre « Pour les parents » dans un chunk à part, chargée
+// seulement quand une annonce est à montrer (jamais sans clé déclarée ni réglage activé).
+const AnnonceDialog = dynamic(() => import("@/components/annonces/AnnonceDialog"), { ssr: false, loading: () => null });
 
 /** Durée du bandeau « Nouvelle carte ! » (spec-carte-collection.md §2). */
 const NEW_CARD_BANNER_MS = 5000;
@@ -284,6 +290,7 @@ function OpenScene({ reader, sceneId, progress, needsQuiz }: { reader: ReaderBoo
         onBack={backToMenu}
         cornerBottomLeft={earned ? <CardButton onClick={openCard} /> : undefined}
         aboveActions={card ? <NewCardBanner show={newCard} onOpen={openCard} /> : undefined}
+        infoExtra={<AnnoncesSetting />}
       />
       {card && cardOpen && (
         <CardDialog
@@ -492,6 +499,10 @@ function CollectionMenu({ book, progress }: { book: ReaderBook | null; progress:
     ? earned.map((id) => ({ sceneId: id, card: cards![id]!.card!, title: cards![id]!.name ?? { fr: id, en: id, es: id }, number: book.scenes.indexOf(id) + 1 }))
     : [];
   const openIndex = openCard ? cardEntries.findIndex((e) => e.sceneId === openCard) : -1;
+  // Annonces (AN1, §4) : lues à l'affichage du menu d'un livre installé, hors cartouche fixture ; fenêtre montrée quand
+  // aucune autre fenêtre du menu n'est ouverte.
+  const annonce = useMenuAnnonce(book && progress ? book.bookId : null);
+  const menuBusy = scanning || confirmReset || openIndex >= 0;
 
   return (
     <Screen className="glbi-menu">
@@ -590,6 +601,7 @@ function CollectionMenu({ book, progress }: { book: ReaderBook | null; progress:
               bookTitle={book.title}
             />
           )}
+          {annonce.found && !menuBusy && <AnnonceDialog found={annonce.found} onShown={annonce.markSeen} onClose={annonce.close} onStop={annonce.stop} />}
           <Dialog open={confirmReset} onClose={() => setConfirmReset(false)} labelledBy={resetTitleId} className="glbi-dialog" testId="collection-reset-dialog">
             <div className="glbi-panel flex flex-col items-center gap-4 p-6 text-center">
               <h2 id={resetTitleId} className="text-xl font-bold">

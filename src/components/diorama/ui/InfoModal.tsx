@@ -29,9 +29,11 @@ interface InfoModalProps {
   isMobile: boolean;
   poiIcon?: string;
   help: InfoHelp;
+  /** Contenu ajouté en fin de fenêtre par la page du livre (AN1 : réglage des annonces) ; absent dans l'atelier. */
+  extra?: React.ReactNode;
 }
 
-export default function InfoModal({ show, onClose, credits, isMobile, poiIcon, help }: InfoModalProps) {
+export default function InfoModal({ show, onClose, credits, isMobile, poiIcon, help, extra }: InfoModalProps) {
   const rotateIcon = isMobile ? "icons/dioramas/UI/one-finger.png" : "icons/dioramas/UI/mouse-left-click.png";
   const zoomIcon = isMobile ? "icons/dioramas/UI/two-fingers.png" : "icons/dioramas/UI/mouse-scroll.png";
   const { t, lang } = useTranslation();
@@ -117,6 +119,7 @@ export default function InfoModal({ show, onClose, credits, isMobile, poiIcon, h
               )}
             </section>
           )}
+          {extra}
         </div>
       </div>
     </Dialog>

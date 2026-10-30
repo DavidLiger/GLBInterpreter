@@ -87,6 +87,30 @@ body {
   }
 }
 
+/* « Voir le livre » des annonces (AN1) : appui maintenu de 3 s (remplissage), sans menu ni sélection à l'appui long. */
+.glbi-hold {
+  position: relative;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: pointer;
+}
+.glbi-hold-fill {
+  position: absolute;
+  inset: 0;
+  background: #fbbf24;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition-property: transform;
+  transition-timing-function: linear;
+}
+.glbi-hold-fill[data-holding="1"],
+.glbi-hold[data-armed="1"] .glbi-hold-fill {
+  transform: scaleX(1);
+}
+
 /* Dialogues (primitive `ui/Dialog.tsx`). */
 dialog.glbi-dialog {
   margin: auto;

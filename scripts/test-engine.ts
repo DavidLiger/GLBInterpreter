@@ -13,7 +13,8 @@
 // chrono, déterminisme ; entrées : joystick, réglages des commandes, clavier, manette sur un état Gamepad simulé ; arène
 // lue d'une scène three ; sons du jeu sur le moteur d'Î11) ; entrée « Jeu » de l'atelier (MJ3 : formulaire de
 // `game/game.edit.json`, aller-retour sans perte, bornes, insécables, liens du Rapport, jeu monté sur l'objet fusionné,
-// stockage en mémoire).
+// stockage en mémoire) ; annonces des nouveaux livres (AN1 : signature, dates, liens, bornes, choix de l'annonce, stockage,
+// lecture du flux sur un réseau simulé : requête minimale, délai, échecs silencieux, aucune requête réglage désactivé).
 // Les mixers tournent sur une scène three minimale (un os animé), le temps est avancé à la main.
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -49,6 +50,13 @@ import { BOND_S, PoursuiteGame, WALK_FACTOR, type EntitySpec, type PoursuiteOpti
 import { CONTROL_SIZES, InputCollector, controlZones, inJoystickZone, isGameKey, joystickVector, keyButtonIndex, keyboardVector, readGamepad, type GamepadLike } from '../src/components/game/input';
 import { capsuleOf, fadeableClone, readArena } from '../src/components/game/scene';
 import { parseReaderBook } from '../src/components/book/readerScene';
+import { webcrypto } from 'node:crypto';
+import * as AF from '../tests/annonces-feed';
+import { allowedLink, parsePayload, pickAnnonce, sniffImage, todayOf, validImagePath, verifyEnvelope, type SubtleLike } from '../src/annonces/feed';
+import { checkAnnonces, type CheckDeps } from '../src/annonces/check';
+import { isDue, isEnabled, parseAnnoncesState, withSeen } from '../src/annonces/store';
+import { ANNONCES_PAR_DEFAUT, annoncesSetup } from '../src/annonces/config';
+import { ANNONCES_KEYS } from '../src/annonces/keys';
 import { BOOK_ICON, cardCount, cardScale, cardTypeCounts, earnedCards, isCompactType, isNewCard, parseCardFields, parseCardTypes, readerCardOf, resolveCardType, showCardType } from '../src/components/card/cardModel';
 
 let failed = 0;
@@ -2142,6 +2150,229 @@ test('jeu monté dans l’atelier : ReaderGame tiré de l’objet fusionné (GLB
   assert.deepEqual(new GameStore('test-dino', mem, quiet).controls(), { side: 'left', size: 'large' }, 'gardé pour l’onglet (remontage du jeu)');
   assert.equal(mem.getItem(gameKey('test-dino')), '{"best":7}');
 });
+
+// ────────────── Annonces des nouveaux livres (AN1) ──────────────
+console.log('Annonces (AN1)');
+{
+  const subtle = webcrypto.subtle as unknown as SubtleLike;
+  const TODAY = new Date(2026, 10, 15, 10, 0, 0); // 15/11/2026, heure locale
+  const today = todayOf(TODAY);
+  const verify = (b: Buffer) => verifyEnvelope(new Uint8Array(b), AF.TEST_KEYS, subtle);
+  const payloadBytes = (p: unknown) => new TextEncoder().encode(JSON.stringify(p));
+  const annTests: Array<[string, () => Promise<void>]> = [];
+  const annTest = (name: string, fn: () => Promise<void>) => annTests.push([name, fn]);
+
+  annTest('signature : clé courante et clé de secours acceptées ; keyId inconnu, octets modifiés, autre clé, signature DER, clé en trop : refus', async () => {
+    const one = AF.payloadOf([await AF.item({}, TODAY)], TODAY);
+    assert.ok((await verify(await AF.envelope(one))).ok, 'clé courante');
+    assert.ok((await verify(await AF.envelope(one, { key: 1 }))).ok, 'clé de secours');
+    const unknown = await verify(await AF.envelope(one, { keyId: 'k-inconnue' }));
+    assert.ok(!unknown.ok && /keyId « k-inconnue » inconnu/.test(unknown.reason));
+    const tampered = await verify(await AF.envelope(one, { tamper: true }));
+    assert.ok(!tampered.ok && tampered.reason === 'signature fausse');
+    const foreign = await verify(await AF.envelope(one, { key: 'foreign' }));
+    assert.ok(!foreign.ok && foreign.reason === 'signature fausse', 'autre clé sous un keyId connu');
+    const env = JSON.parse((await AF.envelope(one)).toString());
+    const der = await verify(Buffer.from(JSON.stringify({ ...env, signature: Buffer.alloc(70).toString('base64') })));
+    assert.ok(!der.ok && /64 octets/.test(der.reason));
+    const extra = await verify(Buffer.from(JSON.stringify({ ...env, html: '<b>' })));
+    assert.ok(!extra.ok && /clé inconnue/.test(extra.reason));
+    const big = await verify(Buffer.alloc(33 * 1024, 32));
+    assert.ok(!big.ok && /32768 au plus/.test(big.reason));
+    assert.ok(!(await verifyEnvelope(new Uint8Array(await AF.envelope(one)), [], subtle)).ok, 'aucune clé');
+  });
+
+  annTest('dates : flux périmé, expires ≤ issued + 90 jours, annonce entre start et end, end ≤ start + 365 jours, dates réelles', async () => {
+    const it = await AF.item({}, TODAY);
+    const p = (issued: number, expires: number, items: unknown[] = [it]) => parsePayload(payloadBytes(AF.payloadOf(items, TODAY, issued, expires)), today);
+    assert.ok(p(-1, 60).ok);
+    const old = p(-60, -1);
+    assert.ok(!old.ok && /périmé/.test(old.reason), 'expires dépassé');
+    assert.ok(p(0, 0).ok, 'expires = aujourd’hui : encore valable');
+    assert.ok(p(-10, 80).ok, 'expires = issued + 90');
+    const far = p(-10, 81);
+    assert.ok(!far.ok && /issued \+ 90/.test(far.reason));
+    assert.ok(!p(5, 2).ok, 'expires avant issued');
+    const bad = parsePayload(payloadBytes({ ...AF.payloadOf([it], TODAY), issued: '2026-02-30' }), today);
+    assert.ok(!bad.ok && /issued ou expires/.test(bad.reason));
+    // Annonce : fenêtre start–end, borne de 365 jours.
+    const pick = (over: Record<string, unknown>) => {
+      const r = parsePayload(payloadBytes(AF.payloadOf([{ ...it, ...over }], TODAY)), today);
+      assert.ok(r.ok);
+      return { kept: r.value.items.length, picked: pickAnnonce(r.value.items, today, 'test-dino', []) };
+    };
+    assert.ok(pick({}).picked);
+    assert.equal(pick({ start: AF.day(1, TODAY) }).picked, null, 'pas encore commencée');
+    assert.equal(pick({ end: AF.day(-1, TODAY) }).picked, null, 'finie');
+    assert.ok(pick({ start: AF.day(0, TODAY), end: AF.day(0, TODAY) }).picked, 'start = end = aujourd’hui');
+    assert.equal(pick({ start: AF.day(-1, TODAY), end: AF.day(364, TODAY) }).kept, 1, 'end = start + 365');
+    assert.equal(pick({ start: AF.day(-1, TODAY), end: AF.day(365, TODAY) }).kept, 0, 'end = start + 366 : annonce ignorée');
+    assert.equal(pick({ end: AF.day(-5, TODAY), start: AF.day(-1, TODAY) }).kept, 0, 'end avant start');
+  });
+
+  annTest('liens : https vers la liste seulement (editions-liger.com et sous-domaines, Amazon) ; sinon annonce sans lien', async () => {
+    for (const u of ['https://editions-liger.com/x', 'https://www.editions-liger.com/', 'https://boutique.editions-liger.com/a?b=1', 'https://www.amazon.fr/dp/1', 'https://amazon.co.uk/x', 'https://www.amazon.es/', 'https://amazon.com/']) {
+      assert.ok(allowedLink(u), u);
+    }
+    for (const u of ['http://www.editions-liger.com/', 'https://exemple.com/', 'https://editions-liger.com.evil.com/', 'https://faux-editions-liger.com/', 'https://amazon.fr.evil.com/', 'https://smile.amazon.fr/', 'https://u:p@www.amazon.fr/', 'https://www.amazon.fr:8443/', 'javascript:alert(1)', 'data:text/html,x', 42]) {
+      assert.equal(allowedLink(u), null, String(u));
+    }
+    const r = parsePayload(payloadBytes(AF.payloadOf([await AF.item({ url: 'https://exemple.com/livre' }, TODAY)], TODAY)), today);
+    assert.ok(r.ok && r.value.items.length === 1 && r.value.items[0].url === undefined);
+    assert.ok(r.ok && r.value.notes.some((n) => /lien hors de la liste/.test(n)));
+  });
+
+  annTest('bornes : titre ≤ 60, texte ≤ 200 par langue (FR, EN, ES), 5 annonces au plus, image (chemin, empreinte, format)', async () => {
+    const it = await AF.item({}, TODAY);
+    const kept = async (over: Record<string, unknown>) => {
+      const r = parsePayload(payloadBytes(AF.payloadOf([{ ...it, ...over }], TODAY)), today);
+      assert.ok(r.ok);
+      return r.value.items.length;
+    };
+    assert.equal(await kept({ title: { fr: 'x'.repeat(60), en: 'y', es: 'z' } }), 1);
+    assert.equal(await kept({ title: { fr: 'x'.repeat(61), en: 'y', es: 'z' } }), 0);
+    assert.equal(await kept({ text: { fr: 'x'.repeat(200), en: 'y', es: 'z' } }), 1);
+    assert.equal(await kept({ text: { fr: 'x'.repeat(201), en: 'y', es: 'z' } }), 0);
+    assert.equal(await kept({ title: { fr: 'a', en: 'b' } }), 0, 'espagnol absent');
+    assert.equal(await kept({ image: { path: '../secret.png', sha256: 'a'.repeat(64) } }), 0);
+    assert.equal(await kept({ image: { path: 'https://x.com/a.png', sha256: 'a'.repeat(64) } }), 0);
+    assert.equal(await kept({ image: { path: 'images/a.gif', sha256: 'a'.repeat(64) } }), 0);
+    assert.equal(await kept({ image: { path: 'images/a.png', sha256: 'A'.repeat(64) } }), 0, 'empreinte en minuscules');
+    assert.equal(await kept({ id: '<b>x</b>' }), 0);
+    const six = parsePayload(payloadBytes(AF.payloadOf(Array.from({ length: 6 }, (_, i) => ({ ...it, id: `a${i}` })), TODAY)), today);
+    assert.ok(!six.ok && /5 au plus/.test(six.reason));
+    const v2 = parsePayload(payloadBytes({ ...AF.payloadOf([it], TODAY), version: 2 }), today);
+    assert.ok(!v2.ok);
+    assert.equal(sniffImage(new Uint8Array(await AF.testImage())), 'image/png');
+    assert.equal(sniffImage(new TextEncoder().encode('<svg>')), null);
+    assert.ok(validImagePath('images/dino-2.webp') && validImagePath('a.v2.JPG') && !validImagePath('/abs.png') && !validImagePath('a/../b.png'));
+  });
+
+  annTest('choix : la plus récente non vue (start), pas celle du livre ouvert, au plus une', async () => {
+    const r = parsePayload(payloadBytes(JSON.parse(Buffer.from(JSON.parse((await AF.feedFor('deux', TODAY)).body.toString()).payload, 'base64').toString())), today);
+    assert.ok(r.ok);
+    assert.equal(pickAnnonce(r.value.items, today, 'test-dino', [])?.id, 'annonce-test-2');
+    assert.equal(pickAnnonce(r.value.items, today, 'test-dino', ['annonce-test-2'])?.id, 'annonce-test-1');
+    assert.equal(pickAnnonce(r.value.items, today, 'test-dino', ['annonce-test-1', 'annonce-test-2']), null);
+    assert.equal(pickAnnonce(r.value.items, today, 'livre-test-2', []), null, 'annonce du livre ouvert ignorée');
+  });
+
+  annTest('stockage : lecture tolérante, lecture due tous les 7 jours, annonces vues ; réglage désactivé par défaut ; aucune clé déclarée', async () => {
+    assert.equal(ANNONCES_PAR_DEFAUT, false);
+    assert.equal(ANNONCES_KEYS.length, 0, 'liste vide (AN1) : fonction inerte');
+    assert.equal(annoncesSetup(), null);
+    assert.deepEqual(parseAnnoncesState('illisible'), { seen: [] });
+    assert.deepEqual(parseAnnoncesState('{"enabled":"oui","lastCheck":"x","seen":["a",3,"b"]}'), { seen: ['a', 'b'] });
+    const st = parseAnnoncesState('{"enabled":true,"lastCheck":"2026-11-10T10:00:00.000Z","seen":[]}');
+    assert.equal(isEnabled(st), true);
+    assert.equal(isEnabled({ seen: [] }), false);
+    assert.equal(isDue(st, new Date('2026-11-16T09:59:00Z')), false);
+    assert.equal(isDue(st, new Date('2026-11-17T10:00:00Z')), true);
+    assert.equal(isDue(st, new Date('2026-11-01T10:00:00Z')), true, 'horloge reculée');
+    assert.deepEqual(withSeen(withSeen({ seen: [] }, 'a'), 'a'), { seen: ['a'] });
+  });
+
+  /** Requête simulée : réponses du serveur de test (tests/annonces-feed.ts), requêtes notées. */
+  function fakeNet(scenario: AF.Scenario | (() => Promise<Response>)) {
+    const calls: { url: string; init?: RequestInit }[] = [];
+    const fetchFn = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      if (typeof scenario === 'function') return scenario();
+      if (url.endsWith(AF.IMAGE_PATH)) return new Response(new Uint8Array(await AF.testImage()), { status: 200 });
+      const r = await AF.feedFor(scenario, TODAY);
+      return new Response(new Uint8Array(r.body), { status: r.status });
+    }) as unknown as typeof fetch;
+    return { calls, fetchFn };
+  }
+  const SETUP = { feedUrl: 'http://localhost:4175/v1/annonces.json', keys: AF.TEST_KEYS };
+  const runCheck = (over: Partial<CheckDeps> & { fetch: typeof fetch }) => {
+    const warnings: string[] = [];
+    const storage = (over.storage ?? memStorage({ 'glbinterpreter:annonces': '{"enabled":true,"seen":[]}' })) as ReturnType<typeof memStorage>;
+    return {
+      warnings,
+      storage,
+      run: () => checkAnnonces({ setup: SETUP, bookId: 'test-dino', subtle, now: () => TODAY, online: true, warn: (m) => warnings.push(m), ...over, storage: storage as unknown as StorageLike }),
+    };
+  };
+
+  annTest('lecture : annonce valide avec image vérifiée ; requête sans cookie, sans référent, sans cache ; date retenue', async () => {
+    const net = fakeNet('valide');
+    const c = runCheck({ fetch: net.fetchFn });
+    const f = await c.run();
+    assert.equal(f?.annonce.id, 'annonce-test-1');
+    assert.equal(f?.image?.type, 'image/png');
+    assert.deepEqual(net.calls.map((x) => x.url), [SETUP.feedUrl, 'http://localhost:4175/v1/images/annonce-test.png']);
+    for (const { init } of net.calls) {
+      assert.equal(init?.credentials, 'omit');
+      assert.equal(init?.referrerPolicy, 'no-referrer');
+      assert.equal(init?.cache, 'no-store');
+      assert.equal(init?.headers, undefined, 'aucun en-tête propre');
+    }
+    assert.equal(JSON.parse(c.storage.m.get('glbinterpreter:annonces')!).lastCheck, TODAY.toISOString());
+    assert.deepEqual(c.warnings, []);
+    // Seconde lecture le même jour : pas due, aucune requête.
+    const again = fakeNet('valide');
+    assert.equal(await runCheck({ fetch: again.fetchFn, storage: c.storage as unknown as StorageLike }).run(), null);
+    assert.equal(again.calls.length, 0);
+  });
+
+  annTest('aucune requête : pas de clé, réglage désactivé (ni écrit), hors ligne, stockage indisponible', async () => {
+    const n1 = fakeNet('valide');
+    assert.equal(await runCheck({ fetch: n1.fetchFn, setup: null }).run(), null);
+    const n2 = fakeNet('valide');
+    const off = runCheck({ fetch: n2.fetchFn, storage: memStorage() as unknown as StorageLike });
+    assert.equal(await off.run(), null);
+    assert.equal(off.storage.m.size, 0, 'rien écrit');
+    const n3 = fakeNet('valide');
+    assert.equal(await runCheck({ fetch: n3.fetchFn, online: false }).run(), null);
+    const n4 = fakeNet('valide');
+    const ro = { getItem: () => '{"enabled":true,"seen":[]}', setItem: () => { throw new Error('plein'); }, removeItem: () => {} };
+    const c4 = runCheck({ fetch: n4.fetchFn, storage: ro });
+    assert.equal(await c4.run(), null);
+    assert.ok(c4.warnings.some((w) => /stockage indisponible/.test(w)));
+    assert.equal(n1.calls.length + n2.calls.length + n3.calls.length + n4.calls.length, 0);
+  });
+
+  annTest('échecs silencieux, date retenue : signature fausse, keyId inconnu, périmé, image d’empreinte fausse, 404, délai dépassé', async () => {
+    for (const [sc, re] of [['signature-fausse', /signature fausse/], ['inconnue', /keyId/], ['perime', /périmé/], ['image-fausse', /empreinte fausse/], ['absent', /réponse 404/]] as const) {
+      const c = runCheck({ fetch: fakeNet(sc).fetchFn });
+      assert.equal(await c.run(), null, sc);
+      assert.ok(c.warnings.some((w) => re.test(w)), `${sc} : ${c.warnings.join(' | ')}`);
+      assert.ok(c.warnings.every((w) => w.startsWith('annonces : ')));
+      assert.ok(JSON.parse(c.storage.m.get('glbinterpreter:annonces')!).lastCheck, `${sc} : date retenue`);
+    }
+    const hang = (async (_u: string, init?: RequestInit) =>
+      new Promise((_, rej) => init?.signal?.addEventListener('abort', () => rej(new DOMException('abort', 'AbortError'))))) as unknown as typeof fetch;
+    const slow = runCheck({ fetch: hang, timeoutMs: 30 });
+    assert.equal(await slow.run(), null);
+    assert.ok(slow.warnings.some((w) => /délai de 0.03 s dépassé/.test(w)), slow.warnings.join(' | '));
+    assert.ok(JSON.parse(slow.storage.m.get('glbinterpreter:annonces')!).lastCheck);
+  });
+
+  annTest('menu quitté pendant la lecture : abandon, rien de retenu ; annonce du livre ouvert : rien', async () => {
+    const ctrl = new AbortController();
+    const hang = (async (_u: string, init?: RequestInit) =>
+      new Promise((_, rej) => init?.signal?.addEventListener('abort', () => rej(new DOMException('abort', 'AbortError'))))) as unknown as typeof fetch;
+    const c = runCheck({ fetch: hang, signal: ctrl.signal });
+    const p = c.run();
+    ctrl.abort();
+    assert.equal(await p, null);
+    assert.equal(JSON.parse(c.storage.m.get('glbinterpreter:annonces')!).lastCheck, undefined);
+    assert.deepEqual(c.warnings, []);
+    const own = runCheck({ fetch: fakeNet('propre-livre').fetchFn });
+    assert.equal(await own.run(), null);
+  });
+
+  for (const [name, fn] of annTests) {
+    try {
+      await fn();
+      console.log(`  ✓ ${name}`);
+    } catch (e) {
+      failed++;
+      console.error(`  ✗ ${name}\n    ${(e as Error).message}`);
+    }
+  }
+}
 
 if (failed) {
   console.error(`\n${failed} test(s) en échec`);

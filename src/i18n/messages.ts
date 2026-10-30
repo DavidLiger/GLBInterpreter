@@ -275,6 +275,17 @@ const fr = {
     error: "Le jeu n'a pas pu démarrer.",
     lost: "L'affichage du jeu s'est arrêté.",
   },
+  // Annonces des nouveaux livres (AN1) : fenêtre « Pour les parents » et réglage, adressés aux parents (vouvoiement).
+  annonces: {
+    title: "Pour les parents",
+    see: "Voir le livre",
+    hold: "Maintenez 3 secondes pour ouvrir (réservé aux parents)",
+    release: "Relâchez pour ouvrir",
+    stop: "Ne plus afficher",
+    setting: "Annonces des nouveaux livres",
+    settingInfo: "Quand l'appareil est connecté, le livre consulte au plus une fois par semaine la liste des nouveaux livres des Éditions Liger (annonces.editions-liger.com) et peut en annoncer un dans le menu. Cette demande ne contient ni cookie ni identifiant ; le serveur reçoit l'adresse IP de l'appareil.",
+    privacy: "Confidentialité",
+  },
 };
 
 export type Messages = typeof fr;
@@ -512,6 +523,16 @@ const en: Messages = {
     error: "The game could not start.",
     lost: "The game display stopped.",
   },
+  annonces: {
+    title: "For parents",
+    see: "See the book",
+    hold: "Hold for 3 seconds to open (for parents)",
+    release: "Release to open",
+    stop: "Don't show again",
+    setting: "New book announcements",
+    settingInfo: "When the device is online, the book checks the list of new Éditions Liger books (annonces.editions-liger.com) at most once a week and may announce one in the menu. This request carries no cookie and no identifier; the server receives the device's IP address.",
+    privacy: "Privacy",
+  },
 };
 
 const es: Messages = {
@@ -746,6 +767,16 @@ const es: Messages = {
     buttons: { bond: "Salto" },
     error: "El juego no pudo empezar.",
     lost: "La pantalla del juego se detuvo.",
+  },
+  annonces: {
+    title: "Para los padres",
+    see: "Ver el libro",
+    hold: "Mantenga pulsado 3 segundos para abrir (reservado a los padres)",
+    release: "Suelte para abrir",
+    stop: "No volver a mostrar",
+    setting: "Anuncios de nuevos libros",
+    settingInfo: "Cuando el dispositivo está conectado, el libro consulta como máximo una vez por semana la lista de nuevos libros de Éditions Liger (annonces.editions-liger.com) y puede anunciar uno en el menú. Esta solicitud no contiene cookies ni identificadores; el servidor recibe la dirección IP del dispositivo.",
+    privacy: "Privacidad",
   },
 };
 

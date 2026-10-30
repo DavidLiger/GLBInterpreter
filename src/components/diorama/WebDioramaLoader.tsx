@@ -109,6 +109,8 @@ export interface WebDioramaLoaderProps {
    */
   cornerBottomLeft?: React.ReactNode;
   aboveActions?: React.ReactNode;
+  /** Livre (AN1) : contenu ajouté en fin de fenêtre Informations (réglage des annonces). Sans elle (atelier, fixture), rien. */
+  infoExtra?: React.ReactNode;
 }
 
 /**
@@ -179,7 +181,7 @@ interface InnerProps extends WebDioramaLoaderProps {
 // plus de vérification de cache ni de modale de téléchargement ici.
 function WebDioramaLoaderInner({
   scene: readerScene, onAction, onEngineReady, onBack, embedded = false, onRemount, refullscreenOnGesture = false,
-  cornerBottomLeft, aboveActions,
+  cornerBottomLeft, aboveActions, infoExtra,
 }: InnerProps) {
   const { config, bookId } = readerScene;
   // Scène v1 du livre (Î13bis) : pas d'écran « Toucher pour commencer », lancement à la fin du chargement. La fixture
@@ -1547,6 +1549,7 @@ function WebDioramaLoaderInner({
             isMobile={useTouchIcons}
             poiIcon={activePOIIcon}
             help={infoHelp}
+            extra={infoExtra}
           />
 
           {/* Reste de votre UI (RotateHint, InfoButton, etc.) */}

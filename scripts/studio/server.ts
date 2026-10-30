@@ -66,6 +66,7 @@ import {
   resolveBookDir,
   stampOf,
   TESTS_PORT,
+  ANNONCES_TESTS_PORT,
   writeEtat,
   writeReglages,
   writeFileAtomic,
@@ -736,7 +737,8 @@ function startTask(name: TaskName): Result {
             buildStart = Date.now();
             return cleanForBuild(e);
           },
-          launch: () => npmRun(ROOT, 'build', ['--source', realCase(testBook) ?? testBook, '--part-mib', '1']),
+          // AN1 : livre de test construit avec le flux d'annonces de test (clés de test, serveur de test sur le port 4175).
+          launch: () => ({ ...npmRun(ROOT, 'build', ['--source', realCase(testBook) ?? testBook, '--part-mib', '1']), env: { GLBI_ANNONCES_TEST: '1' } }),
           after: () => {
             etat.out = recordOutput(OUT_BOOK, realCase(testBook) ?? testBook, 'livre de test', buildStart, git);
             saveEtat();
@@ -744,7 +746,7 @@ function startTask(name: TaskName): Result {
         },
         {
           label: `test:install (${suiteDurationText()})`,
-          before: () => requireFreePort(TESTS_PORT, 'tests d’installation'),
+          before: async () => (await requireFreePort(TESTS_PORT, 'tests d’installation')) ?? requireFreePort(ANNONCES_TESTS_PORT, 'flux d’annonces de test'),
           launch: () => npmRun(ROOT, 'test:install'),
           // Durée de la suite complète menée à son terme, annoncée au lancement suivant (MJ3, point de CC3).
           after: () => {

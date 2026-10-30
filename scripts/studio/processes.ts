@@ -124,6 +124,8 @@ export function childEnv(): NodeJS.ProcessEnv {
   // Réservée à l'atelier (next dev de l'atelier) : refusée par build-book. Source par défaut de build-book : jamais implicite.
   delete env.ATELIER;
   delete env.BOOK_SOURCE;
+  // Annonces de test (AN1) : réservée au build du livre de test de la suite complète (posée par sa seule étape).
+  delete env.GLBI_ANNONCES_TEST;
   return env;
 }
 
@@ -131,6 +133,8 @@ export interface Launch {
   /** Programme (toujours Node) et arguments, pour l'affichage et `pids.json`. */
   file: string;
   args: string[];
+  /** Variables ajoutées à l'environnement des enfants (AN1 : GLBI_ANNONCES_TEST du build du livre de test). */
+  env?: Record<string, string>;
 }
 
 /** `npm run <script> -- <args>` depuis le repo, sans shell. */
@@ -154,7 +158,7 @@ export const showCommand = (l: Launch): string =>
 export function launch(l: Launch, cwd: string, journal: Journal): ChildProcess {
   const child = spawn(l.file, l.args, {
     cwd,
-    env: childEnv(),
+    env: { ...childEnv(), ...l.env },
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
     detached: !IS_WIN,
